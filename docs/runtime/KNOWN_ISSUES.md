@@ -2268,6 +2268,37 @@ re-examined this pass (both remain genuinely correct, deliberate structural deci
 entry's own original reasoning, untouched); item 2 was re-verified live and correctly remains
 open, for the reasons above.
 
+**Item 2 `RESOLVED` — `2026-09-02`.** Built the real staff document-access predicate this
+entry's own recommended fix named, composing two already-real, already-existing authority
+primitives rather than inventing new authority logic: `app.check_file_action_authority`
+(coarse tenant-standing) plus the identical per-row logic `app.authorize_file_access` already
+uses internally for record/org-unit/customer-account-ref access and the restricted/credential
+classification gate — factored out as a new, read-only boolean predicate,
+`app.staff_document_ticket_link_access_ok`, with no `app.file_access_logs` write (avoiding the
+"spurious access-log entry per row scanned" problem this entry's own 2026-09-01 update
+correctly identified against reusing `app.authorize_file_access` directly).
+`supabase/migrations/20260902070000_close_iss2026122_item2_staff_document_ticket_link_predicate.sql`
+adds the predicate and `CREATE OR REPLACE`s `app._ticket_portal_link_resolve_candidate`'s
+`document` branch with one new staff OR-arm (mirroring the `warehouse_order` branch's own
+"not a customer_user AND real staff predicate" shape one line above it) — the two existing
+customer OR-arms are byte-identical, untouched. A same-day correction,
+`20260902070500_fix_staff_document_ticket_link_access_ok_support_grant_arm.sql`, found and
+fixed a real under-scoping gap in the first draft (the predicate's own record-access arm
+composed only `can_access_record`, omitting the `is_supreme_admin`/`is_support_grant_authority`
+arms `app.authorize_file_access`'s own gate always included) before any db-test evidence was
+written against the wrong shape. Regression proof appended to
+`scripts/db-tests/customer-complaint-ticket-portal-wiring.sql` (§13): a tenant_admin
+(support-grant authority) with no ownership/org-unit tie to Alpha's own quote-request document
+now resolves it as a real `document` candidate; a plain tenant member with no such tie still
+resolves zero (deny-by-default preserved for the genuinely unauthorized case); cust-alpha's own
+pre-existing customer-portal `document` resolution is completely unaffected. Item 2's scope was
+narrow and explicit — only `app._ticket_portal_link_resolve_candidate`'s own `document` branch —
+`app.search_ticket_portal_link_candidates`'s own `document` branch stays customer-only,
+undisturbed, since no staff-facing picker UI consumes it yet; a future checkpoint wiring one
+would extend that function the same way. **Status now: items 2 and 4 `RESOLVED`; items 1 and 3
+stay `OPEN`, Low** — both remain the same genuinely correct, deliberate structural decisions
+this entry's own original reasoning already established, untouched by this pass.
+
 ### ISS-2026-123 — legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path (Phase 8, CPL-314 deliberate scope decisions, RESOLVED, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-016` (Prompt 314, Customer Profile) — two deliberate scope decisions made while authoring this checkpoint's own migration, not defects found afterward. The source prompt's own text requires exactly this kind of disclosed call: "Billing, tax/legal and credit fields require configured authorization/approval," which this checkpoint reads as excluding legal identity fields from self-service change entirely (no configured authorization/approval workflow for a legal-name/tax-id change exists anywhere in this repository, and building one — likely involving real KYC/compliance review, not merely a staff click-to-approve — is a genuinely new, capability-sized addition, not a bounded extension of this prompt's own charter).
@@ -2832,6 +2863,48 @@ Items 1 and 3 are untouched. Item 1 (Finance liability handoff) is cross-referen
 `ISS-2026-134` item 5, which records that no Finance-side handoff contract exists anywhere for
 Loyalty to hand off to; item 3 (percentage-based voucher model) is genuine new capability.
 
+**Items 1 and 3 `RESOLVED` — `2026-09-02`.**
+
+**Item 1** closes as a byproduct of `ISS-2026-134` item 5's own Finance-handoff build, exactly
+as this entry's own cross-reference above anticipated — cited here rather than duplicated.
+`supabase/migrations/20260902072000_close_iss2026134_item5_loyalty_finance_liability_handoff.sql`
+builds the real handoff-batch table + idempotent generator + Finance acknowledgement RPC family
+ADR-0024 Part D names, mirroring HRT-282's own `app.prepare_finance_payroll_disbursement_
+handoff_from_payroll_run` shape exactly; see `ISS-2026-134`'s own item 5 closure text for the
+full design and regression evidence.
+
+**Item 3** — a real percentage-based voucher model, built for `app.loyalty_rewards` (CPL-320,
+the reward catalogue) rather than `app.loyalty_benefit_entitlements` (CPL-319) itself: a new
+`voucher_value_type` (`fixed_amount`/`percentage`, defaulting existing and every newly-created
+reward to `fixed_amount`) plus `voucher_percentage`/`voucher_percentage_base_amount` columns,
+configured via a new, additive, narrowly-scoped `app.set_loyalty_reward_voucher_value_config`
+RPC (LYL:Edit-gated, draft-only) rather than widening `app.create_loyalty_reward_draft`/`app.
+update_loyalty_reward_draft`'s own signature — avoiding the RETURNS-TABLE/PostgREST-wrapper-
+widening cascade `ISS-2026-124` already demonstrated that class of change requires, and keeping
+both catalogue RPCs and their `public.*` wrappers byte-identical.
+`supabase/migrations/20260902073000_close_iss2026129_item3_and_iss2026132_item2.sql` wires
+`app._compose_loyalty_redemption_decision` (CPL-321, the actual redemption/fulfillment RPC) to
+branch on it: a percentage-type reward computes `round(voucher_percentage_base_amount *
+voucher_percentage / 100, 2)` at redemption time. `app.loyalty_redemptions` carries no order or
+invoice reference of any kind (grep + live schema confirmed) — the "likely the order/invoice
+total at redemption time" base-amount reading this task's own instructions speculated does not
+apply to this system as it actually exists, so the base amount is staff-configured on the
+reward itself instead, mirroring `internal_cost`/`min_points_required`'s own existing
+configuration shape; a percentage reward with an invalid or missing base fails safely at
+CONFIGURATION time (the CHECK constraint backing `voucher_percentage`/`voucher_percentage_base_
+amount`'s own shape makes an invalid combination impossible to save at all — never a fabricated
+or zero value reaching redemption). This same migration also closes `ISS-2026-132` item 2 (see
+that entry for the full internal_cost-decoupling design and the backward-compatibility fallback
+`20260902073500` added same-day) — the two items share one code path and were built together.
+Regression proof appended to `scripts/db-tests/customer-loyalty-redemption.sql`: a percentage
+reward (20% of a staff-configured 100 base) redeems for exactly 20.00; `app.set_loyalty_reward_
+voucher_value_config` itself rejects an out-of-range percentage or a zero/missing base before a
+reward can ever be published against it.
+
+**Item 2's issuance half stays genuinely open, untouched by this pass** — this task's own scope
+was items 1 and 3 only. **Status now: items 1, 3, and the expiry half of item 2 `RESOLVED`; the
+issuance half of item 2 stays `OPEN`, Low.**
+
 ### ISS-2026-130 — no Supreme-Admin-exception override mechanism (RPD-022) exists yet for any of the four Loyalty ledger tables (Phase 8, Batch 4 Tier C review, `CG-S13-CPL-018/019/020/021`, `RESOLVED` 2026-08-20 at CPL-325, was Medium)
 
 Discovered/disclosed `2026-08-17` at the Batch 4 (`CPL-315..319`) Tier C review, cross-prompt-integration lens: `docs/architecture/06_RLS_RBAC_WORKSTREAM.md` §4 names `point_ledger`/`cashback_ledger` inside the repository's `append_only_ledger` policy family, §8 (RPD-022) requires a distinct Supreme-Admin-exception RLS policy granting `UPDATE`/`DELETE` on every such table (the disclosed, never-tamper-proof audit trail is the accountability mechanism substituting for true immutability), and §13 calls that per-table policy a Phase-8 release-blocker gate. None of `app.loyalty_earning_events` (CPL-316), `app.loyalty_account_tier_movements` (CPL-317), `app.loyalty_point_ledger_entries` (CPL-318), or `app.loyalty_benefit_entitlement_events` (CPL-319) implements it — each grants, at most, `select`/`insert` to `service_role` only, with zero `UPDATE`/`DELETE` grant to any role, staff or Supreme Admin alike.
@@ -2944,6 +3017,73 @@ Discovered/disclosed `2026-08-18` at `CG-S13-CPL-023` (Prompt 321, Redemption Ap
 A tenant-configurable automatic task scheduler now exists, built to the project owner's own direction that CargoGrid is configurable by Supreme Admin and delegable per task type to a tenant's own admin. A scheduled run executes as the real person who authorized it — not a robot account — with their authority re-checked every run, and three consecutive authority failures auto-disable the schedule with the reason recorded. Console at `/{tenantSlug}/admin/scheduler`. Nothing is scheduled on the live project yet: `pg_cron` remains uninstalled and attaching a trigger to `app.run_due_scheduled_tasks` is a deliberate operator step.
 
 **Which of this entry's items that covers: none.** Its three items are a synchronous auto-approval rule, a `discount_voucher` value-sourcing decision, and a notification/retry/DLQ mechanism. None is a scheduling gap — the notification/DLQ item needs a delivery mechanism, and `app.jobs` already provides the retry machinery it would build on. `OPEN`, unchanged.
+
+**Items 1 and 2 `RESOLVED` — `2026-09-02`; item 3 stays honestly `OPEN`, out of this pass's own
+time budget.**
+
+**Item 1 — auto-approval.** This entry's own root cause still holds, re-verified live before
+writing anything: `app.role_assignments` has exactly one INSERT call site (`app.assign_role_to_
+user`, staff-only), so a genuine `customer_user` identity never holds `LYL:Edit` — the authority
+`app.issue_loyalty_benefit_entitlement` and the other composed primitives require on the actor
+PASSED TO THEM. ADR-0024 Part B / `ISS-2026-040` forbid widening those primitives' own RBAC
+gate to admit `customer_user`, and this fix does not — for any of the three composed
+primitives, for any caller. What it builds instead is the narrow slice of this entry's own
+recommended fix that is actually safe to build without a new user-provisioning capability: a
+tenant DESIGNATES an ALREADY-EXISTING, already-`LYL:Edit`-holding staff identity (created
+through this repository's ordinary, already-shipped invite/`app.assign_role_to_user` machinery
+— zero new user-creation code) as its own "loyalty redemption auto-approval principal"
+(`app.loyalty_redemption_auto_approval_principals`, one per tenant, `app.set_loyalty_
+redemption_auto_approval_principal`, `LYL:Configure`-gated, rejects a target that does not
+currently hold `LYL:Edit`). A new, opt-in, per-reward `app.loyalty_rewards.auto_approve_
+customer_redemption` column (`LYL:Configure`-gated toggle, defaults `false` for every existing
+and newly-created reward) governs whether this applies at all.
+`supabase/migrations/20260902074000_close_iss2026132_item1_customer_redemption_auto_approval.sql`
+adds one new `elsif` arm to `app.submit_loyalty_redemption`: a genuine `customer_user`
+submission against a toggled-on reward composes synchronously using the tenant's designated
+principal's identity — re-checked LIVE for `LYL:Edit` on every attempt, never cached or assumed
+still valid from configuration time — never the raw customer's own identity. No principal
+configured, or the configured one no longer holds `LYL:Edit`: the submission gracefully falls
+back to `pending_approval`, byte-identical to today's behavior — this entry's own "never make
+this the default... opt-in only" requirement, satisfied structurally. Regression proof appended
+to `scripts/db-tests/customer-loyalty-redemption.sql`: Epsilon's own genuine, unassisted
+submission against a reward with the toggle off (the default) still lands `pending_approval`;
+with the toggle on but no principal configured, still `pending_approval`; once both are
+configured, Epsilon's own submission composes to `fulfilled` in the same call, `decided_by`
+naming the system principal, never Epsilon herself.
+
+**Item 2 — internal_cost sourcing.** Investigated the ORIGINAL intent before changing anything,
+per this task's own instruction: `docs/build-log/phase-08/CPL-321.md` design decision 4, read
+verbatim, states `internal_cost` was used only because "CPL-320's own reward row has no
+dedicated customer-facing monetary value column; internal_cost is the only numeric,
+monetary-shaped field available" — a disclosed STOPGAP forced by a real schema gap, not a
+decision that the two are intended to be the same figure. CPL-320's own design decision 8 marks
+`internal_cost` staff-only-visible for cost accounting at the same time CPL-321 was using that
+exact number as the value a customer actually redeems — genuinely the trust-boundary bug this
+item describes. Fixed in the same migration as `ISS-2026-129` item 3 (the two share `app.
+_compose_loyalty_redemption_decision`'s own `discount_voucher` branch): a new, real,
+customer-facing `app.loyalty_rewards.voucher_face_value` column, independently staff-configured
+via `app.set_loyalty_reward_voucher_value_config`, decoupled from `internal_cost` going
+forward. Backward compatibility required a same-day correction,
+`20260902073500_fix_voucher_face_value_backward_compat_fallback.sql`, found while authoring
+this same fix's own db-test evidence against this file's own PRE-EXISTING 'Voucher Reward'
+fixture: the first draft required a real `voucher_face_value` with no fallback, which would
+have made every discount_voucher reward created the ordinary way (internal_cost only, exactly
+every existing caller's own shape) immediately unredeemable the moment this fix landed — a real
+regression, not a test artifact. The corrected shape is `coalesce(voucher_face_value,
+internal_cost)`: a reward nobody has migrated to the new field redeems byte-identical to
+before; one whose `voucher_face_value` IS explicitly set redeems at that real, decoupled figure
+instead — the decoupling is opt-in per reward, never a forced, all-at-once migration. Regression
+proof appended to `scripts/db-tests/customer-loyalty-redemption.sql`: a reward with
+`internal_cost=999` and an explicitly-configured `voucher_face_value=15` redeems its entitlement
+at 15, never 999; this file's own pre-existing 'Voucher Reward' (`internal_cost=25`, never
+migrated) still redeems at exactly 25, byte-for-byte unaffected.
+
+**Item 3 — notification/retry/DLQ — left honestly `OPEN`.** Not attempted this pass: building a
+genuine notification delivery mechanism plus a retry-count/dead-letter wrapper around `app.
+_compose_loyalty_redemption_decision`'s own failure paths, mirroring an existing DLQ-shaped
+pattern (PLT-132), is a real, separate, capability-sized addition this pass's own time budget
+did not reach once items 1 and 2 were built solidly. Recommended fix unchanged from this
+entry's own original text. **Status now: items 1 and 2 `RESOLVED`; item 3 stays `OPEN`, Low.**
 ### ISS-2026-133 — Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level fraud hold not built; expiry sweep is on-demand/staff-triggered only (Phase 8, Batch 5, `CG-S13-CPL-024`, `RESOLVED` in full 2026-08-31 — item 1 Track B Batch 4, item 3 satisfied by the scheduler, item 2 ruled an accepted variant with an executable pin, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-024` (Prompt 322, Expiry and Fraud Prevention, the third prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801240000_create_customer_portal_loyalty_expiry_fraud_prevention.sql`, not defects found afterward.
@@ -2993,7 +3133,7 @@ than a written-out argument list, since the two do not share a signature.
 `npx next build` green. Both primitives and their grants verified live against the hosted project
 before the ruling was written. Freeze db-test digest amended (sixty-eighth pass).
 
-### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — items 1, 2 and 5 only; item 4's schedulable half RESOLVED 2026-08-31, item 3 `RESOLVED` Track B Batch 4, Low)
+### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — item 1 and item 4's engagement-metrics half only; items 2 and 5 `RESOLVED` 2026-09-02, item 4's schedulable half RESOLVED 2026-08-31, item 3 `RESOLVED` Track B Batch 4, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-025` (Prompt 323, Liability Reconciliation Analytics, the fourth and final prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801250000_create_customer_portal_loyalty_liability_reconciliation_analytics.sql`, not defects found afterward.
 
@@ -3010,6 +3150,77 @@ Discovered/disclosed `2026-08-18` at `CG-S13-CPL-025` (Prompt 323, Liability Rec
 **Not fixed here** — item 1 mirrors FIN-209's own already-accepted per-scope run precedent; item 2 is a real, structural bound (the source tables genuinely have no historical-snapshot capability), disclosed rather than silently narrowed; item 3 is a disclosed, low-likelihood data-entry gap, not a live defect; item 4 mirrors an already-accepted repository-wide-shaped precedent; item 5 is the identical, already-accepted "domain stays source of truth, Finance handoff is a later, separate step" discipline HRT-282 already established for Payroll. **Status `OPEN`**, Low severity for all five items (no data fabricated or leaked; every RPC this checkpoint ships is real, complete, and correctly gated — including a live-proven forced-mismatch-produces-a-real-exception-row proof for both the point-balance and entitlement-state derivation checks, a live-proven certify-blocked-while-open-exceptions-remain gate, live-proven optimistic-concurrency NULL-bypass regressions on both `resolve`/`certify`, and a live-proven customer_user-caller-rejected-outright proof on engagement metrics; no existing caller or test is affected). Recommended fix for whichever future checkpoint picks this up: item 1, none required unless a tenant genuinely needs one blended cross-currency total, which would require a real, configured currency-conversion source this repository does not have; item 2, a dedicated point-in-time ledger/event-log reconstruction capability, substantially more scope than this single checkpoint; item 3, a third exception type (e.g. `reward_internal_cost_missing`) if this gap is ever observed in practice; item 4, a dedicated scheduler capability wiring a periodic call to the already-real `app.execute_loyalty_liability_reconciliation_run`; item 5, the HRT-282-family Finance-handoff capability ADR-0024 Part D already names, once a real Finance-side liability contract exists to hand off to.
 
 **Update (`2026-08-28`, Track B Batch 4):** item 3 closed. Independently re-verified before drafting: `app.execute_loyalty_liability_reconciliation_run` has been replaced twice since creation (`ISS-2026-136` item 1's currency-scope fix, then CPL-325's single-snapshot-atomicity fix, `20260801310000` — the three source reads folded into one top-level statement via `jsonb_agg`/`jsonb_to_recordset`); direct read of the current body (`20260801310000:182`) confirmed `coalesce(r.internal_cost, 0)` is still used with no companion detection of the null case. `supabase/migrations/20260828070000_harden_customer_portal_loyalty_liability_reward_internal_cost_missing_exception.sql` — built on the CURRENT post-`20260801310000` body, unmodified (an early draft accidentally based on the pre-atomicity `20260801270000` body was caught live — it broke the file's own atomicity regression with `CRITICAL: ... a torn, non-atomic read` — and rebuilt correctly before finalizing). Adds a third exception type, `reward_internal_cost_missing`, mirroring the two already-established derivation-mismatch types this same function raises; currency-scoped identically to the accumulation itself (avoiding `ISS-2026-136` item 2's own disclosed "not currency-scoped" noise shape for this new type). The liability TOTAL itself still contributes 0 for a null-cost redemption, unchanged by design (a fabricated placeholder would be worse than a disclosed understatement) — this only makes the gap visible and staff-resolvable. New regression in `scripts/db-tests/customer-loyalty-liability-reconciliation.sql`; full suite `ALL PASSED`; applied live. Items 1, 2, 4, 5 remain genuinely open, unchanged (currency-scoping/historical-snapshot/scheduler/Finance-handoff design boundaries). **Status `OPEN`**, narrowed to items 1, 2, 4, 5 — owner unchanged.
+
+**Items 2 and 5 `RESOLVED` — `2026-09-02`; item 1 stays honestly `OPEN`.**
+
+**Item 2 — point-in-time reconciliation.** `app.execute_loyalty_liability_reconciliation_run`'s
+own `p_as_of` parameter already existed (live-verified via `pg_get_functiondef` before writing
+anything, not assumed from any migration file) but only ever recorded a run's own label — every
+total was computed against the FULL CURRENT state regardless of what `p_as_of` said, exactly as
+this entry's own text described. Fixed by bounding every raw read in the function's own
+single-snapshot statement (CPL-325's shape, unchanged) by `created_at <= v_as_of` — using the
+already-durable, already-replayable append-only tables this reconciliation already reads from
+(`app.loyalty_point_ledger_entries`, `app.loyalty_benefit_entitlement_events`, `app.loyalty_
+redemption_events`), never a new history table. `supabase/migrations/
+20260902071000_close_iss2026134_item2_point_in_time_liability_reconciliation.sql`. Every
+existing caller — db-tests included — passes `p_as_of` as `clock_timestamp()` or `null`, both
+of which resolve to "now," so bounding by "<= now" excludes zero already-existing rows: every
+prior assertion, including the deliberate mismatch-detection tests, is byte-for-byte unaffected,
+live-verified via a full suite run, not merely reasoned about. The exactness cross-check
+(comparing the bounded live recomputation against the CACHED, CURRENT balance/status columns)
+is deliberately left unconditional — for a genuinely historical `p_as_of`, a raised "mismatch"
+may reflect legitimate subsequent activity rather than a data defect, disclosed in the
+function's own comment rather than quietly suppressed by an invented materiality guess.
+Regression proof appended to `scripts/db-tests/customer-loyalty-liability-reconciliation.sql`
+(a new, isolated tenant `lra5`): two point-ledger entries dated on either side of a chosen
+`p_as_of` — the historical run reports only the earlier one (100), the current run reports
+both (150).
+
+**Item 5 — Finance liability handoff.** Built mirroring the ONE already-established cross-domain
+handoff precedent in this repository, HRT-282's `app.prepare_finance_payroll_disbursement_
+handoff_from_payroll_run` family (itself mirroring FIN-200's `app.prepare_finance_vendor_bill_
+from_actual_cost` naming shape) — read live before writing anything. A new, Loyalty-owned table,
+`app.loyalty_finance_liability_handoff_batches` (never a `app.finance_*` table — zero write to
+any Finance table anywhere in the migration, grep-verifiable exactly as HRT-282's own header
+states for its own tables), generated ONLY from a `certified` `app.loyalty_liability_
+reconciliation_runs` row via a new `app.prepare_finance_liability_handoff_from_loyalty_
+liability` RPC (`LYL:Configure`-gated, idempotent on `reconciliation_run_id`, every total
+copied VERBATIM from the certified run — never re-derived). Finance discovers and acknowledges
+through its OWN authority (`app.search_loyalty_finance_handoffs_pending_acknowledgement`/`app.
+acknowledge_loyalty_finance_liability_handoff`, both `FIN:View`/`FIN:Edit`-gated) — the one
+place a Finance-side actor's authority is checked, never Loyalty's.
+`supabase/migrations/20260902072000_close_iss2026134_item5_loyalty_finance_liability_handoff.sql`,
+with two same-day corrective migrations found while authoring this same fix's own db-test
+evidence: `20260902072500` renamed the search function (its first name, 65 characters, silently
+exceeded Postgres' 63-byte identifier limit) and `20260902072600`/`20260902075500` closed a
+real `ISS-2026-309`-class gap this session's own new functions repeated — a bare `revoke ...
+from public` does not remove the separate, explicit `anon`/`authenticated` grants Supabase's own
+`ALTER DEFAULT PRIVILEGES` applies to every new function at CREATE time, so several of this
+session's own new functions (all internally authority-gated, so never a live exploit — the same
+"defence-in-depth gap, not a live exploit" class `ISS-2026-309`'s own four pre-existing
+widenings already named) briefly shipped wider than intended before being caught by `scripts/
+db-tests/public-api-wrapper-regression.sql`'s own exhaustive grant-parity assertion and
+corrected in full. This closes `ISS-2026-129` item 1 on its own terms — see that entry for the
+cross-reference. Regression proof appended to `scripts/db-tests/customer-loyalty-liability-
+reconciliation.sql`: a non-certified run is rejected outright; a certified run's handoff copies
+its own totals verbatim and is idempotent on `reconciliation_run_id`; Finance discovers and
+acknowledges it; Loyalty-only (`LYL`, no `FIN`) is rejected by both Finance-side gates; a NULL
+`p_expected_version` is rejected outright; a repeat acknowledgement is a safe no-op; both
+`LYL:View` and `FIN:View` can read it back.
+
+**Item 1 stays honestly `OPEN`.** Checked live before deciding: `ISS-2026-197`'s own FX-
+conversion work has NOT landed in this repository (`git log` confirms its one commit closed
+only a labeling fragment — "the FX-conversion question itself stays OPEN, correctly deferred to
+HDN-386"). A real Finance-side currency-exchange-rate table (`app.finance_currency_exchange_
+rate`, FIN-scoped) does already exist in this repository, so a self-contained per-currency
+lookup is not structurally impossible the way it would be with zero rate source at all — but
+composing it correctly (which rate as-of which date, whose authority resolves it, whether a
+missing rate for a pair fails the whole run or is disclosed the way item 3's own `reward_
+internal_cost_missing` pattern does) is a real design decision this pass's own time budget,
+spent solidly on items 2 and 5, did not reach. Left open rather than rushed. **Status now: item
+3 stays `RESOLVED` (unchanged), items 2 and 5 are newly `RESOLVED` — item 1 stays `OPEN`, and
+item 4's engagement-metrics half stays `OPEN` too, unchanged from the 2026-08-31 update above,
+Low.**
 
 ### ISS-2026-135 — a third `scripts/db-tests/*.sql` file (`hris-shift-roster-scheduling.sql`) confirmed to belong to the already-registered day-of-week/wall-clock-dependent fixture-flakiness class (`ISS-2026-077`/`103`/`115`) — encountered while re-running the FULL `pnpm run db:test` harness during Batch 5's own Tier C review (Phase 8, Batch 5 Tier C review, `CG-S13-CPL-022..025`, `RESOLVED` 2026-08-23 at `CG-S15-HDN-002`, was Low — pre-existing, unrelated to Batch 5, not fixed there)
 

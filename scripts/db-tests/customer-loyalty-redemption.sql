@@ -1075,4 +1075,163 @@ begin
   raise notice 'HDN-373 loyalty redemption maker/checker regression proof: an LYL:Edit-only clerk''s discount_voucher submission lands pending_approval (no self-fulfillment), is denied on their own decide_loyalty_redemption attempt, and is correctly decided by a distinct LYL:Configure holder';
 end $$;
 
+\echo '>> ISS-2026-129 item 3 / ISS-2026-132 item 2 (2026-09-02): a percentage-type discount_voucher reward computes its entitlement value against its own staff-configured base amount; a fixed_amount reward with an explicitly-configured voucher_face_value redeems at that DECOUPLED figure, never internal_cost; app.set_loyalty_reward_voucher_value_config itself rejects an invalid percentage/base_amount shape before a reward can ever be redeemed at it; a reward NEVER migrated to voucher_face_value keeps redeeming at internal_cost, byte-identical to before this fix'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rdm1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000344001';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'rdm1') and name = 'Redemption Program');
+  v_loyalty_account_alpha uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Alpha'));
+  v_row app.loyalty_rewards;
+  v_pct_reward app.loyalty_rewards;
+  v_facevalue_reward app.loyalty_rewards;
+  v_redemption app.loyalty_redemptions;
+begin
+  -- Percentage-type reward: 20% of a staff-configured 100 base -> 20.00.
+  v_row := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'Percentage Voucher', 'discount_voucher', 'A percentage-off voucher.', 'Terms.', null, 10, null, 999, 'vendor-pct', null, v_manager1, 'manager1');
+
+  -- Configuring an invalid shape is rejected BEFORE it can ever be
+  -- redeemed at it -- "never a fabricated or zero value" holds at
+  -- configuration time, not merely as a redemption-time afterthought.
+  begin
+    perform app.set_loyalty_reward_voucher_value_config(v_tenant1, v_row.id, v_row.record_version, 'percentage', null, 150, 100, v_manager1, 'manager1');
+    raise exception 'assertion failed: expected invalid_voucher_percentage for a percentage > 100';
+  exception when others then if sqlerrm not like 'invalid_voucher_percentage%' then raise; end if;
+  end;
+  begin
+    perform app.set_loyalty_reward_voucher_value_config(v_tenant1, v_row.id, v_row.record_version, 'percentage', null, 20, 0, v_manager1, 'manager1');
+    raise exception 'assertion failed: expected invalid_voucher_percentage_base_amount for a zero base_amount';
+  exception when others then if sqlerrm not like 'invalid_voucher_percentage_base_amount%' then raise; end if;
+  end;
+
+  v_row := app.set_loyalty_reward_voucher_value_config(v_tenant1, v_row.id, v_row.record_version, 'percentage', null, 20, 100, v_manager1, 'manager1');
+  if v_row.voucher_value_type <> 'percentage' or v_row.voucher_percentage <> 20 or v_row.voucher_percentage_base_amount <> 100 then
+    raise exception 'assertion failed: expected the reward''s own percentage config to persist, got %', to_jsonb(v_row);
+  end if;
+  v_pct_reward := app.publish_loyalty_reward(v_tenant1, v_row.id, v_row.record_version, null, v_manager1, 'manager1');
+
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_alpha, v_pct_reward.id, 'pct-voucher-redeem-1', v_manager1, 'manager1');
+  if v_redemption.status <> 'fulfilled' then
+    raise exception 'assertion failed: expected the percentage-type voucher to instant-fulfill (staff Configure submission), got status=%', v_redemption.status;
+  end if;
+  if not exists (select 1 from app.loyalty_benefit_entitlements where id = v_redemption.benefit_entitlement_id and value_amount = 20.00) then
+    raise exception 'assertion failed: expected the percentage voucher''s entitlement to be worth exactly 20.00 (20%% of the staff-configured 100 base), got %', (select value_amount from app.loyalty_benefit_entitlements where id = v_redemption.benefit_entitlement_id);
+  end if;
+
+  -- Fixed-amount reward with a DECOUPLED, real customer-facing face value:
+  -- internal_cost is 999 (staff-only), voucher_face_value is explicitly
+  -- configured to 15 -- the entitlement must be worth 15, NEVER 999.
+  v_row := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'Decoupled Face Value Voucher', 'discount_voucher', 'internal_cost != customer value.', 'Terms.', null, 10, null, 999, 'vendor-decoupled', null, v_manager1, 'manager1');
+  v_row := app.set_loyalty_reward_voucher_value_config(v_tenant1, v_row.id, v_row.record_version, 'fixed_amount', 15, null, null, v_manager1, 'manager1');
+  v_facevalue_reward := app.publish_loyalty_reward(v_tenant1, v_row.id, v_row.record_version, null, v_manager1, 'manager1');
+
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_alpha, v_facevalue_reward.id, 'facevalue-voucher-redeem-1', v_manager1, 'manager1');
+  if not exists (select 1 from app.loyalty_benefit_entitlements where id = v_redemption.benefit_entitlement_id and value_amount = 15) then
+    raise exception 'assertion failed: expected the decoupled voucher''s entitlement to be worth its own voucher_face_value (15), never internal_cost (999), got %', (select value_amount from app.loyalty_benefit_entitlements where id = v_redemption.benefit_entitlement_id);
+  end if;
+
+  -- Backward compatibility (mandatory): this file''s own PRE-EXISTING
+  -- 'Voucher Reward' (created earlier in this same file, internal_cost=25,
+  -- never touched by app.set_loyalty_reward_voucher_value_config) already
+  -- redeemed at 25 in "main flow A" above, before this fix existed --
+  -- re-confirmed unaffected via a SECOND, fresh redemption against it here.
+  declare
+    v_voucher_reward_id uuid := (select id from app.loyalty_rewards where tenant_id = v_tenant1 and reward_name = 'Voucher Reward');
+    v_compat_redemption app.loyalty_redemptions;
+  begin
+    v_compat_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_alpha, v_voucher_reward_id, 'voucher-compat-redeem-2', v_manager1, 'manager1');
+    if not exists (select 1 from app.loyalty_benefit_entitlements where id = v_compat_redemption.benefit_entitlement_id and value_amount = 25) then
+      raise exception 'assertion failed: expected a reward NEVER migrated to voucher_face_value to keep redeeming at internal_cost (25), byte-identical to before this fix, got %', (select value_amount from app.loyalty_benefit_entitlements where id = v_compat_redemption.benefit_entitlement_id);
+    end if;
+  end;
+end $$;
+
+\echo '>> ISS-2026-132 item 1 (2026-09-02): a genuine, unassisted customer_user (Epsilon) redemption never auto-approves for a reward without auto_approve_customer_redemption; toggling it on requires LYL:Configure; it STILL falls back to pending_approval with no auto-approval principal configured; app.set_loyalty_redemption_auto_approval_principal rejects a target that does not hold LYL:Edit; once BOTH the toggle and a real, LYL:Edit-holding principal are configured, Epsilon''s own genuinely unassisted submission composes synchronously -- decided_by names the system principal, never Epsilon herself'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rdm1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000344001';
+  v_plain1 uuid := '00000000-0000-0000-0000-000000344004';
+  v_customer_epsilon uuid := '00000000-0000-0000-0000-000000344040';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'rdm1') and name = 'Redemption Program');
+  v_loyalty_account_epsilon uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Epsilon'));
+  v_row app.loyalty_rewards;
+  v_reward app.loyalty_rewards;
+  v_redemption app.loyalty_redemptions;
+  v_principal app.loyalty_redemption_auto_approval_principals;
+begin
+  v_row := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'Auto Approve Voucher', 'discount_voucher', 'Opt-in auto-approve fixture.', 'Terms.', null, 5, null, null, null, null, v_manager1, 'manager1');
+  v_row := app.set_loyalty_reward_voucher_value_config(v_tenant1, v_row.id, v_row.record_version, 'fixed_amount', 12, null, null, v_manager1, 'manager1');
+  v_reward := app.publish_loyalty_reward(v_tenant1, v_row.id, v_row.record_version, null, v_manager1, 'manager1');
+
+  -- auto_approve_customer_redemption defaults false -- never the default
+  -- for a newly-created reward. Epsilon''s own genuine self-service
+  -- submission lands pending_approval, exactly the pre-existing "main flow
+  -- B" shape.
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_epsilon, v_reward.id, 'auto-approve-attempt-1-off', v_customer_epsilon, 'epsilon');
+  if v_redemption.status <> 'pending_approval' then
+    raise exception 'assertion failed: expected pending_approval for a reward with auto_approve_customer_redemption=false (the default), got %', v_redemption.status;
+  end if;
+
+  -- Toggling requires LYL:Configure -- v_plain1 (zero LYL grant) is denied.
+  begin
+    perform app.set_loyalty_reward_auto_approve_customer_redemption(v_tenant1, v_reward.id, v_reward.record_version, true, v_plain1, 'plain1');
+    raise exception 'assertion failed: expected insufficient_authority for a no-LYL-grant actor toggling auto-approve';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+  v_reward := app.set_loyalty_reward_auto_approve_customer_redemption(v_tenant1, v_reward.id, v_reward.record_version, true, v_manager1, 'manager1');
+  if v_reward.auto_approve_customer_redemption is not true then
+    raise exception 'assertion failed: expected auto_approve_customer_redemption=true after the toggle, got %', v_reward.auto_approve_customer_redemption;
+  end if;
+
+  -- Toggle is ON, but NO auto-approval principal is configured yet for
+  -- this tenant -- Epsilon''s submission STILL gracefully falls back to
+  -- pending_approval, never a hard failure and never a bypass.
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_epsilon, v_reward.id, 'auto-approve-attempt-2-no-principal', v_customer_epsilon, 'epsilon');
+  if v_redemption.status <> 'pending_approval' then
+    raise exception 'assertion failed: expected pending_approval with no auto-approval principal configured (opt-in toggle alone is not enough), got %', v_redemption.status;
+  end if;
+
+  -- A target that does not hold LYL:Edit cannot be designated the
+  -- principal -- the ONE guardrail this fix adds.
+  begin
+    perform app.set_loyalty_redemption_auto_approval_principal(v_tenant1, v_plain1, 'bogus principal', v_manager1, 'manager1');
+    raise exception 'assertion failed: expected invalid_principal for a target that does not hold LYL:Edit';
+  exception when others then if sqlerrm not like 'invalid_principal%' then raise; end if;
+  end;
+
+  -- Reading the principal before one is configured requires LYL:View but
+  -- returns no row; v_plain1 (zero LYL grant) is denied outright.
+  begin
+    perform app.get_loyalty_redemption_auto_approval_principal(v_tenant1, v_plain1);
+    raise exception 'assertion failed: expected insufficient_authority for a no-LYL-grant actor reading the auto-approval principal';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  v_principal := app.set_loyalty_redemption_auto_approval_principal(v_tenant1, v_manager1, 'manager1-auto-approver', v_manager1, 'manager1');
+  if v_principal.auth_user_id <> v_manager1 or v_principal.principal_label <> 'manager1-auto-approver' then
+    raise exception 'assertion failed: expected the configured principal to persist, got %', to_jsonb(v_principal);
+  end if;
+
+  -- BOTH the reward toggle AND a real, LYL:Edit-holding principal are now
+  -- configured -- Epsilon''s own genuinely unassisted, zero-staff-touch
+  -- submission composes SYNCHRONOUSLY: status=fulfilled in the SAME call,
+  -- and decided_by names the SYSTEM principal, never Epsilon herself --
+  -- the shared LYL:Edit-gated primitives were never called with Epsilon''s
+  -- own identity, exactly as ADR-0024 Part B requires.
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_epsilon, v_reward.id, 'auto-approve-attempt-3-live', v_customer_epsilon, 'epsilon');
+  if v_redemption.status <> 'fulfilled' or v_redemption.benefit_entitlement_id is null then
+    raise exception 'assertion failed: expected Epsilon''s own submission to auto-compose to fulfilled once toggle+principal are both configured, got %', v_redemption;
+  end if;
+  if v_redemption.decided_by <> 'system:manager1-auto-approver' then
+    raise exception 'assertion failed: expected decided_by to name the system principal (system:manager1-auto-approver), never Epsilon herself, got %', v_redemption.decided_by;
+  end if;
+  if v_redemption.created_by <> 'epsilon' then
+    raise exception 'assertion failed: fixture error -- expected created_by=epsilon (the real submitting actor), got %', v_redemption.created_by;
+  end if;
+  if not exists (select 1 from app.loyalty_benefit_entitlements where id = v_redemption.benefit_entitlement_id and value_amount = 12) then
+    raise exception 'assertion failed: expected the auto-approved entitlement to be worth its own configured voucher_face_value (12)';
+  end if;
+end $$;
+
 \echo 'ALL PASSED: CPL-321 Redemption Approval and Fulfillment'
