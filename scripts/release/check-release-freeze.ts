@@ -3334,7 +3334,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // concentration skew. 1 of 5 (scorecards) already used an efficient index path; the other 4
   // genuinely degraded to a Bitmap Heap Scan + top-N sort and are fixed by 4 additive covering
   // indexes, live-verified ~19-43x faster / ~22-41x fewer buffers.
-  migrationSetSha256: "309b3b3e5cd882f4f1ebe09c682af3d174648477b6a9ea9d8671a8c1ddcd8876",
+  // EIGHTY-EIGHTH PASS (2026-09-02, ISS-2026-277): 442 files (+1). Closes the entry's own gap
+  // by composing app._is_under_legal_hold() into the 4 write paths that genuinely reach an
+  // existing legally-held record without going through DELETE: app.commit_customer_import_job
+  // and app.commit_item_import_job (of the 12 commit_*_import_job RPCs, only these two resolve
+  // duplicates by business identity with a live-reachable "matched a pre-existing record"
+  // branch; the other 10 are pure create-or-fail/create-or-append with no such branch, and
+  // app.commit_vendor_import_job's idempotency key is row-unique by construction so it can
+  // never match an unrelated pre-existing vendor), plus app.archive_employee_profile and
+  // app.archive_vendor_profile (genuine overwrite-not-delete paths). Additive CREATE OR REPLACE
+  // FUNCTION, ISS-2026-278's step-up-MFA composition on the same two import RPCs untouched.
+  migrationSetSha256: "dbe4010106f4be7b89a4a987a9f7f6fd75245991c3a14540e8680a1e3f707f0e",
+  // History: 309b3b3e5cd882f4f1ebe09c682af3d174648477b6a9ea9d8671a8c1ddcd8876
+  // (441 files, ISS-2026-063's procurement dashboard covering indexes).
   // History: e1cedbdcd93213a1f4e0dab4fca2911570cd8a3eb1e4b0c46dd6db4a6224dc33
   // (440 files, ISS-2026-141+148's Phase 8/9 target-volume covering indexes).
   // History: 5482304116508c7b2307fae64d8a09d5852efc6c3a0ed4f70599fbb31998c557
@@ -3972,7 +3984,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // row naming the run, dedups on a repeat failure of the same run, records a separate
   // incident for a different run, and stays silent for already-classified rejections; zero
   // anon EXECUTE on the new function.
-  dbTestSetSha256: "de7ef285e54b33bc60e206213604e5e9e87c40800b627d06ff642e1da424b600",
+  // EIGHTY-EIGHTH PASS (2026-09-02, ISS-2026-277): 243 files, unchanged in count -- 3 extended
+  // (master-data-import.sql, hris-employee-master.sql, procurement-vendor-registration.sql),
+  // each proving block-on-hold, an identical not-held control still succeeding, and an
+  // unrelated new-record import unaffected.
+  dbTestSetSha256: "17ca1ad1324ecebcccd8398e8717afcdb1a5cef1e48283deaaf1af2638f5bf1c",
+  // History: de7ef285e54b33bc60e206213604e5e9e87c40800b627d06ff642e1da424b600
+  // (243 files, ISS-2026-079's hris-payroll.sql failure-alert regression).
   // History: 1b981e06903879f92a46af453270d171933c4365140b3409fe9201fc63a18097
   // (243 files, ISS-2026-254's platform-scheduled-task-scheduler.sql).
   // History: 03b1b5695fed1e953b7c4a322a04a91f6358da8368ec66f81ca9ba08e59bc514
