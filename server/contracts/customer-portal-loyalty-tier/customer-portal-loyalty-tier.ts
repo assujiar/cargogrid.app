@@ -259,6 +259,39 @@ export function parseLoyaltyAccountTierState(row: Record<string, unknown>): Loya
 }
 
 // ===========================================================================
+// Staff-facing: app.get_loyalty_program_tier_readiness (ISS-2026-127 item 2)
+// -- advisory, read-only snapshot of whether a programme's own published
+// tier ladder can currently resolve every active enrolment to a tier.
+// Mirrors app.get_loyalty_account_tier_state's own combined-projection
+// shape immediately above.
+// ===========================================================================
+
+export const LoyaltyProgramTierReadinessSchema = z.object({
+  programId: z.string().uuid(),
+  publishedTierCount: z.number().int().min(0),
+  hasBaseTier: z.boolean(),
+  baseTierId: z.string().uuid().nullable(),
+  unsupportedDimensionTierCount: z.number().int().min(0),
+  activeAccountCount: z.number().int().min(0),
+  untieredActiveAccountCount: z.number().int().min(0),
+  ready: z.boolean(),
+});
+export type LoyaltyProgramTierReadiness = z.infer<typeof LoyaltyProgramTierReadinessSchema>;
+
+export function parseLoyaltyProgramTierReadiness(row: Record<string, unknown>): LoyaltyProgramTierReadiness {
+  return LoyaltyProgramTierReadinessSchema.parse({
+    programId: row.program_id,
+    publishedTierCount: row.published_tier_count,
+    hasBaseTier: row.has_base_tier,
+    baseTierId: (row.base_tier_id as string | null) ?? null,
+    unsupportedDimensionTierCount: row.unsupported_dimension_tier_count,
+    activeAccountCount: row.active_account_count,
+    untieredActiveAccountCount: row.untiered_active_account_count,
+    ready: row.ready,
+  });
+}
+
+// ===========================================================================
 // Cursor pagination
 // ===========================================================================
 

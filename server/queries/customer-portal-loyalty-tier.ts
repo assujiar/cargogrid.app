@@ -14,11 +14,13 @@ import {
   parseLoyaltyTierDefinition,
   parseLoyaltyAccountTierMovement,
   parseLoyaltyAccountTierState,
+  parseLoyaltyProgramTierReadiness,
   parseCustomerPortalLoyaltyTierCard,
   type LoyaltyTierDefinition,
   type LoyaltyTierDefinitionStatus,
   type LoyaltyAccountTierMovement,
   type LoyaltyAccountTierState,
+  type LoyaltyProgramTierReadiness,
   type CustomerPortalLoyaltyTierCard,
 } from "../contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
 
@@ -31,6 +33,7 @@ const KNOWN_QUERY_ERROR_CODES = [
   "insufficient_authority",
   "loyalty_tier_definition_not_found",
   "loyalty_account_not_found",
+  "loyalty_program_not_found",
 ] as const;
 type KnownQueryErrorCode = (typeof KNOWN_QUERY_ERROR_CODES)[number];
 export type LoyaltyTierQueryErrorCode = KnownQueryErrorCode | "query_failed";
@@ -119,6 +122,22 @@ export async function listLoyaltyAccountTierMovements(
   });
   if (error) throw new LoyaltyTierQueryError(error.message);
   return ((data as Record<string, unknown>[] | null) ?? []).map(parseLoyaltyAccountTierMovement);
+}
+
+/**
+ * ISS-2026-127 item 2: advisory, read-only readiness snapshot for one
+ * (tenant, program) pair -- whether the programme's own published tier
+ * ladder currently resolves every active enrolment to a tier, ahead of the
+ * nightly app.run_loyalty_tier_recalculation_sweep silently skipping
+ * whichever accounts it cannot. Never blocks anything; the caller decides
+ * how (or whether) to render it.
+ */
+export async function getLoyaltyProgramTierReadiness(client: LoyaltyTierQueryClient, tenantId: string, programId: string, actorAuthUserId: string): Promise<LoyaltyProgramTierReadiness> {
+  const { data, error } = await client.rpc("get_loyalty_program_tier_readiness", { p_tenant_id: tenantId, p_program_id: programId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new LoyaltyTierQueryError(error.message);
+  const row = firstRow(data);
+  if (!row) throw new LoyaltyTierQueryError("query_failed: get_loyalty_program_tier_readiness returned no row");
+  return parseLoyaltyProgramTierReadiness(row);
 }
 
 // ===========================================================================

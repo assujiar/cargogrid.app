@@ -5,6 +5,7 @@ import {
   listLoyaltyTierDefinitions,
   getLoyaltyAccountTierState,
   listLoyaltyAccountTierMovements,
+  getLoyaltyProgramTierReadiness,
   listCustomerPortalLoyaltyTierCards,
   LoyaltyTierQueryError,
   type LoyaltyTierQueryClient,
@@ -162,6 +163,67 @@ describe("listLoyaltyAccountTierMovements", () => {
     const result = await listLoyaltyAccountTierMovements(client, TENANT_ID, ACTOR_ID, { loyaltyAccountId: ACCOUNT_ID });
     assert.equal(result.length, 1);
     assert.equal(result[0]?.movementType, "initial");
+  });
+});
+
+describe("getLoyaltyProgramTierReadiness", () => {
+  test("passes the exact param names and parses a ready row", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: [
+        {
+          program_id: PROGRAM_ID,
+          published_tier_count: 3,
+          has_base_tier: true,
+          base_tier_id: TIER_ID,
+          unsupported_dimension_tier_count: 0,
+          active_account_count: 2,
+          untiered_active_account_count: 0,
+          ready: true,
+        },
+      ],
+      error: null,
+    });
+    const result = await getLoyaltyProgramTierReadiness(client, TENANT_ID, PROGRAM_ID, ACTOR_ID);
+    assert.equal(result.ready, true);
+    assert.deepEqual(calls[0], { fn: "get_loyalty_program_tier_readiness", args: { p_tenant_id: TENANT_ID, p_program_id: PROGRAM_ID, p_actor_auth_user_id: ACTOR_ID } });
+  });
+
+  test("maps a not-ready row (no base tier, untiered accounts present)", async () => {
+    const { client } = fakeRpcClient({
+      data: [
+        {
+          program_id: PROGRAM_ID,
+          published_tier_count: 1,
+          has_base_tier: false,
+          base_tier_id: null,
+          unsupported_dimension_tier_count: 0,
+          active_account_count: 1,
+          untiered_active_account_count: 1,
+          ready: false,
+        },
+      ],
+      error: null,
+    });
+    const result = await getLoyaltyProgramTierReadiness(client, TENANT_ID, PROGRAM_ID, ACTOR_ID);
+    assert.equal(result.ready, false);
+    assert.equal(result.hasBaseTier, false);
+    assert.equal(result.untieredActiveAccountCount, 1);
+  });
+
+  test("propagates loyalty_program_not_found with .code set", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "loyalty_program_not_found: x" } });
+    await assert.rejects(
+      () => getLoyaltyProgramTierReadiness(client, TENANT_ID, PROGRAM_ID, ACTOR_ID),
+      (err: unknown) => err instanceof LoyaltyTierQueryError && err.code === "loyalty_program_not_found",
+    );
+  });
+
+  test("propagates insufficient_authority with .code set", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "insufficient_authority: x" } });
+    await assert.rejects(
+      () => getLoyaltyProgramTierReadiness(client, TENANT_ID, PROGRAM_ID, ACTOR_ID),
+      (err: unknown) => err instanceof LoyaltyTierQueryError && err.code === "insufficient_authority",
+    );
   });
 });
 

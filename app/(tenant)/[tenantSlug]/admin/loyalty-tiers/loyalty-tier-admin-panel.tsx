@@ -9,7 +9,7 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
-import type { LoyaltyTierDefinition, LoyaltyAccountTierState } from "../../../../../server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
+import type { LoyaltyTierDefinition, LoyaltyAccountTierState, LoyaltyProgramTierReadiness } from "../../../../../server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
 import type { LoyaltyAccount } from "../../../../../server/contracts/customer-portal-loyalty-program/customer-portal-loyalty-program.ts";
 import {
   createLoyaltyTierDefinitionAction,
@@ -115,6 +115,45 @@ export function EditTierDefinitionDraftForm({ tenantSlug, programId, version }: 
           Publish this version
         </Button>
       </form>
+    </div>
+  );
+}
+
+/**
+ * ISS-2026-127 item 2: advisory-only warning banner for a programme the
+ * nightly tier-recalculation sweep (app.run_loyalty_tier_recalculation_
+ * sweep) will silently skip accounts under. Reuses StatusBadge's own
+ * `warning` tone (already imported above for the fraud-hold badge) rather
+ * than introducing a new component -- never renders anything that blocks an
+ * action on this page; `readiness === null` (fetch failed or tolerated
+ * error) or `readiness.ready === true` both render nothing.
+ */
+export function TierReadinessBanner({ readiness }: { readiness: LoyaltyProgramTierReadiness | null }) {
+  if (!readiness || readiness.ready) return null;
+
+  const reasons: string[] = [];
+  if (!readiness.hasBaseTier) {
+    reasons.push("no published tier has a threshold of 0, so a newly enrolled account never resolves to a starting tier");
+  }
+  if (readiness.unsupportedDimensionTierCount > 0) {
+    reasons.push(`${readiness.unsupportedDimensionTierCount} published tier${readiness.unsupportedDimensionTierCount === 1 ? "" : "s"} use${readiness.unsupportedDimensionTierCount === 1 ? "s" : ""} a threshold dimension this system does not compute`);
+  }
+  if (readiness.untieredActiveAccountCount > 0) {
+    reasons.push(`${readiness.untieredActiveAccountCount} active account${readiness.untieredActiveAccountCount === 1 ? "" : "s"} currently ha${readiness.untieredActiveAccountCount === 1 ? "s" : "ve"} no tier assigned`);
+  }
+
+  return (
+    <div role="status" className="flex flex-col gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+      <div className="flex items-center gap-2">
+        <StatusBadge tone="warning" label="Tier ladder not ready" />
+        <p className="text-sm font-medium text-text-primary">The nightly recalculation sweep will silently skip some accounts in this programme.</p>
+      </div>
+      <ul className="ml-4 list-disc text-xs text-text-secondary">
+        {reasons.map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+      </ul>
+      <p className="text-xs text-text-secondary">This is advisory only -- no action on this page is blocked. Publish a base (threshold 0) tier, or review the accounts above, to resolve it.</p>
     </div>
   );
 }

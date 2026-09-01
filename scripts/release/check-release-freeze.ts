@@ -3159,7 +3159,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // authenticated (confirmed live) -- the RLS-scoped client cannot call it. Fixed by running
   // that pre-check through the service-role client instead, the same "real identity, explicit
   // param, service-role execution" shape every other PLT-128 call site in this repository uses.
-  migrationSetSha256: "df91a2262da4e297bdf17bde197b1d0a6541eb0c271b1eb781cf79883c423cae",
+  //
+  // SEVENTY-SEVENTH PASS (2026-09-01, ISS-2026-127): 425 files (+1). Closes items 2 and 3 of a
+  // mostly-resolved entry, additively and advisory-only. Item 2: app.recalculate_customer_
+  // loyalty_tier correctly raises loudly when a programme's tier ladder cannot resolve an
+  // account to a tier, but the 2026-08-31 nightly sweep migration wraps that per-account and
+  // converts the raise into a counted skip on the job payload -- live-grep-confirmed that
+  // nothing in app/ or server/ ever reads that payload, so a misconfigured tenant got no
+  // warning at all. 20260901030000 adds one new, additive, read-only, LYL:View-gated function
+  // (app.get_loyalty_program_tier_readiness) plus its public.* wrapper -- never a publish-time
+  // gate (would break the deliberate "Gapped Program"/"Bad Dimension Program" test fixtures),
+  // never an auto-created base tier, never a touch to app.publish_loyalty_tier_definition's
+  // signature or to app.loyalty_account_tier_movements' schema. Item 3 needed no schema change
+  // at all: the live CHECK constraint tying tier_definition_version_id to to_tier_id already
+  // enforces the entry's own disclosed design decision; only a missing existence-assertion was
+  // added.
+  migrationSetSha256: "a6fc27e86de8487012c81a70ce89e5c81b84980a77c51f29b8214f34d0f90d19",
+  // History: df91a2262da4e297bdf17bde197b1d0a6541eb0c271b1eb781cf79883c423cae
+  // (424 files, ISS-2026-131's loyalty reward media document-type registration).
   // History: 37aa1701f15c42b5b9dc5a9111892194eaedec2faccd2d3ddf4571a5554b2984
   // (423 files, ISS-2026-317's payroll loan cutover import adapter).
   // History: c098026ee4f311f262cb6524c7ffabc9f555296dcd264ec7259b95989d39b4b8
@@ -3680,7 +3697,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // one tenant is rejected (invalid_file_id) when attached to a different tenant's reward
   // draft; and the pre-existing pending-file customer-projection behavior (no metadata
   // surfaced, access denied while scanning) is unchanged by the new upload path.
-  dbTestSetSha256: "ee38d214808d120ed461cb27bb31e4baad30a573e262774ef371b2d182a29a42",
+  //
+  // SEVENTY-SEVENTH PASS (2026-09-01, ISS-2026-127): 239 files, unchanged in count -- one
+  // extended, no existing line touched. customer-loyalty-membership-tier.sql gains two blocks
+  // after the existing sweep test: the new readiness function reports ready for a healthy
+  // programme, not-ready (missing base tier, an untiered active account) for "Gapped Program",
+  // not-ready (unsupported-dimension count) for "Bad Dimension Program", succeeds for a
+  // viewer-only actor, refuses a cross-tenant actor, and returns loyalty_program_not_found
+  // indistinguishably for a tenant-A program id under tenant B versus a genuinely nonexistent
+  // id; plus a pg_constraint/pg_get_constraintdef existence-and-definition assertion proving
+  // the tier_definition_version_id/to_tier_id CHECK constraint still exists, not merely that
+  // one historical row's values happen to match it.
+  dbTestSetSha256: "515e20e05dc857834f788f15eec36c2028506da1ca02b3925e3ff86aa3cea4e7",
+  // History: ee38d214808d120ed461cb27bb31e4baad30a573e262774ef371b2d182a29a42
+  // (239 files, ISS-2026-131's loyalty reward media upload regression block).
   // History: 3f444cf22b18131792f8529a672af2b830febdb0cac6ed3483e9c8879063012f
   // (239 files, ISS-2026-317's payroll-loan-cutover-import regression block).
   // History: 6670568cd302a6d835fe7129b65ddea1c27f0260962a132ee87480072fc5e233

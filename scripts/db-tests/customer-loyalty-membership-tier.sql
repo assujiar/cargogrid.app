@@ -1103,4 +1103,105 @@ begin
   raise notice 'PASS: tier sweep walked all % active accounts (% recalculated, % skipped), stayed inside its tenant, and re-running is a no-op', v_active_accounts, v_row.processed_count, v_row.skipped_count;
 end $$;
 
+\echo '>> ISS-2026-127 item 2: app.get_loyalty_program_tier_readiness -- advisory, read-only readiness snapshot. A healthy programme (Tier Rewards) reports ready; "Gapped Program" reports not-ready with no base tier and an untiered active account; "Bad Dimension Program" reports not-ready with an unsupported-dimension count; LYL:View alone (no Edit) may call it; a cross-tenant actor is refused; a tenant-A program id passed under tenant B is loyalty_program_not_found, indistinguishable from a genuinely nonexistent id'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tier1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'tier2');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000338001';
+  v_viewer1 uuid := '00000000-0000-0000-0000-000000338002';
+  v_manager2 uuid := '00000000-0000-0000-0000-000000339001';
+  v_rewards_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'tier1') and name = 'Tier Rewards');
+  v_gapped_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'tier1') and name = 'Gapped Program');
+  v_baddim_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'tier1') and name = 'Bad Dimension Program');
+  v_readiness app.loyalty_program_tier_readiness;
+  v_nonexistent_msg text;
+  v_borrowed_msg text;
+begin
+  -- A healthy, fully-configured programme (base tier Bronze=0, no
+  -- unsupported dimensions, its own two remaining active accounts -- Edge
+  -- was closed earlier in this file -- both already recalculated) reports
+  -- ready. Called by v_viewer1, who holds LYL:View only, never Create/Edit/
+  -- Configure -- proving this read needs no elevated authority.
+  v_readiness := app.get_loyalty_program_tier_readiness(v_tenant1, v_rewards_program_id, v_viewer1);
+  if v_readiness.ready is not true or v_readiness.has_base_tier is not true or v_readiness.unsupported_dimension_tier_count <> 0 or v_readiness.untiered_active_account_count <> 0 then
+    raise exception 'assertion failed: expected Tier Rewards ready with a base tier, zero unsupported dimensions, zero untiered accounts, got %', v_readiness;
+  end if;
+  if v_readiness.active_account_count <> 2 then
+    raise exception 'assertion failed: expected Tier Rewards to carry exactly 2 active accounts (Edge was closed earlier), got %', v_readiness.active_account_count;
+  end if;
+
+  -- "Gapped Program": single Elite tier at threshold=10000, no base
+  -- (threshold=0) rung -- not ready, and its own dedicated Gap account
+  -- (never successfully recalculated, per the no_eligible_tier_definition
+  -- block above) is counted untiered.
+  v_readiness := app.get_loyalty_program_tier_readiness(v_tenant1, v_gapped_program_id, v_manager1);
+  if v_readiness.ready is not false or v_readiness.has_base_tier is not false then
+    raise exception 'assertion failed: expected Gapped Program not-ready with no base tier, got %', v_readiness;
+  end if;
+  if v_readiness.untiered_active_account_count < 1 then
+    raise exception 'assertion failed: expected at least 1 untiered active account for Gapped Program, got %', v_readiness;
+  end if;
+
+  -- "Bad Dimension Program": single "Weird" tier at threshold=0 (so
+  -- has_base_tier is TRUE -- design decision 1, base-tier presence is
+  -- independent of dimension support) but threshold_dimension =
+  -- 'transaction_count_lifetime', unsupported -- not ready via the
+  -- unsupported-dimension count instead.
+  v_readiness := app.get_loyalty_program_tier_readiness(v_tenant1, v_baddim_program_id, v_manager1);
+  if v_readiness.ready is not false or v_readiness.unsupported_dimension_tier_count <> 1 then
+    raise exception 'assertion failed: expected Bad Dimension Program not-ready with unsupported_dimension_tier_count=1, got %', v_readiness;
+  end if;
+  if v_readiness.has_base_tier is not true then
+    raise exception 'assertion failed: expected Bad Dimension Program to still report has_base_tier=true (its own Weird tier IS a threshold=0 rung, just an unsupported dimension), got %', v_readiness;
+  end if;
+
+  -- A tenant2 manager holds no role assignment in tenant1 at all --
+  -- insufficient_authority, never a program lookup.
+  begin
+    perform app.get_loyalty_program_tier_readiness(v_tenant1, v_rewards_program_id, v_manager2);
+    raise exception 'assertion failed: expected insufficient_authority -- manager2 holds no role assignment in tenant1';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A tenant1 program id, borrowed under tenant2's own tenant_id (with
+  -- tenant2's own valid LYL:View authority) -- must be indistinguishable
+  -- from a genuinely nonexistent program id, proving authority is checked
+  -- BEFORE existence and existence never leaks across the tenant boundary.
+  begin
+    perform app.get_loyalty_program_tier_readiness(v_tenant2, v_rewards_program_id, v_manager2);
+    raise exception 'assertion failed: expected loyalty_program_not_found -- a tier1 program id does not exist inside tenant2''s own scope';
+  exception when others then
+    if sqlerrm not like 'loyalty_program_not_found%' then raise; end if;
+    v_borrowed_msg := regexp_replace(sqlerrm, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<id>', 'g');
+  end;
+
+  begin
+    perform app.get_loyalty_program_tier_readiness(v_tenant2, gen_random_uuid(), v_manager2);
+    raise exception 'assertion failed: expected loyalty_program_not_found for a genuinely nonexistent program id';
+  exception when others then
+    if sqlerrm not like 'loyalty_program_not_found%' then raise; end if;
+    v_nonexistent_msg := regexp_replace(sqlerrm, '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<id>', 'g');
+  end;
+  if v_borrowed_msg <> v_nonexistent_msg then
+    raise exception 'assertion failed: a borrowed-id not_found and a genuinely-nonexistent-id not_found must be the identically-shaped error (ids normalized), got % vs %', v_borrowed_msg, v_nonexistent_msg;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-127 item 3: the live CHECK constraint tying tier_definition_version_id to to_tier_id on app.loyalty_account_tier_movements still exists -- not merely that one row''s own values happen to match'
+do $$
+declare
+  v_def text;
+begin
+  select pg_get_constraintdef(oid) into v_def
+  from pg_constraint
+  where conrelid = 'app.loyalty_account_tier_movements'::regclass and conname = 'latm_version_id_matches_to_tier_check';
+  if v_def is null then
+    raise exception 'assertion failed: expected a live CHECK constraint named latm_version_id_matches_to_tier_check on app.loyalty_account_tier_movements (ISS-2026-127 item 3) -- a future migration silently dropped it';
+  end if;
+  if v_def <> 'CHECK ((tier_definition_version_id = to_tier_id))' then
+    raise exception 'assertion failed: expected latm_version_id_matches_to_tier_check to read CHECK ((tier_definition_version_id = to_tier_id)), got %', v_def;
+  end if;
+end $$;
+
 \echo '>> ALL PASSED: CPL-317 Membership Tier'

@@ -2,14 +2,15 @@ import { notFound } from "next/navigation";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listLoyaltyPrograms, listLoyaltyAccounts, LoyaltyProgramQueryError } from "../../../../../server/queries/customer-portal-loyalty-program.ts";
-import { listLoyaltyTierDefinitions, getLoyaltyAccountTierState, LoyaltyTierQueryError } from "../../../../../server/queries/customer-portal-loyalty-tier.ts";
-import type { LoyaltyAccountTierState } from "../../../../../server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
+import { listLoyaltyTierDefinitions, getLoyaltyAccountTierState, getLoyaltyProgramTierReadiness, LoyaltyTierQueryError } from "../../../../../server/queries/customer-portal-loyalty-tier.ts";
+import type { LoyaltyAccountTierState, LoyaltyProgramTierReadiness } from "../../../../../server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import {
   CreateTierDefinitionForm,
   EditTierDefinitionDraftForm,
   TierDefinitionHistory,
+  TierReadinessBanner,
   AccountTierRow,
 } from "./loyalty-tier-admin-panel.tsx";
 
@@ -61,13 +62,23 @@ export default async function LoyaltyTierAdminPage({
   let tierDefinitions: Awaited<ReturnType<typeof listLoyaltyTierDefinitions>> = [];
   let accounts: Awaited<ReturnType<typeof listLoyaltyAccounts>> = [];
   let accountStates: Map<string, LoyaltyAccountTierState> = new Map();
+  let readiness: LoyaltyProgramTierReadiness | null = null;
   let detailLoadFailed = false;
 
   if (selectedProgram) {
     try {
-      [tierDefinitions, accounts] = await Promise.all([
+      // ISS-2026-127 item 2: the readiness fetch rides alongside this
+      // page's own existing Promise.all, but its own failure is tolerated
+      // independently (mapped to null, never rethrown) so an advisory-only
+      // banner can never block the tier definitions/accounts this section
+      // already renders without it.
+      [tierDefinitions, accounts, readiness] = await Promise.all([
         listLoyaltyTierDefinitions(supabase, access.tenant.id, selectedProgram.id, access.authUserId, { limit: 100 }),
         listLoyaltyAccounts(supabase, access.tenant.id, access.authUserId, { programId: selectedProgram.id, status: "active", limit: 50 }),
+        getLoyaltyProgramTierReadiness(supabase, access.tenant.id, selectedProgram.id, access.authUserId).catch((error: unknown) => {
+          if (!(error instanceof LoyaltyTierQueryError)) throw error;
+          return null;
+        }),
       ]);
       const states = await Promise.all(accounts.map((account) => getLoyaltyAccountTierState(supabase, access.tenant.id, account.id, access.authUserId)));
       accountStates = new Map(states.map((state) => [state.loyaltyAccountId, state]));
@@ -115,6 +126,8 @@ export default async function LoyaltyTierAdminPage({
       {selectedProgram && !detailLoadFailed ? (
         <div className="flex flex-col gap-6 rounded-md border border-neutral-200 p-4">
           <h2 className="text-lg font-semibold text-text-primary">{selectedProgram.name}</h2>
+
+          <TierReadinessBanner readiness={readiness} />
 
           <section aria-labelledby="tier-defs-heading" className="flex flex-col gap-3">
             <h3 id="tier-defs-heading" className="text-sm font-semibold text-text-primary">

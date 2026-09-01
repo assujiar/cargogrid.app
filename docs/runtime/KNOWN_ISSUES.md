@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 42 — 4 High, 13 Medium, 25 Low |
+| `OPEN` | 41 — 4 High, 13 Medium, 24 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 225 |
+| `RESOLVED` | 226 |
 | **Total records** | **276** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -134,7 +134,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-123` | Low | `OPEN` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
 | `ISS-2026-124` | Low | `RESOLVED` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
 | `ISS-2026-126` | Low | `RESOLVED` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
-| `ISS-2026-127` | Low | `OPEN` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
+| `ISS-2026-127` | Low | `RESOLVED` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
 | `ISS-2026-128` | Low | `RESOLVED` | Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied par |
 | `ISS-2026-129` | Low | `OPEN` | Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expir |
 | `ISS-2026-131` | Low | `RESOLVED` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
@@ -2233,7 +2233,7 @@ decision for the operator, exactly as `ISS-2026-066`'s own scheduler note disclo
 here is that these three tasks are now *schedulable* — before, no schedule could have expressed
 them at all.
 
-### ISS-2026-127 — Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting, and `tier_definition_version_id` is structurally identical to `to_tier_id` in this checkpoint's own flattened design (Phase 8, Batch 4, `CG-S13-CPL-019`, OPEN — items 2-3 only, item 1 RESOLVED 2026-08-31, Low)
+### ISS-2026-127 — Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting, and `tier_definition_version_id` is structurally identical to `to_tier_id` in this checkpoint's own flattened design (Phase 8, Batch 4, `CG-S13-CPL-019`, RESOLVED 2026-09-01 — items 2 and 3 closed, item 1 already RESOLVED 2026-08-31, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-019` (Prompt 317, Membership Tier) — deliberate scope decisions made while authoring `supabase/migrations/20260801190000_create_customer_portal_loyalty_membership_tier.sql`, not defects found afterward.
 
@@ -2328,6 +2328,102 @@ mechanism, catalogue, authority model and dispatcher are real; attaching a trigg
 decision for the operator, exactly as `ISS-2026-066`'s own scheduler note discloses. What changed
 here is that these three tasks are now *schedulable* — before, no schedule could have expressed
 them at all.
+
+**Items 2 and 3 `RESOLVED`, 2026-09-01 — and with them this entry closes in full.** Both were
+re-verified live rather than trusted from this entry's own prior text, and the re-verification
+found a real, undisclosed gap the original item-2 disposition ("none required — tenant/program
+configuration discipline") did not anticipate.
+
+**What changed underneath item 2 since it was last written.** Item 2's own disclosure was
+correct as written: `app.recalculate_customer_loyalty_tier` raising `no_eligible_tier_definition`
+for a programme with no base tier is deliberate, disclosed, fail-loud design, never weakened here.
+What the entry's own recommended fix — "none required, optionally a future onboarding-time
+linter" — did not foresee is `20260831230000_add_loyalty_earning_tier_and_points_posting_sweeps
+.sql`, which closed item 1 the same day by wrapping that same raise, per account, inside
+`app.run_loyalty_tier_recalculation_sweep`'s own subtransaction so one misconfigured account can
+never abort a tenant's nightly run. That fix is correct — re-verified live against its own body
+via `pg_get_functiondef`, not trusted from the migration file — but it has a real side effect the
+original triage did not name: the raise that used to be loud (a staff member clicking "Recalculate
+tier" sees the error directly) is now a **silently counted skip**. The sweep records it faithfully
+— `skipped_count` and up to 20 `{loyalty_account_id, reason}` entries land on the job row's own
+payload — but nothing in `app/` or `server/` (grep-confirmed) ever reads `skipped_count` or a
+sweep job's own `skips` array. A tenant admin who publishes a tier ladder with no base rung, or a
+published tier using an unsupported `threshold_dimension`, now gets no warning anywhere, forever,
+every night. This was worth building rather than leaving as "documented but optional" because the
+loud failure the original design decision relied on as its own safety net no longer reaches
+anyone.
+
+A second, independent live finding: a published base tier is not sufficient either. `threshold_value <= computed_amount`
+means a newly enrolled account whose current year-to-date earning sum is negative (an early
+reversal/chargeback posted before any genuine earning) fails to clear even a `threshold_value = 0`
+base tier, and stays untiered indefinitely — a readiness surface that checked only "has a base
+tier" would have silently missed exactly this case.
+
+**Fix: `supabase/migrations/20260901030000_create_loyalty_program_tier_readiness.sql`**, additive
+and advisory-only. A new composite type `app.loyalty_program_tier_readiness` and a new,
+`SECURITY DEFINER`, `LYL:View`-gated, read-only function `app.get_loyalty_program_tier_readiness`
+report, per (tenant, program): published tier count, whether a published base (`threshold_value =
+0`) tier exists and its id, how many published tiers use an unsupported `threshold_dimension`, the
+active enrollment count, and — the field that catches the negative-earning-sum case a naive
+"has a base tier" check would miss — how many active accounts have literally zero rows in
+`app.loyalty_account_tier_movements` (never assigned any tier at all, regardless of which of the
+two live causes is responsible). `ready` is true only when a base tier exists, zero published
+tiers use an unsupported dimension, and zero active accounts are untiered. Authority is checked
+BEFORE the programme is looked up (mirrors `app.get_loyalty_tier_definition`'s own ordering), so a
+tenant-A program id passed under tenant B's own `tenant_id` raises the identical
+`loyalty_program_not_found` a genuinely nonexistent id would — live-proven in the new db-test
+block, not merely asserted. The function does zero writes and never calls
+`app.capture_audit_event` — it is a query, not a mutation. `public.get_loyalty_program_tier_
+readiness` mirrors the identical grant set and `SECURITY DEFINER` mode, per `scripts/db-tests/
+public-api-wrapper-regression.sql`'s own exhaustive checks (re-run and green). Nothing about
+`app.publish_loyalty_tier_definition`, `app.recalculate_customer_loyalty_tier`, or `app.run_
+loyalty_tier_recalculation_sweep` changed — no publish-time gate was added (the "Gapped Program"/
+"Bad Dimension Program" fixtures `scripts/db-tests/customer-loyalty-membership-tier.sql` already
+relies on to prove the sweep's own skip-isolation behavior are untouched and still pass), no base
+tier is auto-created, and the sweep's own raise-and-skip behavior is unchanged. This is a new
+early-warning surface, not a correction of a bug in either.
+
+Wired into `app/(tenant)/[tenantSlug]/admin/loyalty-tiers/page.tsx`: the readiness fetch rides
+alongside the page's own existing `Promise.all`, with its own failure tolerated independently
+(mapped to `null`, never rethrown) so the banner can never block the tier-definition/account
+sections that page already renders without it. `loyalty-tier-admin-panel.tsx`'s new
+`TierReadinessBanner` renders nothing when the programme is ready (or the fetch failed/was
+denied), and otherwise reuses `StatusBadge`'s own `warning` tone (already imported in that panel
+for the fraud-hold badge) to state plainly what is missing: no published base tier, how many
+published tiers use an unsupported dimension, and how many active accounts currently have no tier
+and will be silently skipped by the nightly sweep. Advisory only — it blocks no action on the
+page.
+
+**Item 3 `RESOLVED`, 2026-09-01 — a regression assertion, not a schema change, exactly as this
+entry's own recommended fix already named.** The `tier_definition_version_id`/`to_tier_id`
+redundancy is untouched — still a deliberate forward-extensibility decision, not a defect — but
+`scripts/db-tests/customer-loyalty-membership-tier.sql` only ever proved that one row's own two
+columns carried matching values, never that the `CHECK` constraint itself (`latm_version_id_
+matches_to_tier_check`) still exists on `app.loyalty_account_tier_movements` — a future migration
+could have silently dropped it and no test would have failed. Re-verified live via `pg_constraint`/
+`pg_get_constraintdef` before writing the fix (`CHECK ((tier_definition_version_id = to_tier_id))`,
+exact name and definition unchanged since this checkpoint's own original disclosure). The new
+db-test block queries the constraint directly by name and asserts both that it exists and that its
+definition has not drifted.
+
+**Evidence.** Both new db-test blocks were appended to `scripts/db-tests/customer-loyalty-
+membership-tier.sql`, placed after the existing item-1 sweep block and its own "Gapped Program"/
+"Bad Dimension Program" fixtures rather than in a new file, since a readiness snapshot is only
+meaningfully testable against real ready and not-ready programmes that already exist. The item-2
+block proves, live: the healthy "Tier Rewards" programme (base tier, no unsupported dimensions,
+its own two remaining active accounts already tiered — Edge was closed earlier in this same file)
+reports `ready`; "Gapped Program" reports not-ready with `has_base_tier = false` and at least one
+untiered active account; "Bad Dimension Program" reports not-ready via `unsupported_dimension_
+tier_count = 1` while still correctly reporting `has_base_tier = true` (its own "Weird" tier IS a
+`threshold_value = 0` rung, just an unsupported dimension — the two signals are deliberately
+independent); a viewer-only actor (`LYL:View`, no `Edit`) succeeds; a cross-tenant actor is refused
+`insufficient_authority`; and a tenant-A program id borrowed under tenant B's own `tenant_id`
+raises an error byte-for-byte identical (ids normalized) to a genuinely nonexistent program id.
+`db:test ALL PASSED`; `pnpm typecheck`; `pnpm lint` (0 new errors); full unit suite green
+(`server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts` and `server/
+queries/customer-portal-loyalty-tier.ts` both carry their own new unit tests). Not yet applied to
+the live/hosted project — left for the orchestrating session, per this repository's own migration-
+application discipline.
 
 ### ISS-2026-128 — Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied parameter rather than a persisted per-program config; the FIFO consumption primitive has no customer-facing redemption trigger yet (Phase 8, Batch 4, `CG-S13-CPL-020`, `RESOLVED` 2026-08-31 — item 1 closed last, item 2 `RESOLVED` Track B Batch 4, item 3 `RESOLVED` 2026-08-20 at CPL-324, Low)
 

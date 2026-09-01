@@ -5,6 +5,7 @@ import {
   parseLoyaltyAccountTierMovement,
   parseLoyaltyAccountTierHold,
   parseLoyaltyAccountTierState,
+  parseLoyaltyProgramTierReadiness,
   parseCustomerPortalLoyaltyTierCard,
   describeLoyaltyTierProgress,
   LoyaltyTierUpdatedAtCursorSchema,
@@ -199,6 +200,56 @@ describe("parseLoyaltyAccountTierState", () => {
     });
     assert.equal(state.currentTierId, null);
     assert.equal(state.isHeld, false);
+  });
+});
+
+describe("parseLoyaltyProgramTierReadiness", () => {
+  test("maps a ready programme (base tier, no unsupported dimensions, no untiered accounts)", () => {
+    const readiness = parseLoyaltyProgramTierReadiness({
+      program_id: PROGRAM_ID,
+      published_tier_count: 3,
+      has_base_tier: true,
+      base_tier_id: TIER_ID,
+      unsupported_dimension_tier_count: 0,
+      active_account_count: 2,
+      untiered_active_account_count: 0,
+      ready: true,
+    });
+    assert.equal(readiness.ready, true);
+    assert.equal(readiness.baseTierId, TIER_ID);
+  });
+
+  test("maps a not-ready programme with no published base tier (base_tier_id null)", () => {
+    const readiness = parseLoyaltyProgramTierReadiness({
+      program_id: PROGRAM_ID,
+      published_tier_count: 1,
+      has_base_tier: false,
+      base_tier_id: null,
+      unsupported_dimension_tier_count: 0,
+      active_account_count: 1,
+      untiered_active_account_count: 1,
+      ready: false,
+    });
+    assert.equal(readiness.ready, false);
+    assert.equal(readiness.hasBaseTier, false);
+    assert.equal(readiness.baseTierId, null);
+    assert.equal(readiness.untieredActiveAccountCount, 1);
+  });
+
+  test("maps a not-ready programme that HAS a base tier but a published unsupported-dimension tier", () => {
+    const readiness = parseLoyaltyProgramTierReadiness({
+      program_id: PROGRAM_ID,
+      published_tier_count: 1,
+      has_base_tier: true,
+      base_tier_id: TIER_ID,
+      unsupported_dimension_tier_count: 1,
+      active_account_count: 1,
+      untiered_active_account_count: 1,
+      ready: false,
+    });
+    assert.equal(readiness.hasBaseTier, true);
+    assert.equal(readiness.unsupportedDimensionTierCount, 1);
+    assert.equal(readiness.ready, false);
   });
 });
 
