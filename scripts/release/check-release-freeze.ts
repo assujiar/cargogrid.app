@@ -3239,7 +3239,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // value ISS-2026-134's own 20260828070000 added, so a real row of that type would 500 the
   // entire admin Loyalty-liability dashboard rather than only failing to parse itself -- fixed
   // with a pure TypeScript-mirror widening, no database change.
-  migrationSetSha256: "fab7182c7693621d60342f66ae426a5c7578b2ffe81dadfef03496d58258d3d2",
+  //
+  // EIGHTY-SECOND PASS (2026-09-01, ISS-2026-123): 432 files (+3). Closes both items: legal_
+  // name/tax_id have no customer-writable path (deliberately excluded from CPL-314's own
+  // low-authority profile-change-request table, which stays untouched here -- never widened),
+  // and account contacts are read-only with no change-request path. Corrects the entry's own
+  // stale premise ("no configured authorization/approval workflow exists anywhere in this
+  // repository") -- IAE-027's step-up-MFA mechanism at the app.evaluate_permission chokepoint
+  // shipped since this entry was written, and is a strict no-op for any tenant that has not
+  // opted (COM, Approve) into its own additional_high_risk_actions list.
+  //
+  // 20260901080000 adds a genuinely SEPARATE legal-identity change-request table/RPC set
+  // (never a widened CHECK on the low-authority table), whose decide RPC recomputes
+  // normalized_legal_name/normalized_tax_id/duplicate_fingerprint via the SAME functions
+  // app.convert_quotation_to_account already uses, and re-raises a named
+  // identity_fingerprint_conflict (never silently swallowed) on a same-transaction rollback
+  // proven live in the new db-test to leave BOTH the request and both accounts byte-for-byte
+  // unchanged. 20260901090000 adds a contact add/update/remove change-request table/RPC set
+  // whose decide RPC reuses app.create_contact/app.link_contact_to_record/app.
+  // unlink_contact_from_record rather than raw table writes. 20260901100000 closes a real,
+  // separately-discovered dependency: no staff-facing list RPC existed for ANY customer-portal
+  // change-request table, including the already-shipped CPL-314 sibling -- its own
+  // account-scope-only list RPC always returns empty for a staff caller (no customer account
+  // scope), so every request table was a write-only inbox with no staff review surface until
+  // this migration added one tenant-wide, COM:Approve-gated list RPC per table.
+  migrationSetSha256: "3bbf41a7e2130d5b4f14a42f75ade2a5078dc1749ba74449970990d133209c6b",
+  // History: fab7182c7693621d60342f66ae426a5c7578b2ffe81dadfef03496d58258d3d2
+  // (429 files, ISS-2026-136's liability mismatch currency scoping).
   // History: 18f29f11c0ce45633c6d5b8f571de6181d9423d4dcc211876e47c1f1031da29b
   // (428 files, ISS-2026-319's AR/AP open-item source-lineage guard).
   // History: 1c3ab068c7dcf6e2f1630c884192207e96b508847163d297452142a757962dc4
@@ -3825,7 +3851,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // points-balance corruption is STILL caught on that same off-currency run (the load-bearing
   // anti-regression proof points were not accidentally currency-scoped) and a same-instant
   // in-scope run still raises all three exceptions exactly as before.
-  dbTestSetSha256: "4556d0d8d1760b34d32e98d41e05ca13e8db4dd4385fce35fd4c224e42d54d04",
+  //
+  // EIGHTY-SECOND PASS (2026-09-01, ISS-2026-123): 242 files (+3). Three new files:
+  // customer-portal-legal-identity-change-requests.sql (submit/withdraw/list/decide coverage
+  // plus the load-bearing same-transaction rollback proof: a fingerprint collision on approve
+  // is refused and leaves both the request and both accounts byte-for-byte unchanged, decide
+  // self-approval, a step-up-MFA proof isolated to its own dedicated fixture tenant),
+  // customer-portal-contact-change-requests.sql (add/update/remove coverage, the anti-
+  // enumeration contact-not-available proof, and that approve genuinely reuses create_contact/
+  // link_contact_to_record/unlink_contact_from_record rather than a raw table write), and
+  // customer-portal-change-request-staff-review.sql (the new tenant-wide staff list RPCs,
+  // proving the pre-existing account-scope-only sibling list RPC genuinely returns empty for a
+  // staff caller with no customer account scope, and that a caller lacking COM:Approve gets an
+  // empty result from the new RPC too, never an error).
+  dbTestSetSha256: "134dd227dd814b6ca8621f812b312d26dbb7025e7d940ee81cb1a6b613e85e4c",
+  // History: 4556d0d8d1760b34d32e98d41e05ca13e8db4dd4385fce35fd4c224e42d54d04
+  // (239 files, ISS-2026-136's liability mismatch currency-scoping regression block).
   // History: 2147ac0b82fe6c254c559fba5b82eaa62342b01ba90c895302378c26f61dacd7
   // (239 files, ISS-2026-319's AR/AP open-item source-lineage regression across 16 files).
   // History: d9449d7be9c1626b7c8f16e1a20e0fe95c210838c88c310b2b159de59741b0dc

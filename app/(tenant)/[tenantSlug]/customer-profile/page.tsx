@@ -9,21 +9,31 @@ import {
   listCustomerPortalProfileChangeRequests,
   CustomerPortalProfileQueryError,
 } from "../../../../server/queries/customer-portal-profile.ts";
+import { listCustomerPortalLegalIdentityChangeRequests, CustomerPortalLegalIdentityQueryError } from "../../../../server/queries/customer-portal-legal-identity.ts";
+import { listCustomerPortalContactChangeRequests, CustomerPortalContactChangeQueryError } from "../../../../server/queries/customer-portal-contact-change.ts";
 import { PermissionState } from "../../../../components/ui/permission-state.tsx";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import { Link } from "../../../../components/ui/link.tsx";
 import { CustomerPortalNav } from "../../../../components/domain/customer-portal-nav.tsx";
 import { CustomerProfilePanel } from "./customer-profile-panel.tsx";
-import { submitCustomerProfileChangeRequestAction, withdrawCustomerProfileChangeRequestAction } from "./actions.ts";
+import {
+  submitCustomerProfileChangeRequestAction,
+  withdrawCustomerProfileChangeRequestAction,
+  submitCustomerLegalIdentityChangeRequestAction,
+  withdrawCustomerLegalIdentityChangeRequestAction,
+  submitCustomerContactChangeRequestAction,
+  withdrawCustomerContactChangeRequestAction,
+} from "./actions.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Customer Profile (CPL-314, CG-S13-CPL-016, Prompt 314). Current-state
- * projection of one account's own trade_name/billing_address (editable via a
- * staff-reviewed change request) plus read-only legal_name/tax_id/
- * customer_status, contacts, and change-request history.
+ * Customer Profile (CPL-314, CG-S13-CPL-016, Prompt 314; extended by
+ * ISS-2026-123). Current-state projection of one account's own trade_name/
+ * billing_address/legal_name/tax_id (all editable via their own staff-
+ * reviewed change-request path) plus customer_status, contacts (add/update/
+ * remove change requests, ISS-2026-123 item 2), and change-request history.
  *
  * Uses lib/portal/customer-portal-guard.ts (CPL-300's general-purpose Layer 4
  * portal entry guard), carrying `CustomerPortalNav` (a natural sibling of the
@@ -32,12 +42,15 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *
  * Business rule (source prompt §24): "Customer profile edits cannot silently
  * overwrite canonical customer master data" -- there is no direct edit action
- * anywhere on this page. Every writable field (trade_name/billing_address)
- * goes through a change-request form that produces a `pending` row; the real
- * app.accounts row only changes once staff decides it
- * (app.decide_customer_profile_change_request, never callable from here).
- * legal_name/tax_id are rendered locked (design decision 3 of the migration)
- * -- shown, never editable, with an explanation of why.
+ * anywhere on this page. Every writable field goes through its own change-
+ * request form that produces a `pending` row; the real app.accounts/
+ * app.contacts/app.contact_links rows only change once staff decides it
+ * (app.decide_customer_profile_change_request/app.decide_customer_legal_
+ * identity_change_request/app.decide_customer_contact_change_request, none
+ * callable from here). legal_name/tax_id changes are ADDITIONALLY gated on a
+ * current step-up-MFA authorization when the tenant has configured one for
+ * (COM, Approve) -- enforced entirely server-side at the decide RPC, this
+ * page has no MFA-specific UI of its own.
  */
 export default async function CustomerProfilePage({
   params,
@@ -103,19 +116,24 @@ export default async function CustomerProfilePage({
   let profile: Awaited<ReturnType<typeof getCustomerPortalAccountProfile>> | null = null;
   let contacts: Awaited<ReturnType<typeof listCustomerPortalAccountContacts>> = [];
   let history: Awaited<ReturnType<typeof listCustomerPortalProfileChangeRequests>> = [];
+  let legalIdentityHistory: Awaited<ReturnType<typeof listCustomerPortalLegalIdentityChangeRequests>> = [];
+  let contactChangeHistory: Awaited<ReturnType<typeof listCustomerPortalContactChangeRequests>> = [];
 
   try {
-    [profile, contacts, history] = await Promise.all([
+    [profile, contacts, history, legalIdentityHistory, contactChangeHistory] = await Promise.all([
       getCustomerPortalAccountProfile(supabase, access.tenant.id, access.authUserId, selectedAccountId),
       listCustomerPortalAccountContacts(supabase, access.tenant.id, access.authUserId, selectedAccountId),
       listCustomerPortalProfileChangeRequests(supabase, access.tenant.id, access.authUserId, { accountId: selectedAccountId, limit: 50 }),
+      listCustomerPortalLegalIdentityChangeRequests(supabase, access.tenant.id, access.authUserId, { accountId: selectedAccountId, limit: 50 }),
+      listCustomerPortalContactChangeRequests(supabase, access.tenant.id, access.authUserId, { accountId: selectedAccountId, limit: 50 }),
     ]);
   } catch (error) {
-    if (!(error instanceof CustomerPortalProfileQueryError)) throw error;
-    if (error.code === "record_not_found") {
+    if (error instanceof CustomerPortalProfileQueryError && error.code === "record_not_found") {
       notFoundResult = true;
-    } else {
+    } else if (error instanceof CustomerPortalProfileQueryError || error instanceof CustomerPortalLegalIdentityQueryError || error instanceof CustomerPortalContactChangeQueryError) {
       detailLoadFailed = true;
+    } else {
+      throw error;
     }
   }
 
@@ -127,6 +145,22 @@ export default async function CustomerProfilePage({
   // derivation.
   const tradeNameIdempotencyKey = randomUUID();
   const billingAddressIdempotencyKey = randomUUID();
+  const legalNameIdempotencyKey = randomUUID();
+  const taxIdIdempotencyKey = randomUUID();
+  const addContactIdempotencyKey = randomUUID();
+  // One bound update action and one bound remove action per existing contact, per render --
+  // a plain closure cannot cross the Server -> Client Component boundary, only a real (bound)
+  // Server Action reference can, so every per-contact action is pre-bound here rather than
+  // passed down as a factory the client would call.
+  const contactActions = new Map(
+    contacts.map((c) => [
+      c.contactId,
+      {
+        updateAction: submitCustomerContactChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "update", c.contactId, randomUUID()),
+        removeAction: submitCustomerContactChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "remove", c.contactId, randomUUID()),
+      },
+    ]),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -134,10 +168,7 @@ export default async function CustomerProfilePage({
 
       <div>
         <h1 className="text-xl font-semibold text-neutral-900">Company profile</h1>
-        <p className="text-xs text-neutral-500">
-          Trade name and billing address changes are reviewed by our team before they take effect. Legal name and tax ID cannot be changed here -- contact your account administrator for legal/tax record
-          updates.
-        </p>
+        <p className="text-xs text-neutral-500">Trade name, billing address, legal name, tax ID, and contact changes are all reviewed by our team before they take effect. Nothing here is applied immediately.</p>
       </div>
 
       {accounts.length > 1 ? (
@@ -160,9 +191,17 @@ export default async function CustomerProfilePage({
           profile={profile}
           contacts={contacts}
           history={history}
+          legalIdentityHistory={legalIdentityHistory}
+          contactChangeHistory={contactChangeHistory}
           submitTradeNameAction={submitCustomerProfileChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "trade_name", tradeNameIdempotencyKey)}
           submitBillingAddressAction={submitCustomerProfileChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "billing_address", billingAddressIdempotencyKey)}
           withdrawAction={withdrawCustomerProfileChangeRequestAction.bind(null, tenantSlug)}
+          submitLegalNameAction={submitCustomerLegalIdentityChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "legal_name", legalNameIdempotencyKey)}
+          submitTaxIdAction={submitCustomerLegalIdentityChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "tax_id", taxIdIdempotencyKey)}
+          withdrawLegalIdentityAction={withdrawCustomerLegalIdentityChangeRequestAction.bind(null, tenantSlug)}
+          submitAddContactAction={submitCustomerContactChangeRequestAction.bind(null, tenantSlug, selectedAccountId, "add", null, addContactIdempotencyKey)}
+          contactActions={contactActions}
+          withdrawContactChangeAction={withdrawCustomerContactChangeRequestAction.bind(null, tenantSlug)}
         />
       )}
     </div>

@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 38 — 4 High, 13 Medium, 21 Low |
+| `OPEN` | 37 — 4 High, 13 Medium, 20 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 230 |
+| `RESOLVED` | 231 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -132,7 +132,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-120` | Low | `RESOLVED` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
 | `ISS-2026-121` | Low | `OPEN` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
 | `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
-| `ISS-2026-123` | Low | `OPEN` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
+| `ISS-2026-123` | Low | `RESOLVED` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
 | `ISS-2026-124` | Low | `RESOLVED` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
 | `ISS-2026-126` | Low | `RESOLVED` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
 | `ISS-2026-127` | Low | `RESOLVED` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
@@ -2068,7 +2068,7 @@ Discovered `2026-08-17` at `CG-S13-CPL-015` (Prompt 313, Complaint and Ticket) �
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.ticket_portal_links` is still confirmed a genuinely separate table from `app.ticket_links`, with its own `('warehouse_order', 'document')` entity-type CHECK constraint; the two protected regression tests this entry cites (`scripts/db-tests/ticketing-linked-records.sql`, `server/contracts/ticketing/ticketing.test.ts`) still enforce the six-value legacy registry. All four sub-items check out as described; each recommended fix (a staff document-access predicate, a registry-widening migration, or a resolver migration for legacy entity types) is its own capability-sized change. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-123 — legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path (Phase 8, CPL-314 deliberate scope decisions, OPEN, Low)
+### ISS-2026-123 — legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path (Phase 8, CPL-314 deliberate scope decisions, RESOLVED, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-016` (Prompt 314, Customer Profile) — two deliberate scope decisions made while authoring this checkpoint's own migration, not defects found afterward. The source prompt's own text requires exactly this kind of disclosed call: "Billing, tax/legal and credit fields require configured authorization/approval," which this checkpoint reads as excluding legal identity fields from self-service change entirely (no configured authorization/approval workflow for a legal-name/tax-id change exists anywhere in this repository, and building one — likely involving real KYC/compliance review, not merely a staff click-to-approve — is a genuinely new, capability-sized addition, not a bounded extension of this prompt's own charter).
 
@@ -2081,6 +2081,79 @@ Discovered `2026-08-17` at `CG-S13-CPL-016` (Prompt 314, Customer Profile) — t
 **Not fixed here** — both are deliberate, disclosed charter-boundary decisions, not oversights: item 1 because a legal-identity change genuinely has compliance/KYC implications this prompt's own "customer profile maintenance" charter does not cover (mirrors the source prompt's own "tax/legal... require configured authorization/approval" business rule, read as "not yet configured, therefore not yet self-service" rather than silently building an under-governed shortcut); item 2 because building it would double this checkpoint's own already-bounded scope for a screen the source prompt's own requirement ("account/site/contact/address preferences") is already honestly satisfied by via a read-only projection (ADR-0024 Part A governs reads; nothing requires every new read to also grow a write path). **Status `OPEN`**, Low severity for both (no data fabricated, no existing caller affected, the locked/read-only fields are always shown truthfully, never hidden or silently editable). Recommended fix for whichever future checkpoint picks these up: item 1 — a dedicated legal-identity-change capability with a real KYC/compliance review step (likely MFA/RPD-023-gated per the source prompt's own privileged-action business rule), separate from this checkpoint's own trade-name/billing-address workflow; item 2 — a `app.customer_portal_contact_change_requests` table mirroring this checkpoint's own `app.customer_portal_profile_change_requests` shape, with its own staff-decision RPC applying to `app.contact_links`/`app.contacts` in the same transaction.
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `customer_portal_profile_change_requests`'s own `cppcr_field_name_check` constraint still admits only `('trade_name', 'billing_address')`, excluding `legal_name`/`tax_id`; no contact-change-request write path exists anywhere in the repository. A KYC-aware legal-identity workflow and a new contact-change-request table are both genuine new capabilities. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, `2026-09-01`.** Both items closed. The stale premise in this entry's own earlier
+text ("no configured authorization/approval workflow exists anywhere in this repository")
+turned out to be false, re-verified live before writing any code: a real, applied step-up-MFA
+authorization mechanism now exists at the `app.evaluate_permission` chokepoint
+(`20260807100000_create_intelligence_enterprise_mfa_session_controls.sql`, IAE-027, hardened by
+`20260830110000_harden_evaluate_permission_step_up_enforcement.sql`, ISS-2026-236) — a strict
+no-op for any tenant that has not configured it, additive per tenant via `app.mfa_tenant_
+policies.additional_high_risk_actions`, never a change to the platform-default high-risk
+classification. That primitive is what both new decide RPCs below build on.
+
+- **Item 1 — legal identity.** New table `app.customer_portal_legal_identity_change_requests`
+  (`supabase/migrations/20260901080000_create_customer_portal_legal_identity_change_requests.sql`),
+  structurally mirroring `app.customer_portal_profile_change_requests` (CPL-314) as a genuinely
+  SEPARATE object — that sibling table's own `cppcr_field_name_check` stays exactly
+  `{trade_name, billing_address}`, untouched; `scripts/db-tests/customer-profile-visibility.sql`'s
+  own raw-INSERT assertion that it rejects `legal_name`/`tax_id` is unchanged and still passes.
+  RPCs: `app.submit_customer_legal_identity_change_request`/`app.withdraw_customer_legal_
+  identity_change_request`/`app.list_customer_portal_legal_identity_change_requests`/`app.
+  decide_customer_legal_identity_change_request`. The decide RPC's approve branch: gates on the
+  same `COM:Approve` + self-approval-block + optimistic-concurrency discipline the sibling
+  decide RPC uses (re-verified against that function's own CURRENT, post-CPL-324 live body, not
+  its original migration file — the NULL-`p_expected_version` guard and the atomic
+  version-in-WHERE-clause UPDATE it added were both live-discovered and mirrored here too); adds
+  `app.assert_current_step_up_authorization(tenant, actor, 'COM', 'Approve')` immediately after
+  the ordinary authority gate; recomputes `normalized_legal_name`/`normalized_tax_id`/
+  `duplicate_fingerprint` via the SAME `app.normalize_prospect_identifier`/`app.compute_
+  prospect_duplicate_fingerprint` functions `app.convert_quotation_to_account` (COM-155) already
+  uses (confirmed live: `app.accounts` carries no computed-fields trigger of its own); wraps the
+  final `app.accounts` UPDATE in a handler for `accounts_tenant_fingerprint_active_unique`,
+  re-raising a named `identity_fingerprint_conflict` that aborts the whole decision atomically
+  (proven live: both accounts and the request row are byte-for-byte unchanged after a rejected
+  collision); the field-name branch is an explicit if/elsif/else with a real `else` raising
+  `unhandled_field_name`.
+- **Item 2 — contacts.** New table `app.customer_portal_contact_change_requests`
+  (`supabase/migrations/20260901090000_create_customer_portal_contact_change_requests.sql`),
+  `change_kind` `{add, update, remove}`, `target_contact_id` required for update/remove and
+  forbidden for add (CHECK-enforced). Submit re-verifies the target contact is genuinely linked
+  to THAT account (`app.contact_links` joined on `contact_id`/`related_type`/`related_id`), the
+  identical not-found-shaped error regardless of cause. Decide's approve branch reuses existing
+  primitives rather than raw writes: `add` calls `app.create_contact` + `app.link_contact_to_
+  record`; `remove` calls `app.unlink_contact_from_record` (its own audit event is asserted
+  live); `update` issues a direct UPDATE (no generic `update_contact` primitive exists for this
+  table) and explicitly bumps `app.contacts.record_version`, confirmed live to be untouched by
+  that table's own `contacts_set_computed_fields` trigger; a role collision on `contact_links_
+  unique` is caught and re-raised as a named `contact_link_conflict`. Same step-up-MFA gate as
+  item 1.
+- **A third, missing dependency found and closed in the same pass:** grep-confirmed live that
+  NO page anywhere in this repository ever called `app.decide_customer_profile_change_request`
+  (CPL-314, already `VERIFIED`) — every customer-portal change-request table, old and new, was a
+  write-only inbox with no staff decision surface. `supabase/migrations/
+  20260901100000_create_customer_portal_change_request_staff_review.sql` adds one new,
+  `COM:Approve`-gated, TENANT-WIDE list RPC per table (`app.list_profile_change_requests_staff_
+  review`/`app.list_legal_identity_change_requests_staff_review`/`app.list_contact_change_
+  requests_staff_review`) — the existing account-scope-only list RPCs always return empty for a
+  staff caller, which holds no customer account scope (proven live). A new staff page,
+  `app/(tenant)/[tenantSlug]/admin/customer-profile-review/`, lists pending requests across all
+  three tables with approve/reject forms, linked from the tenant admin nav.
+- **Client layer**: `server/contracts/customer-portal-legal-identity/`, `server/contracts/
+  customer-portal-contact-change/` (separate Zod schemas — `legal_name`/`tax_id` never added to
+  the sibling table's own `CUSTOMER_PROFILE_WRITABLE_FIELDS`, which still rejects them, tested),
+  matching `server/mutations/`/`server/queries/` wrappers, and unit tests mirroring the sibling's
+  own argument-shape assertions. UI: `app/(tenant)/[tenantSlug]/customer-profile/` gained a real
+  "request a correction" affordance (with a pending-request indicator) replacing the old
+  "contact your administrator" locked-field copy, plus add/edit/remove affordances for contacts.
+- **Evidence**: `scripts/db-tests/customer-portal-legal-identity-change-requests.sql`,
+  `scripts/db-tests/customer-portal-contact-change-requests.sql`, and `scripts/db-tests/
+  customer-portal-change-request-staff-review.sql` — idempotency, scope checks, anti-
+  enumeration, self-approval, NULL-version rejection, the fingerprint-collision rollback proof,
+  the contact-link-conflict proof, a real audit-event proof for the reused primitives, and a
+  step-up-MFA proof (a dedicated fixture tenant per file, so the policy affects no other test
+  file). Full `pnpm run db:test` (all ~240 files), `typecheck`, `lint`, `ui:check`, and `test`
+  all re-run clean after these changes.
 
 ### ISS-2026-124 — `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capability's equivalent RPC (Phase 8, Batch 3 Tier C review, correctness/concurrency lens, RESOLVED, Low)
 

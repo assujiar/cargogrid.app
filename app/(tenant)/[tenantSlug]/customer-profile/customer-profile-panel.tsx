@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
@@ -13,6 +13,8 @@ import {
   type CustomerProfileChangeRequest,
   type CustomerProfileBillingAddress,
 } from "../../../../server/contracts/customer-portal-profile/customer-portal-profile.ts";
+import { CUSTOMER_LEGAL_IDENTITY_WRITABLE_FIELD_LABELS, type CustomerLegalIdentityChangeRequest, type CustomerLegalIdentityWritableField } from "../../../../server/contracts/customer-portal-legal-identity/customer-portal-legal-identity.ts";
+import { CUSTOMER_CONTACT_ROLES, type CustomerContactChangeRequest } from "../../../../server/contracts/customer-portal-contact-change/customer-portal-contact-change.ts";
 
 const INITIAL_STATE: CustomerProfileActionState = { error: null };
 
@@ -30,18 +32,90 @@ function billingAddressText(address: Record<string, unknown>): string {
   return parts.length > 0 ? parts.join(", ") : "Not on file";
 }
 
-/** Locked/read-only field row (design decision 3 of the migration) -- shown, never editable, with an explanation. */
-function LockedField({ label, value, note }: { label: string; value: string; note: string }) {
+function LegalIdentityPendingBanner({ request, withdrawAction }: { request: CustomerLegalIdentityChangeRequest; withdrawAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(withdrawAction, INITIAL_STATE);
+  const proposedText = typeof request.proposedValue === "string" ? request.proposedValue : "";
+
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+    <div className="flex flex-col gap-2 rounded-md border border-info/30 bg-info/5 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone="info" label="Pending review" />
+        <span className="text-neutral-700">
+          Requested: <span className="font-medium">{proposedText}</span>
+        </span>
+      </div>
+      <p className="text-xs text-neutral-500">Submitted {new Date(request.createdAt).toLocaleString()}. This is a legal identity correction -- our team reviews it before it takes effect.</p>
+      <form action={formAction} className="flex items-center gap-2">
+        <input type="hidden" name="requestId" value={request.id} />
+        <input type="hidden" name="accountId" value={request.accountId} />
+        <input type="hidden" name="expectedVersion" value={request.recordVersion} />
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Withdrawing…">
+          Withdraw
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Legal identity field row (ISS-2026-123 item 1). The field itself is never directly
+ * editable -- CustomerProfilePage has no direct-write path to legal_name/tax_id at all -- but
+ * unlike the old locked-field copy, a customer can request a correction here, reviewed by
+ * staff (COM:Approve, additionally step-up-MFA-gated per tenant policy) before it takes
+ * effect on the real app.accounts row.
+ */
+function LegalIdentityField({
+  label,
+  fieldName,
+  currentValue,
+  pendingRequest,
+  submitAction,
+  withdrawAction,
+}: {
+  label: string;
+  fieldName: CustomerLegalIdentityWritableField;
+  currentValue: string;
+  pendingRequest: CustomerLegalIdentityChangeRequest | undefined;
+  submitAction: BoundAction;
+  withdrawAction: BoundAction;
+}) {
+  const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
       <div className="flex items-center gap-2">
         <span aria-hidden="true" className="text-neutral-400">
           🔒
         </span>
         <span className="text-xs font-medium text-neutral-500">{label}</span>
       </div>
-      <p className="text-sm text-neutral-900">{value || "Not on file"}</p>
-      <p className="text-xs text-neutral-400">{note}</p>
+      <p className="text-sm text-neutral-900">{currentValue || "Not on file"}</p>
+
+      {pendingRequest ? (
+        <LegalIdentityPendingBanner request={pendingRequest} withdrawAction={withdrawAction} />
+      ) : (
+        <form action={formAction} className="flex flex-col gap-2">
+          <label className="text-xs font-medium text-neutral-500">
+            Request a correction
+            <input name="proposedValue" defaultValue={currentValue} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder={`Correct ${CUSTOMER_LEGAL_IDENTITY_WRITABLE_FIELD_LABELS[fieldName].toLowerCase()}`} />
+          </label>
+          <div>
+            <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
+              Request correction
+            </Button>
+          </div>
+          <p className="text-xs text-neutral-400">A legal name or tax ID correction has compliance implications and is reviewed by our team before it takes effect -- it is never applied immediately.</p>
+          {state.error ? (
+            <p role="alert" className="text-xs text-danger">
+              {state.error}
+            </p>
+          ) : null}
+        </form>
+      )}
     </div>
   );
 }
@@ -143,26 +217,242 @@ function BillingAddressForm({ currentValue, submitAction }: { currentValue: Cust
   );
 }
 
-function ContactsSection({ contacts }: { contacts: readonly CustomerPortalAccountContact[] }) {
+function ContactChangePendingBanner({ request, withdrawAction, verb }: { request: CustomerContactChangeRequest; withdrawAction: BoundAction; verb: string }) {
+  const [state, formAction, pending] = useActionState(withdrawAction, INITIAL_STATE);
   return (
-    <section aria-label="Contacts" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+    <div className="flex flex-col gap-2 rounded-md border border-info/30 bg-info/5 p-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone="info" label="Pending review" />
+        <span className="text-neutral-700">{verb} pending -- submitted {new Date(request.createdAt).toLocaleString()}</span>
+      </div>
+      <form action={formAction} className="flex items-center gap-2">
+        <input type="hidden" name="requestId" value={request.id} />
+        <input type="hidden" name="accountId" value={request.accountId} />
+        <input type="hidden" name="expectedVersion" value={request.recordVersion} />
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Withdrawing…">
+          Withdraw
+        </Button>
+      </form>
+      {state.error ? (
+        <p role="alert" className="text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AddContactForm({ submitAction }: { submitAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-3 sm:grid-cols-2">
+      <p className="text-xs font-semibold text-neutral-900 sm:col-span-2">Request a new contact</p>
+      <label className="text-xs font-medium text-neutral-500">
+        Full name
+        <input name="fullName" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Title
+        <input name="title" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Email
+        <input name="email" type="email" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Phone
+        <input name="phone" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Role
+        <select name="role" defaultValue="other" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+          {CUSTOMER_CONTACT_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {role}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-xs font-medium text-neutral-500">
+        <input type="checkbox" name="isPrimary" value="true" className="rounded border-neutral-300" />
+        Primary contact
+      </label>
+      <p className="text-xs text-neutral-400 sm:col-span-2">Provide at least an email or a phone number. This submits a request for our team to review before the contact is added.</p>
+      <div className="sm:col-span-2">
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
+          Request add
+        </Button>
+      </div>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger sm:col-span-2">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ContactEditForm({ contact, submitAction, onCancel }: { contact: CustomerPortalAccountContact; submitAction: BoundAction; onCancel: () => void }) {
+  const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 sm:grid-cols-2">
+      <label className="text-xs font-medium text-neutral-500">
+        Full name
+        <input name="fullName" defaultValue={contact.fullName} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Title
+        <input name="title" defaultValue={contact.title ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Email
+        <input name="email" type="email" defaultValue={contact.email ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Phone
+        <input name="phone" defaultValue={contact.phone ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+      </label>
+      <label className="text-xs font-medium text-neutral-500">
+        Role
+        <select name="role" defaultValue={contact.role} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+          {CUSTOMER_CONTACT_ROLES.map((role) => (
+            <option key={role} value={role}>
+              {role}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-xs font-medium text-neutral-500">
+        <input type="checkbox" name="isPrimary" value="true" defaultChecked={contact.isPrimary} className="rounded border-neutral-300" />
+        Primary contact
+      </label>
+      <p className="text-xs text-neutral-400 sm:col-span-2">Leave a field as-is to keep it unchanged. This submits a request for our team to review before it takes effect.</p>
+      <div className="flex gap-2 sm:col-span-2">
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
+          Request update
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger sm:col-span-2">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function RemoveContactForm({ submitAction }: { submitAction: BoundAction }) {
+  const [state, formAction, pending] = useActionState(submitAction, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex flex-col items-end gap-1">
+      <Button type="submit" variant="destructive" loading={pending} loadingLabel="Submitting…">
+        Request removal
+      </Button>
+      {state.error ? (
+        <p role="alert" className="text-xs text-danger">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ContactRow({
+  contact,
+  pendingUpdate,
+  pendingRemove,
+  updateAction,
+  removeAction,
+  withdrawAction,
+}: {
+  contact: CustomerPortalAccountContact;
+  pendingUpdate: CustomerContactChangeRequest | undefined;
+  pendingRemove: CustomerContactChangeRequest | undefined;
+  updateAction: BoundAction;
+  removeAction: BoundAction;
+  withdrawAction: BoundAction;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <li className="flex flex-col gap-2 rounded border border-neutral-100 p-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-neutral-900">{contact.fullName}</span>
+        {contact.isPrimary ? <StatusBadge tone="info" label="Primary" /> : null}
+        <span className="text-xs text-neutral-500">{contact.title ?? "—"}</span>
+        <span className="text-xs text-neutral-500">{contact.email ?? "—"}</span>
+        <span className="text-xs text-neutral-500">{contact.phone ?? "—"}</span>
+      </div>
+
+      {pendingRemove ? (
+        <ContactChangePendingBanner request={pendingRemove} withdrawAction={withdrawAction} verb="Removal" />
+      ) : pendingUpdate ? (
+        <ContactChangePendingBanner request={pendingUpdate} withdrawAction={withdrawAction} verb="Update" />
+      ) : editing ? (
+        <ContactEditForm contact={contact} submitAction={updateAction} onCancel={() => setEditing(false)} />
+      ) : (
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={() => setEditing(true)}>
+            Request edit
+          </Button>
+          <RemoveContactForm submitAction={removeAction} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function ContactsSection({
+  contacts,
+  contactChangeHistory,
+  submitAddContactAction,
+  contactActions,
+  withdrawContactChangeAction,
+}: {
+  contacts: readonly CustomerPortalAccountContact[];
+  contactChangeHistory: readonly CustomerContactChangeRequest[];
+  submitAddContactAction: BoundAction;
+  contactActions: ReadonlyMap<string, { updateAction: BoundAction; removeAction: BoundAction }>;
+  withdrawContactChangeAction: BoundAction;
+}) {
+  const pendingAdd = contactChangeHistory.find((r) => r.status === "pending" && r.changeKind === "add");
+
+  return (
+    <section aria-label="Contacts" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Contacts</h2>
       {contacts.length === 0 ? (
         <EmptyState title="No contacts on file" description="No contacts are linked to this account yet." />
       ) : (
         <ul className="flex flex-col gap-2">
-          {contacts.map((c) => (
-            <li key={c.contactId} className="flex flex-wrap items-center gap-2 rounded border border-neutral-100 p-2 text-sm">
-              <span className="font-medium text-neutral-900">{c.fullName}</span>
-              {c.isPrimary ? <StatusBadge tone="info" label="Primary" /> : null}
-              <span className="text-xs text-neutral-500">{c.title ?? "—"}</span>
-              <span className="text-xs text-neutral-500">{c.email ?? "—"}</span>
-              <span className="text-xs text-neutral-500">{c.phone ?? "—"}</span>
-            </li>
-          ))}
+          {contacts.map((c) => {
+            const actions = contactActions.get(c.contactId);
+            if (!actions) return null;
+            const pendingUpdate = contactChangeHistory.find((r) => r.status === "pending" && r.changeKind === "update" && r.targetContactId === c.contactId);
+            const pendingRemove = contactChangeHistory.find((r) => r.status === "pending" && r.changeKind === "remove" && r.targetContactId === c.contactId);
+            return (
+              <ContactRow
+                key={c.contactId}
+                contact={c}
+                pendingUpdate={pendingUpdate}
+                pendingRemove={pendingRemove}
+                updateAction={actions.updateAction}
+                removeAction={actions.removeAction}
+                withdrawAction={withdrawContactChangeAction}
+              />
+            );
+          })}
         </ul>
       )}
-      <p className="text-xs text-neutral-400">Contacts are managed by your account team -- there is no self-service edit here yet.</p>
+
+      {pendingAdd ? (
+        <div className="max-w-md">
+          <ContactChangePendingBanner request={pendingAdd} withdrawAction={withdrawContactChangeAction} verb="New contact" />
+        </div>
+      ) : (
+        <AddContactForm submitAction={submitAddContactAction} />
+      )}
     </section>
   );
 }
@@ -209,24 +499,80 @@ function HistorySection({ history }: { history: readonly CustomerProfileChangeRe
   );
 }
 
+function LegalIdentityHistorySection({ history }: { history: readonly CustomerLegalIdentityChangeRequest[] }) {
+  return (
+    <section aria-label="Legal identity correction history" className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+      <h2 className="text-sm font-semibold text-neutral-900">Legal identity correction history</h2>
+      {history.length === 0 ? (
+        <EmptyState title="No correction requests yet" description="Legal name/tax ID correction requests you or a colleague submit will appear here." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="text-left text-xs font-medium text-neutral-500">
+                <th className="p-2">Field</th>
+                <th className="p-2">Requested value</th>
+                <th className="p-2">Status</th>
+                <th className="p-2">Reviewed</th>
+                <th className="p-2">Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((r) => (
+                <tr key={r.id} className="border-t border-neutral-100">
+                  <td className="p-2 text-sm">{CUSTOMER_LEGAL_IDENTITY_WRITABLE_FIELD_LABELS[r.fieldName]}</td>
+                  <td className="p-2 text-sm">{typeof r.proposedValue === "string" ? r.proposedValue : ""}</td>
+                  <td className="p-2 text-sm">
+                    <StatusBadge tone={STATUS_TONE[r.status]} label={r.status} />
+                  </td>
+                  <td className="p-2 text-xs text-neutral-500">{r.reviewedAt ? `${new Date(r.reviewedAt).toLocaleString()}${r.reviewReason ? ` — ${r.reviewReason}` : ""}` : "—"}</td>
+                  <td className="p-2 text-xs text-neutral-500">{new Date(r.createdAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function CustomerProfilePanel({
   profile,
   contacts,
   history,
+  legalIdentityHistory,
+  contactChangeHistory,
   submitTradeNameAction,
   submitBillingAddressAction,
   withdrawAction,
+  submitLegalNameAction,
+  submitTaxIdAction,
+  withdrawLegalIdentityAction,
+  submitAddContactAction,
+  contactActions,
+  withdrawContactChangeAction,
 }: {
   tenantSlug: string;
   profile: CustomerPortalAccountProfile;
   contacts: readonly CustomerPortalAccountContact[];
   history: readonly CustomerProfileChangeRequest[];
+  legalIdentityHistory: readonly CustomerLegalIdentityChangeRequest[];
+  contactChangeHistory: readonly CustomerContactChangeRequest[];
   submitTradeNameAction: BoundAction;
   submitBillingAddressAction: BoundAction;
   withdrawAction: BoundAction;
+  submitLegalNameAction: BoundAction;
+  submitTaxIdAction: BoundAction;
+  withdrawLegalIdentityAction: BoundAction;
+  submitAddContactAction: BoundAction;
+  contactActions: ReadonlyMap<string, { updateAction: BoundAction; removeAction: BoundAction }>;
+  withdrawContactChangeAction: BoundAction;
 }) {
   const pendingTradeName = history.find((r) => r.status === "pending" && r.fieldName === "trade_name");
   const pendingBillingAddress = history.find((r) => r.status === "pending" && r.fieldName === "billing_address");
+  const pendingLegalName = legalIdentityHistory.find((r) => r.status === "pending" && r.fieldName === "legal_name");
+  const pendingTaxId = legalIdentityHistory.find((r) => r.status === "pending" && r.fieldName === "tax_id");
 
   return (
     <div className="flex flex-col gap-4">
@@ -237,8 +583,8 @@ export function CustomerProfilePanel({
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <LockedField label="Legal name" value={profile.legalName} note="Legal name changes require a separate legal/tax verification process -- contact your account administrator." />
-          <LockedField label="Tax ID" value={profile.taxId ?? ""} note="Tax ID changes require a separate legal/tax verification process -- contact your account administrator." />
+          <LegalIdentityField label="Legal name" fieldName="legal_name" currentValue={profile.legalName} pendingRequest={pendingLegalName} submitAction={submitLegalNameAction} withdrawAction={withdrawLegalIdentityAction} />
+          <LegalIdentityField label="Tax ID" fieldName="tax_id" currentValue={profile.taxId ?? ""} pendingRequest={pendingTaxId} submitAction={submitTaxIdAction} withdrawAction={withdrawLegalIdentityAction} />
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -257,8 +603,15 @@ export function CustomerProfilePanel({
         </div>
       </section>
 
-      <ContactsSection contacts={contacts} />
+      <ContactsSection
+        contacts={contacts}
+        contactChangeHistory={contactChangeHistory}
+        submitAddContactAction={submitAddContactAction}
+        contactActions={contactActions}
+        withdrawContactChangeAction={withdrawContactChangeAction}
+      />
       <HistorySection history={history} />
+      <LegalIdentityHistorySection history={legalIdentityHistory} />
     </div>
   );
 }

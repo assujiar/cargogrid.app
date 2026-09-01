@@ -81,6 +81,9 @@ export default async function TenantAdminLayout({
           <a href={`/${access.tenant.slug}/admin/api-keys`} className="text-neutral-700 hover:text-neutral-900">
             API keys
           </a>
+          <a href={`/${access.tenant.slug}/admin/customer-profile-review`} className="text-neutral-700 hover:text-neutral-900">
+            Customer profile review
+          </a>
           <a href={`/${access.tenant.slug}/admin/loyalty`} className="text-neutral-700 hover:text-neutral-900">
             Loyalty
           </a>
