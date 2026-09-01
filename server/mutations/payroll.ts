@@ -260,6 +260,45 @@ export async function cancelPayrollReimbursementRequest(
 
 // --- Loan ---
 
+export interface IssuePayrollLoanFormFields {
+  employeeId: string; principalAmount: number; installmentAmount: number; termCount: number;
+  isOpeningBalance: boolean; openingRemainingInstallments: number | null;
+}
+
+/**
+ * ISS-2026-321: the ordinary "Issue Loan" screen's own form-parsing, pulled
+ * out of the `"use server"` action so it is unit-testable without a Supabase
+ * client or request context (a `"use server"` file may export only async
+ * functions, and nothing under `app/` is picked up by `pnpm run test`).
+ * `app.issue_payroll_loan` itself accepts a remaining-installments count
+ * between 0 and term_count inclusive (0 = fully paid off already, term_count
+ * = none paid yet) -- this mirrors that exact bound so a bad value is
+ * rejected here with the same shape of message as every other validation in
+ * this action, instead of surfacing the RPC's own `invalid_opening_remaining_installments`.
+ */
+export function parseIssuePayrollLoanFormData(formData: FormData): { fields: IssuePayrollLoanFormFields } | { error: string } {
+  const employeeId = String(formData.get("employeeId") ?? "").trim();
+  const principalAmount = Number(formData.get("principalAmount") ?? 0);
+  const installmentAmount = Number(formData.get("installmentAmount") ?? 0);
+  const termCount = Number(formData.get("termCount") ?? 0);
+  if (!employeeId || principalAmount <= 0 || installmentAmount <= 0 || termCount <= 0) {
+    return { error: "Employee, principal, installment amount, and term count are all required and must be positive." };
+  }
+
+  const isOpeningBalance = formData.get("isOpeningBalance") === "on";
+  let openingRemainingInstallments: number | null = null;
+  if (isOpeningBalance) {
+    const raw = String(formData.get("openingRemainingInstallments") ?? "").trim();
+    const parsed = raw === "" ? Number.NaN : Number(raw);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > termCount) {
+      return { error: "Remaining installments (for an opening balance) must be a whole number between 0 and the term count." };
+    }
+    openingRemainingInstallments = parsed;
+  }
+
+  return { fields: { employeeId, principalAmount, installmentAmount, termCount, isOpeningBalance, openingRemainingInstallments } };
+}
+
 export async function issuePayrollLoan(
   client: PayrollMutationRpcClient,
   input: {

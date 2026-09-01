@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
@@ -197,6 +197,11 @@ function AssignComponentForm({ components, assignPayrollComponentAction }: { com
 
 function IssueLoanForm({ issuePayrollLoanAction }: { issuePayrollLoanAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(issuePayrollLoanAction, INITIAL_STATE);
+  const [termCount, setTermCount] = useState("");
+  const [isOpeningBalance, setIsOpeningBalance] = useState(false);
+  const termCountNumber = Number(termCount);
+  const remainingMax = termCount && termCountNumber > 0 ? termCountNumber : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Issue an employee loan/advance</h3>
@@ -215,9 +220,37 @@ function IssueLoanForm({ issuePayrollLoanAction }: { issuePayrollLoanAction: Bou
         </label>
         <label className="text-xs text-neutral-500">
           Term (installments)
-          <input type="number" name="termCount" min={1} max={360} required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+          <input
+            type="number" name="termCount" min={1} max={360} required value={termCount}
+            onChange={(e) => setTermCount(e.target.value)}
+            className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm"
+          />
         </label>
       </div>
+      <label className="inline-flex items-center gap-1 text-xs text-neutral-500">
+        <input
+          type="checkbox" name="isOpeningBalance" checked={isOpeningBalance}
+          onChange={(e) => setIsOpeningBalance(e.target.checked)}
+        /> This is an opening balance
+      </label>
+      <p className="text-xs text-neutral-400">
+        Check this for a loan carried over from before this system was used, where some installments were already
+        paid elsewhere. Leave unchecked for an ordinary new loan issued from today.
+      </p>
+      {isOpeningBalance ? (
+        <label className="text-xs text-neutral-500">
+          Remaining installments
+          <input
+            type="number" name="openingRemainingInstallments" min={0} max={remainingMax} required
+            className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm"
+          />
+          <span className="mt-1 block text-xs text-neutral-400">
+            How many of the {termCount || "term"} installments above are still unpaid (0 if this loan is already
+            fully paid off, up to the full term count if none of it was paid before cutover). Cannot exceed the
+            term count.
+          </span>
+        </label>
+      ) : null}
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Issuing…">Issue loan</Button>
       <ErrorLine error={state.error} />
     </form>

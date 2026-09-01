@@ -8,6 +8,7 @@ import {
   assignPayrollComponentToEmployee,
   decidePayrollReimbursementRequest,
   issuePayrollLoan,
+  parseIssuePayrollLoanFormData,
   calculatePayrollRun,
   submitPayrollRunForFinalization,
   finalizePayrollRun,
@@ -105,6 +106,53 @@ describe("decidePayrollReimbursementRequest / issuePayrollLoan", () => {
     });
     assert.equal(calls[0]?.args.p_is_opening_balance, true);
     assert.equal(calls[0]?.args.p_opening_remaining_installments, 2);
+  });
+});
+
+// ISS-2026-321: app.issue_payroll_loan's p_is_opening_balance/p_opening_remaining_installments
+// parameters (proven correct above) were reachable from no UI -- the ordinary "Issue Loan"
+// screen's own Server Action hardcoded isOpeningBalance:false/openingRemainingInstallments:null
+// on every call. These tests cover parseIssuePayrollLoanFormData, the pure formData-parsing
+// function that action now calls, since a "use server" file may only export async functions and
+// nothing under app/ is picked up by `pnpm run test` -- this is the closest testable seam to the
+// Server Action itself.
+describe("parseIssuePayrollLoanFormData (ISS-2026-321)", () => {
+  function baseFields(overrides: Record<string, string> = {}): FormData {
+    const formData = new FormData();
+    const fields: Record<string, string> = { employeeId: ID_1, principalAmount: "300000", installmentAmount: "100000", termCount: "6", ...overrides };
+    for (const [key, value] of Object.entries(fields)) formData.set(key, value);
+    return formData;
+  }
+
+  test("regression: an unchecked opening-balance box still yields isOpeningBalance:false and openingRemainingInstallments:null, exactly as before this closure", () => {
+    const result = parseIssuePayrollLoanFormData(baseFields());
+    assert.ok("fields" in result);
+    assert.equal(result.fields.isOpeningBalance, false);
+    assert.equal(result.fields.openingRemainingInstallments, null);
+  });
+
+  test("a checked opening-balance box with a valid remaining-installments value passes both through", () => {
+    const formData = baseFields({ isOpeningBalance: "on", openingRemainingInstallments: "2" });
+    const result = parseIssuePayrollLoanFormData(formData);
+    assert.ok("fields" in result);
+    assert.equal(result.fields.isOpeningBalance, true);
+    assert.equal(result.fields.openingRemainingInstallments, 2);
+  });
+
+  test("a checked opening-balance box accepts 0 remaining installments (already fully paid off)", () => {
+    const result = parseIssuePayrollLoanFormData(baseFields({ isOpeningBalance: "on", openingRemainingInstallments: "0" }));
+    assert.ok("fields" in result);
+    assert.equal(result.fields.openingRemainingInstallments, 0);
+  });
+
+  test("rejects a remaining-installments value greater than the term count, mirroring app.issue_payroll_loan's own bound", () => {
+    const result = parseIssuePayrollLoanFormData(baseFields({ isOpeningBalance: "on", openingRemainingInstallments: "7" }));
+    assert.ok("error" in result);
+  });
+
+  test("rejects a missing remaining-installments value when the box is checked", () => {
+    const result = parseIssuePayrollLoanFormData(baseFields({ isOpeningBalance: "on" }));
+    assert.ok("error" in result);
   });
 });
 

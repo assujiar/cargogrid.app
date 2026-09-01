@@ -20,6 +20,7 @@ import {
   assignPayrollComponentToEmployee,
   decidePayrollReimbursementRequest,
   issuePayrollLoan,
+  parseIssuePayrollLoanFormData,
   createPayrollRun,
   calculatePayrollRun,
   resolvePayrollException,
@@ -195,17 +196,15 @@ export async function issuePayrollLoanAction(tenantSlug: string, _prevState: Pay
   const access = await resolveHrisAccessForRequest(tenantSlug);
   if (access.status !== "allowed") return NO_ACCESS;
 
-  const employeeId = String(formData.get("employeeId") ?? "").trim();
-  const principalAmount = Number(formData.get("principalAmount") ?? 0);
-  const installmentAmount = Number(formData.get("installmentAmount") ?? 0);
-  const termCount = Number(formData.get("termCount") ?? 0);
-  if (!employeeId || principalAmount <= 0 || installmentAmount <= 0 || termCount <= 0) return { error: "Employee, principal, installment amount, and term count are all required and must be positive." };
+  const parsed = parseIssuePayrollLoanFormData(formData);
+  if ("error" in parsed) return { error: parsed.error };
+  const { employeeId, principalAmount, installmentAmount, termCount, isOpeningBalance, openingRemainingInstallments } = parsed.fields;
 
   const supabase = await createSupabaseServerClient();
   try {
     await issuePayrollLoan(supabase, {
       tenantId: access.tenant.id, employeeId, principalAmount, currency: "IDR", installmentAmount, termCount,
-      isOpeningBalance: false, openingRemainingInstallments: null, notes: null, actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
+      isOpeningBalance, openingRemainingInstallments, notes: null, actorAuthUserId: access.authUserId, actorLabel: access.authUserId,
     });
   } catch (error) {
     if (error instanceof PayrollMutationError) return { error: `Could not issue this loan: ${error.message}` };
