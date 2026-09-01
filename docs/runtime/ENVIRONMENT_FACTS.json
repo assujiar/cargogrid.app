@@ -1,0 +1,19 @@
+{
+  "$comment": "ISS-2026-284. The single machine-readable declaration of every load-bearing environment fact this repository's own documentation asserts as current. Before this file, none of these facts lived anywhere a script could read -- each was a string typed into prose, independently, in as many as a dozen files, and nothing ever noticed when the provider moved and the prose did not. That is exactly how Step 15's frozen 'no deployed environment exists' survived unverified for 13 days across 21 checkpoints, and how RGL-BLK-001's mechanism fix (vercel.json + check-go-decision.ts, 2026-08-30) still left four current-state documents describing the pre-fix world three days later. Whoever changes one of these facts for real (moves the Vercel project, rotates the Supabase project, changes the pinned Node version) must edit this file in the same change -- scripts/release/check-environment-facts.ts's Group A reads it and fails when a tracked document disagrees.",
+  "vercel": {
+    "projectId": "prj_9ND1BsfbppHiqeKrSEldYh8xbC68",
+    "teamSlug": "saiki-tech",
+    "productionAutoDeployGated": true,
+    "productionAutoDeployGatedSince": "2026-08-30",
+    "productionAutoDeployGatedMechanism": "vercel.json git.deploymentEnabled.main=false, ignoreCommand=scripts/release/check-go-decision.ts"
+  },
+  "supabase": {
+    "projectRef": "awdlicmwzdxquopwtcfd",
+    "organizationId": "xnvwzlfbmcvgodnsxxsk",
+    "region": "ap-northeast-1"
+  },
+  "nodeVersion": {
+    "pinned": "24.x",
+    "source": "package.json engines.node"
+  }
+}

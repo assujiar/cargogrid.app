@@ -151,6 +151,14 @@ jobs:
       - name: Release-candidate freeze check (docs/build-log/release-go-live/RGL-392.md)
         run: pnpm run release:check-freeze
 
+      # ISS-2026-284: the credential-free half only (no VERCEL_TOKEN/SUPABASE_PAT in CI) --
+      # checks that vercel.json and package.json still agree with what
+      # docs/runtime/ENVIRONMENT_FACTS.json declares. The live-provider half runs from an
+      # operator's own session, same reasoning as check-live-schema-drift.ts: a pipeline
+      # holding production credentials is a pipeline whose compromise reads production.
+      - name: Environment-facts drift check (repo-consistency half)
+        run: pnpm run release:check-env-facts
+
       - name: Branch name check (PR only)
         if: github.event_name == 'pull_request'
         run: node --experimental-strip-types scripts/git/check-branch-name.ts "${{ github.head_ref }}"

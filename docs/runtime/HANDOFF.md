@@ -77,6 +77,18 @@
 > the master prompt. Future work executes the package from `START_HERE.md` against an authorized
 > target repository — after reading the validation report and gap/risk register first, which
 > `START_HERE.md` §8 now tells you to do.
+>
+> **Correction, 2026-09-01 (`ISS-2026-284`), this banner's own error, fixed rather than left
+> standing.** Both mentions of `RGL-BLK-001` above (and its own mention in §0.-3 below) say the
+> ungated production auto-deploy is "still architecturally unfixed". That was true when written
+> and is no longer true: since 2026-08-30, `vercel.json`'s `git.deploymentEnabled.main = false`
+> plus its `ignoreCommand` routing every would-be build through
+> `scripts/release/check-go-decision.ts` means production only builds when a recorded
+> go-decision names the exact commit SHA. `RGL-BLK-001` is `RESOLVED` by mechanism
+> (`docs/build-log/release-go-live/BLOCKER_LEDGER.md`), not merely accepted as risk. Nothing
+> else in this banner is affected — `UAT_ACCEPTED` was still never obtained and no staging tier
+> exists, both of which remain genuinely true. Re-verify with `pnpm run release:check-env-facts`
+> if this is ever in doubt.
 
 ---
 

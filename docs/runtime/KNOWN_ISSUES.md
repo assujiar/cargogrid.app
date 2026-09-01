@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 45 — 4 High, 15 Medium, 26 Low |
+| `OPEN` | 44 — 4 High, 14 Medium, 26 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 221 |
+| `RESOLVED` | 222 |
 | **Total records** | **275** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -94,7 +94,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-256` | Medium | `ACCEPTED_RISK` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
 | `ISS-2026-259` | Medium | `RESOLVED` | `app.audit_logs` is structurally blind to raw-SQL or infra-level data corruption, a real detection gap for the data-corruption DR scenario |
 | `ISS-2026-281` | Medium | `OPEN` | the mandatory "CI-mirrors-hosted property" cross-cutting Tier B check (`HARDENING_MATRIX.md` §17, `00_EXECUTION_INDEX.md` §13) is explicitly documente |
-| `ISS-2026-284` | Medium | `OPEN` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
+| `ISS-2026-284` | Medium | `RESOLVED` | A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpo |
 | `ISS-2026-288` | Medium | `OPEN` | `claude/prompt-206-210-dpxtmu` carries a superseded, divergent copy of an already-applied migration under the same filename, one merge away from the p |
 | `ISS-2026-300` | Medium | `RESOLVED` | `supabase_migrations.schema_migrations` ledger on the hosted project (`awdlicmwzdxquopwtcfd`) records 9 of this checkpoint's own applied migrations un |
 | `ISS-2026-302` | Medium | `RESOLVED` | the IP-restriction half of `ISS-2026-236`: `SEC:Configure`, `FIN:Approve` and `HRS:Approve` (61 functions) still have no IP-allowlist wiring |
@@ -6996,7 +6996,7 @@ A full sweep of `BLOCKER_LEDGER.md`'s 32 currently-open entries found 14 (`HDN-B
 
 **`RESOLVED` at `HDN-388`.** This finding's own stated remedy — "stating the true count going forward" rather than retroactively editing history — has now been honored correctly twice running: `HDN-387`'s own Tier C hand-recounted its tally from scratch (independently re-verified accurate by `HDN-388`'s own Tier C correctness re-derivation lens), and `HDN-388`'s own new "Status as of `HDN-388`" section (0 Critical / 17 High / 6 Medium) was likewise hand-recounted entry-by-entry, not carried forward, and independently confirmed accurate by the same lens. The "standing reminder" this finding registered is no longer a live risk in the current live tally — closing it here does not touch any of the 6 historical "Status as of" snapshots it correctly declined to rewrite.
 
-### ISS-2026-284 — A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpoint ever re-verified it against the provider (found at `RGL-391`, Step 16 kickoff, Medium) (OPEN, Medium)
+### ISS-2026-284 — A load-bearing environment fact ("no deployed environment exists") drifted unverified for 13 days across 21 `VERIFIED` checkpoints, because no checkpoint ever re-verified it against the provider (found at `RGL-391`, Step 16 kickoff, `RESOLVED` 2026-09-01, Medium)
 
 `docs/build-log/full-system-hardening/00_EXECUTION_INDEX.md` §2 froze, and its §10 built an entire structural constraint on, the statement: *"Deployed environment: **None.** No Vercel deployment, no CI-driven deploy pipeline, no real sign-in flow. The live Supabase project is a migrated database, **not** a running system."* That statement was **already untrue when it was written**, and stayed untrue and uncorrected through every one of Step 15's 21 checkpoints.
 
@@ -7007,6 +7007,50 @@ A full sweep of `BLOCKER_LEDGER.md`'s 32 currently-open entries found 14 (`HDN-B
 **Status `OPEN`**, Medium (a process/documentation-accuracy issue; the technical consequences are separately registered as `RGL-BLK-001` and `RGL-BLK-002` in `docs/build-log/release-go-live/BLOCKER_LEDGER.md`, which carry their own owners). **Step 15's historical records are deliberately not rewritten** — they accurately record what their authors observed, and `docs/runtime/` is append-only per `AGENTS.md`; only *current-state* assertions were corrected, in Step 16's own documents. Owner: `RGL-409` (Post-Implementation Review) as a mandatory PIR input, with forward-document propagation owned by `RGL-411`.
 
 **Re-verified, disposition confirmed accurate — the correction pattern is confirmed to have held, now further reinforced by an actual production deployment (2026-08-28, Track B Batch 8).** Confirmed `00_EXECUTION_INDEX.md` line 43 still carries the original, deliberately-unrewritten "Deployed environment: **None**" claim, correctly untouched per `AGENTS.md`'s append-only convention. Confirmed `docs/build-log/release-go-live/00_RELEASE_GO_LIVE_EXECUTION_INDEX.md` carries the corrected, current-state fact. Independently reinforced: Track A (`RGL-404.md` §12A, 2026-08-27) has since actually merged and deployed this branch to production (`main` HEAD `c11c616`, Vercel deployment `READY`), and this batch's own live `curl` probes against the production URL (see `ISS-2026-297` below) confirm it is genuinely serving traffic today — the fact this entry is about is now doubly, freshly true. Confirmed `RGL-409`/`RGL-411` have not yet run. **Not fixed by this batch** — the immediate doc-drift symptom is already fixed in current-state documents; the real subject (no checkpoint re-verifies an external-provider fact) is correctly left open pending its own named PIR/propagation owners. Owner unchanged.
+
+**`RESOLVED`, 2026-09-01**, under `ADR-0027` Part A. Both named owners have since run —
+`RGL-409.md` §10 closed this entry "by demonstrated practice", and `RGL-411.md` §3 ran a
+propagation sweep and found "no further edit was needed" — but **closing by demonstrated
+practice, without a durable mechanism, measurably failed within three days.** `RGL-BLK-001`
+was closed by mechanism on 2026-08-30 (`vercel.json` + `scripts/release/check-go-decision.ts`),
+and four current-state documents — including the *active* `deployment-rollback.md` runbook —
+still told a reader that `main` auto-deploys to production ungated. That is this entry's own
+failure mode, recurring against the very fact this entry is about.
+
+**The residual is a durable check, not another documentation pass.**
+`docs/runtime/ENVIRONMENT_FACTS.json` is the first machine-readable declaration this repository
+has had for the facts that kept drifting silently — which Vercel project this repo deploys to,
+whether production auto-deploy is gated, which Supabase project is live, which Node version is
+pinned. `scripts/release/check-environment-facts.ts` checks it two ways: Group A (no
+credentials, wired into CI) confirms the repository's own configuration — `vercel.json`,
+`package.json` — agrees with what is declared; Group B (credentialed, run by an operator, same
+reasoning as `check-live-schema-drift.ts`: a pipeline holding production credentials is a
+pipeline whose compromise reads production) confirms the live providers still agree. Group B is
+what would have caught this entry's own original finding — a Vercel project appearing under a
+frozen "no deployed environment exists" claim — the moment it happened rather than 13 days
+later.
+
+**Deliberately not a prose scanner.** A checker that greps documentation for phrases like
+"ungated" would be exactly as fragile as the problem it fixes — blind to a new document making
+the same mistake in different words, and brittle against rewording of an existing one. It checks
+what is actually mechanical (repository configuration, live provider state) rather than trying
+to parse intent from prose.
+
+**The four stale documents are corrected**, each per its own convention: `deployment-rollback.md`
+(an *active* runbook, not historical narrative) is edited in place, since a responder reading it
+mid-incident needs the current mechanism, not a footnote. `HANDOFF.md`'s Step 17 banner,
+`RELEASE_READINESS_MATRIX.md`'s Step 16 table and `CARGOGRID_BUILD_STATUS.md`'s dated checkpoint
+log are each left byte-for-byte as their authors wrote them — `docs/runtime/` is append-only —
+with one dated correction note appended per file, naming exactly which claim is stale and why,
+matching this file's own and `HANDOFF.md`'s own established self-correction pattern.
+
+**Evidence.** 12 unit tests on the two pure decision cores (`findAssertionDrift`,
+`findLiveDrift`), including the exact shape that recurred — a gate declared but not actually
+configured — and the exact shape that caused the 13-day drift — a declared provider resource
+that has quietly stopped existing. Live-run against the real project: Group A clean, Group B
+clean with `SUPABASE_PAT` present. `pnpm run typecheck`/`lint`/`test`/`docs:check`/`issues:check`
+all green; `release:check-freeze` untouched, which is the proof no migration or db-test file was
+added.
 
 ### ISS-2026-285 — `app._calc_vendor_kpi_rate_validity` returns not-computable for sub-24-hour windows, contradicting its own documented guarantee and failing `db:test` for 3 hours of every 24 (found live at `RGL-391`, High) (RESOLVED, High)
 

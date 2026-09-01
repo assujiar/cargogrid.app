@@ -146,3 +146,16 @@ finding at this checkpoint; one real mixed-checkpoint evidence drift found and r
 requires passes at this one checkpoint. Still not a production, pilot, GA, or market-ready claim —
 that determination is `RGL-412`'s alone to make, per this document's own governing constraint (§9
 above, inherited unchanged from Step 15's own charter).
+
+---
+
+**Correction, 2026-09-01 (`ISS-2026-284`).** The two table rows above naming `RGL-BLK-001` as
+"remains open, `ACCEPTED (operator override)`" and listing "branch-protection/promotion-gate
+config" as an unchanged Track C human-only gap were accurate as of this document's own
+`RGL-410` checkpoint and are not rewritten here. **They are stale as current state.** Since
+2026-08-30, `vercel.json`'s `git.deploymentEnabled.main = false` plus its `ignoreCommand`
+routing every would-be build through `scripts/release/check-go-decision.ts` closed
+`RGL-BLK-001` by mechanism — `docs/build-log/release-go-live/BLOCKER_LEDGER.md` records
+`RESOLVED`, not an accepted risk. GitHub branch protection specifically remains genuinely
+unconfigured and is tracked separately as `ISS-2026-289`. Re-verify the mechanism half with
+`pnpm run release:check-env-facts` if this is ever in doubt.

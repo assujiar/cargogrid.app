@@ -116,9 +116,19 @@ without disturbing every other tenant's post-backup writes is the exact hard pro
 
 ### 4.1 Frontend/API layer — Vercel application rollback
 
-CargoGrid's Vercel project auto-deploys `main` to Production on every merge (`RGL-BLK-001`,
-accepted risk — `docs/build-log/release-go-live/BLOCKER_LEDGER.md`). Two real, verified
-mechanisms exist, in order of preference:
+**Corrected 2026-09-01 (`ISS-2026-284`): the sentence this replaced said CargoGrid's Vercel
+project auto-deploys `main` to Production on every merge, unconditionally. That was true when
+this runbook was written and is no longer true.** Since 2026-08-30, `vercel.json`'s
+`git.deploymentEnabled.main = false` disables Vercel's own automatic trigger for `main`, and its
+`ignoreCommand` routes every would-be build through `scripts/release/check-go-decision.ts` —
+production only builds when a recorded go-decision names the exact commit SHA
+(`RGL-BLK-001`, `RESOLVED` by mechanism — `docs/build-log/release-go-live/BLOCKER_LEDGER.md`).
+Merging to `main` no longer deploys anything by itself. The rollback mechanisms below are
+unaffected by this and remain correct as written; only the "every merge auto-deploys" premise
+above them was stale. Re-verify this statement with `pnpm run release:check-env-facts` if it is
+ever in doubt during an incident.
+
+Two real, verified mechanisms exist, in order of preference:
 
 1. **Vercel instant rollback** (the fast path, no rebuild). Every `target: "production"`
    deployment carries `isRollbackCandidate: true`/`false`; promoting a prior `READY` production

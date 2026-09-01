@@ -1238,6 +1238,24 @@ External pilot is not a release stage. Direct GA requires the entire table `VERI
 - ~~Required action before any further Phase 0 prompt: rewrite `docs/architecture/14_*.md`, `15_*.md`, `16_*.md` as single, non-duplicated, internally consistent documents reflecting the chosen option; re-verify Step 3 closure; then resume Phase 0 at `CG-S5-PH0-004` (Prompt 83).~~
 - If resuming without operator input by mistake: stop immediately, re-read this section and `HANDOFF.md` §1 in full first.
 
+## 9.-1 Correction, 2026-09-01 (`ISS-2026-284`)
+
+Several dated entries above (line 22-26's "ungated Vercel `main` -> production auto-deploy",
+line 99's "auto-deploys `main` to production, ungated", and the `RGL-014` checkpoint entry's own
+`RGL-BLK-001` narrative) accurately describe the state **at the time each was written**, and are
+retained unedited per §10's own "keep as one current-state dashboard, do not stack duplicates"
+rule applying to structure, not to rewriting a checkpoint's own historical observation.
+
+**They are stale as CURRENT state, and this section exists so the next reader does not have to
+guess which.** Since 2026-08-30, `vercel.json`'s `git.deploymentEnabled.main = false` plus its
+`ignoreCommand` routing every would-be build through `scripts/release/check-go-decision.ts`
+means production only builds when a recorded go-decision names the exact commit SHA.
+`RGL-BLK-001` is `RESOLVED` by mechanism (`docs/build-log/release-go-live/BLOCKER_LEDGER.md`),
+not an accepted, still-armed risk. `docs/runtime/ENVIRONMENT_FACTS.json` now declares this fact
+machine-readably, and `pnpm run release:check-env-facts` re-verifies it against both the
+repository's own configuration and, with credentials, the live Vercel project — re-run it if
+this is ever in doubt.
+
 ## 10. Update rules
 
 Update after every atomic task, rollback, gate change, blocker change, or checkpoint. Reconcile with `TASK_LEDGER.md`, build logs, change manifest, error/issue ledgers. Status is controlled by the evidence link. Keep this file as **one** current-state dashboard — if a future merge produces stacked/duplicate sections again, consolidate them in the same checkpoint that discovers them rather than leaving them stacked.
