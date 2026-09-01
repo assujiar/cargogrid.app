@@ -160,7 +160,9 @@ function ExceptionRow({ tenantSlug, exception, runCurrency }: { tenantSlug: stri
               ? "Point balance mismatch"
               : exception.exceptionType === "entitlement_state_derivation_mismatch"
                 ? "Entitlement status mismatch"
-                : "Redemption liability status mismatch"}
+                : exception.exceptionType === "redemption_liability_status_mismatch"
+                  ? "Redemption liability status mismatch"
+                  : "Reward internal cost missing"}
           </p>
           <p className="text-xs text-text-secondary">Run currency: {runCurrency}</p>
           <pre className="mt-1 max-w-xl overflow-x-auto rounded bg-neutral-50 p-2 text-xs text-text-secondary">{JSON.stringify(exception.detail, null, 2)}</pre>

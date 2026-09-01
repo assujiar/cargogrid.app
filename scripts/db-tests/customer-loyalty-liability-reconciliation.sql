@@ -727,6 +727,98 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-136 item 2 regression (mandatory): mismatch DETECTION is now scoped identically to each domain''s own liability computation -- Gamma''s (USD) entitlement corruption and Delta''s (tenant-default-currency) redemption corruption from the block above are still sitting there, untouched. A FRESH off-currency (IDR) run must raise NEITHER, while Beta''s tenant-wide point corruption must STILL be caught (the load-bearing anti-regression proof that points were NOT accidentally currency-scoped); a fresh SAME-instant in-scope (USD) run must still raise all three, exactly as before this fix'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lra1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000346001';
+  v_run_idr app.loyalty_liability_reconciliation_runs;
+  v_run_usd app.loyalty_liability_reconciliation_runs;
+  v_entitlement_count integer;
+  v_redemption_count integer;
+  v_point_count integer;
+  v_total_count integer;
+  v_point_exception app.loyalty_liability_reconciliation_exceptions;
+begin
+  -- ---------------------------------------------------------------------
+  -- Off-currency (IDR) run: Gamma's own entitlement currency is USD and
+  -- Delta's redemption is only ever in scope for lra1's own resolved
+  -- default currency (USD) -- neither is IDR, so neither mismatch may fire.
+  -- ---------------------------------------------------------------------
+  v_run_idr := app.execute_loyalty_liability_reconciliation_run(v_tenant1, clock_timestamp(), 'IDR', v_manager1, 'manager1', 'lra-currency-scope-detection-idr', 1);
+
+  select count(*) into v_entitlement_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_idr.id and exception_type = 'entitlement_state_derivation_mismatch';
+  if v_entitlement_count <> 0 then
+    raise exception 'ISS-2026-136 item 2 regression: expected ZERO entitlement_state_derivation_mismatch exceptions on an IDR-scoped run (Gamma''s corrupted entitlement is USD, out of scope for this run), got %', v_entitlement_count;
+  end if;
+
+  select count(*) into v_redemption_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_idr.id and exception_type = 'redemption_liability_status_mismatch';
+  if v_redemption_count <> 0 then
+    raise exception 'ISS-2026-136 item 2 regression: expected ZERO redemption_liability_status_mismatch exceptions on an IDR-scoped run (redemptions only ever land on the tenant-default-currency run, USD here), got %', v_redemption_count;
+  end if;
+
+  -- The load-bearing anti-regression assertion: a tenant-wide points defect
+  -- must still be caught on EVERY currency-scoped run, proving points were
+  -- NOT accidentally currency-scoped by this fix.
+  select count(*) into v_point_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_idr.id and exception_type = 'point_balance_derivation_mismatch';
+  if v_point_count <> 1 then
+    raise exception 'ISS-2026-136 item 2 regression: expected EXACTLY ONE point_balance_derivation_mismatch exception on the IDR-scoped run (Beta''s corruption is tenant-wide and must be caught on every run regardless of currency -- this is the proof points were NOT accidentally currency-scoped), got %', v_point_count;
+  end if;
+
+  select * into v_point_exception from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_idr.id and exception_type = 'point_balance_derivation_mismatch';
+  if v_point_exception.detail->>'loyaltyAccountId' is null then
+    raise exception 'assertion failed: expected the IDR run''s own point exception to carry a real loyaltyAccountId in its detail';
+  end if;
+
+  if v_run_idr.status <> 'exceptions_pending' then
+    raise exception 'ISS-2026-136 item 2 regression: expected the IDR-scoped run to still land exceptions_pending (Beta''s tenant-wide point defect alone must still block it), got %', v_run_idr.status;
+  end if;
+
+  -- Certify must still be BLOCKED by the one exception that is genuinely in
+  -- scope for this run (the points mismatch) -- detection SCOPE changed,
+  -- the certify gate itself (zero open exceptions) did not.
+  begin
+    perform app.certify_loyalty_liability_reconciliation_run(v_tenant1, v_run_idr.id, v_run_idr.record_version, v_manager1, 'manager1');
+    raise exception 'ISS-2026-136 item 2 regression: expected certify to remain BLOCKED on the IDR-scoped run by the still-open, genuinely-in-scope point mismatch';
+  exception when others then if sqlerrm not like 'loyalty_liability_reconciliation_unresolved_exceptions%' then raise; end if;
+  end;
+
+  -- ---------------------------------------------------------------------
+  -- Same-instant in-scope (USD) run: proves the fix did not also suppress
+  -- detection for the currency it SHOULD fire on -- all three mismatches
+  -- (point, entitlement, redemption) still raise, exactly as the original
+  -- "all THREE forced mismatches" assertion above already proved before
+  -- this fix existed.
+  -- ---------------------------------------------------------------------
+  v_run_usd := app.execute_loyalty_liability_reconciliation_run(v_tenant1, clock_timestamp(), 'USD', v_manager1, 'manager1', 'lra-currency-scope-detection-usd', 1);
+
+  select count(*) into v_total_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_usd.id;
+  if v_total_count <> 3 then
+    raise exception 'ISS-2026-136 item 2 regression: expected exactly 3 exceptions on the fresh in-scope USD run (1 point, 1 entitlement, 1 redemption -- unchanged from before this fix), got %', v_total_count;
+  end if;
+
+  select count(*) into v_entitlement_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_usd.id and exception_type = 'entitlement_state_derivation_mismatch';
+  if v_entitlement_count <> 1 then
+    raise exception 'ISS-2026-136 item 2 regression: expected the USD run to still raise Gamma''s entitlement_state_derivation_mismatch (in scope -- her entitlement IS USD), got %', v_entitlement_count;
+  end if;
+  if (select detail->>'currency' from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_usd.id and exception_type = 'entitlement_state_derivation_mismatch') <> 'USD' then
+    raise exception 'assertion failed: expected the entitlement mismatch exception''s own detail to name its scoping currency (USD, the entitlement''s own currency)';
+  end if;
+
+  select count(*) into v_redemption_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_usd.id and exception_type = 'redemption_liability_status_mismatch';
+  if v_redemption_count <> 1 then
+    raise exception 'ISS-2026-136 item 2 regression: expected the USD run to still raise Delta''s redemption_liability_status_mismatch (in scope -- USD is lra1''s own resolved default currency), got %', v_redemption_count;
+  end if;
+  if (select detail->>'currency' from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_usd.id and exception_type = 'redemption_liability_status_mismatch') <> 'USD' then
+    raise exception 'assertion failed: expected the redemption mismatch exception''s own detail to name its scoping currency (USD, the run''s own currency / the tenant''s resolved default currency)';
+  end if;
+
+  select count(*) into v_point_count from app.loyalty_liability_reconciliation_exceptions where run_id = v_run_usd.id and exception_type = 'point_balance_derivation_mismatch';
+  if v_point_count <> 1 then
+    raise exception 'ISS-2026-136 item 2 regression: expected the USD run to still raise exactly one point_balance_derivation_mismatch (unaffected by this fix), got %', v_point_count;
+  end if;
+end $$;
+
 \echo '>> certify BLOCKED while any exception on the run remains open (mandatory test) -- a real, tested exception, mirroring FIN-209''s own certify-blocked-while-exceptions-open semantics exactly'
 do $$
 declare

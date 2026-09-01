@@ -111,7 +111,21 @@ export type CertifyLoyaltyLiabilityReconciliationRunInput = z.input<typeof Certi
 // re-derived from app.loyalty_redemption_events, mirroring the entitlement
 // line's own derivation exactly, so it can now raise the same class of
 // exception on a cached/re-derived status mismatch.
-export const LOYALTY_LIABILITY_RECONCILIATION_EXCEPTION_TYPES = ["point_balance_derivation_mismatch", "entitlement_state_derivation_mismatch", "redemption_liability_status_mismatch"] as const;
+//
+// ISS-2026-134 item 3 mirror fix: added reward_internal_cost_missing --
+// 20260828070000 widened the live llre_exception_type_check constraint to a
+// fourth value (raised when a physical_item/service_credit redemption's own
+// reward.internal_cost is null while actively fulfilling), but this contract
+// was never updated alongside it. A real row of that type failed this
+// module's own z.enum parse, throwing for every caller -- including the
+// admin Loyalty-liability page's own Promise.all over every open exception,
+// which 500'd the whole page rather than rendering the other, valid rows.
+export const LOYALTY_LIABILITY_RECONCILIATION_EXCEPTION_TYPES = [
+  "point_balance_derivation_mismatch",
+  "entitlement_state_derivation_mismatch",
+  "redemption_liability_status_mismatch",
+  "reward_internal_cost_missing",
+] as const;
 export const LoyaltyLiabilityReconciliationExceptionTypeSchema = z.enum(LOYALTY_LIABILITY_RECONCILIATION_EXCEPTION_TYPES);
 export type LoyaltyLiabilityReconciliationExceptionType = z.infer<typeof LoyaltyLiabilityReconciliationExceptionTypeSchema>;
 

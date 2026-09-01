@@ -3219,7 +3219,29 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // and 2 files whose fixture ordering was legal only because no FK existed. All fixed by
   // minting a genuinely real, minimal target row through a shared pg_temp helper (never
   // weakening the new guard); no fixture assertion was skipped, weakened, or deleted.
-  migrationSetSha256: "18f29f11c0ce45633c6d5b8f571de6181d9423d4dcc211876e47c1f1031da29b",
+  //
+  // EIGHTY-FIRST PASS (2026-09-01, ISS-2026-136 + ISS-2026-322): 429 files (+1). Closes item 2:
+  // mismatch DETECTION inside app.execute_loyalty_liability_reconciliation_run was tenant-wide
+  // while every liability TOTAL it feeds is currency-scoped, so one corrupted row re-raised the
+  // identical exception on every currency-scoped run for a tenant, blocking each from
+  // certifying separately. 20260901070000 is a CREATE OR REPLACE built from the LIVE function
+  // body (re-verified byte-identical to 20260828070000's own text before drafting -- this
+  // function has a documented near-miss of being rebuilt from a stale on-disk migration
+  // instead), adding exactly two currency guards: an entitlement mismatch now fires only on the
+  // run matching the entitlement's own immutable currency column; a redemption mismatch now
+  // fires only on the run matching the tenant's resolved default currency -- both the identical
+  // predicates the function's own accumulation logic already used a few lines below each check.
+  // The points-balance mismatch block is deliberately untouched: points carry no currency of
+  // their own and a tenant-wide points defect must stay caught on every run regardless of
+  // currency, a distinction the new regression proves directly rather than only asserting.
+  // Also closes the new ISS-2026-322, a real, unrelated defect found while re-deriving this
+  // function's live body: the TypeScript exception-type contract never learned the fourth live
+  // value ISS-2026-134's own 20260828070000 added, so a real row of that type would 500 the
+  // entire admin Loyalty-liability dashboard rather than only failing to parse itself -- fixed
+  // with a pure TypeScript-mirror widening, no database change.
+  migrationSetSha256: "fab7182c7693621d60342f66ae426a5c7578b2ffe81dadfef03496d58258d3d2",
+  // History: 18f29f11c0ce45633c6d5b8f571de6181d9423d4dcc211876e47c1f1031da29b
+  // (428 files, ISS-2026-319's AR/AP open-item source-lineage guard).
   // History: 1c3ab068c7dcf6e2f1630c884192207e96b508847163d297452142a757962dc4
   // (427 files, ISS-2026-197's Operations profitability revenue-basis labeling).
   // History: 5ee83b6325c1001342815654894e7e321ef7815976969d3681b115cd41ccb4dd
@@ -3795,7 +3817,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // a fabricated one is refused via the RPC AND via a direct table INSERT (the guard is on the
   // table, not merely the RPC), and the opening_balance case resolves against a real staged
   // import row, never the open item itself.
-  dbTestSetSha256: "2147ac0b82fe6c254c559fba5b82eaa62342b01ba90c895302378c26f61dacd7",
+  //
+  // EIGHTY-FIRST PASS (2026-09-01, ISS-2026-136): 239 files, count unchanged -- one extended,
+  // no existing line touched. customer-loyalty-liability-reconciliation.sql gains a block
+  // proving a fresh off-currency run raises NEITHER the entitlement nor the redemption mismatch
+  // its own still-present forced corruptions would have raised before this fix, while a forced
+  // points-balance corruption is STILL caught on that same off-currency run (the load-bearing
+  // anti-regression proof points were not accidentally currency-scoped) and a same-instant
+  // in-scope run still raises all three exceptions exactly as before.
+  dbTestSetSha256: "4556d0d8d1760b34d32e98d41e05ca13e8db4dd4385fce35fd4c224e42d54d04",
+  // History: 2147ac0b82fe6c254c559fba5b82eaa62342b01ba90c895302378c26f61dacd7
+  // (239 files, ISS-2026-319's AR/AP open-item source-lineage regression across 16 files).
   // History: d9449d7be9c1626b7c8f16e1a20e0fe95c210838c88c310b2b159de59741b0dc
   // (239 files, ISS-2026-197's Operations profitability revenue-basis regression block).
   // History: 6247e07c73fcf41910829d0f38123a6817cd8b42aaf10b32150f089a225eb6c5

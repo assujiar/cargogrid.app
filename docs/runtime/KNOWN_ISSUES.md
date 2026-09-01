@@ -43,10 +43,10 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 39 — 4 High, 13 Medium, 22 Low |
+| `OPEN` | 38 — 4 High, 13 Medium, 21 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 228 |
-| **Total records** | **276** |
+| `RESOLVED` | 230 |
+| **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -115,6 +115,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-319` | Low | `RESOLVED` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
 | `ISS-2026-320` | Low | `OPEN` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
 | `ISS-2026-321` | Low | `OPEN` | the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself |
+| `ISS-2026-322` | Low | `RESOLVED` | the loyalty-liability reconciliation exception-type contract never learned the fourth live value `20260828070000` added, crashing the admin dashboard on a real row of that type |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -141,7 +142,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-132` | Low | `OPEN` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
 | `ISS-2026-133` | Low | `RESOLVED` | Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level |
 | `ISS-2026-134` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects c |
-| `ISS-2026-136` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, caus |
+| `ISS-2026-136` | Low | `RESOLVED` | Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, caus |
 | `ISS-2026-146` | Low | `OPEN` | cross-tenant `tenant_id` disclosure via exception message text, confirmed repository-wide (2,087+ occurrences since Phase 6), reproduced live in Group |
 | `ISS-2026-147` | Low | `RESOLVED` | Batch 3's own two Tier C-disclosed findings (zero test coverage for the 9 `/api/v1` REST route handlers; `IAE-013`'s own per-connector execution-log f |
 | `ISS-2026-156` | Low | `RESOLVED` | `scripts/db-tests/n8n-integration.sql:204`'s own webhook-endpoint lookup has no `ORDER BY`, nondeterministic if enough other test files' own webhook-e |
@@ -2793,7 +2794,7 @@ branch. `db:test ALL PASSED`; typecheck, lint (0 errors), 5753 unit tests and `n
 Applied live; the rewritten constraint verified against the hosted project. Freeze migration +
 db-test digests amended (sixty-eighth pass).
 
-### ISS-2026-136 — Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, causing silent double-counting if a multi-currency tenant's per-currency reconciliation runs are summed as the migration's own design decision 6 instructs (Phase 8, CPL-324 Integrated Verification, `CG-S13-CPL-026`, `OPEN` 2026-08-20 — item 1 only, item 2 remains `OPEN`, Low)
+### ISS-2026-136 — Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, causing silent double-counting if a multi-currency tenant's per-currency reconciliation runs are summed as the migration's own design decision 6 instructs (Phase 8, CPL-324 Integrated Verification, `CG-S13-CPL-026`, `RESOLVED` 2026-09-01 — item 1 resolved 2026-08-20, item 2 resolved this update, Low)
 
 Found `2026-08-20` at `CG-S13-CPL-026` (Prompt 324, Customer Portal and Loyalty Integrated Verification) — the loyalty-ledger-reconciliation lens's live-reproduced report, independently re-derived and confirmed by direct code read (not accepted on the lens's word alone) before being registered here.
 
@@ -2812,6 +2813,20 @@ Found `2026-08-20` at `CG-S13-CPL-026` (Prompt 324, Customer Portal and Loyalty 
 **Item 2 remains `OPEN`, Low** — unchanged from the original text above; not touched by this fix (a separate, lower-severity, disclosed-as-acceptable operational-noise characteristic, not a wrong-number defect).
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — item 1's fix still holds (`20260801270000...sql:260`, `p_currency = v_tenant_default_currency` gate). Item 2 (tenant-wide exception-detection noise) remains explicitly disclosed as acceptable operational noise, not a wrong-number defect. Disposition unchanged, still `OPEN` (item 2 only).
+
+**Item 2 `RESOLVED` (`2026-09-01`, ADR-0027 Part A backlog remediation).** Re-derived live before drafting, per this repository's own standing near-miss on this exact function (built from a migration file instead of the live body): `select pg_get_functiondef(...)` against a fresh disposable database with every migration applied confirmed the live body was still byte-identical (modulo formatting) to `20260828070000`'s own text — unchanged since the `reward_internal_cost_missing` exception type was added, so this fix starts from that live-confirmed body, copied verbatim, never reconstructed from disk.
+
+**The new invariant, as a ruling:** an exception is now raised on a run exactly when the row it concerns is genuinely in scope for that run's own liability computation — points: every run, unconditionally, because points carry no currency of their own (design decision 6) and a tenant-wide points defect must stay caught regardless of which currency a run happens to be scoped to; entitlements: only the run matching the entitlement's own immutable `currency` column (`app.loyalty_benefit_entitlements.currency`, `NOT NULL`, never `UPDATE`d anywhere in this repository's migration history — grep-confirmed before drafting); redemptions and the existing `reward_internal_cost_missing` exception: only the run whose `p_currency` equals the tenant's own resolved default currency. In every case the mismatch-detection guard is now the IDENTICAL predicate this same function already used a few lines below it to decide whether that row's value gets accumulated into the run's own liability TOTAL — detection scope is now congruent with total scope, never broader than it.
+
+`supabase/migrations/20260901070000_scope_customer_portal_loyalty_liability_mismatch_detection_to_run_currency.sql` — `CREATE OR REPLACE FUNCTION` against the live-confirmed body, unmodified except for exactly two added predicates (`and v_entitlement.currency = p_currency` on the entitlement mismatch test; `and p_currency = v_tenant_default_currency` on the redemption mismatch test) plus one additive `detail` key on each of those two exception types (the entitlement's own currency; the run's own currency), so the new scoping is self-evident to staff reading a resolved exception later. The points block, the CPL-325 single-snapshot-atomicity shape (one top-level statement, three `jsonb_agg`/`jsonb_to_recordset` branches sharing one MVCC snapshot), and the already-correctly-scoped `reward_internal_cost_missing` branch are byte-identical to the live body — untouched. `detail` is already a generic `z.record(z.string(), z.unknown())` in the TypeScript contract and rendered as a raw JSON dump in the admin UI, verified directly before drafting; neither needed a schema or UI change.
+
+**The one honest tradeoff, disclosed rather than hidden:** a mismatch on an entitlement (or redemption) in a currency the tenant never actually runs reconciliation for is no longer surfaced by any run. This is not a NEW coverage hole — that same currency's own liability TOTAL was already never reported in exactly that scenario (item 1's own currency-scope fix, above); a tenant that runs no reconciliation in a currency has nothing in that currency to reconcile either way. The change makes detection coverage congruent with total coverage rather than broader than it — which is exactly why the prior shape produced noise rather than signal: a defect out of scope for a run's own totals was still blocking that same run's own certify.
+
+**The certify gate itself is unchanged** — `status = certified` still requires zero open exceptions on the run; only detection SCOPE changed, never what counts as "resolved enough to certify."
+
+**Evidence.** A new regression block appended (never editing or deleting an existing line, including the file's own established forced-mismatch fixtures) to `scripts/db-tests/customer-loyalty-liability-reconciliation.sql`, placed directly after the existing "all THREE forced mismatches" currency-scoped exception-count assertion it builds on: a fresh off-currency (IDR) run of the same already-corrupted lra1 fixture (Gamma's USD entitlement, Delta's tenant-default-currency redemption) raises ZERO entitlement and ZERO redemption mismatches, while Beta's tenant-wide point-balance corruption is still caught exactly once and still blocks certify — the load-bearing anti-regression proof that points were NOT accidentally currency-scoped by this fix; a fresh same-instant in-scope (USD) run still raises all three mismatches, exactly as before this fix, each now carrying its own scoping currency in `detail`. Full `pnpm run db:test` (200+ files) `ALL PASSED`; `pnpm typecheck`, `pnpm lint` (0 new errors), `pnpm run issues:check`, and `pnpm test` all clean. Not yet applied to the live/hosted project — left for the orchestrating session, per this repository's own migration-application discipline.
+
+**Adjacent, separate defect noticed while reading this function's live body, NOT fixed here:** the `llre_exception_type_check` constraint (`20260828070000`) admits `reward_internal_cost_missing` as a 4th exception type, but `LOYALTY_LIABILITY_RECONCILIATION_EXCEPTION_TYPES` in `server/contracts/customer-portal-loyalty-liability/customer-portal-loyalty-liability.ts:114` still lists only the original three — a strict `z.enum` that would throw parsing any real `reward_internal_cost_missing` row. Grep-confirmed not tracked anywhere in this file or elsewhere under `docs/` as of this update. Flagged for the orchestrating session to register or fold into an existing entry; out of this closure's own scope (a TypeScript contract gap, not this migration's own currency-scoping charter).
 
 ### ISS-2026-137 — `app.loyalty_account_tier_movements` carries the identical Supreme-Admin-override gap `ISS-2026-130` closed for its own 5-table scope, but was not itself included in that fix (Phase 8, CPL-325, `CG-S13-CPL-027`, `RESOLVED` Track B Batch 4, Low)
 
@@ -9075,3 +9090,30 @@ mechanical field addition. **What would close it:** add an "opening balance" tog
 `IssueLoanForm` that reveals a "remaining instalments" field when checked, wired through
 `actions.ts` to the two parameters `app.issue_payroll_loan` already accepts, with a regression
 test proving the toggle actually reaches the database rather than only appearing on screen.
+
+### ISS-2026-322 — the loyalty-liability reconciliation exception-type contract never learned the fourth live value `20260828070000` added, crashing the admin dashboard on a real row of that type (found 2026-09-01 while closing `ISS-2026-136`, `RESOLVED` 2026-09-01, Low)
+
+While closing `ISS-2026-136` item 2, re-reading `app.execute_loyalty_liability_reconciliation_run`'s
+live body turned up an unrelated, real defect: `20260828070000` (closing `ISS-2026-134` item 3)
+widened the live `llre_exception_type_check` constraint to admit a fourth exception type,
+`reward_internal_cost_missing`, but never updated
+`LOYALTY_LIABILITY_RECONCILIATION_EXCEPTION_TYPES` in
+`server/contracts/customer-portal-loyalty-liability/customer-portal-loyalty-liability.ts` — a
+strict `z.enum` over only the original three values. `parseLoyaltyLiabilityReconciliationException`
+calls `.parse` against that enum for every exception row it reads, so a single real
+`reward_internal_cost_missing` row threw a `ZodError` for any caller — including the admin
+Loyalty-liability page's own `Promise.all` over every open exception across every pending run,
+which would 500 the entire page rather than render the other, valid rows next to it. The admin
+panel's own label ternary would separately have mislabeled the fourth type as a redemption
+mismatch, but never reached that branch since the parse failed first.
+
+**Risk in plain terms:** the live database has been able to produce this exception type since
+2026-08-28, and the moment a real one appeared, the whole staff Loyalty-liability dashboard would
+go down — not silently wrong data, a hard crash blocking every other exception on the page too.
+
+**`RESOLVED`, 2026-09-01.** Widened `LOYALTY_LIABILITY_RECONCILIATION_EXCEPTION_TYPES` to include
+`reward_internal_cost_missing` (a pure TypeScript-mirror repair — no database change, the live
+constraint was already correct), added the missing UI label branch in
+`loyalty-liability-admin-panel.tsx`, and added a unit test parsing a real
+`reward_internal_cost_missing` row through `parseLoyaltyLiabilityReconciliationException`. No
+migration needed.

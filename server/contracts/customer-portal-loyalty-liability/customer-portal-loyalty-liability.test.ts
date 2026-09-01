@@ -118,6 +118,28 @@ describe("parseLoyaltyLiabilityReconciliationException", () => {
     assert.equal(exception.detail.actualStatus, "fulfilled");
   });
 
+  // ISS-2026-134 item 3 mirror fix: reward_internal_cost_missing -- the live
+  // llre_exception_type_check constraint has admitted this fourth value since
+  // 20260828070000, but this contract's own z.enum never did, so a real row
+  // of this type failed to parse.
+  test("maps an open reward-internal-cost-missing exception", () => {
+    const exception = parseLoyaltyLiabilityReconciliationException({
+      id: EXCEPTION_ID,
+      tenant_id: TENANT_ID,
+      run_id: RUN_ID,
+      exception_type: "reward_internal_cost_missing",
+      detail: { redemptionId: ACCOUNT_ID, rewardId: ACCOUNT_ID, note: "reward.internal_cost is null on an actively fulfilling redemption" },
+      status: "open",
+      resolved_by: null,
+      resolution_reason: null,
+      resolved_at: null,
+      record_version: 1,
+      created_at: "2026-08-18T00:00:00.000Z",
+      updated_at: "2026-08-18T00:00:00.000Z",
+    });
+    assert.equal(exception.exceptionType, "reward_internal_cost_missing");
+  });
+
   test("rejects an unrecognized exception_type", () => {
     assert.throws(() =>
       parseLoyaltyLiabilityReconciliationException({
