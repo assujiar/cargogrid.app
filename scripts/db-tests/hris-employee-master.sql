@@ -2305,3 +2305,63 @@ begin
   end if;
 end;
 $$;
+
+\echo '>> ISS-2026-277 regression: app.archive_employee_profile refuses to archive an employee under legal hold (app._is_under_legal_hold, scope app.employees) with employee_legal_hold_blocks_archive -- while a structurally identical archive of a NOT-held employee still succeeds unchanged'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_supreme uuid := '00000000-0000-0000-0000-000000027999';
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HR1');
+  v_held_employee app.employees;
+  v_free_employee app.employees;
+  v_raised boolean;
+begin
+  -- A draft employee is a legitimate archive target on its own (archive is valid directly
+  -- from draft, per the reject-path block above) -- no need to progress the full lifecycle.
+  v_held_employee := app.create_employee_draft(v_tenant1, 'Legal Hold Employee Held', 'contract', null, null, null, null, null, null, '2026-02-01', v_company, null, null, null, null, null, null, 'hr_created', 'idem-lh-employee-held', v_staff, 'staff');
+  v_free_employee := app.create_employee_draft(v_tenant1, 'Legal Hold Employee Free', 'contract', null, null, null, null, null, null, '2026-02-01', v_company, null, null, null, null, null, null, 'hr_created', 'idem-lh-employee-free', v_staff, 'staff');
+
+  -- v_staff holds no RET:Configure -- app.request_legal_hold requires it, and Supreme Admin
+  -- (v_supreme) is who this file's own setup already grants that universal authority to.
+  perform app.request_legal_hold(v_tenant1, 'operational', 'app.employees', v_held_employee.master_record_id, 'ISS-2026-277 regression: litigation hold on a draft employee', v_supreme, 'supreme');
+
+  v_raised := false;
+  begin
+    perform app.archive_employee_profile(v_held_employee.master_record_id, v_held_employee.record_version, 'record retention closure', v_staff, 'staff');
+    raise exception 'assertion failed: expected employee_legal_hold_blocks_archive for a held employee, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'employee_legal_hold_blocks_archive' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected employee_legal_hold_blocks_archive, got none';
+  end if;
+  if (select lifecycle_status from app.employees where master_record_id = v_held_employee.master_record_id) <> 'draft' then
+    raise exception 'assertion failed: a blocked archive must leave the held employee''s own lifecycle_status untouched';
+  end if;
+
+  -- Also refused for a SCHEDULED (future-dated) archive of the same held employee -- the
+  -- guard is checked once, before either branch runs.
+  v_raised := false;
+  begin
+    perform app.archive_employee_profile(v_held_employee.master_record_id, v_held_employee.record_version, 'scheduled closure', v_staff, 'staff', current_date + 30);
+    raise exception 'assertion failed: expected employee_legal_hold_blocks_archive for a SCHEDULED archive of a held employee';
+  exception when check_violation then
+    if sqlerrm !~ 'employee_legal_hold_blocks_archive' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected employee_legal_hold_blocks_archive for the scheduled-archive branch, got none';
+  end if;
+
+  -- Control: the structurally identical archive of a NOT-held employee still succeeds --
+  -- no regression to ordinary archive behavior.
+  v_free_employee := app.archive_employee_profile(v_free_employee.master_record_id, v_free_employee.record_version, 'record retention closure', v_staff, 'staff');
+  if v_free_employee.lifecycle_status <> 'archived' then
+    raise exception 'assertion failed: expected the not-held employee to archive normally, got %', v_free_employee.lifecycle_status;
+  end if;
+
+  raise notice 'PASS: app.archive_employee_profile (ISS-2026-277) refuses both an immediate and a scheduled archive of a held employee with employee_legal_hold_blocks_archive, and a not-held employee still archives normally';
+end;
+$$;

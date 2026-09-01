@@ -157,7 +157,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-245` | Low | `RESOLVED` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
 | `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
 | `ISS-2026-248` | Low | `RESOLVED` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
-| `ISS-2026-277` | Low | `OPEN` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
+| `ISS-2026-277` | Low | `RESOLVED` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
 | `ISS-2026-278` | Low | `RESOLVED` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
 | `ISS-2026-294` | High | `RESOLVED` | the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into |
 | `ISS-2026-306` | Low | `ACCEPTED_RISK` | Per-directory prompt numbering contiguity is deliberately broken: `431_TENANT_MERGE_SPLIT_PROMPT.md` executes in Phase 1 but is numbered after the who |
@@ -7722,7 +7722,7 @@ Read the exact trigger definition (`supabase/migrations/20260729180000_create_fi
 
 **RESOLVED**, 2026-08-27 (Step 16 historical-issue-backlog remediation, item 14, jointly with `ISS-2026-275` above): `supabase/migrations/20260826160000_create_finance_journal_historical_import.sql` widens `app.finance_journals`' own `finance_journals_source_type_check` and `finance_journals_source_check` constraints to add a real `'migration'` source type (requiring `source_id is not null`, the same shape as `'subledger'`/`'correction'`) — both replacements confirmed, by direct read of the currently-applied constraint text before writing the new one, to preserve the existing `'correction'` source type (FIN-206's own retrofit) byte-for-byte, an additive change, never a narrowing of an already-applied constraint. A migration-sourced journal written through the new `app.import_historical_finance_journal` RPC (see `ISS-2026-275`'s own resolution note above) now carries its real provenance directly via `source_type='migration'`/`source_id`, rather than being forced into `'manual'` (discarding the actual migration batch/external-system reference) or failing the orphan-source trigger. Defense-in-depth regression coverage in `scripts/db-tests/finance-journal.sql` proves the table-level `finance_journals_source_check` constraint itself (independent of the RPC's own explicit check) still rejects a sourceless `'migration'` row. Full local `db-tests` suite (351 migrations, 234 runner files) re-run clean; applied live to the hosted Supabase project; freeze digest amended (seventeenth pass, `scripts/release/check-release-freeze.ts`). See `docs/build-log/release-go-live/RGL-404.md` §12.
 
-### ISS-2026-277 — `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting or archiving a legally-held record (found at `HDN-385` Data Migration Rehearsal, live investigation; corrected at `HDN-385` Tier C schema-wide completeness sweep lens, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-277 — `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting or archiving a legally-held record (found at `HDN-385` Data Migration Rehearsal, live investigation; corrected at `HDN-385` Tier C schema-wide completeness sweep lens, `RESOLVED` 2026-09-02, Low)
 
 **Corrected at `HDN-385` Tier C**: the first-round text claimed `app._is_under_legal_hold()` had "exactly one call site" and was "not a table-level trigger." Both claims were wrong — the function actually has 3 call sites: `app.request_retention_archive()` (`20260807500000_create_intelligence_data_retention_archival.sql`), `app.request_file_deletion()` (`20260814000000_harden_storage_signed_url_audit_findings.sql`), and it already backs a real table-level trigger, `files_protect_legal_hold_from_deletion` (`BEFORE UPDATE OR DELETE ON app.files`, `20260814100000_harden_storage_signed_url_audit_tierc_fixes.sql`). The underlying gap is narrower than first described but still real: that trigger only fires on `UPDATE OR DELETE` of `app.files` specifically, guarding deletion/archival-flagging of files — it is not a generic, schema-wide write guard covering every legal-hold-eligible table, and in particular would not guard a future import adapter's `INSERT`-only writes to a different hold-eligible table (e.g. overwriting/superseding a held record via a fresh row rather than an `UPDATE`). Since no canonical import write-path exists yet for any legal-hold-eligible table (the generic framework's own header discloses `commit_import_job()` never writes to a business table — only the 4 real domain adapters do, none of which touch a legal-hold-eligible table type today), this remains a latent, not live-exploitable, gap.
 
@@ -7740,6 +7740,72 @@ against, exactly this entry's own "latent, not live-exploitable" characterizatio
 independently re-confirmed rather than merely repeated. **Not fixed by this batch** — same
 reasoning as the original disposition. Owner and scope unchanged; guard count corrected to
 5 for the next reader.
+
+**`RESOLVED`, 2026-09-02.** This checkpoint's own reachability analysis (above) is not
+re-litigated by this closure — it was accurate on 2026-08-28 for the callers that existed then.
+What changed since is exactly what the disposition itself named as the trigger for real work:
+`ISS-2026-278` (resolved 2026-09-01, `20260901110000_harden_import_commit_step_up_mfa_gating.sql`)
+live-counted the `app.commit_*_import_job` family at **12** functions, not the 4 domain adapters
+this entry's own header still describes — a real bulk-import write surface now exists. Read
+`app._is_under_legal_hold()`'s live body first (`pg_get_functiondef`, not assumed from this
+entry's own prior text) before building anything: it is a generic, table-agnostic primitive —
+`app.request_legal_hold()` already accepts any schema-qualified `p_scope_record_table`, so a hold
+can be placed on a specific `app.employees`/`app.vendor_profiles`/`app.accounts`/`app.item_masters`
+row today, with no schema change required; the gap was never the hold mechanism, only that
+nothing outside the DELETE/soft-delete path ever consulted it.
+
+Every one of the 12 import-commit RPCs was read live before deciding scope, not assumed from
+their own comments. Ten are pure create-or-fail/create-or-append primitives (a genuine identity
+collision either raises before any row is written, or the underlying create-primitive's own
+idempotency key is derived from the staging row's own id and can therefore never resolve to a
+different, pre-existing business record) — a legal-hold guard there would have zero live caller
+to exercise, exactly this entry's own "latent, not reachable" shape, correctly left alone rather
+than guarded speculatively. Two — `app.commit_customer_import_job` and
+`app.commit_item_import_job` — are different in kind: their underlying create primitives resolve
+duplicates by **business identity** (`app.create_customer_account_direct`'s normalized
+legal_name+tax_id fingerprint; `app.create_item_master`'s (tenant, owner_account_id, code)), which
+a genuinely unrelated, pre-existing record can share independent of which staged row created it.
+Each already has two branches that treat such a match as a legitimate import target (linked to a
+different staged row's own earlier commit; predates this job entirely) — both real,
+live-reachable today, and neither asked whether the resolved record was under legal hold before
+reporting the row a successful "link". `app.commit_vendor_import_job` was checked and excluded:
+its own idempotency key is unique per staging row by construction, so it can never resolve to a
+different, pre-existing vendor — no gap to close there either.
+
+The archive half of this entry's own title ("archiving a legally-held record") had a real,
+directly reachable target the DELETE-scoped guards were never going to see: `app.archive_employee_profile`
+and `app.archive_vendor_profile` (the same two tables the import-commit adapters above write to)
+each genuinely overwrite an existing row's own live content (`lifecycle_status`,
+`archive_reason`/`record_version`) with no DELETE anywhere in their own call path.
+
+Built, in `supabase/migrations/20260902060000_harden_legal_hold_import_archive_overwrite_guard.sql`
+(additive `CREATE OR REPLACE FUNCTION` on all 4, same signature, diffed line-for-line against each
+function's own live `pg_get_functiondef` output first — `ISS-2026-278`'s own already-landed
+step-up-MFA/IP-allowlist composition in the two import-commit functions is untouched): a call to
+`app._is_under_legal_hold()` at the exact point each function is about to treat a pre-existing
+record as its own write target, raising a clear, existence-oracle-safe, DELETE-path-shaped named
+error (`employee_legal_hold_blocks_archive` / `vendor_profile_legal_hold_blocks_archive` /
+`import_blocked_legal_hold`, `errcode = check_violation`) — the identical `<domain>_legal_hold_blocks_<verb>`
+shape `app.request_file_deletion` already established, never a generic error. `p_record_class`
+passed as `'operational'` throughout, matching every other non-finance/non-audit call site of
+`app._is_under_legal_hold()`. The guard never fires on record CREATION and never fires for a row
+unrelated to the one under hold. Live-verified against the hosted Supabase project
+(`awdlicmwzdxquopwtcfd`) immediately after applying: all 4 functions' bodies carry the new check,
+and the migration is recorded in `supabase_migrations.schema_migrations`.
+
+Real, executable regression evidence: `scripts/db-tests/master-data-import.sql` proves both the
+"linked to a different staged row" and "predates this job" branches of
+`app.commit_customer_import_job`/`app.commit_item_import_job` each refuse a held target with
+`import_blocked_legal_hold`, a structurally identical NOT-held target still links normally, and an
+import naming a genuinely new, unrelated identity is unaffected. `scripts/db-tests/hris-employee-master.sql`
+and `scripts/db-tests/procurement-vendor-registration.sql` prove `app.archive_employee_profile`
+(both its immediate and scheduled/future branches) and `app.archive_vendor_profile` each refuse to
+archive a held record while a not-held one still archives normally. Full local `db-tests` suite
+(356 migrations, every `*.sql` runner file) re-run clean; `pnpm run typecheck`/`lint`/`test` clean
+(the one pre-existing `check-release-freeze` digest-drift failure is the centrally-reconciled
+freeze ledger reflecting this and every other session's own new migrations/db-tests, out of this
+checkpoint's own scope per standing instruction, not a defect this fix introduced); applied live
+to the hosted Supabase project.
 
 ### ISS-2026-278 — no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk class (found at `HDN-385` Data Migration Rehearsal, live investigation, `RESOLVED` 2026-09-01, Low)
 

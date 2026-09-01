@@ -1371,3 +1371,70 @@ begin
   select has_function_privilege('service_role', 'app.commit_vendor_import_job(uuid, boolean, uuid, text, text)', 'EXECUTE') into v_has;
   if not v_has then raise exception 'assertion failed: service_role must hold EXECUTE on app.commit_vendor_import_job'; end if;
 end $$;
+
+\echo '>> ISS-2026-277 regression: app.archive_vendor_profile refuses to archive a vendor profile under legal hold (app._is_under_legal_hold, scope app.vendor_profiles) with vendor_profile_legal_hold_blocks_archive -- while a structurally identical archive of a NOT-held vendor profile still succeeds unchanged'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
+  v_staff uuid := '00000000-0000-0000-0000-000000025102';
+  v_reviewer uuid := '00000000-0000-0000-0000-000000025103';
+  v_manager uuid := '00000000-0000-0000-0000-000000025104';
+  v_supreme uuid := '00000000-0000-0000-0000-000000025999';
+  v_held app.vendor_profiles;
+  v_free app.vendor_profiles;
+  v_raised boolean;
+begin
+  -- Two fresh vendor profiles, each progressed to 'suspended' -- archive's own one legal
+  -- precondition (see the full-lifecycle block above: archive is blocked directly from
+  -- active, must suspend first). begin/decide_review and activate need PRC:Approve
+  -- (v_reviewer); only suspend/archive need PRC:Override (v_manager) -- the same split the
+  -- full-lifecycle block above already uses.
+  v_held := app.create_vendor_profile_draft(v_tenant1, 'PT Legal Hold Vendor Held', 'LH Held', 'PT', 'REG-LH-HELD', 'trucking', 30, 'staff_created', 'idem-lh-vendor-held', v_staff, 'staff');
+  perform app.add_vendor_contact(v_held.master_record_id, 'LH Held Contact', 'Ops Manager', 'held@lh-vendor.test', '0811-900-001', true, v_staff, 'staff');
+  perform app.add_vendor_address(v_held.master_record_id, 'legal', 'Jl. Legal Hold 1', 'Jakarta', 'DKI Jakarta', '10220', 'Indonesia', v_staff, 'staff');
+  perform app.add_vendor_service(v_held.master_record_id, 'trucking', v_staff, 'staff');
+  v_held := app.submit_vendor_profile_for_review(v_held.master_record_id, v_held.record_version, v_staff, 'staff');
+  v_held := app.begin_vendor_profile_review(v_held.master_record_id, v_held.record_version, v_reviewer, 'reviewer');
+  v_held := app.decide_vendor_profile_review(v_held.master_record_id, v_held.record_version, 'approve', null, v_reviewer, 'reviewer');
+  v_held := app.activate_vendor_profile(v_held.master_record_id, v_held.record_version, v_reviewer, 'reviewer');
+  v_held := app.suspend_vendor_profile(v_held.master_record_id, v_held.record_version, 'ISS-2026-277 regression setup', v_manager, 'manager');
+
+  v_free := app.create_vendor_profile_draft(v_tenant1, 'PT Legal Hold Vendor Free', 'LH Free', 'PT', 'REG-LH-FREE', 'trucking', 30, 'staff_created', 'idem-lh-vendor-free', v_staff, 'staff');
+  perform app.add_vendor_contact(v_free.master_record_id, 'LH Free Contact', 'Ops Manager', 'free@lh-vendor.test', '0811-900-002', true, v_staff, 'staff');
+  perform app.add_vendor_address(v_free.master_record_id, 'legal', 'Jl. Legal Hold 2', 'Jakarta', 'DKI Jakarta', '10220', 'Indonesia', v_staff, 'staff');
+  perform app.add_vendor_service(v_free.master_record_id, 'trucking', v_staff, 'staff');
+  v_free := app.submit_vendor_profile_for_review(v_free.master_record_id, v_free.record_version, v_staff, 'staff');
+  v_free := app.begin_vendor_profile_review(v_free.master_record_id, v_free.record_version, v_reviewer, 'reviewer');
+  v_free := app.decide_vendor_profile_review(v_free.master_record_id, v_free.record_version, 'approve', null, v_reviewer, 'reviewer');
+  v_free := app.activate_vendor_profile(v_free.master_record_id, v_free.record_version, v_reviewer, 'reviewer');
+  v_free := app.suspend_vendor_profile(v_free.master_record_id, v_free.record_version, 'ISS-2026-277 regression setup (control)', v_manager, 'manager');
+
+  -- v_manager holds no RET:Configure -- app.request_legal_hold requires it, and Supreme
+  -- Admin (v_supreme) is who this file's own setup already grants that universal authority.
+  perform app.request_legal_hold(v_tenant1, 'operational', 'app.vendor_profiles', v_held.master_record_id, 'ISS-2026-277 regression: litigation hold on a suspended vendor profile', v_supreme, 'supreme');
+
+  v_raised := false;
+  begin
+    perform app.archive_vendor_profile(v_held.master_record_id, v_held.record_version, 'closing', v_manager, 'manager');
+    raise exception 'assertion failed: expected vendor_profile_legal_hold_blocks_archive for a held vendor profile, the call unexpectedly succeeded';
+  exception when check_violation then
+    if sqlerrm !~ 'vendor_profile_legal_hold_blocks_archive' then raise; end if;
+    v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected vendor_profile_legal_hold_blocks_archive, got none';
+  end if;
+  if (select lifecycle_status from app.vendor_profiles where master_record_id = v_held.master_record_id) <> 'suspended' then
+    raise exception 'assertion failed: a blocked archive must leave the held vendor profile''s own lifecycle_status untouched';
+  end if;
+
+  -- Control: the structurally identical archive of a NOT-held vendor profile still
+  -- succeeds -- no regression to ordinary archive behavior.
+  v_free := app.archive_vendor_profile(v_free.master_record_id, v_free.record_version, 'closing', v_manager, 'manager');
+  if v_free.lifecycle_status <> 'archived' then
+    raise exception 'assertion failed: expected the not-held vendor profile to archive normally, got %', v_free.lifecycle_status;
+  end if;
+
+  raise notice 'PASS: app.archive_vendor_profile (ISS-2026-277) refuses to archive a held vendor profile with vendor_profile_legal_hold_blocks_archive, and a not-held vendor profile still archives normally';
+end;
+$$;
