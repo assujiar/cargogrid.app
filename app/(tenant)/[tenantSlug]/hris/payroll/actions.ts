@@ -33,6 +33,7 @@ import {
   acknowledgePayrollFinanceHandoffBatch,
   PayrollMutationError,
 } from "../../../../../server/mutations/payroll.ts";
+import { observePayrollRunCalculationFailure } from "../../../../../server/policies/payroll-run-failure-recorder.ts";
 
 export interface PayrollAdminActionState {
   readonly error: string | null;
@@ -243,6 +244,11 @@ export async function calculatePayrollRunAction(
   try {
     await calculatePayrollRun(supabase, { runId, expectedVersion, idempotencyKey: null, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
+    // ISS-2026-079: app.calculate_payroll_run's own crash rolls back everything it did, leaving
+    // no durable trace -- so a genuine (non-routine) failure is recorded and alerted on here, at
+    // the boundary that caught it, in a fresh call. Never throws, and never changes this catch's
+    // own existing behavior below.
+    await observePayrollRunCalculationFailure(supabase, { runId, actorAuthUserId: access.authUserId, actorLabel: access.authUserId }, error);
     if (error instanceof PayrollMutationError) return { error: `Could not calculate this run: ${error.message}` };
     throw error;
   }

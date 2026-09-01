@@ -1160,4 +1160,132 @@ begin
   raise notice 'OK: ISS-2026-105 Tier C fix verified independently -- emp5 regular_minutes=% (735 raw - 180 real approved overtime, never a config-derived baseline)', v_snapshot.regular_minutes;
 end $$;
 
+-- ===========================================================================
+-- ISS-2026-079: app.calculate_payroll_run's own whole-invocation crash rolls
+-- back everything it did (the app.jobs row, the payroll_runs.status update,
+-- every calculation line) and leaves nothing durable to alert from -- that IS
+-- the finding, and the owner's explicit scope for closing it is alerting
+-- only, never a redesign of that transaction model. So this proves the
+-- boundary recorder (app.record_payroll_run_calculation_failure,
+-- 20260902010000), called AFTER the caller catches a failed calculation
+-- attempt -- exactly what server/policies/payroll-run-failure-recorder.ts's
+-- observePayrollRunCalculationFailure does from calculatePayrollRunAction.
+-- ===========================================================================
+
+\echo '>> ISS-2026-079: a payroll run forced to fail results in exactly one new alert row naming the failed run, repeat failures on the SAME run dedupe into it, and a DIFFERENT run''s failure opens its own'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='pay1');
+  v_period app.payroll_periods;
+  v_run app.payroll_runs;
+  v_run2 app.payroll_runs;
+  v_baseline_count integer;
+  v_after_first_count integer;
+  v_after_dup_count integer;
+  v_after_second_run_count integer;
+  v_incident app.incidents;
+  v_caught boolean := false;
+begin
+  v_period := app.create_payroll_period(v_tenant, null, 'pay1-2026-11-iss079', 'monthly', '2026-11-01', '2026-11-30', '2026-12-05', '00000000-0000-0000-0000-000000028202', 'hr');
+  v_period := app.freeze_payroll_period_inputs(v_period.id, v_period.record_version, '00000000-0000-0000-0000-000000028202', 'hr');
+  v_run := app.create_payroll_run(v_tenant, v_period.id, 'regular', null, 'IDR', null, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  select count(*) into v_baseline_count from app.incidents where tenant_id = v_tenant and source_type = 'job' and signal_type = 'error' and status <> 'resolved';
+
+  -- Force calculate_payroll_run to fail (a wrong expected_version -- stale_version). It rolls
+  -- back completely: v_run's own status is still 'draft' afterward, proving there is nothing
+  -- left inside that transaction for anything to alert from -- this is the structural gap the
+  -- entry names. The catch below is exactly what the application boundary does.
+  begin
+    perform app.calculate_payroll_run(v_run.id, v_run.record_version + 99, null, '00000000-0000-0000-0000-000000028202', 'hr');
+    raise exception 'test setup failed: expected calculate_payroll_run to raise stale_version';
+  exception when others then
+    if sqlerrm not like 'stale_version%' then raise; end if;
+    v_caught := true;
+  end;
+  if not v_caught then raise exception 'assertion failed: expected the forced failure to be caught'; end if;
+  if (select status from app.payroll_runs where id = v_run.id) <> 'draft' then
+    raise exception 'assertion failed: expected the failed attempt to leave the run status untouched (full rollback), got %', (select status from app.payroll_runs where id = v_run.id);
+  end if;
+
+  -- The boundary now records the failure it just caught.
+  v_incident := app.record_payroll_run_calculation_failure(v_run.id, '00000000-0000-0000-0000-000000028202', 'hr', 'stale_version: forced by ISS-2026-079 regression');
+
+  select count(*) into v_after_first_count from app.incidents where tenant_id = v_tenant and source_type = 'job' and signal_type = 'error' and status <> 'resolved';
+  if v_after_first_count <> v_baseline_count + 1 then
+    raise exception 'assertion failed: expected exactly 1 new alert row after the forced failure, baseline=% after=%', v_baseline_count, v_after_first_count;
+  end if;
+  if v_incident.tenant_id <> v_tenant or v_incident.title not like ('%' || v_run.id::text || '%') then
+    raise exception 'assertion failed: expected the alert to name the failed run (%), got tenant_id=% title=%', v_run.id, v_incident.tenant_id, v_incident.title;
+  end if;
+  if v_incident.severity <> 'high' then
+    raise exception 'assertion failed: expected high severity, got %', v_incident.severity;
+  end if;
+
+  -- A second failure on the SAME run inside the dedupe window collapses into the SAME incident
+  -- (a duplicate_signal timeline event), never opening a second one for a run already alerting.
+  perform app.record_payroll_run_calculation_failure(v_run.id, '00000000-0000-0000-0000-000000028202', 'hr', 'stale_version: second forced failure, same run');
+  select count(*) into v_after_dup_count from app.incidents where tenant_id = v_tenant and source_type = 'job' and signal_type = 'error' and status <> 'resolved';
+  if v_after_dup_count <> v_after_first_count then
+    raise exception 'assertion failed: expected a second failure on the SAME run to dedupe into the existing incident rather than opening a new one, before=% after=%', v_after_first_count, v_after_dup_count;
+  end if;
+
+  -- A DIFFERENT run failing must open its own, separate incident -- a human resuming run A must
+  -- not have to wonder whether run B's own failure is hiding inside it.
+  v_run2 := app.create_payroll_run(v_tenant, v_period.id, 'off_cycle', null, 'IDR', null, '00000000-0000-0000-0000-000000028202', 'hr');
+  perform app.record_payroll_run_calculation_failure(v_run2.id, '00000000-0000-0000-0000-000000028202', 'hr', 'stale_version: a different run entirely');
+  select count(*) into v_after_second_run_count from app.incidents where tenant_id = v_tenant and source_type = 'job' and signal_type = 'error' and status <> 'resolved';
+  if v_after_second_run_count <> v_after_dup_count + 1 then
+    raise exception 'assertion failed: expected a DIFFERENT run''s failure to open its own incident, before=% after=%', v_after_dup_count, v_after_second_run_count;
+  end if;
+
+  raise notice 'OK: ISS-2026-079 alerting verified -- a forced payroll run failure produces exactly one new alert row naming the failed run (%), repeat failures on the same run dedupe, and a different run''s failure opens its own incident', v_run.id;
+end $$;
+
+\echo '>> ISS-2026-079: app.record_payroll_run_calculation_failure enforces the same HRS:Edit authority app.calculate_payroll_run itself requires, and rejects an unknown run'
+do $$
+declare
+  v_tenant uuid := (select id from app.tenants where slug='pay1');
+  v_period app.payroll_periods;
+  v_run app.payroll_runs;
+begin
+  select * into v_period from app.payroll_periods where tenant_id = v_tenant and code = 'pay1-2026-11-iss079';
+  v_run := app.create_payroll_run(v_tenant, v_period.id, 'off_cycle', null, 'IDR', null, '00000000-0000-0000-0000-000000028202', 'hr');
+
+  begin
+    -- emp1 has no HRS:Edit.
+    perform app.record_payroll_run_calculation_failure(v_run.id, '00000000-0000-0000-0000-000000028204', 'emp1', 'forced');
+    raise exception 'assertion failed: expected insufficient_authority for an actor without HRS:Edit';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  begin
+    perform app.record_payroll_run_calculation_failure('00000000-0000-0000-0000-000000000000', '00000000-0000-0000-0000-000000028202', 'hr', 'forced');
+    raise exception 'assertion failed: expected payroll_run_not_found for an unknown run id';
+  exception when others then if sqlerrm not like 'payroll_run_not_found%' then raise; end if;
+  end;
+
+  raise notice 'OK: ISS-2026-079 authority/not-found gating verified';
+end $$;
+
+\echo '>> ISS-2026-079: app.record_payroll_run_calculation_failure has no anon grant on either app.* or the PostgREST-exposed public.* wrapper (calculatePayrollRunAction calls through an authenticated session, never service_role)'
+do $$
+declare
+  v_has_priv boolean;
+begin
+  select has_function_privilege('anon', 'app.record_payroll_run_calculation_failure(uuid,uuid,text,text)', 'EXECUTE') into v_has_priv;
+  if v_has_priv then raise exception 'assertion failed: anon must NOT have execute on app.record_payroll_run_calculation_failure'; end if;
+
+  select has_function_privilege('anon', 'public.record_payroll_run_calculation_failure(uuid,uuid,text,text)', 'EXECUTE') into v_has_priv;
+  if v_has_priv then raise exception 'assertion failed: anon must NOT have execute on public.record_payroll_run_calculation_failure'; end if;
+
+  select has_function_privilege('authenticated', 'public.record_payroll_run_calculation_failure(uuid,uuid,text,text)', 'EXECUTE') into v_has_priv;
+  if not v_has_priv then raise exception 'assertion failed: authenticated MUST have execute on public.record_payroll_run_calculation_failure'; end if;
+
+  select has_function_privilege('service_role', 'app.record_payroll_run_calculation_failure(uuid,uuid,text,text)', 'EXECUTE') into v_has_priv;
+  if not v_has_priv then raise exception 'assertion failed: service_role MUST have execute on app.record_payroll_run_calculation_failure'; end if;
+
+  raise notice 'OK: ISS-2026-079 grant surface verified';
+end $$;
+
 \echo 'HRT-282 PAYROLL FOUNDATION, BENEFIT AND REIMBURSEMENT TEST SUITE COMPLETE'

@@ -68,7 +68,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-071` | Medium | `RESOLVED` | Onboarding and Offboarding (HRT-277): Finance/Operations/IT task-owner completion authority is uniformly `HRS:Edit`-gated, not task-owner-identity-gat |
 | `ISS-2026-073` | Medium | `RESOLVED` | Onboarding and Offboarding (HRT-277): a direct-hire onboarding case has no "approved direct hire" precondition anywhere in the implementation, despite |
 | `ISS-2026-076` | Medium | `RESOLVED` | Overtime and Timesheet (HRT-281): five mutation wrappers (HR-on-behalf create ×2, draft edit, explicit reconcile, per-employee payroll generate) exist |
-| `ISS-2026-079` | Medium | `OPEN` | Payroll Foundation (HRT-282): `app.calculate_payroll_run`'s claimed multi-transaction crash-resumability (`app.claim_next_job`/`app.record_job_failure |
+| `ISS-2026-079` | Medium | `RESOLVED` | Payroll Foundation (HRT-282): `app.calculate_payroll_run`'s claimed multi-transaction crash-resumability (`app.claim_next_job`/`app.record_job_failure |
 | `ISS-2026-086` | Medium | `RESOLVED` | Internal and Interdepartmental Ticket (HRT-286): `TKT:Edit` grants blanket, tenant-wide, non-queue-scoped ticket-content staff status via `app.is_tick |
 | `ISS-2026-091` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): RPD-025 retention/legal-hold classification is unbuilt for every Phase 7 HR/payroll structured |
 | `ISS-2026-092` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant membe |
@@ -130,7 +130,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-118` | Low | `RESOLVED` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
 | `ISS-2026-119` | Low | `ACCEPTED_EXCEPTION` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
 | `ISS-2026-120` | Low | `RESOLVED` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
-| `ISS-2026-121` | Low | `OPEN` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
+| `ISS-2026-121` | Low | `ACCEPTED_EXCEPTION` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
 | `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
 | `ISS-2026-123` | Low | `RESOLVED` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
 | `ISS-2026-124` | Low | `RESOLVED` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
@@ -1142,13 +1142,84 @@ Not root-caused in depth (`hris-leave-permit-business-trip.sql` and its own migr
 
 Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-HRT-010` (Prompt 282), integration lens Finding 1, CONFIRMED live: a weekly `app.timesheet_periods` row straddling a monthly payroll period's boundary (e.g. Jul 27 – Aug 2 against an Aug 1–31 payroll period — a routine, ordinary configuration, not a contrived edge case) caused its ENTIRE `app.payroll_time_inputs` row's minutes to be excluded from the frozen input snapshot, even for work_dates genuinely inside the payroll period and genuinely HR-approved. Live-reproduced: a real, approved 480-minute timesheet entry for a work_date inside the payroll period produced `regular_minutes=0` in the frozen snapshot, with zero error/exception/audit trace. **Resolution:** `app._resolve_payroll_time_inputs_for_period` was rewritten (migration `20260731020000`) to compute contribution per work_date from the underlying `app.timesheet_entries`/`app.overtime_requests` rows a `payroll_time_inputs` row's own `source_entry_ids`/`source_overtime_request_ids` reference, scoped to `[period_start, period_end]`, rather than gating on full timesheet-period containment. Live-reproduced as fixed: the identical scenario now correctly produces `regular_minutes=480`. Status `RESOLVED`, closed in the same checkpoint it was found in.
 
-### ISS-2026-079 — Payroll Foundation (HRT-282): `app.calculate_payroll_run`'s claimed multi-transaction crash-resumability (`app.claim_next_job`/`app.record_job_failure`) is not real — the whole job lifecycle runs inside one function invocation/transaction (OPEN, Medium — architectural, requires a design decision outside this batch's mandate)
+### ISS-2026-079 — Payroll Foundation (HRT-282): `app.calculate_payroll_run`'s claimed multi-transaction crash-resumability (`app.claim_next_job`/`app.record_job_failure`) is not real — the whole job lifecycle runs inside one function invocation/transaction (RESOLVED — alerting added at the application boundary; the single-transaction architecture itself is unchanged, per explicit owner scope, Medium)
 
 Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-HRT-010` (Prompt 282), correctness lens Finding 3, CONFIRMED by direct code read and by live concurrent-session observation: `app.calculate_payroll_run` calls `app.enqueue_job`/`app.heartbeat_job`/`app.complete_job` (and, on cancellation, `app.acknowledge_job_cancellation`) but never `app.claim_next_job` or `app.record_job_failure` — PLT-131/132's own actual multi-worker-safe claim and backoff/dead-letter mechanisms, grep-confirmed zero occurrences anywhere in this checkpoint. The entire lifecycle runs inside ONE PL/pgSQL `FUNCTION` invocation (not a `PROCEDURE`), i.e. one transaction from the caller's perspective, so it structurally cannot commit incrementally. This checkpoint's ORIGINAL migration comment and build log overclaimed genuine durability ("a real chunk-boundary heartbeat... + a `record_job_failure`-compatible dead-letter path, all reusing PLT-131/132 unchanged") — corrected in migration `20260731020000`'s updated function comment. A crash mid-calculation is NOT a data-integrity risk (full atomic rollback — zero corruption, zero partial/dirty payroll data ever observable, live-confirmed by direct session observation during an in-flight calculation), but it is not a genuine checkpoint/resume either — the caller must re-invoke the whole batch from scratch, with zero durable trace of the interrupted attempt for any DLQ/retry/monitoring surface to pick up.
 
 **Handling:** Not fixed by this batch — a genuine multi-transaction, crash-resumable redesign (turning a single synchronous RPC call into a true background-worker-polled, incrementally-committing chunked execution, with a considered answer to "what does a partially-committed payroll calculation mean for the finalized-history-never-recalculates business rule") is a substantial architectural change requiring its own design decision, not a bounded review-round fix. The narrower, genuinely fixable part of the same finding (the mid-loop cancellation check being unreachable dead code) IS fixed in this same batch — see `ISS-2026-080`/correctness lens Finding 4 disposition in `docs/build-log/phase-07/HRT-282.md`. **Status `OPEN`**, Medium severity (no data-integrity or security exposure, confirmed rollback-safe; the gap is operational/scalability — a very large tenant's payroll calculation has no genuine mid-batch durability) — owner: a dedicated Phase 7 (or platform-wide PLT-131/132 follow-up) prompt scoped to "give `app.calculate_payroll_run` (and any sibling synchronous-inline job pattern — `roster_generation`, `leave_accrual`/`leave_carry_forward`, all confirmed to share this exact shape by the spec-compliance lens) genuine multi-transaction resumability," landing once, consistently, rather than piecemeal per capability.
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** `app.calculate_payroll_run`'s live definition (`20260731000000_create_hris_payroll_foundation.sql:2033`, unredefined since) is still declared `language plpgsql` with no `claim_next_job`/`record_job_failure` calls anywhere in its body — confirmed structurally, not merely re-cited. This is architectural by construction; no config flag or small patch converts a single-invocation function into a genuinely multi-transaction, incrementally-committing design without redesigning the caller contract. **Not attempted this batch** — same reasoning as the original disposition. One cosmetic note found in passing: `20260731020000`'s own inline comment on `app.request_payroll_run_calculation_cancellation` mislabels its disclosure as `ISS-2026-081` (a different, already-`RESOLVED` entry); it should read `ISS-2026-079`. Does not affect this finding's validity. Owner and scope unchanged.
+
+**`RESOLVED` (2026-09-02) — alerting only, exactly as the owner scoped this item; the
+single-transaction architecture itself is deliberately unchanged.** Verified live before writing
+anything: `pg_get_functiondef` against the hosted project (`awdlicmwzdxquopwtcfd`) confirmed
+`app.calculate_payroll_run` still has no top-level exception handler — its only `exception when
+others` block is scoped to a single employee inside the per-row loop and already writes to
+`app.payroll_exceptions`, which is a different, already-handled case (a per-employee calculation
+error, non-fatal) from what this entry is about (the whole invocation dying and rolling back with
+zero durable trace).
+
+That absence of a top-level handler is exactly why the fix cannot live inside
+`app.calculate_payroll_run` itself, for the same structural reason `ISS-2026-249` already
+established: **a database function that rolls back cannot durably record the failure it rolled
+back on.** Any alert call added inside the function, before a crash that aborts the transaction,
+rolls back with everything else; wrapping the whole body in its own exception handler that
+re-raises would not help either, because PL/pgSQL's exception block is a savepoint and a RE-RAISE
+after it unwinds anything written after that savepoint too — and not re-raising would change the
+caller's own contract for observing success or failure, which is the redesign the owner ruled out
+for this item.
+
+So the fix mirrors `20260831100000`'s `app.record_authority_denial` /
+`server/policies/authority-denial-recorder.ts` pattern exactly: record at the boundary that
+catches the error, in a fresh statement, after the rollback has already happened.
+`supabase/migrations/20260902010000_alert_on_payroll_run_calculation_failure_iss2026079.sql`
+(applied live) adds `app.record_payroll_run_calculation_failure` — looks the run back up by id
+(the row still exists; only its in-flight update rolled back), re-checks the same `HRS:Edit`
+authority `calculate_payroll_run` itself requires, and composes `app.raise_observability_alert`
+(IAE-030) — never a second, parallel alerting path — naming the run id, tenant, period, run type,
+acting identity and the caught error text, `source_type='job'`/`signal_type='error'` matching
+`app.record_job_failure`'s own existing convention, high severity, deduped per run id so repeated
+crashes on the same run collapse into one incident while two different failing runs never
+collapse into each other's. `public.record_payroll_run_calculation_failure` mirrors it as the
+RGL-394 Option-2 PostgREST wrapper, granted to `authenticated`/`service_role` only (no `anon`),
+matching `app.calculate_payroll_run`'s own grant shape.
+
+Wired at the one real call site: `server/policies/payroll-run-failure-recorder.ts`
+(`observePayrollRunCalculationFailure`) is called from `calculatePayrollRunAction`
+(`app/(tenant)/[tenantSlug]/hris/payroll/actions.ts`) after it catches an error from
+`calculatePayrollRun`, mirroring `authority-denial-recorder.ts`'s own shape and its "never throws"
+guarantee (a failed recording write must not turn an already-failed calculation attempt into a
+second, unrelated error for the user). It is deliberately selective, to avoid the exact
+false-positive flood `ISS-2026-249`'s own ruling warned against: `isGenuinePayrollRunCalculationFailure`
+stays silent for the routine, already-classified rejections `calculate_payroll_run` raises before
+doing any real work (`stale_version`, `insufficient_authority`, `payroll_run_not_found`,
+`payroll_period_inputs_not_frozen`, `invalid_transition`, `idempotency_key_conflict`, ...) — those
+are the validation layer working, not a crash — and alerts only on an error its own known-code
+list cannot classify, or a raw non-`PayrollMutationError` throw (a network failure, a dropped
+connection): the shape a genuine mid-calculation crash actually takes once it reaches the caller.
+Covered by a new `server/policies/payroll-run-failure-recorder.test.ts`.
+
+**Evidence:** `scripts/db-tests/hris-payroll.sql` gains a new section proving, against a real
+disposable database: a payroll run forced to fail (a version conflict, standing in for any
+whole-invocation crash reaching the caller) leaves the run's own status untouched (full
+rollback, confirmed live — nothing durable survives inside that transaction), and the boundary
+recorder called immediately afterward produces **exactly one** new alert row naming the failed
+run; a second forced failure on the SAME run within the dedupe window collapses into that same
+incident rather than opening a second one; a DIFFERENT run's failure opens its own, separate
+incident; the recorder rejects an actor without `HRS:Edit` and an unknown run id; and neither
+`app.record_payroll_run_calculation_failure` nor its `public.*` wrapper carries an `anon` grant.
+Full `bash scripts/db-tests/run.sh` and `pnpm run test` both clean on a full re-run.
+
+**What stays exactly as this entry always said it would.** The underlying finding — one
+transaction, no genuine mid-batch checkpoint/resume, a caller must re-invoke the whole batch from
+scratch after any failure — is unchanged and not what this fix touches. `app.calculate_payroll_run`
+still crash-rolls-back atomically (zero data corruption, confirmed by this entry's own original
+live observation), and a human now gets paged with the run id, tenant and error detail instead of
+silence, but resuming the run is still a manual re-trigger, exactly as designed for this item. A
+genuine multi-transaction, incrementally-committing redesign — for `calculate_payroll_run` and the
+sibling synchronous-inline job pattern this entry already named (`roster_generation`,
+`leave_accrual`/`leave_carry_forward`) — remains its own, larger, dedicated follow-up, not
+attempted here and not in scope for it.
 
 ### ISS-2026-080 — Payroll Foundation (HRT-282): `app.request_payroll_run_calculation_cancellation` (the Tier C fix making `calculate_payroll_run`'s mid-loop cancellation check genuinely reachable) has a real, tested SQL/TS wrapper but no UI caller yet (RESOLVED, Low)
 
@@ -2055,7 +2126,7 @@ column-by-column identical to their originals; and a structural `prosrc` sweep f
 Applied live; all six functions, their grants and both rewritten policies verified against the
 hosted project. Freeze digest amended (sixty-fifth pass).
 
-### ISS-2026-121 — "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to narrow it further (Phase 8, CPL-311 deliberate scope decision, OPEN, Low)
+### ISS-2026-121 — "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to narrow it further (Phase 8, CPL-311 deliberate scope decision, ACCEPTED_EXCEPTION, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-013` (Prompt 311, Invoice and Billing Visibility) — a deliberate scope decision made while authoring this checkpoint's own migration, not a defect found afterward. The source prompt's own text explicitly required this checkpoint to "confirm this by checking CPL-300's own membership/role model before finalizing this decision," which is what this entry records.
 
@@ -2066,6 +2137,30 @@ Discovered `2026-08-17` at `CG-S13-CPL-013` (Prompt 311, Invoice and Billing Vis
 **Not fixed here** — inventing a new per-domain sub-permission column or table (e.g. a `finance_scope` flag on `app.customer_portal_account_memberships`, or a wholly separate Finance-specific delegation grant table) is a genuinely new, capability-sized data-model decision, out of this prompt's own bounded scope (normally 5-15 files, at most 1-3 additive migrations) and out of scope for a single capability prompt to invent unilaterally per `BUILD_EXECUTION_PROTOCOL.md`'s own discipline. **Status `OPEN`**, Low severity (matches every other already-`VERIFIED` Phase 8 capability's own identical account-scope granularity; no data is fabricated, no existing caller is affected, and the business rule this prompt names — "invoice visibility requires customer finance scope, not generic shipment access alone" — is satisfied literally: finance scope IS the account scope, since no narrower concept exists to satisfy it with). Recommended fix for whichever future checkpoint picks it up, if the business ever requires narrower in-account granularity: a new, additive per-module delegation mechanism, composed by ALL Phase 8 domain gates uniformly (not just Finance), to avoid Finance alone gaining an inconsistent, narrower shape than its siblings.
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.customer_portal_account_memberships`'s own `cpam_role_check` constraint still admits only `('account_admin', 'member')`, no per-domain sub-scope column exists anywhere on that table or `app.accounts`. Inventing a new finance-specific delegation model is a data-model/business decision outside a bounded agent pass. Disposition unchanged, still `OPEN`.
+
+**`ACCEPTED_EXCEPTION` (2026-09-02) — closed by explicit owner direction, no code change.** This
+entry has said the same thing twice already, at authoring time and again at re-verification: there
+is no data anywhere in this repository that could back a narrower "finance scope" than plain
+account scope, and the identical account-scope-alone boundary already governs every other Phase 8
+domain capability shipped so far (booking requests, shipment orders, inventory balances, warehouse
+orders) — CPL-311 is not a new widening, only the first place this shared, pre-existing
+granularity becomes visible for Finance data specifically. The owner has now reviewed exactly that
+disposition and ruled it acceptable as designed: no per-domain finance sub-permission is to be
+built, and this record closes on that ruling rather than on a fix, because there is no fix here to
+make — inventing a new finance-specific delegation column or table would be introducing an
+inconsistency (Finance alone gaining a narrower shape than every sibling domain) rather than
+closing one, exactly as this entry's own "Not fixed here" reasoning already argued before any
+owner ruling existed to formalize it.
+
+Status recorded as `ACCEPTED_EXCEPTION` rather than `RESOLVED` because nothing was fixed or
+changed — the code, the data model and the live behavior are all identical to what this entry
+already described and re-verified twice. `RESOLVED` would misstate that as a repair; this is a
+disposition on an already-accurate, already-disclosed design decision, matching the vocabulary
+`docs/runtime/KNOWN_ISSUES.md` §1 and `scripts/docs/check-known-issues.ts`'s own `VALID_STATUSES`
+reserve for exactly this shape (a formally ruled acceptance, not pending work). If the business
+ever requires narrower in-account granularity, this entry's own original recommended fix still
+stands: a new, additive per-module delegation mechanism composed by ALL Phase 8 domain gates
+uniformly, not invented for Finance alone.
 
 ### ISS-2026-122 — the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-creation search has no per-attempt audit ledger, and the three PRE-EXISTING app.ticket_links entity types remain on the legacy scope resolver (Phase 8, CPL-313 deliberate scope decisions, OPEN, Low)
 
