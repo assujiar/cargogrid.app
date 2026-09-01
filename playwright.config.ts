@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
+import { resolveE2eChromiumOverride } from "./scripts/testing/resolve-e2e-chromium.ts";
 
 // Playwright E2E/visual-regression/accessibility config — CG-S5-PH0-012,
 // Prompt 91. Tool choice and rationale: docs/adr/ADR-0007-test-runner-and-
@@ -19,6 +21,20 @@ import { defineConfig, devices } from "@playwright/test";
 // `KNOWN_ISSUES.md` `ISS-2026-244`. Mobile/tablet viewport + touch emulation, by
 // contrast, works fully on the pre-installed Chromium binary via `devices[...]` (no
 // separate browser needed) — live-verified before adopting this pattern.
+//
+// ISS-2026-316: a sandbox may carry a Chromium build OLDER than the one pinned above (build
+// 1194/v141 rather than 1228/v149 at the time this was written) with no way to fetch the exact
+// match. That does not make the suite unrunnable there — Playwright does not require the exact
+// pinned build to launch a browser, only a Chromium-family one. Setting
+// `CARGOGRID_E2E_CHROMIUM_PATH` to a real local binary (e.g. `/opt/pw-browsers/chromium`) runs
+// the full suite, axe-core specs included, against that binary instead. This is opt-in and
+// refused under `CI` (see `resolveE2eChromiumOverride`) — CI always tests the exact pinned
+// build, and a local run on a different Chromium is corroborating evidence, not a substitute
+// for it. Real Safari/Firefox remain genuinely unavailable in such a sandbox regardless of
+// this variable; that residual belongs with `ISS-2026-244` and needs binaries this override
+// cannot supply.
+const e2eChromiumPath = resolveE2eChromiumOverride({ CI: process.env["CI"], CARGOGRID_E2E_CHROMIUM_PATH: process.env["CARGOGRID_E2E_CHROMIUM_PATH"] }, existsSync);
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -31,6 +47,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     baseURL: "http://127.0.0.1:3100",
+    ...(e2eChromiumPath ? { launchOptions: { executablePath: e2eChromiumPath } } : {}),
   },
   projects: [
     {

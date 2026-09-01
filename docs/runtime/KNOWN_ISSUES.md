@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 46 — 4 High, 15 Medium, 27 Low |
+| `OPEN` | 45 — 4 High, 15 Medium, 26 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 220 |
+| `RESOLVED` | 221 |
 | **Total records** | **275** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -109,7 +109,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-313` | Low | `RESOLVED` | four existing tenant-wide sweeps are not yet in the scheduler catalogue, so they still cannot be automated |
 | `ISS-2026-314` | Medium | `RESOLVED` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
-| `ISS-2026-316` | Low | `OPEN` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
+| `ISS-2026-316` | Low | `RESOLVED` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-319` | Low | `OPEN` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
@@ -5594,7 +5594,7 @@ than letting one shape stand in for both. 9 new TypeScript tests on the header-t
 
 **Not covered by any test here, stated rather than implied:** that Next's `headers()` returns
 the real address inside a live request. That is a framework guarantee, it needs a running
-server to observe, and the e2e suite cannot run in this sandbox (`ISS-2026-316`). Everything
+server to observe, and this repository's CI environment is the one that proves it end to end (`ISS-2026-316`, resolved -- an opt-in `CARGOGRID_E2E_CHROMIUM_PATH` override also lets this sandbox run the full suite on its own Chromium build). Everything
 either side of it — which header is trusted, what happens when none is present, and what the
 database does with an address once it has one — is tested.
 
@@ -5780,7 +5780,7 @@ remembering to stop a leftover server. No spec hard-codes a port (grep-confirmed
 **Evidence, and its limits, stated plainly.** The change was verified where it can be: a real
 `next build` compiled clean, `next start --port 3100` served `/login` with **HTTP 200**, and port
 3000 was confirmed free at the same instant (`HTTP 000`) — the collision this port move exists to
-prevent. **The full Playwright suite was NOT run**, and could not be: see `ISS-2026-316`,
+prevent. **The full Playwright suite was NOT run at the time this note was written** -- see `ISS-2026-316` (resolved 2026-09-01: it can be, via an opt-in Chromium-path override, and 34/34 now pass in this sandbox).
 registered from this same attempt — the sandbox no longer carries the Chromium build the pinned
 Playwright requires, so every spec fails at browser launch before any application code executes.
 That is an environment fact, not a verdict on this change, and it is recorded rather than glossed.
@@ -8120,7 +8120,7 @@ current, not remembered.
 re-run on the container's own Node 22 **after** the bump and still passes, so a contributor on 22
 sees at most an advisory, never a blocked install.
 
-**What this does not claim:** the e2e suite is still unrunnable in this sandbox (`ISS-2026-316`),
+**What this does not claim:** this sandbox will never hold the exact Chromium build Playwright pins, nor WebKit or Firefox (`ISS-2026-244`; `ISS-2026-316` resolved separately -- an opt-in override lets the suite run here on a different Chromium build, which is corroborating evidence rather than a substitute for CI's own pinned-build run),
 so its Node-24 behaviour is unproven here. CI runs it on the same `node-version-file` and will be
 the first to exercise that.
 
@@ -8372,7 +8372,7 @@ pinning the failure direction: a row missing `unpaid_break_minutes` must be **re
 in the suite) while a row missing `notes` must degrade to `null` (a missing note must never break
 a listing). Live-verified after apply: all four functions project both columns, 0 anon grants.
 
-### ISS-2026-316 — the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all (found 2026-08-31 while closing `ISS-2026-243`, `OPEN`, Low)
+### ISS-2026-316 — the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all (found 2026-08-31 while closing `ISS-2026-243`, `RESOLVED` 2026-09-01, Low)
 
 Found by running `pnpm test:e2e` to verify an unrelated `playwright.config.ts` change. All 34
 specs fail identically in 3–5ms, before any application code executes:
@@ -8405,6 +8405,28 @@ version (owner/infrastructure), or a deliberate decision to pin `@playwright/tes
 whose Chromium build the sandbox does have — the latter is a real dependency change with its own
 CI implications and should not be made merely to suit one sandbox. Neither is a code fix available
 here.
+
+**`RESOLVED`, 2026-09-01.** Every observable fact above was correct; the conclusion drawn from
+it was not. **Playwright does not require the exact pinned Chromium build to launch a
+browser** — `launchOptions.executablePath` runs any Chromium-family binary pointed at it, and
+the sandbox's own build 1194 (v141) runs the entire suite, axe-core accessibility specs
+included: **34/34 pass**, live-run in this sandbox on 2026-09-01, verified against a real
+`next build` + `next start` on port 3100, not merely `--list`.
+
+`scripts/testing/resolve-e2e-chromium.ts` (`resolveE2eChromiumOverride`, 7 unit tests) and one
+opt-in line in `playwright.config.ts` make this deliberate rather than accidental: it activates
+only when `CARGOGRID_E2E_CHROMIUM_PATH` is explicitly set, and is refused outright under `CI` —
+verified directly rather than assumed. CI keeps installing and testing the exact pinned build
+(`.github/workflows/ci.yml`) unaffected, exactly as this entry's own text already confirmed.
+
+**What this closure does and does not claim.** It closes "no e2e run is possible in this
+sandbox at all" — that was wrong, and is corrected here rather than left to mislead the next
+reader. It does **not** claim this sandbox now has the exact pinned build, or WebKit, or
+Firefox: a run on build 1194 is corroborating evidence on a *different* Chromium than the one
+CI gates on, not a substitute for it. That residual — this sandbox never holding the exact
+pinned build or a non-Chromium engine — is `ISS-2026-244`'s own subject and stays there; no
+code change supplies a missing binary. Every cross-reference elsewhere in this file claiming
+"the e2e suite cannot run in this sandbox at all" is corrected alongside this entry.
 ### ISS-2026-317 — payroll loan cutover has no import path, and it is not opening-balance-shaped (found 2026-08-31 while closing `ISS-2026-303`, `OPEN`, Low)
 
 `ISS-2026-273` named three domains whose opening-balance handling was bespoke and
