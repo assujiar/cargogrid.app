@@ -1151,6 +1151,93 @@ begin
   end;
 end $$;
 
+\echo '>> ISS-2026-278 (Step 16 historical-issue-backlog remediation, resumed) regression: app.commit_finance_opening_balance_import_job composes app.assert_current_step_up_authorization(tenant, actor, ''FIN'', ''Import'') immediately after its own existing FIN:Import check -- a strict no-op for a tenant with no MFA policy configured, and a real block-then-unblock once the tenant opts (FIN, Import) into its own additional_high_risk_actions and completes a genuine step-up challenge'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmesubla');
+  v_fm uuid := '00000000-0000-0000-0000-000000029702';
+  v_supreme uuid := '00000000-0000-0000-0000-000000029999';
+  v_customer_tax text := '09.876.543.2-109.000';
+  v_source_file1 app.files;
+  v_source_file2 app.files;
+  v_job1 app.jobs;
+  v_job2 app.jobs;
+  v_committed app.jobs;
+  v_challenge app.mfa_step_up_challenges;
+  v_raised boolean;
+begin
+  insert into auth.users (id, email) values (v_supreme, 'supreme@acmesubla.test')
+    on conflict (id) do nothing;
+  perform app.grant_principal_membership(v_supreme, 'supreme_admin', null, null, 'tester');
+
+  -- (a) no app.mfa_tenant_policies row at all yet for this tenant -- a strict no-op, the
+  -- commit succeeds exactly as it did before this checkpoint.
+  v_source_file1 := app.initiate_file_upload(
+    v_tenant_a, 'finance_opening_balance_source', 'import_source', gen_random_uuid(),
+    'opening-balances-mfacheck-a.csv', 'text/csv', 4096, 'internal', false, null, null, null,
+    'idem-fin-ob-mfacheck-source-a', v_fm, 'financemanagera'
+  );
+  perform app.record_file_scan_result(v_source_file1.id, 'clean', 'test-scanner', v_fm, 'financemanagera');
+  v_job1 := app.create_import_export_job(v_tenant_a, 'import', 'finance_opening_balance_import', v_source_file1.id, '{}'::jsonb, 'idem-fin-ob-mfacheck-job-a', v_fm, 'financemanagera');
+  perform app.stage_import_rows(v_job1.job_id, jsonb_build_array(jsonb_build_object(
+    'open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+    'original_amount', '10.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'
+  )), v_fm, 'financemanagera');
+  perform app.validate_finance_opening_balance_import_row((select id from app.import_staging_rows where job_id = v_job1.job_id and row_number = 1), v_fm, 'financemanagera');
+  v_committed := app.commit_finance_opening_balance_import_job(v_job1.job_id, false, v_fm, 'financemanagera');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for a tenant with no MFA policy configured (strict no-op), got %', v_committed;
+  end if;
+
+  -- (b) this tenant now additively opts (FIN, Import) into its own additional_high_risk_
+  -- actions -- tenant_wide_required deliberately left false, since app.assert_current_
+  -- step_up_authorization gates on is_high_risk_action alone, never on tenant_wide_required.
+  -- Never FIN:Approve, which is a platform-default high-risk tuple already.
+  perform app.set_mfa_tenant_policy(v_tenant_a, false, '["supreme_admin", "tenant_admin"]'::jsonb, 15, '[{"moduleCode": "FIN", "action": "Import"}]'::jsonb, v_supreme, 'supreme');
+
+  v_source_file2 := app.initiate_file_upload(
+    v_tenant_a, 'finance_opening_balance_source', 'import_source', gen_random_uuid(),
+    'opening-balances-mfacheck-b.csv', 'text/csv', 4096, 'internal', false, null, null, null,
+    'idem-fin-ob-mfacheck-source-b', v_fm, 'financemanagera'
+  );
+  perform app.record_file_scan_result(v_source_file2.id, 'clean', 'test-scanner', v_fm, 'financemanagera');
+  v_job2 := app.create_import_export_job(v_tenant_a, 'import', 'finance_opening_balance_import', v_source_file2.id, '{}'::jsonb, 'idem-fin-ob-mfacheck-job-b', v_fm, 'financemanagera');
+  perform app.stage_import_rows(v_job2.job_id, jsonb_build_array(jsonb_build_object(
+    'open_item_type', 'ar', 'party_tax_id', v_customer_tax, 'currency', 'USD',
+    'original_amount', '20.00', 'document_date', '2026-03-05', 'due_date', '2026-03-25'
+  )), v_fm, 'financemanagera');
+  perform app.validate_finance_opening_balance_import_row((select id from app.import_staging_rows where job_id = v_job2.job_id and row_number = 1), v_fm, 'financemanagera');
+
+  v_raised := false;
+  begin
+    perform app.commit_finance_opening_balance_import_job(v_job2.job_id, false, v_fm, 'financemanagera');
+    raise exception 'assertion failed: expected mfa_step_up_required with no verified challenge on record, the call unexpectedly succeeded';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'mfa_step_up_required' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected mfa_step_up_required, got none';
+  end if;
+  if (select status from app.jobs where job_id = v_job2.job_id) <> 'in_progress' then
+    raise exception 'assertion failed: expected the job to remain in_progress while blocked on step-up';
+  end if;
+
+  -- (c) a genuine step-up challenge (request + verify) for the SAME actor/tenant/module/
+  -- action then unblocks the identical commit call.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant_a, 'FIN', 'Import', v_fm, 'financemanagera');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, v_fm, 'financemanagera');
+
+  v_committed := app.commit_finance_opening_balance_import_job(v_job2.job_id, false, v_fm, 'financemanagera');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit once a current verified step-up challenge exists, got %', v_committed;
+  end if;
+
+  raise notice 'PASS: app.commit_finance_opening_balance_import_job (ISS-2026-278, resumed) is a strict no-op for a tenant with no MFA policy configured, blocks with mfa_step_up_required once the tenant opts (FIN, Import) into its own additional_high_risk_actions, and succeeds again once a genuine step-up challenge is requested and verified';
+end;
+$$;
+
 \echo '>> ISS-2026-273: neither anon nor authenticated holds EXECUTE on the new opening-balance functions or their public wrappers'
 do $$
 declare

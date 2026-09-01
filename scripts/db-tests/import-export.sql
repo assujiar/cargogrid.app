@@ -870,4 +870,65 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-278 (Step 16 historical-issue-backlog remediation, resumed) regression: app.commit_import_job composes app.assert_current_step_up_authorization, resolving (module, ''Import'') dynamically from the job''s own import_export_schemas.owner_primitive_code -- a strict no-op for a tenant with no MFA policy configured (identical behavior to before this checkpoint), and a real block-then-unblock once the tenant opts this exact tuple into its own additional_high_risk_actions and completes a genuine step-up challenge'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmeie');
+  v_source_file_id uuid := (select id from app.files where tenant_id = v_tenant_id and idempotency_key = 'idem-source-1');
+  v_job app.jobs;
+  v_committed app.jobs;
+  v_challenge app.mfa_step_up_challenges;
+  v_raised boolean;
+begin
+  -- (a) no app.mfa_tenant_policies row at all yet for this tenant -- a strict no-op, the
+  -- commit succeeds exactly as it did before this checkpoint (p_client_ip omitted, so the
+  -- pre-existing IP-allowlist branch proven above is not in play here either).
+  v_job := app.create_import_export_job(v_tenant_id, 'import', 'shipment_rows', v_source_file_id, '{}'::jsonb, 'idem-job-mfacheck-a', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object('ref', 'REF-MFA-A', 'amount', '10')), '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.validate_staging_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), '00000000-0000-0000-0000-000000003001', 'requester');
+  v_committed := app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit for a tenant with no MFA policy configured (strict no-op), got %', v_committed;
+  end if;
+
+  -- (b) this tenant now additively opts (SHP, Import) -- the shipment_rows schema's own
+  -- owner_primitive_code -- into its own additional_high_risk_actions. tenant_wide_required
+  -- is deliberately left false: app.assert_current_step_up_authorization gates on
+  -- is_high_risk_action alone, never on tenant_wide_required (that flag governs the
+  -- SEPARATE evaluate_permission-level branch, not this composable assertion).
+  perform app.set_mfa_tenant_policy(v_tenant_id, false, '["supreme_admin", "tenant_admin"]'::jsonb, 15, '[{"moduleCode": "SHP", "action": "Import"}]'::jsonb, '00000000-0000-0000-0000-000000003005', 'supreme');
+
+  v_job := app.create_import_export_job(v_tenant_id, 'import', 'shipment_rows', v_source_file_id, '{}'::jsonb, 'idem-job-mfacheck-b', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.stage_import_rows(v_job.job_id, jsonb_build_array(jsonb_build_object('ref', 'REF-MFA-B', 'amount', '10')), '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.validate_staging_row((select id from app.import_staging_rows where job_id = v_job.job_id and row_number = 1), '00000000-0000-0000-0000-000000003001', 'requester');
+  v_raised := false;
+  begin
+    perform app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester');
+    raise exception 'assertion failed: expected mfa_step_up_required with no verified challenge on record, the call unexpectedly succeeded';
+  exception
+    when insufficient_privilege then
+      if sqlerrm !~ 'mfa_step_up_required' then raise; end if;
+      v_raised := true;
+  end;
+  if not v_raised then
+    raise exception 'assertion failed: expected mfa_step_up_required, got none';
+  end if;
+  if (select status from app.jobs where job_id = v_job.job_id) <> 'in_progress' then
+    raise exception 'assertion failed: expected the job to remain in_progress while blocked on step-up';
+  end if;
+
+  -- (c) a genuine step-up challenge (request + verify) for the SAME actor/tenant/module/
+  -- action then unblocks the identical commit call.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant_id, 'SHP', 'Import', '00000000-0000-0000-0000-000000003001', 'requester');
+  perform app.verify_mfa_step_up_challenge(v_challenge.id, '00000000-0000-0000-0000-000000003001', 'requester');
+
+  v_committed := app.commit_import_job(v_job.job_id, false, '00000000-0000-0000-0000-000000003001', 'requester');
+  if v_committed.status <> 'completed' then
+    raise exception 'assertion failed: expected a real completed commit once a current verified step-up challenge exists, got %', v_committed;
+  end if;
+
+  raise notice 'PASS: app.commit_import_job (ISS-2026-278, resumed) is a strict no-op for a tenant with no MFA policy configured, blocks with mfa_step_up_required once the tenant opts (module, Import) into its own additional_high_risk_actions, and succeeds again once a genuine step-up challenge is requested and verified';
+end;
+$$;
+
 \echo '>> PLT-131 (Import/Export Job Framework) test suite passed'
