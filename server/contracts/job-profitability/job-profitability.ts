@@ -34,6 +34,32 @@ export const JobProfitabilitySnapshotSchema = z.object({
   createdBy: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** ISS-2026-197: the tenant's own base/reporting currency at calculation time (app.resolve_tenant_locale). Metadata, never masked. */
+  baseCurrency: z.string().nullable(),
+  /** ISS-2026-197: revenueAmount converted into baseCurrency at the rate effective on revenueFxAsOf. Null when revenueFxStatus='rate_unavailable'. Masked alongside revenueAmount. */
+  revenueBaseAmount: z.number().nullable(),
+  /** ISS-2026-197: the revenueCurrency -> baseCurrency rate applied (1 when revenueFxStatus='identity'). Masked alongside revenueAmount. */
+  revenueFxRate: z.number().nullable(),
+  /** ISS-2026-197: the date the revenue conversion rate was resolved for -- the Job Order's own created_at. Metadata, never masked. */
+  revenueFxAsOf: z.string().nullable(),
+  /** ISS-2026-197: 'identity' | 'converted' | 'rate_unavailable'. Metadata, never masked. */
+  revenueFxStatus: z.enum(["identity", "converted", "rate_unavailable"]).nullable(),
+  /** ISS-2026-197: the actual invoiced/billed total's own currency (Finance AR, app.finance_invoices status='issued'). Null unless invoicedStatus='available'. Masked alongside revenueAmount. */
+  invoicedCurrency: z.string().nullable(),
+  /** ISS-2026-197: sum of every issued invoice's subtotal for this Job Order, in invoicedCurrency. Null unless invoicedStatus='available'. Masked alongside revenueAmount. */
+  invoicedAmount: z.number().nullable(),
+  /** ISS-2026-197: 'not_yet_invoiced' | 'mixed_currency' | 'available'. Metadata, never masked. */
+  invoicedStatus: z.enum(["not_yet_invoiced", "mixed_currency", "available"]).nullable(),
+  /** ISS-2026-197: invoicedAmount converted into baseCurrency at the rate effective on invoicedFxAsOf. Masked alongside revenueAmount. */
+  invoicedBaseAmount: z.number().nullable(),
+  /** ISS-2026-197: the invoicedCurrency -> baseCurrency rate applied. Masked alongside revenueAmount. */
+  invoicedFxRate: z.number().nullable(),
+  /** ISS-2026-197: the date the invoiced-total conversion rate was resolved for -- the latest issue_date across every issued invoice counted. Metadata, never masked. */
+  invoicedFxAsOf: z.string().nullable(),
+  /** ISS-2026-197: same three-value vocabulary as revenueFxStatus, for the invoiced total's own conversion. Metadata, never masked. */
+  invoicedFxStatus: z.enum(["identity", "converted", "rate_unavailable"]).nullable(),
+  /** ISS-2026-197: the exact app.finance_invoices ids summed into invoicedAmount. Masked alongside revenueAmount. */
+  sourceInvoiceIds: z.array(z.string().uuid()),
 });
 export type JobProfitabilitySnapshot = z.infer<typeof JobProfitabilitySnapshotSchema>;
 
@@ -65,6 +91,19 @@ export function parseJobProfitabilitySnapshot(row: Record<string, unknown>): Job
     createdBy: row.created_by ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    baseCurrency: (row.base_currency as string | undefined) ?? null,
+    revenueBaseAmount: toNullableNumber(row.revenue_base_amount),
+    revenueFxRate: toNullableNumber(row.revenue_fx_rate),
+    revenueFxAsOf: (row.revenue_fx_as_of as string | undefined) ?? null,
+    revenueFxStatus: (row.revenue_fx_status as JobProfitabilitySnapshot["revenueFxStatus"] | undefined) ?? null,
+    invoicedCurrency: (row.invoiced_currency as string | undefined) ?? null,
+    invoicedAmount: toNullableNumber(row.invoiced_amount),
+    invoicedStatus: (row.invoiced_status as JobProfitabilitySnapshot["invoicedStatus"] | undefined) ?? null,
+    invoicedBaseAmount: toNullableNumber(row.invoiced_base_amount),
+    invoicedFxRate: toNullableNumber(row.invoiced_fx_rate),
+    invoicedFxAsOf: (row.invoiced_fx_as_of as string | undefined) ?? null,
+    invoicedFxStatus: (row.invoiced_fx_status as JobProfitabilitySnapshot["invoicedFxStatus"] | undefined) ?? null,
+    sourceInvoiceIds: (row.source_invoice_ids as string[] | undefined) ?? [],
   });
 }
 

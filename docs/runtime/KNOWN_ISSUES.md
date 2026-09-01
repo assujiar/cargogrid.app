@@ -4600,6 +4600,70 @@ conversion for the revenue chain, remains a genuine, correctly-deferred product-
 for `HDN-386`, not something this migration builds or claims to build. Only the labeling
 fragment is closed.
 
+**Real FX conversion built (2026-09-02), status left OPEN pending `HDN-386`'s own ruling.**
+Under ADR-0027's owner-authorized broader remediation scope, this entry's own core subject —
+"no FX/multi-currency conversion exists anywhere in the revenue chain" — is substantively
+addressed for `app.calculate_job_profitability` specifically, via
+`20260902050000_wire_fx_conversion_into_operations_job_profitability.sql`. What was verified
+live first, honestly: `app.finance_exchange_rates` (a real, already-shipped versioned/dated rate
+table — `status='approved'`, `effective_from`/`effective_to`, overlap-checked at approval) and a
+real admin surface to input/publish rates (`app.create_finance_exchange_rate_draft`/
+`app.approve_finance_exchange_rate`, FIN:Edit/FIN:Approve, plus an already-shipped UI page,
+`app/(tenant)/[tenantSlug]/finance/exchange-rates`) both already existed before this migration —
+neither was built here, and this closure does not claim otherwise. What was genuinely missing,
+and is what this migration builds: `app.calculate_job_profitability` itself never called any of
+it. It now does. The function (rebuilt via `CREATE OR REPLACE FUNCTION`, prior body re-verified
+byte-for-byte against the live `pg_get_functiondef` output before editing) converts BOTH the
+quote-time revenue AND the actual invoiced/billed total (read from Finance AR,
+`app.finance_invoices status='issued'`, the same source `app.finance_job_profitability_facts`
+already reads for its own `'billed'` basis) into the tenant's own configured base/reporting
+currency (`app.resolve_tenant_locale`), each at the rate genuinely effective on its own
+respective date — the Job Order's own `created_at` for the quote, the invoice's own business
+`issue_date` for the invoiced total — through one new, uniform internal helper
+(`app.resolve_operations_fx_conversion`) that both figures call identically regardless of
+whether the source currency already equals the base currency (rate=1 resolved inside that one
+shared helper, never a special-cased branch at either call site). The original-currency figures
+are never discarded: `app.job_profitability_snapshots` gained 13 new columns
+(`base_currency`, `revenue_base_amount`/`revenue_fx_rate`/`revenue_fx_as_of`/`revenue_fx_status`,
+`invoiced_currency`/`invoiced_amount`/`invoiced_status`/`invoiced_base_amount`/`invoiced_fx_rate`/
+`invoiced_fx_as_of`/`invoiced_fx_status`/`source_invoice_ids`) sitting alongside the original
+`revenue_currency`/`revenue_amount` — a reader now sees both the original and the converted
+figure for both the quote-time and the actual-invoiced total, on the same row. A missing
+approved rate never blocks or breaks the calculation an Operations actor already has every right
+to see in its own original currency — it reports `*_fx_status='rate_unavailable'` with the
+converted amount left null, never a guess and never a new failure mode for an existing caller.
+`app.job_profitability_directory` masks every new dollar figure/rate/job-specific-currency-code/
+id-array the identical way `revenue_currency`/`revenue_amount` already were; pure state/timing
+metadata stays unmasked, the same treatment `revenue_basis` already got. Live regression proof:
+`scripts/db-tests/operations-job-profitability.sql` (appended, nothing above it edited) proves
+the new helper's identity and `rate_unavailable` paths in isolation, that both pre-existing
+same-currency Job Orders from this file's own earlier fixtures are genuinely unaffected (rate=1,
+their already-asserted revenue/cost/margin figures unchanged), and a THIRD Job Order quoted and
+invoiced entirely in USD (tenant base currency IDR) converts its quote-time revenue at one
+approved rate and its later actual-invoiced total at a deliberately different approved rate,
+each the one genuinely in effect on its own date, with both original-USD and converted-IDR
+figures readable side by side afterward. **Honest about what this does NOT do**, so this closure
+does not overstate itself: no new admin UI panel was built (a real one already existed, named
+above); only `rate_type='spot'` is read (the same default the existing rate infrastructure
+already uses elsewhere — a forward/budget rate type is not wired in, since nothing upstream
+records which rate type a quote or invoice was priced against); and the Operations job-order
+profitability panel UI is not touched — the new figures are exposed at the RPC/view/Zod-contract
+layer (`server/contracts/job-profitability/job-profitability.ts`,
+`server/queries/job-profitability.ts`, both updated) exactly like every other field on this row,
+but rendering them in the panel is a follow-up, not built here. **Status intentionally left
+`OPEN`, not flipped to `RESOLVED`** — not because the remaining work is unclear, but because
+`HDN-386` (named owner throughout this entry's own history) has not yet issued the downstream
+ruling this entry's own prior dispositions kept deferring to, and because `docs/runtime/KNOWN_
+ISSUES.md` §3's summary count table is reconciled centrally, outside this migration's own scope
+— flipping this row's status here without that central reconciliation would desynchronize a
+table this repository already broke once (see §3's own 2026-08-30 history) for the opposite
+reason. `HDN-386`, reading this: the FX-conversion primitive this entry asked for is now real,
+live, and regression-proven for the one function this entry named; whether that satisfies this
+entry's own closure bar, or whether a broader revenue-chain rollout (quotations, invoices
+themselves, not just this one reporting function) is still expected first, is the ruling this
+entry has been waiting for since its own original disposition — until that ruling lands, this
+record's own status word stays exactly `OPEN`.
+
 ### ISS-2026-198 — `app.prepare_finance_vendor_bill_from_actual_cost`'s idempotency replay lookup had no `status <> 'void'` predicate, silently returning a discarded draft instead of allowing a fresh one (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, Medium, owner `HDN-374`)
 
 **Disclosure correction, not a new fix** — this fix was already shipped, mechanically, inside
