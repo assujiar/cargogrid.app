@@ -153,6 +153,10 @@ function ReplyForm({ isStaffViewer, replyAction }: { isStaffViewer: boolean; rep
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Post a message</h3>
       <textarea name="body" required minLength={1} rows={3} className="w-full rounded border border-neutral-300 p-2 text-sm" placeholder="Write a reply…" />
+      <label className="flex flex-col gap-1 text-xs text-neutral-600">
+        Attachments (optional)
+        <input name="attachments" type="file" multiple className="mt-1 block w-full text-sm" />
+      </label>
       {isStaffViewer ? (
         <label className="flex items-center gap-2 text-xs text-neutral-600">
           Visibility
@@ -174,6 +178,10 @@ function ReplyForm({ isStaffViewer, replyAction }: { isStaffViewer: boolean; rep
           {state.error}
         </p>
       ) : null}
+      <p className="text-xs text-neutral-500">
+        Each attachment is staged through app.initiate_ticket_attachment_upload (PLT-128, requester-or-staff-gated) and clears malware scanning before it can be attached to a reply -- an infected or not-yet-scanned file is rejected. This repository has no Supabase Storage integration anywhere, so the
+        file&apos;s bytes themselves are not persisted to an object store yet (disclosed NOT_RUN, see ISS-2026-064 / ISS-2026-087).
+      </p>
     </form>
   );
 }

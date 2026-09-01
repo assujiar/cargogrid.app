@@ -960,4 +960,195 @@ begin
 end;
 $$;
 
+\echo '>> 17. ISS-2026-087: app.initiate_ticket_attachment_upload -- requester-or-staff-gated, malware-scan-gated identically to app.reply_to_ticket''s own direct-file-id path (section 11), terminal-status- and cross-tenant-safe'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tkt1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'HARDWARE');
+  v_bystander_emp uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'bystanderwork@tkt1.test');
+  v_ticket app.tickets;
+  v_ticket_closed app.tickets;
+  v_ticket_cancelled app.tickets;
+  v_file_req record;
+  v_file_staff record;
+  v_file_clean uuid;
+  v_file_infected uuid;
+  v_file_pending uuid;
+  v_msg app.ticket_messages;
+  v_msg_text text;
+  v_watcher app.ticket_watchers;
+begin
+  v_ticket := app.create_ticket(v_tenant1, v_category, null, 'normal', 'ISS-2026-087 upload-path test', 'See attached.', 'idem-iss087-1', '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  -- 17a. The requester-side party may stage an attachment against their own
+  -- ticket through the NEW gated RPC (never the raw, unauthorized
+  -- app.initiate_file_upload primitive).
+  select * into v_file_req from app.initiate_ticket_attachment_upload(v_ticket.id, 'requester-photo.png', 'image/png', 2048, null, 'idem-iss087-req-file', '00000000-0000-0000-0000-000000286002', 'requester1');
+  if v_file_req.document_type_code <> 'ticket_attachment' or v_file_req.record_type <> 'ticket' or v_file_req.record_id <> v_ticket.id then
+    raise exception 'FAIL: app.initiate_ticket_attachment_upload returned a file not correctly scoped to document_type_code=ticket_attachment/record_type=ticket/record_id=<ticket>, got type=% record_type=% record_id=%', v_file_req.document_type_code, v_file_req.record_type, v_file_req.record_id;
+  end if;
+  if v_file_req.tenant_id <> v_tenant1 then
+    raise exception 'FAIL: uploaded file tenant_id must be the ticket''s own tenant';
+  end if;
+
+  -- 17b. Ticket staff may ALSO stage an attachment against the same ticket.
+  select * into v_file_staff from app.initiate_ticket_attachment_upload(v_ticket.id, 'staff-annotation.png', 'image/png', 2048, null, 'idem-iss087-staff-file', '00000000-0000-0000-0000-000000286004', 'staff1');
+  if v_file_staff.id is null then
+    raise exception 'FAIL: ticket staff must be able to stage an attachment too';
+  end if;
+
+  -- 17c. A genuinely unrelated bystander (same tenant, zero participation on
+  -- THIS ticket) gets the SAME ticket_not_found a nonexistent ticket id
+  -- would produce -- existence-oracle-safe, mirroring app.reply_to_ticket's
+  -- own C-05 discipline (section 5/12 above) and never insufficient_authority.
+  begin
+    perform app.initiate_ticket_attachment_upload(v_ticket.id, 'sneaky.png', 'image/png', 1024, null, 'idem-iss087-bystander', '00000000-0000-0000-0000-000000286006', 'bystander');
+    raise exception 'FAIL: a non-participant bystander must not be able to stage an attachment';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_not_found%' then
+        raise exception 'FAIL: expected ticket_not_found for a non-participant bystander, got: %', v_msg_text;
+      end if;
+  end;
+
+  -- 17d. Once the SAME bystander is an explicit, structurally-scoped WATCHER
+  -- (app.can_access_ticket now true for them), the bar shifts from
+  -- ticket_not_found to insufficient_authority -- proving this RPC checks
+  -- the actual requester-or-staff participation bar (mirroring
+  -- app.reply_to_ticket's own identical two-tier check), not merely
+  -- "can this identity see the ticket at all."
+  v_watcher := app.add_ticket_watcher(v_ticket.id, v_bystander_emp, '00000000-0000-0000-0000-000000286002', 'requester1');
+  begin
+    perform app.initiate_ticket_attachment_upload(v_ticket.id, 'watcher-file.png', 'image/png', 1024, null, 'idem-iss087-watcher', '00000000-0000-0000-0000-000000286006', 'bystander');
+    raise exception 'FAIL: a plain watcher (not requester, not staff) must not be able to stage an attachment';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'insufficient_authority%' then
+        raise exception 'FAIL: expected insufficient_authority for a watcher-only identity, got: %', v_msg_text;
+      end if;
+  end;
+  perform app.remove_ticket_watcher(v_watcher.id, v_watcher.record_version, '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  -- 17e. A tenant2 identity gets ticket_not_found against a tenant1 ticket
+  -- (cross-tenant isolation, mirroring section 12 above).
+  begin
+    perform app.initiate_ticket_attachment_upload(v_ticket.id, 'cross-tenant.png', 'image/png', 1024, null, 'idem-iss087-crosstenant', '00000000-0000-0000-0000-000000286022', 'tkt2-requester1');
+    raise exception 'FAIL: a tenant2 identity must not be able to stage an attachment against a tenant1 ticket';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_not_found%' then
+        raise exception 'FAIL: expected ticket_not_found for a cross-tenant identity, got: %', v_msg_text;
+      end if;
+  end;
+
+  raise notice 'PASS: app.initiate_ticket_attachment_upload -- requester and staff may stage an attachment; a non-participant gets ticket_not_found (existence-oracle-safe); a plain watcher gets insufficient_authority (proves the real requester-or-staff bar, not just can_access_ticket); a cross-tenant identity gets ticket_not_found';
+
+  -- 17f. Malware-scan gating, exercised through the NEW RPC end-to-end
+  -- (upload -> scan -> reply), identical outcomes to section 11's own
+  -- direct-app.initiate_file_upload path -- proves the two upload paths are
+  -- fully interchangeable from app.reply_to_ticket's point of view.
+  v_file_clean := (app.initiate_ticket_attachment_upload(v_ticket.id, 'clean.png', 'image/png', 1024, null, 'idem-iss087-clean', '00000000-0000-0000-0000-000000286002', 'requester1')).id;
+  perform app.record_file_scan_result(v_file_clean, 'clean', 'test-scanner', '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  v_file_infected := (app.initiate_ticket_attachment_upload(v_ticket.id, 'infected.png', 'image/png', 1024, null, 'idem-iss087-infected', '00000000-0000-0000-0000-000000286002', 'requester1')).id;
+  perform app.record_file_scan_result(v_file_infected, 'infected', 'test-scanner', '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  v_file_pending := (app.initiate_ticket_attachment_upload(v_ticket.id, 'pending.png', 'image/png', 1024, null, 'idem-iss087-pending', '00000000-0000-0000-0000-000000286002', 'requester1')).id;
+
+  begin
+    perform app.reply_to_ticket(v_ticket.id, 'attaching an infected file via the new upload path', 'public', array[v_file_infected], null, '00000000-0000-0000-0000-000000286002', 'requester1');
+    raise exception 'FAIL: an infected attachment staged via the new RPC should still be rejected by app.reply_to_ticket';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'evidence_file_infected%' then
+        raise exception 'FAIL: expected evidence_file_infected, got: %', v_msg_text;
+      end if;
+  end;
+
+  begin
+    perform app.reply_to_ticket(v_ticket.id, 'attaching an unscanned file via the new upload path', 'public', array[v_file_pending], null, '00000000-0000-0000-0000-000000286002', 'requester1');
+    raise exception 'FAIL: an unscanned attachment staged via the new RPC should still be rejected by app.reply_to_ticket';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'evidence_file_not_scanned%' then
+        raise exception 'FAIL: expected evidence_file_not_scanned, got: %', v_msg_text;
+      end if;
+  end;
+
+  -- The full, real round trip: stage via the new RPC, clear scanning,
+  -- attach via app.reply_to_ticket -- exactly the path ISS-2026-087's own
+  -- new Server Action drives. Both attachments must clear scanning BEFORE
+  -- the reply -- app.reply_to_ticket rejects any non-'clean' file in the
+  -- array atomically (section 11's own established behavior), so scanning
+  -- v_file_req.id AFTER the call would make this assertion pass for the
+  -- wrong reason (17f above already proves the pending-file rejection).
+  perform app.record_file_scan_result(v_file_req.id, 'clean', 'test-scanner', '00000000-0000-0000-0000-000000286002', 'requester1');
+  v_msg := app.reply_to_ticket(v_ticket.id, 'here is a clean file via the new upload path', 'public', array[v_file_clean, v_file_req.id], null, '00000000-0000-0000-0000-000000286002', 'requester1');
+  if not (v_msg.attachment_file_ids @> array[v_file_clean, v_file_req.id]) then
+    raise exception 'FAIL: both clean attachments staged via the new RPC should round-trip through app.reply_to_ticket onto the resulting message';
+  end if;
+
+  raise notice 'PASS: app.initiate_ticket_attachment_upload round-trips through app.reply_to_ticket''s malware-scan gating identically to the direct-app.initiate_file_upload path (section 11) -- infected/unscanned rejected, clean accepted';
+
+  -- 17g. Terminal-status guard: a cancelled or closed ticket refuses a NEW
+  -- attachment upload with the same ticket_cancelled/ticket_closed
+  -- app.reply_to_ticket itself already raises for a new message on the same
+  -- ticket (section 16 above) -- proven with two fresh tickets so this
+  -- section never depends on section 16's own fixtures/state.
+  v_ticket_cancelled := app.create_ticket(v_tenant1, v_category, null, 'normal', 'ISS-2026-087 cancelled-guard test', 'body', 'idem-iss087-cancel', '00000000-0000-0000-0000-000000286002', 'requester1');
+  v_ticket_cancelled := app.transition_ticket_status(v_ticket_cancelled.id, v_ticket_cancelled.record_version, 'cancelled', 'no longer needed', '00000000-0000-0000-0000-000000286002', 'requester1');
+  begin
+    perform app.initiate_ticket_attachment_upload(v_ticket_cancelled.id, 'too-late.png', 'image/png', 1024, null, 'idem-iss087-cancel-upload', '00000000-0000-0000-0000-000000286002', 'requester1');
+    raise exception 'FAIL: a cancelled ticket must refuse a new attachment upload';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_cancelled%' then
+        raise exception 'FAIL: expected ticket_cancelled, got: %', v_msg_text;
+      end if;
+  end;
+
+  v_ticket_closed := app.create_ticket(v_tenant1, v_category, null, 'normal', 'ISS-2026-087 closed-guard test', 'body', 'idem-iss087-close', '00000000-0000-0000-0000-000000286002', 'requester1');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'open', null, '00000000-0000-0000-0000-000000286004', 'staff1');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'resolved', 'done', '00000000-0000-0000-0000-000000286004', 'staff1');
+  v_ticket_closed := app.transition_ticket_status(v_ticket_closed.id, v_ticket_closed.record_version, 'closed', null, '00000000-0000-0000-0000-000000286004', 'staff1');
+  begin
+    perform app.initiate_ticket_attachment_upload(v_ticket_closed.id, 'too-late.png', 'image/png', 1024, null, 'idem-iss087-close-upload', '00000000-0000-0000-0000-000000286004', 'staff1');
+    raise exception 'FAIL: a closed ticket must refuse a new attachment upload';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_closed%' then
+        raise exception 'FAIL: expected ticket_closed, got: %', v_msg_text;
+      end if;
+  end;
+
+  raise notice 'PASS: app.initiate_ticket_attachment_upload refuses a new attachment upload against a cancelled (ticket_cancelled) or closed (ticket_closed) ticket, mirroring app.reply_to_ticket''s own terminal-status guard (HRT-295)';
+
+  -- 17h. Schema-privilege defense in depth, mirroring section 14 above's own
+  -- static-catalog-check technique (has_function_privilege, not a live
+  -- role switch): anon has zero EXECUTE on either the app.* function or its
+  -- public.* wrapper.
+  declare
+    v_has_priv boolean;
+  begin
+    select has_function_privilege('anon', 'app.initiate_ticket_attachment_upload(uuid, text, text, bigint, text, text, uuid, text)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'FAIL: anon should have zero execute privilege on app.initiate_ticket_attachment_upload';
+    end if;
+    select has_function_privilege('anon', 'public.initiate_ticket_attachment_upload(uuid, text, text, bigint, text, text, uuid, text)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'FAIL: anon should have zero execute privilege on public.initiate_ticket_attachment_upload';
+    end if;
+  end;
+
+  raise notice 'PASS: app.initiate_ticket_attachment_upload and its public.* wrapper -- anon has zero schema privilege, defense in depth mirroring section 14';
+end;
+$$;
+
 \echo '>> all ticketing-internal (HRT-286) assertions passed'

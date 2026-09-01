@@ -133,7 +133,10 @@ import {
   UnlinkTicketPortalRecordInputSchema,
   type LinkTicketPortalRecordInput,
   type UnlinkTicketPortalRecordInput,
+  InitiateTicketAttachmentUploadInputSchema,
+  type InitiateTicketAttachmentUploadInput,
 } from "../contracts/ticketing/ticketing.ts";
+import { parseFileSummary, type FileSummary } from "../contracts/document/document.ts";
 
 export type TicketMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -230,6 +233,26 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by app.add_ticket_escalation_level
   // since HRT-291's own creation migration, never added here (API-parity gap).
   "invalid_cooldown",
+  // ISS-2026-087 closure (20260901120000): app.reply_to_ticket has raised ticket_closed
+  // since HRT-295 (20260731270000) but it was never added to this array -- a pre-existing
+  // API-parity gap (mirrors invalid_cooldown's own comment immediately above), found and
+  // fixed here because app.initiate_ticket_attachment_upload (new, this closure) can raise
+  // it too and needs it classified correctly, not folded into generic mutation_failed.
+  "ticket_closed",
+  // app.initiate_ticket_attachment_upload delegates to app.initiate_file_upload (PLT-128)
+  // for the actual metadata recording, making that primitive's own validation error
+  // prefixes reachable through this service layer for the first time -- mirrors this
+  // array's own established "widen when a fix makes a new code reachable" pattern (see
+  // server/mutations/employee.ts's identical ISS-2026-064 item 2 comment). ticket_not_found,
+  // ticket_cancelled, insufficient_authority and idempotency_key_conflict are already
+  // present above and are not duplicated.
+  "document_type_not_configured",
+  "document_unsafe_filename",
+  "document_mime_type_not_allowed",
+  "document_file_too_large",
+  "document_invalid_classification",
+  "document_classification_too_weak",
+  "file_actor_unauthorized",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -347,6 +370,35 @@ export async function replyToTicket(client: TicketMutationRpcClient, input: Repl
     p_actor_auth_user_id: v.actorAuthUserId,
     p_actor_label: v.actorLabel,
   });
+}
+
+/**
+ * ISS-2026-087 closure (20260901120000): app.initiate_ticket_attachment_upload --
+ * requester-or-staff-gated (the SAME participation bar app.reply_to_ticket itself
+ * enforces for posting), never the raw app.initiate_file_upload primitive's own
+ * coarse tenant-membership-only check. document_type_code/record_type/record_id
+ * are fixed server-side ('ticket_attachment'/'ticket'/<the ticket's own id>).
+ * Returns a FileSummary (storage_path-less -- this RPC is callable directly by
+ * `authenticated`, unlike app.initiate_file_upload itself). One file per call --
+ * the calling Server Action loops over every selected file to build up
+ * ReplyToTicketInput.attachmentFileIds, which is genuinely plural.
+ */
+export async function initiateTicketAttachmentUpload(client: TicketMutationRpcClient, input: InitiateTicketAttachmentUploadInput): Promise<FileSummary> {
+  const v = InitiateTicketAttachmentUploadInputSchema.parse(input);
+  const { data, error } = await client.rpc("initiate_ticket_attachment_upload", {
+    p_ticket_id: v.ticketId,
+    p_original_filename: v.originalFilename,
+    p_mime_type: v.mimeType,
+    p_size_bytes: v.sizeBytes,
+    p_classification: v.classification ?? null,
+    p_idempotency_key: v.idempotencyKey ?? null,
+    p_actor_auth_user_id: v.actorAuthUserId,
+    p_actor_label: v.actorLabel,
+  });
+  if (error) throw new TicketMutationError(classifyError(error.message), error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") throw new TicketMutationError("mutation_failed", "initiate_ticket_attachment_upload returned no row");
+  return parseFileSummary(row as Record<string, unknown>);
 }
 
 export async function redactTicketMessage(client: TicketMutationRpcClient, input: RedactTicketMessageInput) {

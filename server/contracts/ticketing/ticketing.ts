@@ -20,6 +20,7 @@
  */
 
 import { z } from "zod";
+import { ClassificationSchema } from "../document/document.ts";
 
 export const TICKET_CHANNELS = ["internal", "customer", "helpdesk"] as const;
 export const TicketChannelSchema = z.enum(TICKET_CHANNELS);
@@ -467,6 +468,28 @@ export const ReplyToTicketInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type ReplyToTicketInput = z.infer<typeof ReplyToTicketInputSchema>;
+
+/**
+ * ISS-2026-087: app.initiate_ticket_attachment_upload (20260901120000) --
+ * one file per call, mirroring server/contracts/employee/employee.ts's own
+ * InitiateEmployeeDocumentUploadInputSchema shape exactly. `attachmentFileIds`
+ * on ReplyToTicketInputSchema above is genuinely plural (a support
+ * conversation routinely needs more than one file per reply, per
+ * 20260731060000's own decision 8) -- the calling Server Action uploads each
+ * selected file with its own call to this RPC first, collecting the
+ * resulting file ids, then passes the full array into replyToTicket.
+ */
+export const InitiateTicketAttachmentUploadInputSchema = z.object({
+  ticketId: z.string().uuid(),
+  originalFilename: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  classification: ClassificationSchema.nullable().default(null),
+  idempotencyKey: z.string().nullable().default(null),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type InitiateTicketAttachmentUploadInput = z.input<typeof InitiateTicketAttachmentUploadInputSchema>;
 
 export const RedactTicketMessageInputSchema = z.object({
   messageId: z.string().uuid(),

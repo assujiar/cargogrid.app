@@ -24,6 +24,7 @@ import {
   removeTicketQueueMember,
   createTicket,
   replyToTicket,
+  initiateTicketAttachmentUpload,
   redactTicketMessage,
   addTicketWatcher,
   removeTicketWatcher,
@@ -252,12 +253,46 @@ export async function replyToTicketAction(tenantSlug: string, ticketId: string, 
   if (!body) return { error: "A non-empty message is required." };
 
   const supabase = await createSupabaseServerClient();
+
+  // ISS-2026-087: attachmentFileIds is genuinely plural (20260731060000's own
+  // decision 8 -- a support conversation routinely needs more than one file
+  // per reply). Each selected file is staged with its own
+  // app.initiate_ticket_attachment_upload call FIRST -- that RPC re-checks
+  // real requester-or-staff ticket authority itself (never trusted from
+  // access.status === "allowed" alone, which only proves tenant-level portal
+  // entry) -- and only once every file has a clean, scoped app.files row does
+  // this action attempt the reply itself. A failed upload aborts before
+  // reply_to_ticket is ever called, so a reply is never posted with only
+  // SOME of its intended attachments.
+  const files = formData
+    .getAll("attachments")
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0 && entry.name.length > 0);
+
+  const attachmentFileIds: string[] = [];
+  try {
+    for (const [index, file] of files.entries()) {
+      const uploaded = await initiateTicketAttachmentUpload(supabase, {
+        ticketId,
+        originalFilename: file.name,
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: file.size,
+        classification: null,
+        idempotencyKey: `reply-attach-${access.authUserId}-${Date.now()}-${index}`,
+        actorAuthUserId: access.authUserId,
+        actorLabel: access.authUserId,
+      });
+      attachmentFileIds.push(uploaded.id);
+    }
+  } catch (error) {
+    return errorMessage("Could not upload an attachment", error);
+  }
+
   try {
     await replyToTicket(supabase, {
       ticketId,
       body,
       visibility,
-      attachmentFileIds: null,
+      attachmentFileIds: attachmentFileIds.length > 0 ? attachmentFileIds : null,
       idempotencyKey: `reply-${access.authUserId}-${Date.now()}`,
       actorAuthUserId: access.authUserId,
       actorLabel: access.authUserId,
