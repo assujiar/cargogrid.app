@@ -1401,6 +1401,14 @@ declare
     'shipment_actual_costs_directory', 'job_profitability_directory', 'vendor_rate_tiers_directory',
     'vendor_rate_versions_directory', 'sourcing_requests_directory', 'rfq_responses_directory',
     'purchase_orders_directory', 'purchase_order_events_directory',
+    -- ISS-2026-060: app.vendor_rate_zone_distance_tiers_directory (20260902030000)
+    -- -- mirrors vendor_rate_tiers_directory''s own hardened pattern-5 row predicate
+    -- and PRC:View cost (app.has_prc_view_cost) column-masking byte-for-byte;
+    -- security_invoker=false is required for the identical reason every other
+    -- entry on this list needs it (the base table''s own column-level grant
+    -- excludes amount/minimum_charge, so an invoker-mode view could not read
+    -- them at all to mask them).
+    'vendor_rate_zone_distance_tiers_directory',
     -- Plain, unmasked projection views (13) -- exist for the "always read
     -- through a _directory-shaped view" convention; carry their own
     -- hand-rolled tenant/row predicate, proven correct independently.
