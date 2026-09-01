@@ -214,18 +214,28 @@ the sweep. Everything still *works*; nothing happens *by itself*.
 **Recommendation.** Do this at deploy time. It is the difference between a system that watches
 itself and one that waits to be asked.
 
-### 3.8 A public status page — a signup, and a decision
+### 3.8 A public status page — built, with one gap left (`ISS-2026-320`)
 
-**What it is.** A page customers can load to see whether CargoGrid is up, when they cannot
-sign in.
+**What shipped, 2026-09-01.** `/status` — a page customers can load to see whether CargoGrid
+is up, when they cannot sign in. It is statically rendered and checks `/api/health`/`/api/ready`
+live from the visitor's own browser, so it keeps answering while the application or its
+database does not — the outage that matters most, since CargoGrid runs on one backend vendor
+with no failover (`ISS-2026-261`).
 
-**Why it is not done.** On purpose. A status page hosted inside the system it reports on is
-useless during exactly the outage it exists to report — it belongs somewhere else, which makes
-it a hosting choice rather than a feature.
+**What is still deliberately not done, and why.** `/status` shares a host with the
+application: if the hosting platform itself goes down, the page never loads either. A page
+that survives *that* needs a second host, and standing one up is likely not the purchase it
+sounds like: `cargogrid.app` already resolves through Cloudflare's edge today (`server:
+cloudflare`, live-verified — see `ISS-2026-311`), so whoever controls that DNS zone can very
+likely host a free Cloudflare Pages page and point `status.cargogrid.app` at it with one DNS
+record, roughly the same ten minutes as this document's own CNAME step elsewhere — worth
+confirming against your actual Cloudflare account rather than assumed. It stays your call
+because this session holds no Cloudflare credential of any kind, not because it costs money.
 
-**Risk if you skip it.** During a real outage you reach customers by whatever channel you
-already have — email, WhatsApp, a phone call — by hand. Workable for a handful of customers,
-and what most companies do at launch. It stops scaling, and enterprise buyers ask about it.
+**Risk if you skip the second host.** In the one outage class `/status` cannot cover — the
+hosting platform itself down — you reach customers by whatever channel you already have, by
+hand. Workable for a handful of customers; it stops scaling, and enterprise buyers ask about
+it.
 
 ---
 

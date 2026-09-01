@@ -18,11 +18,17 @@ nothing.
 
 The mechanism now exists in the database. This file is the human half of it.
 
-**What is deliberately still missing** is stated here rather than discovered later: there is
-**no public status page** for unauthenticated visitors. The `customer_portal` audience below
-reaches signed-in portal users. If customers cannot sign in — which is precisely the case in
-a serious outage — you are reaching them by whatever channel you already have with them, not
-through CargoGrid. See `ISS-2026-304`.
+**Corrected 2026-09-01 (`ISS-2026-304`/`ISS-2026-320`).** The paragraph below originally said
+there is no public status page at all. That is no longer true: `/status` is a statically
+rendered, unauthenticated page that checks `/api/health` and `/api/ready` live from the
+visitor's own browser, so it keeps answering while the application or its database is
+unreachable — the `customer_portal` audience below still only reaches signed-in portal users,
+so `/status` is what a customer who cannot sign in can check instead.
+
+**One outage class is still genuinely uncovered, stated here rather than discovered later**:
+`/status` shares a host with the application. If the hosting platform itself is down, the
+page never loads either — a genuinely independent status page needs a second host, which is
+`ISS-2026-320`'s own remaining subject.
 
 ---
 
@@ -130,6 +136,6 @@ whole story of an incident stays in one place.
 
 | Limit | Consequence | Tracked as |
 |---|---|---|
-| No public status page | Customers who cannot sign in cannot be reached through CargoGrid at all | `ISS-2026-304` — see `human-execution-pack.md` §7 |
+| The status page shares a host with the app | It goes dark in a platform-wide outage, the one case it cannot cover | `ISS-2026-320` — see `human-execution-pack.md` §7 |
 | No SLA clock | Send times are recorded, but nothing measures or alerts on a P1 response-time breach | `ISS-2026-258` annotation |
 | `internal` depends on an `app.alert_routes` row | An incident with no matching route resolves to the tenant's admins only, and the owning team is not paged | Configure routes via the monitoring console |

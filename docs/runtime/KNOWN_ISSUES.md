@@ -8742,3 +8742,27 @@ question, and it is deliberately not something to fake with more code inside the
 deployment. **Owner: Platform/Infrastructure.** Whoever takes it should also decide whether the
 same service carries incident history and planned-maintenance notices, which `/status`
 deliberately does not attempt.
+
+**Update, 2026-09-01 — narrowed, still `OPEN`.** Two corrections, both found while checking
+this entry against live state rather than accepting its own framing.
+
+**The cost claim was wrong, and matters to what the owner is actually deciding.** "Opening an
+account, paying for it" describes a hosted status service. It does not describe the more
+likely path: `cargogrid.app` already resolves through Cloudflare's edge today (`server:
+cloudflare`, live-verified — the same fact `ISS-2026-311` records), so whoever controls that
+DNS zone can very likely stand up a free Cloudflare Pages page and add one DNS record for
+`status.cargogrid.app` — the same shape as an ordinary CNAME step, not a purchase. This is
+corrected in `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` §3.8 and
+`docs/runbooks/human-execution-pack.md` §7, hedged appropriately: this session holds no
+Cloudflare credential, so it could confirm the zone is *reachable* but not who controls it, and
+says so rather than asserting access it cannot verify.
+
+**A real documentation-drift defect, closed.** `ISS-2026-304`'s own closure never swept the
+documents that describe it. `docs/runbooks/incident-communication.md` §1 and its own §6 limits
+table, and `docs/runbooks/disaster-recovery.md`, all still told a responder there is no public
+status page at all — two of them read *during* an incident, which is the worst place for a
+stale claim to survive. All three are corrected in place with dated notes, stating what
+`/status` actually covers and pointing the remaining gap at this entry by ID.
+
+Status stays `OPEN`: the second-host page itself is not built, and remains the owner's call for
+the access reason above, not a cost one.

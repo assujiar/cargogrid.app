@@ -67,10 +67,14 @@ than being built a second time, which is the caution `ISS-2026-251` raises.
 improvise from this section.
 
 **What remains genuinely absent, stated plainly rather than left to be discovered mid-DR:**
-there is **no public status page** for unauthenticated visitors (`ISS-2026-304`), and no SLA
-clock measuring the P1–P4 response targets `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4
-describes. In a serious outage, customers who cannot sign in cannot be reached through
-CargoGrid at all — reach them by whatever channel you already have with them.
+**Corrected 2026-09-01 (`ISS-2026-304`) — `/status` now exists**, a statically rendered,
+unauthenticated page that checks `/api/health`/`/api/ready` from the visitor's own browser and
+so keeps answering while the application or its database does not. It shares a host with the
+application, so it goes dark in a genuine platform-wide outage — that residual is
+`ISS-2026-320`. Also still absent: no SLA clock measuring the P1–P4 response targets
+`docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.4 describes. In a platform-wide outage,
+customers cannot be reached through CargoGrid at all — reach them by whatever channel you
+already have with them.
 
 **Backup-file handling** (inherited from `database-restore.md` §5, applies identically to any DR event that touches a backup): a backup file carries the same confidentiality risk as the live secrets it contains (`ISS-2026-257`) — never distribute one through an incident channel or attach it to a ticket accessible to anyone not already entitled to raw webhook/integration secrets.
 

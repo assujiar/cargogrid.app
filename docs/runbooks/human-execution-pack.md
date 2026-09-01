@@ -336,15 +336,29 @@ This is one task for all of them.
 
 ---
 
-## 7. Public status page — `ISS-2026-304`
+## 7. Independent status page — `ISS-2026-320`
 
-**Time:** an hour plus a signup. **Needs:** a decision and possibly a subscription.
+**`/status` already exists**, live in this application: unauthenticated, statically rendered,
+checking `/api/health`/`/api/ready` from the visitor's own browser. It keeps working through
+the outage that matters most here — the application or its database being unreachable, since
+CargoGrid runs on one backend vendor with no failover (`ISS-2026-261`). You are not building
+this from scratch; skip straight to the residual below.
 
-**It must not be hosted on CargoGrid's own infrastructure.** A status page inside the system
-it reports on is unavailable during exactly the outage it exists to report.
+**Time:** roughly ten minutes, likely without a purchase. **Needs:** access to whichever
+account controls the `cargogrid.app` DNS zone.
 
-Options: a hosted status service; or a static page on a different host and domain, updated by
-hand. For a young product the second is entirely respectable.
+**The one thing `/status` cannot cover: the hosting platform itself going down.** It shares a
+host with the application, so it goes dark exactly when a platform-wide outage would make it
+most useful. A page that survives that needs a second host.
+
+`cargogrid.app` already resolves through Cloudflare's edge today (`server: cloudflare`,
+live-verified — see `ISS-2026-311`), which means the account that controls that DNS zone can
+very likely create a free Cloudflare Pages project, upload one static HTML page, and point
+`status.cargogrid.app` at it with a single DNS record — the same shape as this document's own
+CNAME step elsewhere, not a new subscription. Confirm you actually hold that Cloudflare account
+before starting; if `cargogrid.app` is fronted by someone else's Cloudflare zone (a reseller,
+a prior owner), a hosted status service or a page on any other host and domain works exactly
+as well.
 
 Whichever you pick, put the URL in `docs/runbooks/incident-communication.md` §6 so the person
 handling an incident can find it without hunting.
