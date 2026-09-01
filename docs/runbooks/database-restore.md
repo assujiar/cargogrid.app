@@ -80,7 +80,16 @@ Scope per Prompt 383 §24/`HARDENING_MATRIX.md` §14 item 4: database, files, co
 
 ## 5. Communication
 
-**RPO/RTO defaults** (never independently confirmed operationally enabled on the real hosted project — cite honestly, do not promise beyond tested evidence per business rule §24): `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.1 states MVP-tier defaults of 15-minute RPO / 4-hour RTO via Supabase-managed automated backup + PITR "where plan supports" — a proposed default (RPD-031/RPD-037), not a signed SLA, and never operationally verified as active on `awdlicmwzdxquopwtcfd`. RPD-025's 35-day backup retention is the outer bound for how far back any restore can reach, regardless of tier. **This checkpoint's own measured figures** (~44–46s schema rebuild, ~11.6s row-level dump/restore cycle) are real but describe a small, disposable-sandbox dataset, not a production-scale one — do not extrapolate them as a production RTO commitment.
+**RPO/RTO defaults** (independently verified 2026-09-01 and found NOT to be in place — see the dated note at the end of this paragraph; cite honestly, do not promise beyond tested evidence per business rule §24): `docs/architecture/11_DEVOPS_WORKSTREAM.md` §8.1 states MVP-tier defaults of 15-minute RPO / 4-hour RTO via Supabase-managed automated backup + PITR "where plan supports" — a proposed default (RPD-031/RPD-037), not a signed SLA, and never operationally verified as active on `awdlicmwzdxquopwtcfd`. RPD-025's 35-day backup retention is the outer bound for how far back any restore can reach, regardless of tier. **This checkpoint's own measured figures** (~44–46s schema rebuild, ~11.6s row-level dump/restore cycle) are real but describe a small, disposable-sandbox dataset, not a production-scale one — do not extrapolate them as a production RTO commitment.
+
+**Live verification, 2026-09-01 (`ISS-2026-256`).** This was checked rather than left open, and
+the result is negative: `GET /v1/projects/awdlicmwzdxquopwtcfd/database/backups` returns
+`pitr_enabled: false` with an empty `backups` array, and the owning organization is on the free
+plan, where PITR is a paid add-on. **A responder reading this runbook during an incident should
+know that there is currently no customer-restorable backup to restore from at all** — the
+procedures below assume one exists. Re-run `pnpm run db:check-live-backup` to re-derive this;
+it needs `SUPABASE_PAT` and `SUPABASE_PROJECT_REF` and reports NOT RUN rather than a false pass
+without them. The evidence is recorded in `app.dr_restore_tests` as a `failed` result.
 
 **Release-gating consequence**: absent production-like restore evidence for Storage and Auth is a named release blocker, not an internal note — `00_EXECUTION_INDEX.md` §8.1 items 6 ("Backup and restore tested") and 9 ("Runbooks available") are 2 of the ten non-negotiable Step 16 eligibility gates (§12); §7's severity policy bands an unenforced-but-plausible recovery path as High, release-blocking unless explicitly ruled an accepted exception at `HDN-387`/`HDN-389`.
 

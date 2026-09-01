@@ -150,6 +150,23 @@ Reproduces Tech Arch §31.1/§31.2 verbatim as the binding backup contract:
 
 RPO/RTO (Tech Arch §31.2, verbatim, tiered): MVP baseline 15 minutes RPO / 4 hours RTO; Scale-up 5–15 minutes RPO / 2–4 hours RTO; Enterprise contract-defined. Per RPD-031/037 (binding, restated exactly as `10_*.md` §10.3/§7.4 already cite): these are proposed defaults, not a universal guarantee — a specific tenant's contracted RPO/RTO governs when one exists; contract silence means best effort without a guaranteed recovery commitment. RPD-025's 35-day backup retention (§6.3) is the outer bound for how far back a restore can reach regardless of RPO/RTO tier.
 
+**Operational status (live-verified 2026-09-01, `ISS-2026-256`).** The paragraph above states the
+*proposed defaults*, reproduced from Tech Arch §31.2, and is left unchanged. What is true of the
+real hosted project today is different, and is recorded here rather than left to be discovered:
+the Supabase Management API reports `pitr_enabled: false` and `backups: []` for
+`awdlicmwzdxquopwtcfd`, and organization `xnvwzlfbmcvgodnsxxsk` is on the **free** plan, where
+point-in-time recovery is not available at all. **The 15-minute MVP-tier RPO is therefore not
+merely unconfirmed — it is unattainable in the current configuration**, and RPD-025's 35-day
+retention outer bound is unmet: there is nothing to restore from. Supabase's own physical backup
+daemon is running (`walg_enabled: true`), but that is the platform's internal safety net rather
+than a customer-restorable backup, and it must not be reported as an RPO.
+
+Re-check with `pnpm run db:check-live-backup` (`scripts/db/check-live-backup-config.ts`); it goes
+green on its own once PITR is enabled and a restorable backup exists inside the declared window,
+with no code change. Closing it is an owner action — a plan upgrade plus a PITR add-on — recorded
+as an evidence row in `app.dr_restore_tests` (status `failed`, scenario `provider_failure`) rather
+than as a passed gate.
+
 ### 8.2 Recovery testing
 
 Reproduces Tech Arch §31.3's six-item list verbatim as the binding rehearsal scope, executed at the cadence `10_*.md` §7.4/§11 already resolves (`ADR-CAND-ARCH-023`: quarterly, deferred to Phase 0 testing foundation — not re-opened here, only confirmed as this document's own backup/DR cadence too, so the testing and DevOps workstreams cite one cadence, not two): quarterly restore rehearsal, tenant-level logical export test, storage restore test (§7 above), config rollback test (`07_*.md` §10), financial reconciliation after restore (ties to `10_*.md` §5.3's `FINTEST-*` suite run post-restore), incident runbook test (§8.4 below).
