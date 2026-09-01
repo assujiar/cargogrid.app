@@ -321,6 +321,7 @@ export function EmployeeDetailPanel({
   removeContactAction,
   decideDuplicateAction,
   decideChangeRequestAction,
+  uploadDocumentAction,
 }: {
   tenantSlug: string;
   profile: EmployeeProfile;
@@ -347,6 +348,7 @@ export function EmployeeDetailPanel({
   removeContactAction: (contactId: string, expectedVersion: number) => BoundAction;
   decideDuplicateAction: (candidateId: string, expectedVersion: number) => BoundAction;
   decideChangeRequestAction: (requestId: string, expectedVersion: number) => BoundAction;
+  uploadDocumentAction: BoundAction;
 }) {
   const [tab, setTab] = useState<"personal" | "employment" | "organization" | "documents" | "history">("personal");
   const orgUnitName = (id: string | null) => (id ? orgUnits.find((u) => u.id === id)?.name ?? id : "—");
@@ -748,7 +750,27 @@ export function EmployeeDetailPanel({
               ))}
             </ul>
           )}
-          <p className="mt-2 text-xs text-neutral-500">Upload is server-mediated through app.initiate_file_upload (RPD-032 true quarantine) -- not yet wired to a client-side file picker in this checkpoint (residual gap, see the build log).</p>
+          <FormWithState action={uploadDocumentAction} className="mt-3 flex flex-col gap-2 rounded-md border border-dashed border-neutral-300 p-3 sm:flex-row sm:items-end sm:gap-3">
+            {(pending, error) => (
+              <>
+                <label className="flex-1 text-xs text-neutral-600">
+                  Upload a document
+                  <input name="file" type="file" required className="mt-1 block w-full text-sm" />
+                </label>
+                <div className="flex flex-col gap-1">
+                  <Button type="submit" loading={pending} loadingLabel="Uploading…">
+                    Upload
+                  </Button>
+                  {error ? (
+                    <p role="alert" className="text-xs text-danger">
+                      {error}
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </FormWithState>
+          <p className="mt-2 text-xs text-neutral-500">Upload is server-mediated through app.initiate_file_upload (RPD-032 true quarantine) -- metadata (filename, MIME type, size, classification) is recorded and malware-scanned once a scan provider reports a result; this repository has no Supabase Storage integration anywhere, so the file&apos;s bytes themselves are not persisted to an object store yet (disclosed NOT_RUN, see ISS-2026-064).</p>
         </div>
       ) : null}
 

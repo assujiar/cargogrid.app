@@ -2104,3 +2104,127 @@ begin
   raise notice 'ISS-2026-189 closure: the directory grant is pinned at % reviewed columns; probation_end_date and employment_end_date are withheld; PII still withheld; service_role intact', array_length(v_expected, 1);
 end;
 $$;
+
+\echo '>> ISS-2026-064 item 2 closure: app.initiate_employee_document_upload is HRS:Edit-gated (never the raw app.initiate_file_upload primitive''s own coarse tenant-membership-only gate) -- an HRS:View-only actor is refused with insufficient_authority; a different-tenant actor holding real HRS:Edit gets the SAME employee_not_found a genuinely nonexistent master_record_id would (no cross-tenant leak); a real HRS:Edit actor succeeds and the file carries record_type=employee/record_id=the employee and picks up the TENANT''S OWN published default_classification (confidential, never a hardcoded ''internal''); a TERMINATED employee still accepts uploads (offboarding paperwork) while an ARCHIVED one is refused with employee_closed; replaying an idempotency key returns the identical row and reusing it against a different employee conflicts; anon holds zero EXECUTE on both app.* and public.*'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrmemp1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027102';
+  v_approver uuid := '00000000-0000-0000-0000-000000027103';
+  v_manager uuid := '00000000-0000-0000-0000-000000027104';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027105';
+  v_t2_staff uuid := '00000000-0000-0000-0000-000000027202';
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HR1');
+  v_employee app.employees;
+  v_employee2 app.employees;
+  v_file record;
+  v_file2 record;
+  v_has_privilege boolean;
+begin
+  v_employee := app.create_employee_draft(v_tenant1, 'Dian Kusuma', 'full_time', null, null, null, null, null, null, null, null, null, null, null, null, null, null, 'hr_created', 'idem-docupload-1', v_staff, 'staff');
+
+  -- HRS:View-only actor refused -- never merely coarse tenant membership.
+  begin
+    perform app.initiate_employee_document_upload(v_employee.master_record_id, 'view-only.csv', 'text/csv', 100, null, null, v_viewer, 'viewer');
+    raise exception 'assertion failed: expected insufficient_authority for an HRS:View-only actor';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A cross-tenant actor holding real HRS:Edit (in their OWN tenant) gets the identical
+  -- employee_not_found a genuinely nonexistent master_record_id produces -- never a
+  -- distinguishable cross-tenant leak.
+  begin
+    perform app.initiate_employee_document_upload(v_employee.master_record_id, 'cross-tenant.csv', 'text/csv', 100, null, null, v_t2_staff, 't2 staff');
+    raise exception 'assertion failed: expected employee_not_found for a cross-tenant actor';
+  exception
+    when others then
+      if sqlerrm not like 'employee_not_found%' then raise; end if;
+  end;
+  begin
+    perform app.initiate_employee_document_upload(gen_random_uuid(), 'nonexistent.csv', 'text/csv', 100, null, null, v_t2_staff, 't2 staff');
+    raise exception 'assertion failed: expected the identical employee_not_found for a genuinely nonexistent master_record_id';
+  exception
+    when others then
+      if sqlerrm not like 'employee_not_found%' then raise; end if;
+  end;
+
+  -- Real HRS:Edit actor succeeds. classification is passed as null and picks up the
+  -- tenant's own published default_classification ('confidential', this file's own
+  -- staged-import fixture above) -- never a hardcoded 'internal'.
+  select * into v_file from app.initiate_employee_document_upload(v_employee.master_record_id, 'offer-letter.csv', 'text/csv', 100, null, 'idem-docupload-file-1', v_staff, 'staff');
+  if v_file.record_type <> 'employee' or v_file.record_id <> v_employee.master_record_id then
+    raise exception 'assertion failed: expected record_type=employee/record_id=% got %/%', v_employee.master_record_id, v_file.record_type, v_file.record_id;
+  end if;
+  if v_file.document_type_code <> 'employee_document' then
+    raise exception 'assertion failed: expected document_type_code=employee_document, got %', v_file.document_type_code;
+  end if;
+  if v_file.classification <> 'confidential' then
+    raise exception 'assertion failed: expected the tenant''s own published default_classification (confidential), got %', v_file.classification;
+  end if;
+
+  -- Idempotency replay returns the identical row.
+  select * into v_file2 from app.initiate_employee_document_upload(v_employee.master_record_id, 'offer-letter.csv', 'text/csv', 100, null, 'idem-docupload-file-1', v_staff, 'staff');
+  if v_file2.id <> v_file.id then
+    raise exception 'assertion failed: expected an idempotency replay to return the identical file row, got % vs %', v_file2.id, v_file.id;
+  end if;
+
+  -- Reusing that key against a DIFFERENT employee record is a conflict, never a
+  -- silent misattribution (ATW-031 / ISS-2026-029's own established shape).
+  v_employee2 := app.create_employee_draft(v_tenant1, 'Second Employee', 'full_time', null, null, null, null, null, null, null, null, null, null, null, null, null, null, 'hr_created', 'idem-docupload-2', v_staff, 'staff');
+  begin
+    perform app.initiate_employee_document_upload(v_employee2.master_record_id, 'offer-letter.csv', 'text/csv', 100, null, 'idem-docupload-file-1', v_staff, 'staff');
+    raise exception 'assertion failed: expected idempotency_key_conflict when the same key targets a different employee record';
+  exception
+    when others then
+      if sqlerrm not like 'idempotency_key_conflict%' then raise; end if;
+  end;
+
+  -- Trap 2's own explicit decision, executed rather than merely narrated: a TERMINATED
+  -- employee still accepts document uploads (offboarding/termination paperwork is filed
+  -- against exactly this employee); only an ARCHIVED profile refuses further documents.
+  v_employee := app.update_employee_draft(v_employee.master_record_id, v_employee.record_version, 'Dian Kusuma', 'full_time', 'dian@hrmemp1.test', null, null, null, null, null, '2026-01-15', null, v_company, null, null, 'Staff Analyst', null, v_staff, 'staff');
+  perform app.add_employee_emergency_contact(v_employee.master_record_id, 'Kin Kusuma', 'Sibling', '+62-811-9', null, true, v_staff, 'staff');
+  v_employee := app.submit_employee_for_approval(v_employee.master_record_id, v_employee.record_version, v_staff, 'staff');
+  v_employee := app.decide_employee_approval(v_employee.master_record_id, v_employee.record_version, 'approve', null, v_approver, 'approver');
+  v_employee := app.activate_employee(v_employee.master_record_id, v_employee.record_version, v_approver, 'approver');
+  v_employee := app.terminate_employee(v_employee.master_record_id, v_employee.record_version, 'resignation', '2026-06-30', v_manager, 'manager');
+  if v_employee.lifecycle_status <> 'terminated' then
+    raise exception 'assertion failed: expected terminated, got %', v_employee.lifecycle_status;
+  end if;
+
+  select * into v_file from app.initiate_employee_document_upload(v_employee.master_record_id, 'termination-letter.csv', 'text/csv', 100, null, 'idem-docupload-terminated-1', v_staff, 'staff');
+  if v_file.id is null then
+    raise exception 'assertion failed: expected a terminated employee to still accept a document upload (offboarding paperwork)';
+  end if;
+
+  v_employee := app.archive_employee_profile(v_employee.master_record_id, v_employee.record_version, 'record retention closure', v_staff, 'staff');
+  if v_employee.lifecycle_status <> 'archived' then
+    raise exception 'assertion failed: expected archived, got %', v_employee.lifecycle_status;
+  end if;
+
+  begin
+    perform app.initiate_employee_document_upload(v_employee.master_record_id, 'post-archive.csv', 'text/csv', 100, null, null, v_staff, 'staff');
+    raise exception 'assertion failed: expected employee_closed for an upload attempt against an archived employee';
+  exception
+    when others then
+      if sqlerrm not like 'employee_closed%' then raise; end if;
+  end;
+
+  -- Schema-privilege defense in depth (ERR-2026-004): anon holds zero EXECUTE on either
+  -- the app.* RPC or its public.* wrapper.
+  select has_function_privilege('anon', 'app.initiate_employee_document_upload(uuid, text, text, bigint, text, text, uuid, text)', 'EXECUTE') into v_has_privilege;
+  if v_has_privilege then
+    raise exception 'assertion failed: expected anon to hold no EXECUTE on app.initiate_employee_document_upload';
+  end if;
+  select has_function_privilege('anon', 'public.initiate_employee_document_upload(uuid, text, text, bigint, text, text, uuid, text)', 'EXECUTE') into v_has_privilege;
+  if v_has_privilege then
+    raise exception 'assertion failed: expected anon to hold no EXECUTE on public.initiate_employee_document_upload';
+  end if;
+  select has_function_privilege('anon', 'app.assert_employee_document_upload_authority(uuid, uuid)', 'EXECUTE') into v_has_privilege;
+  if v_has_privilege then
+    raise exception 'assertion failed: expected anon to hold no EXECUTE on the internal-only app.assert_employee_document_upload_authority';
+  end if;
+end;
+$$;

@@ -32,6 +32,7 @@ import {
   removeEmployeeEmergencyContactAction,
   decideEmployeeDuplicateCandidateAction,
   decideEmployeeChangeRequestAction,
+  uploadEmployeeDocumentAction,
 } from "../actions.ts";
 
 /**
@@ -138,6 +139,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       removeContactAction={(contactId: string, expectedVersion: number) => removeEmployeeEmergencyContactAction.bind(null, tenantSlug, masterRecordId, contactId, expectedVersion)}
       decideDuplicateAction={(candidateId: string, expectedVersion: number) => decideEmployeeDuplicateCandidateAction.bind(null, tenantSlug, masterRecordId, candidateId, expectedVersion)}
       decideChangeRequestAction={(requestId: string, expectedVersion: number) => decideEmployeeChangeRequestAction.bind(null, tenantSlug, masterRecordId, requestId, expectedVersion)}
+      uploadDocumentAction={uploadEmployeeDocumentAction.bind(null, tenantSlug, masterRecordId)}
     />
   );
 }

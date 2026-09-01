@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { ClassificationSchema } from "../document/document.ts";
 
 export const EMPLOYMENT_TYPES = ["full_time", "part_time", "contract", "intern", "probation", "daily_worker"] as const;
 export const EmploymentTypeSchema = z.enum(EMPLOYMENT_TYPES);
@@ -694,6 +695,24 @@ export const ActivateDueEmployeeLifecycleTransitionsInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type ActivateDueEmployeeLifecycleTransitionsInput = z.input<typeof ActivateDueEmployeeLifecycleTransitionsInputSchema>;
+
+// ISS-2026-064 item 2 closure: app.initiate_employee_document_upload. classification
+// is nullable (never a hardcoded literal) so the tenant's own published
+// default_classification for 'employee_document' applies when the caller does not
+// name one. Returns a FileSummary (server/contracts/document/document.ts) -- this RPC
+// is callable directly by `authenticated`, unlike the raw storage_path-carrying
+// app.initiate_file_upload primitive underneath it.
+export const InitiateEmployeeDocumentUploadInputSchema = z.object({
+  masterRecordId: z.string().uuid(),
+  originalFilename: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  classification: ClassificationSchema.nullable().default(null),
+  idempotencyKey: z.string().nullable().default(null),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type InitiateEmployeeDocumentUploadInput = z.input<typeof InitiateEmployeeDocumentUploadInputSchema>;
 
 export const AddEmployeeEmergencyContactInputSchema = z.object({
   masterRecordId: z.string().uuid(),

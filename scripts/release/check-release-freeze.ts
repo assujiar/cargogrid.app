@@ -3174,7 +3174,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // at all: the live CHECK constraint tying tier_definition_version_id to to_tier_id already
   // enforces the entry's own disclosed design decision; only a missing existence-assertion was
   // added.
-  migrationSetSha256: "a6fc27e86de8487012c81a70ce89e5c81b84980a77c51f29b8214f34d0f90d19",
+  //
+  // SEVENTY-EIGHTH PASS (2026-09-01, ISS-2026-064): 426 files (+1). Closes items 2 and 3 of a
+  // partly-stale entry (item 1, a manager-team route, was already resolved 2026-08-27 but the
+  // heading kept naming it). The naive fix for item 2 -- call app.initiate_file_upload directly
+  // from a Server Action with a service-role client, the exact shape already used for vendor
+  // compliance evidence -- was rejected as a real authority hole: that primitive gates on
+  // nothing more than active tenant membership, with no HRS concept at all. 20260901040000
+  // instead adds app.initiate_employee_document_upload, a new HRS:Edit-gated RPC that folds
+  // "employee not found" and "actor lacks tenant membership" into one existence-oracle-safe
+  // error, deliberately allows a TERMINATED employee to still receive uploads (offboarding
+  // paperwork) while refusing only an ARCHIVED one, and passes classification straight through
+  // so a tenant's own configured default applies rather than a hardcoded literal. Item 3 (no
+  // HRIS e2e/axe coverage) closed with a portal-guard spec mirroring this repository's own
+  // established no-live-backend fail-safe-state pattern.
+  migrationSetSha256: "5ee83b6325c1001342815654894e7e321ef7815976969d3681b115cd41ccb4dd",
+  // History: a6fc27e86de8487012c81a70ce89e5c81b84980a77c51f29b8214f34d0f90d19
+  // (425 files, ISS-2026-127's loyalty program tier readiness surface).
   // History: df91a2262da4e297bdf17bde197b1d0a6541eb0c271b1eb781cf79883c423cae
   // (424 files, ISS-2026-131's loyalty reward media document-type registration).
   // History: 37aa1701f15c42b5b9dc5a9111892194eaedec2faccd2d3ddf4571a5554b2984
@@ -3708,7 +3724,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // id; plus a pg_constraint/pg_get_constraintdef existence-and-definition assertion proving
   // the tier_definition_version_id/to_tier_id CHECK constraint still exists, not merely that
   // one historical row's values happen to match it.
-  dbTestSetSha256: "515e20e05dc857834f788f15eec36c2028506da1ca02b3925e3ff86aa3cea4e7",
+  //
+  // SEVENTY-EIGHTH PASS (2026-09-01, ISS-2026-064): 239 files, unchanged in count -- one
+  // extended, no existing line touched. hris-employee-master.sql gains a block proving
+  // app.initiate_employee_document_upload is HRS:Edit-gated (never the raw primitive's own
+  // coarse tenant-membership-only gate): an HRS:View-only actor is refused; a cross-tenant
+  // actor with real HRS:Edit gets the identical employee_not_found a genuinely nonexistent
+  // employee would; a real HRS:Edit actor succeeds and the file's classification is the
+  // tenant's own configured default, never a hardcoded literal; a terminated employee still
+  // accepts uploads while an archived one is refused; idempotency replay/conflict both proven;
+  // anon holds zero EXECUTE on either function.
+  dbTestSetSha256: "6247e07c73fcf41910829d0f38123a6817cd8b42aaf10b32150f089a225eb6c5",
+  // History: 515e20e05dc857834f788f15eec36c2028506da1ca02b3925e3ff86aa3cea4e7
+  // (239 files, ISS-2026-127's loyalty tier readiness regression block).
   // History: ee38d214808d120ed461cb27bb31e4baad30a573e262774ef371b2d182a29a42
   // (239 files, ISS-2026-131's loyalty reward media upload regression block).
   // History: 3f444cf22b18131792f8529a672af2b830febdb0cac6ed3483e9c8879063012f

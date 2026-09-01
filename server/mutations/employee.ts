@@ -63,7 +63,10 @@ import {
   type EmployeeChangeRequest,
   ActivateDueEmployeeLifecycleTransitionsInputSchema,
   type ActivateDueEmployeeLifecycleTransitionsInput,
+  InitiateEmployeeDocumentUploadInputSchema,
+  type InitiateEmployeeDocumentUploadInput,
 } from "../contracts/employee/employee.ts";
+import { parseFileSummary, type FileSummary } from "../contracts/document/document.ts";
 import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type EmployeeMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -138,6 +141,20 @@ export const EMPLOYEE_KNOWN_MUTATION_ERROR_CODES = [
   // new code reachable" pattern (see backdate_reason_required's own comment,
   // immediately above).
   "lifecycle_conflict",
+  // ISS-2026-064 item 2 closure (20260901040000): app.initiate_employee_document_upload
+  // delegates to app.initiate_file_upload (PLT-128) for the actual metadata recording,
+  // making that primitive's own validation error prefixes reachable through this
+  // service layer for the first time -- mirrors this array's own established "widen
+  // when a fix makes a new code reachable" pattern (see lifecycle_conflict's own
+  // comment above). insufficient_authority, employee_not_found, employee_closed and
+  // idempotency_key_conflict are already present above and are not duplicated.
+  "document_type_not_configured",
+  "document_unsafe_filename",
+  "document_mime_type_not_allowed",
+  "document_file_too_large",
+  "document_invalid_classification",
+  "document_classification_too_weak",
+  "file_actor_unauthorized",
 ] as const;
 type KnownEmployeeMutationErrorCode = (typeof EMPLOYEE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type EmployeeMutationErrorCode = KnownEmployeeMutationErrorCode | "mutation_failed";
@@ -600,4 +617,32 @@ export async function reactivateUserAfterRehire(client: EmployeeMutationRpcClien
   const row = firstRow(data);
   if (!row) throw new EmployeeMutationError("invalid_response", "reactivate_user_after_rehire returned no row");
   return row;
+}
+
+// --- Documents (ISS-2026-064 item 2 closure, PLT-128 reused through an HRS:Edit gate) ---
+
+/**
+ * app.initiate_employee_document_upload -- HRS:Edit-gated (never the raw
+ * app.initiate_file_upload primitive's own coarse tenant-membership-only check).
+ * document_type_code is fixed server-side to 'employee_document'; classification is
+ * passed through as given (null lets the tenant's own published default apply -- never
+ * hardcoded here). Returns a FileSummary (storage_path-less -- this RPC is callable
+ * directly by `authenticated`, unlike app.initiate_file_upload itself).
+ */
+export async function initiateEmployeeDocumentUpload(client: EmployeeMutationRpcClient, input: InitiateEmployeeDocumentUploadInput): Promise<FileSummary> {
+  const parsed = InitiateEmployeeDocumentUploadInputSchema.parse(input);
+  const { data, error } = await client.rpc("initiate_employee_document_upload", {
+    p_master_record_id: parsed.masterRecordId,
+    p_original_filename: parsed.originalFilename,
+    p_mime_type: parsed.mimeType,
+    p_size_bytes: parsed.sizeBytes,
+    p_classification: parsed.classification ?? null,
+    p_idempotency_key: parsed.idempotencyKey ?? null,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
+  const row = firstRow(data);
+  if (!row) throw new EmployeeMutationError("invalid_response", "initiate_employee_document_upload returned no row");
+  return parseFileSummary(row);
 }

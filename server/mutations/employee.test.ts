@@ -19,6 +19,7 @@ import {
   commitEmployeeImportJob,
   reactivateUserAfterRehire,
   activateDueEmployeeLifecycleTransitions,
+  initiateEmployeeDocumentUpload,
   EmployeeMutationError,
   type EmployeeMutationRpcClient,
 } from "./employee.ts";
@@ -616,4 +617,191 @@ describe("activateDueEmployeeLifecycleTransitions", () => {
       (err: unknown) => err instanceof EmployeeMutationError && err.code === "insufficient_authority",
     );
   });
+});
+
+// ISS-2026-064 item 2 closure.
+describe("initiateEmployeeDocumentUpload", () => {
+  const FILE_ROW = {
+    id: "723e4567-e89b-12d3-a456-426614174000",
+    tenant_id: TENANT_ID,
+    document_type_code: "employee_document",
+    config_version_id: "823e4567-e89b-12d3-a456-426614174000",
+    record_type: "employee",
+    record_id: MASTER_RECORD_ID,
+    classification: "confidential",
+    original_filename: "termination-letter.pdf",
+    mime_type: "application/pdf",
+    size_bytes: 2048,
+    malware_scan_status: "pending",
+    malware_scan_completed_at: null,
+    malware_scan_provider_ref: null,
+    version_group_id: "923e4567-e89b-12d3-a456-426614174000",
+    version_number: 1,
+    is_latest_version: true,
+    lifecycle_status: "active",
+    legal_hold: false,
+    legal_hold_reason: null,
+    deleted_at: null,
+    uploaded_by_auth_user_id: ACTOR_ID,
+    shared_org_unit_ids: [],
+    customer_account_ref: null,
+    idempotency_key: null,
+    created_at: "2026-09-01T00:00:00.000Z",
+    updated_at: "2026-09-01T00:00:00.000Z",
+  };
+
+  test("calls initiate_employee_document_upload with mapped snake_case args, classification defaulting to null", async () => {
+    const { client, calls } = fakeRpcClient({ data: [FILE_ROW], error: null });
+    const result = await initiateEmployeeDocumentUpload(client, {
+      masterRecordId: MASTER_RECORD_ID,
+      originalFilename: "termination-letter.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 2048,
+      classification: null,
+      idempotencyKey: null,
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "staff",
+    });
+    assert.equal(calls[0]?.fn, "initiate_employee_document_upload");
+    assert.deepEqual(calls[0]?.args, {
+      p_master_record_id: MASTER_RECORD_ID,
+      p_original_filename: "termination-letter.pdf",
+      p_mime_type: "application/pdf",
+      p_size_bytes: 2048,
+      p_classification: null,
+      p_idempotency_key: null,
+      p_actor_auth_user_id: ACTOR_ID,
+      p_actor_label: "staff",
+    });
+    // Never a hardcoded classification -- the RPC's own return is trusted as-is, so a
+    // future regression to a hardcoded literal in either this function or the RPC
+    // itself surfaces here as a mismatch against the tenant-published default.
+    assert.equal(result.classification, "confidential");
+    assert.equal(result.recordType, "employee");
+    assert.equal(result.recordId, MASTER_RECORD_ID);
+    assert.ok(!("storagePath" in result));
+  });
+
+  test("throws invalid_response when the RPC returns no row", async () => {
+    const { client } = fakeRpcClient({ data: [], error: null });
+    await assert.rejects(
+      () =>
+        initiateEmployeeDocumentUpload(client, {
+          masterRecordId: MASTER_RECORD_ID,
+          originalFilename: "x.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 10,
+          classification: null,
+          idempotencyKey: null,
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "staff",
+        }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "invalid_response",
+    );
+  });
+
+  test("classifies insufficient_authority (HRS:Edit required, never HRS:View)", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "insufficient_authority: identity lacks HRS:Edit" } });
+    await assert.rejects(
+      () =>
+        initiateEmployeeDocumentUpload(client, {
+          masterRecordId: MASTER_RECORD_ID,
+          originalFilename: "x.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 10,
+          classification: null,
+          idempotencyKey: null,
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "staff",
+        }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "insufficient_authority",
+    );
+  });
+
+  test("classifies employee_not_found (the shared existence-oracle-safe not-found shape)", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "employee_not_found: no such employee" } });
+    await assert.rejects(
+      () =>
+        initiateEmployeeDocumentUpload(client, {
+          masterRecordId: MASTER_RECORD_ID,
+          originalFilename: "x.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 10,
+          classification: null,
+          idempotencyKey: null,
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "staff",
+        }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "employee_not_found",
+    );
+  });
+
+  test("classifies employee_closed (an archived employee refuses new documents)", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "employee_closed: employee is archived" } });
+    await assert.rejects(
+      () =>
+        initiateEmployeeDocumentUpload(client, {
+          masterRecordId: MASTER_RECORD_ID,
+          originalFilename: "x.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 10,
+          classification: null,
+          idempotencyKey: null,
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "staff",
+        }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "employee_closed",
+    );
+  });
+
+  test("classifies idempotency_key_conflict", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "idempotency_key_conflict: key already used for a different file upload" } });
+    await assert.rejects(
+      () =>
+        initiateEmployeeDocumentUpload(client, {
+          masterRecordId: MASTER_RECORD_ID,
+          originalFilename: "x.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 10,
+          classification: null,
+          idempotencyKey: "reused-key",
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "staff",
+        }),
+      (err: unknown) => err instanceof EmployeeMutationError && err.code === "idempotency_key_conflict",
+    );
+  });
+
+  // Each of the 7 newly-reachable PLT-128 error prefixes (app.initiate_file_upload,
+  // called internally by app.initiate_employee_document_upload) classifies to its own
+  // named code, never the generic "mutation_failed" fallback.
+  const NEWLY_REACHABLE_DOCUMENT_ERROR_CODES = [
+    "document_type_not_configured",
+    "document_unsafe_filename",
+    "document_mime_type_not_allowed",
+    "document_file_too_large",
+    "document_invalid_classification",
+    "document_classification_too_weak",
+    "file_actor_unauthorized",
+  ] as const;
+
+  for (const code of NEWLY_REACHABLE_DOCUMENT_ERROR_CODES) {
+    test(`classifies ${code} (newly reachable through app.initiate_file_upload)`, async () => {
+      const { client } = fakeRpcClient({ data: null, error: { message: `${code}: synthetic test message` } });
+      await assert.rejects(
+        () =>
+          initiateEmployeeDocumentUpload(client, {
+            masterRecordId: MASTER_RECORD_ID,
+            originalFilename: "x.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 10,
+            classification: null,
+            idempotencyKey: null,
+            actorAuthUserId: ACTOR_ID,
+            actorLabel: "staff",
+          }),
+        (err: unknown) => err instanceof EmployeeMutationError && err.code === code,
+      );
+    });
+  }
 });

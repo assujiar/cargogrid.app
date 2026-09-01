@@ -31,6 +31,7 @@ import {
   decideEmployeeDuplicateCandidate,
   decideEmployeeChangeRequest,
   reactivateUserAfterRehire,
+  initiateEmployeeDocumentUpload,
   EmployeeMutationError,
 } from "../../../../../server/mutations/employee.ts";
 import type { EmployeeReviewDecision, EmploymentType } from "../../../../../server/contracts/employee/employee.ts";
@@ -289,6 +290,48 @@ export async function updateEmployeeEmergencyContactPrimaryAction(
     { contactId, expectedVersion, name, relationship, phone, email, isPrimary: true },
     "set this contact as primary",
   );
+}
+
+// --- Documents (ISS-2026-064 item 2 closure) ---
+
+/**
+ * Wires the Documents tab's file picker to app.initiate_employee_document_upload --
+ * unlike app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts's own
+ * evidence-upload actions, this goes through the ordinary RLS-scoped
+ * createSupabaseServerClient(), never a service-role client: the new RPC performs its
+ * own HRS:Edit check and is granted directly to `authenticated` (see the migration's
+ * own header for why the raw app.initiate_file_upload primitive underneath it must
+ * never be called straight from a Server Action). classification is left null so the
+ * tenant's own published default for 'employee_document' applies.
+ */
+export async function uploadEmployeeDocumentAction(tenantSlug: string, masterRecordId: string, _prevState: EmployeeActionState, formData: FormData): Promise<EmployeeActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Select a file to upload." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await initiateEmployeeDocumentUpload(supabase, {
+      masterRecordId,
+      originalFilename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      sizeBytes: file.size,
+      classification: null,
+      idempotencyKey: null,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof EmployeeMutationError) return { error: `Could not upload this document: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(detailPath(tenantSlug, masterRecordId));
+  return OK;
 }
 
 // --- Duplicate review ---
