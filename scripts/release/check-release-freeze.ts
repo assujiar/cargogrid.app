@@ -3263,7 +3263,37 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // account-scope-only list RPC always returns empty for a staff caller (no customer account
   // scope), so every request table was a write-only inbox with no staff review surface until
   // this migration added one tenant-wide, COM:Approve-gated list RPC per table.
-  migrationSetSha256: "3bbf41a7e2130d5b4f14a42f75ade2a5078dc1749ba74449970990d133209c6b",
+  //
+  // EIGHTY-THIRD PASS (2026-09-01, ISS-2026-278 + ISS-2026-087 + ISS-2026-122 + ISS-2026-125 +
+  // ISS-2026-234): 437 files (+5). Five independent closures built and reviewed together in one
+  // pass. ISS-2026-278: composes app.assert_current_step_up_authorization onto all 12 (not the
+  // stale "5") bulk-import-commit RPCs, reusing each function's own existing (module, 'Import')
+  // authority pair -- deliberately never app.commit_payroll_loan_cutover_import_job's second,
+  // platform-default HRS:Approve pair, which would have broken the whole fix's tenant-opt-in-only
+  // premise. ISS-2026-087: a new HRS:Edit-shaped, requester-or-staff-gated
+  // app.initiate_ticket_attachment_upload wired into the ticket reply form -- no new document
+  // type needed, ticket_attachment was already registered. ISS-2026-122 item 4: swaps the legacy
+  // app.resolve_customer_owner_account_scope for the widened CPL-300 resolver on the three
+  // pre-existing app.ticket_links entity types, leaving the six-value registry and item 2's
+  // correctly-still-open staff document-access gap untouched. ISS-2026-125 item 1: wires the same
+  // step-up-MFA composition onto customer-portal-admin role-change/suspend/revoke actions under a
+  // new, accurately-scoped (CPADM, ManageMembership) tag -- never reusing the mismatched staff-RBAC
+  // CPT tag -- and widens app.request_mfa_step_up_challenge's own precondition
+  // (app.actor_holds_customer_user_layer, the established PLT-128/CPL-302 precedent) so a
+  // customer_user-layer principal can obtain a challenge at all; item 2's premise corrected
+  // (a real session-revocation primitive shipped with IAE-027) but the gap for this specific
+  // capability stays open, honestly. ISS-2026-234: DROP EXTENSION postgis CASCADE + recreate in
+  // extensions, safe only because all 15 geography-typed columns were independently confirmed
+  // live at zero rows immediately before executing it; restores every one of 35 affected functions
+  // (not the entry's own assumed ~18), including two bugs no static sweep would have caught --
+  // app.set_epod_evidence's hardcoded public.geography declaration, and Postgres's own innate
+  // PUBLIC-execute re-grant on every CASCADE-recreated function, plus column-level SELECT grants
+  // silently dropped alongside their own recreated columns. All five independently gate-verified
+  // and cross-reviewed (ISS-2026-122's own db:test run caught the postgis migration's
+  // then-still-missing app.create_warehouse fix before this pass finished).
+  migrationSetSha256: "7c4af19901aebe574510f2372fe10bed496691255cca72cab9126d555be6c461",
+  // History: 3bbf41a7e2130d5b4f14a42f75ade2a5078dc1749ba74449970990d133209c6b
+  // (432 files, ISS-2026-123's legal-identity/contact change-request capability plus its staff review surface).
   // History: fab7182c7693621d60342f66ae426a5c7578b2ffe81dadfef03496d58258d3d2
   // (429 files, ISS-2026-136's liability mismatch currency scoping).
   // History: 18f29f11c0ce45633c6d5b8f571de6181d9423d4dcc211876e47c1f1031da29b
@@ -3864,7 +3894,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // proving the pre-existing account-scope-only sibling list RPC genuinely returns empty for a
   // staff caller with no customer account scope, and that a caller lacking COM:Approve gets an
   // empty result from the new RPC too, never an error).
-  dbTestSetSha256: "134dd227dd814b6ca8621f812b312d26dbb7025e7d940ee81cb1a6b613e85e4c",
+  //
+  // EIGHTY-THIRD PASS (2026-09-01, ISS-2026-278 + ISS-2026-087 + ISS-2026-122 + ISS-2026-125 +
+  // ISS-2026-234): 242 files, unchanged in count -- 6 extended (import-export.sql,
+  // hris-employee-master.sql, procurement-vendor-rate-tiers.sql, master-data-import.sql,
+  // finance-subledger.sql, hris-payroll.sql, each proving the same no-policy/opt-in/challenge
+  // step-up-MFA shape for its own import-commit RPC), 1 extended for ticketing-internal.sql
+  // (ISS-2026-087's new attachment-upload RPC: requester/staff-gated, existence-oracle-safe,
+  // malware-scan-gated identically to the pre-existing direct path), 1 extended for
+  // ticketing-linked-records.sql (ISS-2026-122 item 4's resolver-swap proof, the six-value
+  // registry untouched), 1 extended for customer-user-management.sql (ISS-2026-125 item 1's
+  // isolated-fixture step-up-MFA proof for role-change/suspend/revoke), and 1 extended for
+  // postgis.sql (ISS-2026-234's full relocation regression: extension location, all 15 columns'
+  // exact type/nullability, all 4 GiST indexes still usable, a real round-trip through every one
+  // of the 35 recreated/search-path-fixed functions, and the ISS-2026-309 anon-reachability guard
+  // re-asserted). No existing line touched in any of the 9 files.
+  dbTestSetSha256: "03b1b5695fed1e953b7c4a322a04a91f6358da8368ec66f81ca9ba08e59bc514",
+  // History: 134dd227dd814b6ca8621f812b312d26dbb7025e7d940ee81cb1a6b613e85e4c
+  // (239 files, ISS-2026-123's legal-identity/contact-change/staff-review regression across three new files).
   // History: 4556d0d8d1760b34d32e98d41e05ca13e8db4dd4385fce35fd4c224e42d54d04
   // (239 files, ISS-2026-136's liability mismatch currency-scoping regression block).
   // History: 2147ac0b82fe6c254c559fba5b82eaa62342b01ba90c895302378c26f61dacd7

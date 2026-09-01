@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 37 — 4 High, 13 Medium, 20 Low |
+| `OPEN` | 32 — 4 High, 12 Medium, 16 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 231 |
+| `RESOLVED` | 236 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -88,7 +88,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-206` | Medium | `RESOLVED` | the orphan-`source_id` gap `ISS-2026-202` closed on `loyalty_earning_events`/`finance_journals` recurs on at least 4 more tables one hop further up th |
 | `ISS-2026-207` | Medium | `RESOLVED` | `app.api_versions`'s own active/deprecated/sunset registry has zero live effect on real REST `/v1` requests |
 | `ISS-2026-231` | Medium | `RESOLVED` | a schema-level backstop was drafted for `app.record_file_scan_result()`'s "cannot re-resolve an already-resolved scan" invariant, then discovered befo |
-| `ISS-2026-234` | Medium | `OPEN` | `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR,  |
+| `ISS-2026-234` | Medium | `RESOLVED` | `postgis` relocated `public` → `extensions` via `DROP EXTENSION ... CASCADE` + recreate; 15 geography columns/15 tables restored, 35 functions rebui |
 | `ISS-2026-238` | Medium | `RESOLVED` | 4 production routes load an entire tenant-wide dataset to the browser with zero pagination; a 4-list fleet-assets page plus ~12 more lower-severity si |
 | `ISS-2026-242` | Medium | `OPEN` | the repository's own dedicated accessible form primitives (`components/forms/form-field.tsx`, `components/forms/validation-message.tsx`) are adopted i |
 | `ISS-2026-256` | Medium | `ACCEPTED_RISK` | this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real  |
@@ -114,19 +114,19 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-319` | Low | `RESOLVED` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
 | `ISS-2026-320` | Low | `OPEN` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
-| `ISS-2026-321` | Low | `OPEN` | the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself |
+| `ISS-2026-321` | Low | `RESOLVED` | the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself |
 | `ISS-2026-322` | Low | `RESOLVED` | the loyalty-liability reconciliation exception-type contract never learned the fourth live value `20260828070000` added, crashing the admin dashboard on a real row of that type |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
 | `ISS-2026-064` | Low | `RESOLVED` | Employee Master (HRT-274): client-side document upload and browser/accessibility E2E were disclosed, not built (manager-team UI route resolved earlier, 2026-08-27) |
 | `ISS-2026-066` | Low | `OPEN` | Organization and Position Linkage (HRT-275): no bulk/multi-employee reorganization wizard, no live scheduler for future-dated assignment activation, n |
-| `ISS-2026-067` | Low | `OPEN` | Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalo |
+| `ISS-2026-067` | Low | `RESOLVED` | Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalone candidate directory -- all six items closed 2026-09-01 |
 | `ISS-2026-070` | Low | `OPEN` | Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/tra |
 | `ISS-2026-075` | Low | `RESOLVED` | Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern |
 | `ISS-2026-083` | Low | `RESOLVED` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
 | `ISS-2026-084` | Low | `RESOLVED` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
-| `ISS-2026-087` | Low | `OPEN` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
+| `ISS-2026-087` | Low | `RESOLVED` | Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are |
 | `ISS-2026-118` | Low | `RESOLVED` | dashboard's `bookings`/`shipments` stub cards are not wired to real CPL-303/304 data even though it exists by the end of the same batch |
 | `ISS-2026-119` | Low | `ACCEPTED_EXCEPTION` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
 | `ISS-2026-120` | Low | `RESOLVED` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
@@ -158,7 +158,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
 | `ISS-2026-248` | Low | `RESOLVED` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
 | `ISS-2026-277` | Low | `OPEN` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
-| `ISS-2026-278` | Low | `OPEN` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
+| `ISS-2026-278` | Low | `RESOLVED` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
 | `ISS-2026-294` | High | `RESOLVED` | the `auth.users` row this entry called an orphan with "no access path" is the platform's ONLY active Supreme Admin, and it has never been signed into |
 | `ISS-2026-306` | Low | `ACCEPTED_RISK` | Per-directory prompt numbering contiguity is deliberately broken: `431_TENANT_MERGE_SPLIT_PROMPT.md` executes in Phase 1 but is numbered after the who |
 | `ISS-2026-111` | Medium | `ACCEPTED_RISK` | HRIS/Ticketing Integrated Verification (HRT-294): ticket free-text fields (escalation reason, and by construction subject/body/notes) are gated only b |
@@ -795,7 +795,7 @@ The automatic task scheduler now exists, and it is configurable rather than hard
 
 **Which of this entry's four items that closes: one.** `app.activate_due_employee_position_assignments` is now a catalogue task (`employee_position_activation`), so future-dated assignment activation genuinely runs on a timer once a trigger is attached. The bulk/multi-employee reorganization wizard, the staged-import position/grade crosswalk, and the browser/accessibility E2E remain `OPEN` and are unaffected — none of them is a scheduling problem.
 
-### ISS-2026-067 — Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalone candidate directory (OPEN, Low)
+### ISS-2026-067 — Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalone candidate directory (RESOLVED, was Low)
 
 Discovered `2026-08-09` during `CG-S12-HRT-004` (Prompt 276, Recruitment, Job Portal and ATS), by this checkpoint's own Tier B taxonomy self-check (class C-20) before closing, mirroring `ISS-2026-064`/`ISS-2026-066`'s own disclosure discipline. The full domain/service layer for every item below is real, tested, and live — what is disclosed here is UI depth beyond it, not a broken or fabricated code path:
 
@@ -811,6 +811,19 @@ None of the six blocks HR staff or a public applicant from using the shipped cap
 **Handling:** Not fixed by this checkpoint (disclosed scope trim under time/size constraints for a single capability checkpoint, mirroring `ISS-2026-064`/`ISS-2026-066`'s own identical disposition). **Status `OPEN`**, Low severity (UI-depth gaps over an already-real, already-tested service layer; no security/data-integrity exposure) — owner: a later Phase 7 UI-hardening checkpoint (`HRT-293`/`294`/`295`, the phase's own dedicated hardening/verification slots) or a near-term follow-up once real tenant usage clarifies which gaps (most likely duplicate-review and export) matter first.
 
 **Update (`2026-08-27`, Track B Batch 3):** re-verified — `searchCandidateDuplicates`, `flagCandidateDuplicate`, `decideCandidateDuplicate`, the export functions, and the interview cancel/reschedule functions still have zero callers anywhere under `app/`, and no standalone candidate directory route exists. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-09-01 — all six items closed. Pure UI wiring over the already-real, already-tested domain/service layer this entry's own body always described; no new RPC, authority check, or design decision was needed or made, and none of the six exposed a security/data-integrity gap while open.**
+
+Re-verified live before building, per this entry's own standing disclosure: all six gaps still held. Every RPC named below was confirmed real, RBAC-gated (`app.evaluate_permission(..., 'HRS', ...)`), and already exercised by `scripts/db-tests/hris-recruitment-ats.sql` before any UI code was written — none was invented.
+
+1. **Duplicate-candidate search/flag/decide -- closed.** The new candidate profile page (item 5, below) carries a "Duplicate review" section: a search form over `searchCandidateDuplicates` (name/email/phone, pre-filled from the candidate being viewed), each match row offering "Flag as duplicate" (`flagCandidateDuplicate`), and on success an inline "Confirm duplicate (link)" / "Not a duplicate (dismiss)" pair (`decideCandidateDuplicate`) for the record just created. This repository has no dedicated duplicate-review inbox UI (nothing lists previously-flagged-but-undecided pairs) -- the decide step is scoped to a duplicate flagged in the same page session, the identical disclosed posture `application-detail-panel.tsx`'s own `ApprovalStepForm` already established for job-offer approvals ("ships with zero authoring/inbox UI", a standing pattern, not a shortcut invented for this item).
+2. **`export_job_vacancies`/`export_candidates`/`export_applications` -- closed.** A repository-wide "download/export" UI pattern already existed (`components/domain/hris-export-form.tsx`/`lib/hris/hris-export-action.ts`, ISS-2026-075) and was mirrored rather than reinvented: `lib/recruitment/recruitment-export-action.ts` (`buildRecruitmentExport`) reuses the same `rowsToSafeCsv` OWASP formula-injection guard and the same token-per-submission download-dedup contract, and `components/domain/recruitment-export-form.tsx` is the identical `useActionState` + blob-download component minus the date-range fields neither RPC accepts (`p_status_filter`/`p_vacancy_id`, not a date range -- disclosed in the helper's own header rather than forcing a fake date range through `buildHrisExport`). Wired where each RPC's own subject already lives: vacancy export on the vacancy list page (respecting the page's own status filter), application export on each vacancy's own detail page (scoped to that vacancy), candidate export on the new candidate directory (item 5).
+3. **`cancel_candidate_assessment`/`reschedule_interview`/`cancel_interview` -- closed.** Added to `applications/[applicationId]/application-detail-panel.tsx` beside the existing assessment/interview UI they belong next to: a "Cancel assessment" action beside `AssessmentResultForm` for any non-terminal assessment, and "Reschedule"/"Cancel interview" actions beside the existing "Mark completed" button for any `scheduled` interview -- following the same reason-required `<details>`-disclosed form shape the page's own existing reject/withdraw actions already use.
+4. **Candidate `set_candidate_status` (block/archive) -- closed.** Added to the new candidate profile page: "Block candidate"/"Archive candidate" for an active candidate, "Reactivate to active" otherwise -- mirroring `vacancy-detail-panel.tsx`'s own status-action-button-set-per-current-status shape.
+5. **Standalone candidate directory and profile-edit page -- closed, including the edit surface.** `/hris/recruitment/candidates` (search/status-filtered, cursor-paginated, mirroring `../page.tsx`'s own vacancy list exactly) lists every candidate with a link to `/hris/recruitment/candidates/[candidateId]`, independent of any one application. **The profile-edit surface is real, not a disclosed gap:** `app.update_candidate_profile` already existed, tested, with zero caller -- verified live before assuming otherwise. The candidate profile page's "Profile" section is a genuine, working edit form (full name, phone, national ID number, date of birth, address, resume file id) wired to it through a real Server Action, following the exact pattern every other recruitment mutation in this checkpoint already uses.
+6. **Playwright/axe-core E2E -- closed.** `e2e/recruitment-ats.spec.ts`, modeled on `e2e/hris-employee-master.spec.ts`'s own portal-guard pattern (itself modeled on `e2e/vendor-registration.spec.ts`) for the four staff-facing pages plus the new candidate directory/profile pages, and on `vendor-registration.spec.ts`'s own public-page halves for the two genuinely public careers pages. No live Supabase project exists in this sandbox, so the spec proves only fail-safe states: a real 404 (never a 500 or the real page shell) for every staff-facing page, both for a real-looking tenant slug and a genuinely nonexistent one; and, for the two public careers pages (which render this app's own markup rather than a bare `notFound()`), the real "no open positions" / "not available" collapse state each page already renders when its own backend call fails, plus a zero-violations axe-core check on that rendered state. No axe check runs against the staff-page guard states, matching `hris-employee-master.spec.ts`'s own established reasoning: a bare Next.js `notFound()` carries no markup this checkpoint owns.
+
+No RPC, authority check, or migration was added -- every primitive named in this entry's original six items was already real, RLS/RBAC-enforced, and covered by `scripts/db-tests/hris-recruitment-ats.sql` before this closure, exactly as the entry's own body always said. New files: `lib/recruitment/recruitment-export-action.ts`(+`.test.ts`), `components/domain/recruitment-export-form.tsx`, `app/(tenant)/[tenantSlug]/hris/recruitment/candidates/` (directory + `[candidateId]` profile, each with `page.tsx`/`actions.ts`/a client panel/`loading.tsx`), `e2e/recruitment-ats.spec.ts`; modified: `recruitment/actions.ts`, `recruitment/page.tsx`, `recruitment/recruitment-panel.tsx`, `[vacancyId]/page.tsx`, `[vacancyId]/vacancy-detail-panel.tsx`, `applications/[applicationId]/actions.ts`, `applications/[applicationId]/application-detail-panel.tsx`, `applications/[applicationId]/page.tsx`. `pnpm run typecheck`/`lint` (zero new warnings)/`ui:check` clean; `pnpm run test` clean except one pre-existing, unrelated failure already present in the working tree before this task began (`check-release-freeze`'s frozen-digest check, which compares migration/db-test content against a frozen snapshot and fails whenever the tree carries uncommitted migration/db-test changes -- unrelated dirty-worktree changes already present in `scripts/db-tests/*.sql` and `supabase/migrations/*` before this task started, not touched by this closure, which added no migration and no db-test file). **Status `RESOLVED`.**
 
 ### ISS-2026-068 — Recruitment, Job Portal and ATS (HRT-276): hiring managers have no self-scoped "assigned slice" read surface, unlike interviewers (RESOLVED, was Medium)
 
@@ -1311,11 +1324,13 @@ Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-H
 
 New regression in `scripts/db-tests/ticketing-internal.sql`: a fresh identity holding `TKT:Edit` and nothing else (asserted to genuinely lack `TKT:Override` before anything else runs) is **not** ticket staff on a queue it does not belong to; adding `TKT:Override` makes it staff; and — the half this whole finding is about — revoking `TKT:Override` alone removes the content access while leaving the `TKT:Edit` configuration authority intact. Full `db:test` `ALL PASSED` (397 migrations, 236 runner files).
 
-### ISS-2026-087 — Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are disclosed, not built (OPEN, Low — matches repository-wide precedent)
+### ISS-2026-087 — Internal and Interdepartmental Ticket (HRT-286): attachment-upload UI and browser/accessibility/performance E2E, both named in Prompt 286 §15/§28, are disclosed, not built (RESOLVED, Low — matches repository-wide precedent)
 
 Discovered `2026-08-13` during the Tier C batch adversarial review for `CG-S12-HRT-014` (Prompt 286), spec-compliance lens Findings 3/4, CONFIRMED by direct code read: `app/(tenant)/[tenantSlug]/tickets/actions.ts:194` hardcodes `attachmentFileIds: null`, and no file-upload form/field exists anywhere in `ticket-detail-panel.tsx` (grep-confirmed zero "file"/"upload" references), even though `app.reply_to_ticket`'s attachment parameter and its full malware-scan-gating logic are real and live-tested at the DB layer (§15 names "attachments" in the same sentence as "reply versus internal note distinction," which the implementer did fully build). Separately, no Playwright/axe-core spec exists anywhere in the new files for the named TKT-LST/DET E2E requirement (§28/§33).
 
 **Re-verified, disposition confirmed accurate (2026-08-28, Track B Batch 8).** `app/(tenant)/[tenantSlug]/tickets/actions.ts:260` still hardcodes `attachmentFileIds: null`; `ticket-detail-panel.tsx` still has zero file/upload UI (the one `file` grep hit is an unrelated comment). No Playwright/axe-core spec exists anywhere for tickets. `app.reply_to_ticket`'s attachment parameter and malware-scan-gating remain fully live and DB-tested. Matches this repository's own repeated, disclosed precedent (no browser/E2E harness exists anywhere yet) — genuine UI/infra feature work, correctly out of scope. **Not fixed by this batch.** Owner and scope unchanged.
+
+**Update (`2026-09-01`) — this record is now fully resolved.** Live-verified before design: unlike the two sibling closures this fix follows (`ISS-2026-064` item 2/HRIS, `ISS-2026-131` item 3/Loyalty), `app.document_types`/`app.config_types` ALREADY carried `'ticket_attachment'`/`'document:ticket_attachment'` rows (registered by `20260731060000_create_ticketing_internal.sql`'s own decision 8, long before this checkpoint) — no new document-type registration migration was needed; zero tenants had published an actual definition yet, the same disclosed per-tenant gap `ISS-2026-131` also carries. Which of the two sibling shapes applies was re-derived fresh rather than assumed: `app.initiate_file_upload` is `service_role`-only (confirmed live via `information_schema.routine_privileges`), but so is `app.reply_to_ticket`'s own authority chain's raw primitives are NOT — `app.can_access_ticket`/`app.is_ticket_staff`/`app.reply_to_ticket` itself are all `authenticated`-callable already. That made the HRIS shape (one new `SECURITY DEFINER` RPC, its own domain-authority check inline, granted straight to `authenticated`) the correct one here, not the Loyalty shape (raw primitive plus a separate service-role pre-check) — there was no `authenticated`-unreachable authority primitive forcing a split. `supabase/migrations/20260901120000_close_iss2026087_ticket_attachment_upload.sql` adds `app.initiate_ticket_attachment_upload`: resolves and locks the ticket, requires the caller to be the requester-side party or ticket staff (`app._is_ticket_requester_party`/`app.is_ticket_staff`, the identical bar `app.reply_to_ticket` itself enforces for posting — not merely `app.can_access_ticket`'s looser "can view" bar, so a plain watcher is refused too), refuses a cancelled or closed ticket (mirroring `app.reply_to_ticket`'s own HRT-295 terminal-status guard byte for byte), then delegates to `app.initiate_file_upload` with `document_type_code`/`record_type`/`record_id` fixed server-side to `'ticket_attachment'`/`'ticket'`/the locked ticket's own id — never caller-supplied. Wired end to end: `server/contracts/ticketing/ticketing.ts` (`InitiateTicketAttachmentUploadInputSchema`), `server/mutations/ticketing.ts` (`initiateTicketAttachmentUpload`, with the newly-reachable PLT-128 error prefixes added to the known-error-code array, plus a pre-existing `ticket_closed` API-parity gap found and fixed in the same pass — `app.reply_to_ticket` has raised it since HRT-295 but it was never classified here), `replyToTicketAction` (`app/(tenant)/[tenantSlug]/tickets/actions.ts`, called through the same ordinary RLS-scoped client every other write in that file already uses — never a service-role client), and a real `<input type="file" multiple>` in the reply form of `ticket-detail-panel.tsx` (`attachmentFileIds` is genuinely plural, unlike the single-file HRIS/Loyalty precedents — each selected file is staged with its own RPC call before the reply is attempted, and a failed upload aborts before `reply_to_ticket` is ever called, so a reply is never posted with only some of its intended attachments). Regression appended (section 17) to `scripts/db-tests/ticketing-internal.sql`: requester and staff may each stage an attachment; a non-participant bystander gets the same `ticket_not_found` a nonexistent ticket id would (existence-oracle-safe); the SAME bystander, once added as a plain watcher, gets `insufficient_authority` instead — proving the real requester-or-staff bar is checked, not just ticket visibility; a cross-tenant identity gets `ticket_not_found`; a cancelled/closed ticket refuses a new upload with `ticket_cancelled`/`ticket_closed`; malware-scan gating (infected/unscanned rejected, clean accepted) round-trips through `app.reply_to_ticket` identically to the pre-existing direct-`app.initiate_file_upload` path (section 11); `anon` holds zero `EXECUTE` on the new `app.*`/`public.*` functions. `e2e/ticketing.spec.ts` is a new Playwright spec, modeled on this repository's existing portal-guard pattern (`e2e/hris-employee-master.spec.ts`) — no live Supabase project exists in this sandbox, so it asserts only fail-safe states (non-5xx status, expected heading/attachment-input absent) for both the ticket list and detail routes, for a real-looking and a genuinely nonexistent tenant slug; the actual upload/reply behavior is proven at the DB layer instead, never claimed by the E2E spec. Residual, disclosed rather than implied: this repository has no Supabase Storage integration anywhere, so uploaded file bytes are still not persisted to an object store (same standing, disclosed gap the HRIS/Loyalty precedents also carry) — the reply form's own UI copy says so explicitly. Not yet applied to the live/hosted project — left for the orchestrating session, per this repository's own migration-application discipline. **Status `RESOLVED`** — the attachment-upload UI gap is closed; the browser/accessibility/performance E2E gap is closed to the same fail-safe-only depth every other first-real-page spec in this repository is held to (no live backend exists to test anything deeper against, a standing, repository-wide, separately-tracked condition — `ISS-2026-244`/`ISS-2026-245`).
 
 ### ISS-2026-088 — Customer-to-Tenant Ticket (HRT-287): `app.get_customer_ticket` never exposes `resolution_summary` to the customer at all, following this batch's own containment fix for the staff-authored-rationale leak (RESOLVED as a fix, disclosed here as a residual scope narrowing — Low)
 
@@ -2068,6 +2083,62 @@ Discovered `2026-08-17` at `CG-S13-CPL-015` (Prompt 313, Complaint and Ticket) �
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — `app.ticket_portal_links` is still confirmed a genuinely separate table from `app.ticket_links`, with its own `('warehouse_order', 'document')` entity-type CHECK constraint; the two protected regression tests this entry cites (`scripts/db-tests/ticketing-linked-records.sql`, `server/contracts/ticketing/ticketing.test.ts`) still enforce the six-value legacy registry. All four sub-items check out as described; each recommended fix (a staff document-access predicate, a registry-widening migration, or a resolver migration for legacy entity types) is its own capability-sized change. Disposition unchanged, still `OPEN`.
 
+**Item 4 `RESOLVED`, item 2 stays `OPEN` (re-verified, not fixed) — `2026-09-01`.** Live
+verification before writing any code, exactly as this entry's own "Recommended fix" prescribed.
+
+- **Item 4.** Confirmed live (`pg_get_functiondef`, not the migration file) that
+  `app._ticket_link_resolve_candidate`/`app.search_ticket_link_candidates` still composed
+  `app.resolve_customer_owner_account_scope` in the `shipment`/`invoice`/`warehouse`
+  customer-owner-scope branches, and that `app.resolve_customer_account_scope` (CPL-300) is an
+  identical-signature, strict-superset drop-in — its own body unions the legacy marker with every
+  active `app.customer_portal_account_memberships` row, excluding the legacy marker only where the
+  new table already carries a row for that exact triple, and every caller that reaches this branch
+  already asserts session identity before doing so, so the resolver's own internal assertion is
+  redundant, not a new failure mode.
+  `supabase/migrations/20260901130000_resolve_customer_account_scope_for_legacy_ticket_link_types_iss2026122.sql`
+  rebuilds both functions via `CREATE OR REPLACE FUNCTION`, restating `language`, `stable` (where
+  the original has it), `security definer`, and `set search_path` explicitly and unchanged — mirroring
+  `20260801160000`'s own established technique for safely modifying these exact two HRT-292
+  functions, and avoiding the exact failure shape `ISS-2026-318` already found and fixed once in
+  this codebase (a bare replace silently resetting an omitted attribute to its default). Swaps
+  ONLY the resolver call in the three named branches — the `customer` branch (also on the legacy
+  resolver, but never named by this entry's own item 4 text) and `vendor`/`user` are untouched, a
+  deliberate scope boundary, not an oversight. New regression in
+  `scripts/db-tests/ticketing-linked-records.sql` section 21: a customer_user granted a second
+  account ONLY through `app.customer_portal_account_memberships` (never the legacy marker) now
+  sees that account's `shipment`/`invoice`/`warehouse` candidates via both
+  `app.search_ticket_link_candidates` and a real `app.link_ticket_record` durable link; an identity
+  with no grant to that account still sees none; a legacy-marker-only identity's own pre-existing
+  visibility is unchanged. The file's own protected six-value registry assertion (line 254) is
+  untouched.
+- **Item 2 — re-verified, correctly stays open.** Grepped the `app` schema live for a staff
+  document-access predicate beyond the two this entry already named
+  (`app.check_file_action_authority`, `app.authorize_file_access`) and found one genuinely new
+  since this entry's last update: `app.list_files_for_tenant`
+  (`20260831040000_create_logged_file_metadata_listing.sql`, closing `ISS-2026-172`'s own logging
+  gap). None of the three composes cleanly into `app._ticket_portal_link_resolve_candidate`'s
+  read-only `document` branch without inventing new logic: `check_file_action_authority` checks
+  only coarse tenant membership, already implied by this function's own existing tenant-view gate,
+  so composing it would be a no-op, not a real per-file restriction; `authorize_file_access` (and
+  `list_files_for_tenant`, which is built on it) is a mutating, exception-raising function that
+  writes an `app.file_access_logs` row on every call — composing it into a candidate-search
+  predicate would either write a spurious access-log entry for every document scanned during an
+  unrelated ticket-link search, or require extracting its authorization logic into a new
+  boolean-only wrapper, which is inventing authority logic, not a mechanical composition. The
+  `files_select_scoped` RLS policy carries the real per-row predicate but is an inline `USING`
+  expression keyed on session-implicit `auth.uid()`, not a callable function taking an explicit
+  actor — reusing it would mean hand-transcribing RLS logic into a second, independently
+  maintained copy (the `C-25` two-independently-built-enforcement-mechanisms class this
+  codebase's own defect taxonomy already names), or introducing `auth.uid()` into an RPC that
+  takes an explicit `p_actor_auth_user_id` (`C-06`) — neither is a safe, additive change. Per this
+  entry's own escape valve, item 2 is left exactly as disclosed: deny-by-default, safe, not yet a
+  real staff capability. No code changed for item 2.
+
+**Status now: item 4 `RESOLVED`; items 1, 2, 3 stay `OPEN`, Low** — items 1 and 3 were not
+re-examined this pass (both remain genuinely correct, deliberate structural decisions per this
+entry's own original reasoning, untouched); item 2 was re-verified live and correctly remains
+open, for the reasons above.
+
 ### ISS-2026-123 — legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path (Phase 8, CPL-314 deliberate scope decisions, RESOLVED, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-016` (Prompt 314, Customer Profile) — two deliberate scope decisions made while authoring this checkpoint's own migration, not defects found afterward. The source prompt's own text requires exactly this kind of disclosed call: "Billing, tax/legal and credit fields require configured authorization/approval," which this checkpoint reads as excluding legal identity fields from self-service change entirely (no configured authorization/approval workflow for a legal-name/tax-id change exists anywhere in this repository, and building one — likely involving real KYC/compliance review, not merely a staff click-to-approve — is a genuinely new, capability-sized addition, not a bounded extension of this prompt's own charter).
@@ -2215,6 +2286,10 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-017` (Prompt 315, Customer User
 
 **`RESOLVED` (item 3 only, 2026-08-28, Track B Batch 8,
 `supabase/migrations/20260828193000_harden_customer_portal_last_account_admin_status_guard.sql`).** Re-verified against the function's true latest body (`20260828030000_harden_customer_portal_membership_anti_enumeration.sql`, itself a same-day, unrelated Track B Batch 4 anti-enumeration fix — confirmed the last-admin gap survived that fix untouched) before drafting. Applied the exact fix this entry's own text already prescribed: `app.set_customer_portal_account_membership_status` now row-locks the account's full active-`account_admin` set before deciding, and rejects a suspend/revoke that would leave zero — the IDENTICAL guard shape `app.update_customer_portal_account_membership_role` already applies to its own account_admin→member transition (design decision 3, `20260801170000`). Scoped narrowly: fires only when the CURRENT row is an active `account_admin` transitioning to `suspended`/`revoked`; a plain member, an already-non-active row, or a reactivation is never blocked. `CREATE OR REPLACE`, byte-identical signature — ACL carries forward, no new grants. Two pre-existing, unrelated test fixtures (`customer-portal-dashboard.sql` test 4, `customer-shipment-alerts.sql`'s own "LIVE rescoping" test) broke as a direct, correct consequence of the fix (each had incidentally self-revoked/self-suspended its own fixture's sole admin as a means to a different end) — both repaired by giving each account a second admin immediately before the self-mutation, preserving each test's own actual intent. New regression in `scripts/db-tests/customer-user-management.sql`: the sole admin (`Beta`, already fixture-established) cannot self-suspend/self-revoke; a fresh, dedicated 2-admin account (`Gamma`) proves the full shape — a non-last admin is suspended (allowed), the true last is then rejected on both suspend and revoke, a plain member is unaffected. Live-verified: `SECURITY DEFINER`, `search_path` pinned, grants unchanged (`authenticated, service_role`). Full `db-tests` suite re-run clean. **Items 1-2 stay `OPEN`, Low** — standing, repository-wide infrastructure gaps, re-confirmed zero `revoke_session`/`invalidate_session`/MFA primitives anywhere, unchanged. Owner: item 3 closed; items 1-2 unchanged.
+
+**`RESOLVED` (item 1 only, 2026-09-01, `supabase/migrations/20260901140000_wire_step_up_mfa_into_customer_portal_account_admin_actions.sql`) — item 1's own premise re-verified live, and found stale, before drafting.** `20260807100000_create_intelligence_enterprise_mfa_session_controls.sql` (IAE-027, 2026-08-07) shipped a real, applied step-up-MFA mechanism (`app.assert_current_step_up_authorization`, `app.is_high_risk_action`, `app.mfa_tenant_policies`, `app.request_mfa_step_up_challenge`/`app.verify_mfa_step_up_challenge`) — predating even the 2026-08-28 update immediately above, which restated "zero MFA primitives anywhere" without re-checking (the same citation-currency-drift class `ISS-2026-138` already found once for this entry's own CPL-314 citation). Composition was checked by reading the live code, not assumed: `app.assert_current_step_up_authorization`/`app.is_high_risk_action` are genuinely generic (no RBAC role assignment, no `app.evaluate_permission` call, no FK into `app.permissions`) — confirmed against `pg_get_functiondef` on the hosted project, not the migration file text. The one real, narrow gap was `app.request_mfa_step_up_challenge`'s own membership precondition (`app.has_active_tenant_membership` OR `app.is_supreme_admin`) — structurally false for every customer_user-layer identity, whose own `app.tenant_user_identities` row deliberately never reaches `active` (the identical shape `app.check_file_action_authority`/PLT-128 already hit and fixed at CPL-302, `20260730311000`, by widening with `app.actor_holds_customer_user_layer`). `20260901140000` applies the SAME widening to `app.request_mfa_step_up_challenge`, then wires `app.assert_current_step_up_authorization(tenant, actor, 'CPADM', 'ManageMembership')` into `app.update_customer_portal_account_membership_role` (role change) and `app.set_customer_portal_account_membership_status` (suspend/revoke only — never reactivate, which restores access rather than removing it). `('CPADM', 'ManageMembership')` is a genuinely NEW tag, deliberately not a reuse of the existing `'CPT'` ("Customer Portal") staff-RBAC module: this capability's own ordinary authority check is `app.actor_is_active_customer_portal_account_admin`, a Layer-4-only chain that never touches `app.evaluate_permission`/`app.permissions` at all (ADR-0024 Part B) — reusing `'CPT'` would have misleadingly implied composition with staff CPT permissions, which do not apply here; this is exactly the "mismatched pair" this fix's own task explicitly warned against. `app.is_high_risk_action`'s hardcoded platform-default tuple list is untouched — `('CPADM', 'ManageMembership')` is reachable only via a tenant's own `additional_high_risk_actions` (`app.set_mfa_tenant_policy`), so every existing tenant and the live project see zero behavior change unless they explicitly opt in. All three `CREATE OR REPLACE FUNCTION` bodies were rebuilt from the LIVE `pg_get_functiondef` output (not the on-disk migration files, which could have drifted), with `language plpgsql`/`security definer`/`set search_path` restated explicitly on every one — the exact recurrence class `20260831290000_restore_security_definer_on_drifted_finance_wrappers.sql` already had to correct once. New regression in `scripts/db-tests/customer-user-management.sql`, isolated to its own dedicated fixture tenant (`cummfa`): a tenant with no `app.mfa_tenant_policies` row sees role change/suspend/revoke all succeed unconditionally; a tenant that opts `('CPADM', 'ManageMembership')` into `additional_high_risk_actions` and turns tenant-wide MFA on blocks all three with `mfa_step_up_required` until a real, verified step-up challenge exists, then succeeds; reactivation is proven never gated; `app.request_mfa_step_up_challenge` is proven to now genuinely succeed for a customer_user-layer principal, not merely that the assert itself is generic. `pnpm run typecheck`/`lint`/`test`/`db:test` all clean. `app/(tenant)/[tenantSlug]/customer-portal-users/actions.ts`'s own header comment (which stated the now-stale "no MFA/step-up mechanism exists" premise) is corrected in place. **Item 2 stays `OPEN`, Low** (see the correction immediately below — its own premise needed a narrower correction, not a resolution). Owner: item 1 closed; item 2 unchanged.
+
+**Correction (2026-09-01, same pass) — item 2's own "no session/token/JWT-revocation primitive exists anywhere in this repository" premise is also stale, re-verified live rather than assumed; the entry stays `OPEN` because the correct, narrower gap is real.** The literal grep this entry (and the 2026-08-28 update above) cites — zero hits for `revoke_session`/`invalidate_session`/`revoke_token`/`invalidate_token` — is still accurate today, re-run verbatim. But the broader English claim it was standing in for is not: the SAME `20260807100000` (IAE-027) migration that closed item 1 also shipped `app.user_sessions`/`app.revoke_user_session`/`app.revoke_all_actor_sessions` — a real, persisted, applied session-revocation primitive (the latter also cascades to revoke every API key the target actor created, per its own comment), reachable since 2026-08-07. Two things keep item 2 genuinely `OPEN` rather than resolved, both disclosed by IAE-027's own text, not discovered here: (a) `app.revoke_user_session` flips the real, persisted `app.user_sessions.status` signal but does not itself invalidate a live Supabase JWT/refresh token — that requires the external Supabase Admin API (`auth.admin.signOut`), explicitly disclosed as not performed by IAE-027 either; (b) CPL-315's own capability composes with none of it — suspending/revoking a customer-portal membership does not register or revoke any `app.user_sessions` row for that identity, so this specific capability's own protection remains exactly what this entry already documented: every RPC re-checks the caller's own live status/role/authority on every call, never a cached claim, unchanged and still accurate. **Status `OPEN`, Low, unchanged** — the premise is corrected (a real, adjacent, non-JWT session-revocation primitive now exists platform-wide), the underlying gap for THIS capability is not.
 
 ### ISS-2026-126 — Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_for_paid_invoice` to a real payment event yet (Phase 8, Batch 4, CPL-316, `CG-S13-CPL-018`, RESOLVED 2026-08-31, Low)
 
@@ -5740,7 +5815,7 @@ established: `revoke select` then `grant select` on an explicit column list omit
 
 **The same control-character-injection gap was independently found on a SQL-side sibling by the schema-wide completeness sweep lens, fixed the same pass.** `app.validate_webhook_url` (PLT-129, the registration-time SSRF guard for `app.webhook_endpoints`) shared the identical defect: `validate_webhook_url('https://\t127.0.0.1/webhook')` returned `true` (accepted) because the private-IP-literal regex checks ran against a host string still containing the tab, so none matched — while a real WHATWG URL parser strips the tab first, collapsing the payload back to the literal private-IP/cloud-metadata host (`169.254.169.254` reproduced too) before any real HTTP client would ever see it. **Not exploitable end-to-end**: every real delivery path re-validates via `lib/webhooks/ssrf-guard.server.ts`'s own proper URL-parsing, live-DNS-resolving dispatch-time check (confirmed the only real caller of a registered URL) — that independent second gate held. Fixed anyway at `supabase/migrations/20260815400000_harden_ip_restriction_tierc_fixes.sql`: `validate_webhook_url` now strips `[\t\r\n]` from `p_url` before any check, mirroring the TS-side fix exactly. Verified live: the tab-smuggled payload now correctly raises `webhook_unsafe_url_host`; a legitimate URL still validates; `api-key-webhook.sql`/`n8n-integration.sql`/`public-api-platform.sql`/`webhook-management.sql` all re-run clean.
 
-### ISS-2026-234 — `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR, `spatial_ref_sys`'s `rls_disabled_in_public`) remain permanently open absent a full extension relocation (found at `HDN-378` infra-items lens, `OPEN`, Medium, owner: a dedicated future task)
+### ISS-2026-234 — `postgis` cannot be relocated out of `public`, unlike `pg_trgm`/`btree_gist`; 6 of 8 `extension_in_public`-class advisories (including the one ERROR, `spatial_ref_sys`'s `rls_disabled_in_public`) remain permanently open absent a full extension relocation (found at `HDN-378` infra-items lens, `RESOLVED` 2026-09-01, Medium, owner: closed)
 
 The Hardening Matrix's own punch list (§9 item 3) assumed all three non-`pgcrypto` extensions still living in `public` (`postgis`, `pg_trgm`, `btree_gist`) could be relocated together to close "7 of 8" advisory findings. Confirmed this checkpoint: `postgis`'s own extension control file sets `relocatable = false` — `ALTER EXTENSION postgis SET SCHEMA extensions` fails outright, a Postgres/PostGIS packaging constraint, not a permissions issue. The only real way to move an already-installed, in-use PostGIS is `DROP EXTENSION postgis CASCADE` + recreate with `SCHEMA extensions`, which cascades and drops all 15 live `geography(Point, 4326)`-typed columns across 12 real production tables (`hris_attendance`, several `advanced_tms_*` telemetry/tracking tables, `operations_epod_capture_review`, etc.) — a data-migration-class operation, not a migration-only schema tweak.
 
@@ -5749,6 +5824,63 @@ The Hardening Matrix's own punch list (§9 item 3) assumed all three non-`pgcryp
 **Status `OPEN`**, Medium severity (a structural packaging/data-migration constraint, not an active exploit path — `spatial_ref_sys` is a reference table of coordinate system definitions, not tenant data, so the practical risk of its own `rls_disabled_in_public` is low despite the advisory's ERROR label). **Not fixed by this checkpoint** — genuinely out of a bounded hardening pass's scope (a full extension relocation requires confirming live relocatability against the actual deployed Postgres/PostGIS version, deciding a DROP+recreate-with-backfill strategy for 15 real columns across 12 tables, and a coordinated `CREATE OR REPLACE` sweep of the ~18 functions that call bare `ST_*()`). Owner: a dedicated future task, scoped exactly as above. Correct the Hardening Matrix's own "clears 7 of 8" framing to "clears 2 of 8 this checkpoint; the remaining 6, including the one ERROR, require a full postgis relocation this checkpoint cannot safely deliver."
 
 **Re-verified, disposition confirmed accurate, one count corrected (2026-08-28, Track B Batch 8).** Independently re-queried the live hosted project (not merely re-cited): `postgis` is still installed in `public` (`3.3.7`), `pg_trgm`/`btree_gist` are both still confirmed relocated. Live advisories today total exactly 8 postgis-attributable line items: 1 ERROR (`spatial_ref_sys` RLS-disabled) + 1 WARN (`extension_in_public` on `postgis` itself) + 6 WARN (`st_estimatedextent` overloads) — all still open, same 15-column/12-table data-migration constraint. **Correction, found by direct count**: this entry's own third paragraph says "3 `extension_in_public` warnings" remain; live, there is exactly **1** (`postgis` — `pg_trgm`/`btree_gist` no longer appear at all, correctly). Reads as a stale pre-fix figure never updated, not a live regression. **Not fixed by this batch** — same reasoning as the original disposition. Owner and scope unchanged; count corrected (3→1) for the next reader.
+
+**`RESOLVED` 2026-09-01.** Re-verified the safety precondition live, immediately before building
+anything, rather than trusting this entry's own prior citations: independently re-queried every
+one of the 15 `geography`-typed columns directly against the live hosted project — both
+`select count(*)` (whole table) and `select count(*) where <col> is not null` (the column
+specifically) — all 15 returned zero, confirming this pre-launch system still holds no real
+tenant data in any of them. **Count correction, found by direct schema query, not by trusting
+either this entry's own "12 tables" or its own "15 columns" figures**: re-derived from
+`information_schema.columns` (`udt_name = 'geography'`) rather than assuming either prior number
+was right — the true, current figure is **15 columns across 15 tables**, one geography column per
+table (the "12 tables" framing undercounted by 3; the earlier "15 columns" figure was already
+correct). Built `supabase/migrations/20260901150000_harden_relocate_postgis_out_of_public.sql`:
+`DROP EXTENSION postgis CASCADE` + `CREATE EXTENSION postgis SCHEMA extensions`, then restored
+every object CASCADE took with it, enumerated from live `pg_depend` rather than guessed — the 15
+columns (exact type/nullability preserved), 20 CHECK constraints, 4 GiST indexes, and 11 `app.*`
+functions whose own signature carries `geography` (each paired with an identical `public.*`
+PostgREST wrapper CASCADE also dropped, 21 function objects in total, every one rebuilt from a
+live `pg_get_functiondef` capture, not a possibly-stale on-disk file — `ISS-2026-053`'s own
+withdrawal note names exactly this failure mode). A further 13 functions never touched by CASCADE
+(no `geography` in their own signature) needed `extensions` added to their pinned `search_path`
+because their body calls a bare `ST_*()`, mirroring the exact technique the `pg_trgm`/`btree_gist`
+migration already established for its own 3 functions. Three further, genuinely new failure
+classes were found only by actually building and testing this, not by extending the original
+plan: (1) `app.set_epod_evidence` hardcoded `v_geog public.geography` — an explicit schema
+qualification no `search_path` addition alone could fix, since it points at the wrong schema
+outright; (2) 8 more functions (`add_route_planning_stop`, `add_shipment_leg_stop`,
+`create_attendance_policy_version`, `create_warehouse`, `update_warehouse`,
+`ingest_direct_device_telemetry_batch`, `ingest_third_party_provider_webhook_event`,
+`record_attendance_clock_event`) declare a `geography`-typed LOCAL VARIABLE without calling any
+bare `ST_*()` themselves — invisible to a "calls postgis" sweep, only found by a live-database,
+disposable-Postgres `db:test` run failing at the exact call site
+(`scripts/db-tests/postgis.sql`'s own new regression section reproduced `app.add_shipment_leg_stop`
+raising `type "geography" does not exist` on first real use); (3) COLUMN-LEVEL grants (this
+codebase's own `grant select (col) on app.t to role` convention, orthogonal to table-level grants)
+on all 15 recreated columns were silently dropped along with the columns themselves and never
+restored by the table/constraint/index work above — caught the same way, by a genuinely unrelated
+pre-existing test (`scripts/db-tests/hris-attendance.sql`) failing `permission denied for table
+attendance_policy_versions` when run as `authenticated`, isolated to the missing grant by diffing
+`information_schema.column_privileges` between a disposable database built with and without this
+migration. All three are fixed in the same migration. True total: **35 functions rebuilt or
+`search_path`-fixed**, not the entry's own original "~18" estimate (which only ever counted the
+"calls a bare `ST_*()`" class; 16 of the 35 are signature-driven-only or the one hardcoded-
+qualification case). Regression evidence added to `scripts/db-tests/postgis.sql` (the sibling
+geospatial test file, extended rather than duplicated): postgis confirmed relocated to
+`extensions`; all 15 columns confirmed present with the correct type/nullability; a real INSERT
+with a real geography value into each of the 15 round-trips correctly; a representative,
+non-trivial set of the rebuilt functions (`arbitrate_and_project_vehicle_position`,
+`evaluate_route_deviation`, `get_vehicle_current_position`, `_compute_shipment_leg_eta`,
+`set_epod_evidence`, `_ingest_attendance_event`) execute correctly against real fixture data, not
+merely "does not error"; all 4 pre-existing GiST indexes on geography columns confirmed still
+present and still a real GiST index; the ISS-2026-309/ERR-2026-004 anon-reachability guard
+re-asserted against every recreated function, `app.*` and `public.*` alike. Full `pnpm run
+db:test` (every migration including this one, every test file including the extended one) `ALL
+PASSED`; `pnpm run typecheck` and `pnpm run lint` clean (0 errors); `pnpm run test` clean except
+the one, expected, out-of-scope `check-release-freeze` digest-drift failure that legitimately
+editing `scripts/db-tests/postgis.sql` causes and which this task was explicitly scoped to leave
+for the orchestrating session's own digest update, not fix here. Owner: closed.
 
 ### ISS-2026-235 — `app.set_integration_connection_status` independently bypasses `ISS-2026-150`'s own IP-restriction fix, IAE-026's lockout guard, and step-up-MFA simultaneously (found at `HDN-378` Tier C attack-surface adversarial testing lens, `RESOLVED at HDN-387`, was Critical, own `HDN-BLK-023` entry, owner `HDN-386`)
 
@@ -7307,13 +7439,103 @@ independently re-confirmed rather than merely repeated. **Not fixed by this batc
 reasoning as the original disposition. Owner and scope unchanged; guard count corrected to
 5 for the next reader.
 
-### ISS-2026-278 — no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk class (found at `HDN-385` Data Migration Rehearsal, live investigation, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-278 — no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk class (found at `HDN-385` Data Migration Rehearsal, live investigation, `RESOLVED` 2026-09-01, Low)
 
 `app.create_import_export_job`, `app.stage_import_rows`, `app.commit_import_job`, and every domain adapter's own `commit_*_import_job` are gated only by `app.check_import_export_job_authority()` = ordinary active tenant membership OR Supreme Admin — no step-up/MFA/IP-restriction check whatsoever. `HDN-378`'s own hardening work explicitly named 4 "platform-default high-risk target functions" requiring the IP-allowlist/MFA-exception composition it added (`app.decide_ai_output_approval`, `app.activate_enterprise_idp_connection`, `app.approve_mfa_exception`, `app.create_integration_connection`) — none of the import/export framework's functions are in that set, and none carry the equivalent `p_client_ip`/allowlist-bypass composition. A bulk data-migration commit is a privileged/financial-adjacent action (business rule §24's own RPD-023 citation names "export... financial, payroll" actions explicitly) yet requires only the same authorization bar as staging one ordinary CSV row.
 
 **RESOLVED**, 2026-08-27 (Step 16 historical-issue-backlog remediation, item 18): confirmed with the operator (`AskUserQuestion`) before implementing: IP-allowlist gating only, no mandatory MFA step-up, scoped to the 5 real `commit_*_import_job` functions (`app.create_import_export_job`/`app.stage_import_rows` deliberately left untouched — staging operations, not the bulk-commit action this entry is concerned with). This entry's own text already flagged the real risk of full HDN-378 parity: forcing mandatory MFA step-up on every bulk import commit, including routine, non-financial ones (e.g. `attendance_device_import`), risks over-restricting a legitimate operational workflow without dedicated UX review this checkpoint has no standing to perform. `supabase/migrations/20260826190000_harden_import_commit_ip_allowlist_gating.sql` widens `app.commit_import_job`, `app.commit_employee_import_job`, `app.commit_attendance_device_import_job`, `app.commit_timesheet_import_job`, and `app.commit_vendor_rate_import_job` (plus each one's own Option 2 `public.*` wrapper) with one new, trailing, default-valued `p_client_ip` parameter each — the identical composition and non-interactive-caller exemption (`app.assert_ip_allowed` + `app.has_active_ip_allowlist_bypass`) HDN-378's own 4 functions already established. Every one of the 10 functions widened via an explicit `DROP FUNCTION` + `CREATE FUNCTION` (never `CREATE OR REPLACE` across a changed argument list — `ISS-2026-260`'s own self-caught ambiguous-overload finding applied correctly from the first draft this time). New regression coverage: a full 4-scenario proof for `app.commit_import_job` in `scripts/db-tests/import-export.sql` (deny out-of-range IP under enforced mode, allow in-range, allow omitted regardless of enforcement, exempt an active bypass grant), plus a lighter 3-scenario proof (deny/allow-in-range/allow-omitted) for each of the other 4 domain adapters in their own db-tests files. Full local `db-tests` suite (354 migrations, 234 runner files) re-run clean on the first attempt; applied live to the hosted Supabase project; grants and single-overload correctness live-verified via direct `pg_proc` query for all 10 functions; freeze digest amended (twentieth pass). See `docs/build-log/release-go-live/RGL-404.md` §12.
 
 **Status `OPEN`**, Low severity (a real, disclosed-nowhere gap in this repository's own established privileged-action-hardening pattern — not a live incident, since the RPCs remain tenant-membership-gated and RLS-enforced, but a real inconsistency with the risk class `HDN-378` already established this action type belongs to). **Not fixed by this checkpoint** — extending `HDN-378`'s own IP-allowlist/MFA-exception composition to the import-commit RPCs is a real, scoped code change, but doing so without a dedicated review of the resulting UX impact on routine, non-financial imports (e.g. `attendance_device_import`) risks over-restricting a legitimate operational workflow; better scoped to a dedicated future task. Disclosed in `docs/runbooks/data-migration-rehearsal.md` §3 item 3. Owner: a dedicated future task.
+
+**`RESOLVED`, 2026-09-01.** The 2026-08-27 pass's own stated reason for declining full parity —
+"forcing mandatory MFA step-up on every bulk import commit... risks over-restricting a legitimate
+operational workflow without dedicated UX review" — no longer applies, and this closure does not
+re-litigate it: it composes a mechanism that did not exist on 2026-08-27. `IAE-027`
+(`20260807100000_create_intelligence_enterprise_mfa_session_controls.sql`) shipped a real,
+applied step-up-MFA primitive, `app.assert_current_step_up_authorization`, live-verified before
+building anything here (not assumed from its own header) to be a STRICT, TENANT-OWNED OPT-IN: it
+is a no-op unless `app.is_high_risk_action(tenant, module, action)` is true for the exact tuple
+passed, which happens only for (a) a fixed platform-default set that contains no import-commit
+tuple, or (b) a tuple the TENANT ITSELF has additively opted into its own
+`app.mfa_tenant_policies.additional_high_risk_actions`. A tenant that never configures this policy
+— every tenant in every existing fixture, and every tenant on the live project today — sees
+IDENTICAL behavior after this fix as before it; this is proven, not merely asserted, in the new
+regression evidence below. This exact composition (one `perform app.assert_current_step_up_
+authorization(tenant, actor, module, action)` call immediately after the existing authority check)
+was independently used twice more this same day for an identical reasoning shape
+(`20260901080000`, `20260901090000`, both gating a `decide_*` RPC on `COM:Approve`) and once more
+for a different capability while this fix was in progress (`20260901140000`, `ISS-2026-125`,
+customer-portal account-admin actions) — this closure follows that same established placement
+precedent, not a new pattern.
+
+`supabase/migrations/20260901110000_harden_import_commit_step_up_mfa_gating.sql`. **The task that
+started this fix named "the 5 real `commit_*_import_job` functions" from the 2026-08-27 pass and
+explicitly required re-verifying that count live rather than assuming it still held — it does
+not.** A live `pg_proc` sweep (`proname ~ '^commit_.*import_job$'`) found the set has grown from 5
+to **12**: the original `app.commit_import_job`, `app.commit_employee_import_job`,
+`app.commit_attendance_device_import_job`, `app.commit_timesheet_import_job`,
+`app.commit_vendor_rate_import_job`, joined by 7 domain adapters that shipped since (`app.commit_
+vendor_import_job`, `app.commit_customer_import_job`, `app.commit_item_import_job`, `app.commit_
+finance_opening_balance_import_job`, `app.commit_inventory_opening_balance_import_job`, `app.
+commit_leave_opening_balance_import_job`, `app.commit_payroll_loan_cutover_import_job`) — every
+one of which already carries the 2026-08-27 pass's own `p_client_ip` IP-allowlist composition,
+several explicitly "at birth." This migration composes step-up MFA onto all 12, not only the
+stale 5, reusing each function's own existing `evaluate_permission`-checked (module, `Import`)
+pair — never inventing a new one. `app.commit_import_job` (the one function with no fixed module,
+since a single job may target any registered schema) resolves the module dynamically from the
+job's own `app.import_export_schemas.owner_primitive_code` rather than being left out or guessing.
+`app.commit_payroll_loan_cutover_import_job` — the one adapter whose second authority check maps
+to `HRS:Approve`, one of `app.is_high_risk_action`'s 7 fixed platform-default tuples — deliberately
+composes on `HRS:Import` instead: gating on `HRS:Approve` would not have been a tenant opt-in at
+all, it would have started requiring step-up for every tenant with `tenant_wide_required = true`
+regardless of any `additional_high_risk_actions` list, breaking this fix's own no-op-by-default
+premise for that one function. `app.is_high_risk_action`'s own platform-default tuple list is
+untouched everywhere in this migration. `app.create_import_export_job` and `app.stage_import_rows`
+remain untouched, unchanged from the 2026-08-27 disposition. Every `CREATE OR REPLACE FUNCTION`
+restates `language`, `security definer`/`security invoker` (verified live per function, never
+assumed — `app.commit_import_job` is genuinely `security invoker` with no `search_path` override,
+unchanged since its 2026-07-19 origin; every other one of the 11 domain adapters is `security
+definer` with its own already-existing `search_path`), and `search_path` explicitly, avoiding the
+exact silent-reset recurrence class `20260831290000_restore_security_definer_on_drifted_finance_
+wrappers.sql` had to issue a corrective migration for. Every parameter, return type, IP-allowlist
+branch, and existing grant is preserved byte-for-byte — confirmed by diffing the live
+`pg_get_functiondef`/`pg_proc.prosecdef`/`proconfig`/grant output for all 12 functions before and
+after applying this migration to a freshly migrated disposable database.
+
+New regression coverage, mirroring the fixture shape `20260901090000`'s own db-test already
+established for this same mechanism: a 3-part proof (no-op with no tenant policy configured;
+`mfa_step_up_required` once the tenant opts the exact tuple in; success again after a genuine
+`request_mfa_step_up_challenge` + `verify_mfa_step_up_challenge` cycle) added to `scripts/db-
+tests/import-export.sql` for `app.commit_import_job` (proving the dynamic module-resolution path),
+`scripts/db-tests/hris-employee-master.sql` for `app.commit_employee_import_job` (representative
+of the identical `HRS:Import` shape also used by `app.commit_attendance_device_import_job`/`app.
+commit_timesheet_import_job`/`app.commit_leave_opening_balance_import_job`), `scripts/db-
+tests/procurement-vendor-rate-tiers.sql` for `app.commit_vendor_rate_import_job` (representative of
+`PRC:Import`, also used by `app.commit_vendor_import_job`), `scripts/db-tests/master-data-
+import.sql` for `app.commit_customer_import_job` (`COM:Import`, representative also of `OPS:Import`
+used by `app.commit_item_import_job`/`app.commit_inventory_opening_balance_import_job`),
+`scripts/db-tests/finance-subledger.sql` for `app.commit_finance_opening_balance_import_job`
+(`FIN:Import`, explicitly proven distinct from the platform-default `FIN:Approve` tuple), and
+`scripts/db-tests/hris-payroll.sql` for `app.commit_payroll_loan_cutover_import_job` (the one
+adapter needing its own dedicated proof, since it is the case that deliberately does NOT compose
+on the tuple its own second authority check names). Every existing IP-allowlist regression from
+the 2026-08-27 pass re-run and still passes unmodified. Full local `db-tests` suite (241 runner
+files) re-run clean against a disposable database built from every migration currently on disk
+except one unrelated, independently-confirmed-broken concurrent migration
+(`20260901150000_harden_relocate_postgis_out_of_public.sql`, reproduced failing identically with
+this fix's own migration file removed entirely — a pre-existing/concurrent defect in a different,
+unrelated capability, not caused by and out of scope for this fix; left for its own author). Not
+yet applied to the live hosted Supabase project or freeze-digest-amended — left for the
+orchestrating session, per this task's own instructions.
+
+**Disclosed for a future reader, not itself a gap:** the live count of `commit_*_import_job`-
+shaped functions moved from 5 to 12 in the roughly two weeks between the 2026-08-27 pass and this
+one, purely from ordinary new-capability growth. Nothing about this fix's own composition depends
+on the count staying at 12 — each new domain adapter that ships hereafter and follows the
+established `check_import_export_job_authority` + `evaluate_permission(module, 'Import')` +
+`p_client_ip` shape (as every one of the 12 already does) is a strong candidate for the identical
+step-up composition, but a future checkpoint should re-verify the live list itself rather than
+trust this entry's "12," exactly as this entry's own task required re-verifying the prior "5."
 
 ### ISS-2026-279 — `app.employee_number` uniqueness on an explicit staged value is case/whitespace-sensitive, letting `EMP-001`, `emp-001`, and `EMP-001 ` (trailing space) all commit as 3 distinct employees in one job (found at `HDN-385` Tier C attack-surface adversarial testing lens, live-reproduced, `RESOLVED`, Medium, owner a dedicated future task)
 
@@ -9152,7 +9374,7 @@ stale claim to survive. All three are corrected in place with dated notes, stati
 Status stays `OPEN`: the second-host page itself is not built, and remains the owner's call for
 the access reason above, not a cost one.
 
-### ISS-2026-321 — the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself (found 2026-09-01 while closing `ISS-2026-317`, `OPEN`, Low)
+### ISS-2026-321 — the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself (found 2026-09-01 while closing `ISS-2026-317`, `RESOLVED` 2026-09-01, Low)
 
 While closing `ISS-2026-317`, re-reading `app.issue_payroll_loan`'s live signature turned up
 that `p_is_opening_balance` and `p_opening_remaining_installments` — the two parameters the
@@ -9170,14 +9392,37 @@ import path this entry's sibling built now reaches the real code); it is a missi
 affordance for a case the backend already supports and the ordinary "issue one loan" screen
 does not.
 
-**Status `OPEN`**, Low severity. This is not agent-work to close blind: it is a small,
-concrete UI task (two additional form fields, gated behind a checkbox, wired to two
-already-existing action parameters) rather than a design or authority question, but it
-touches a live tenant-facing form and deserves a deliberate UI/UX pass rather than a
-mechanical field addition. **What would close it:** add an "opening balance" toggle to
-`IssueLoanForm` that reveals a "remaining instalments" field when checked, wired through
-`actions.ts` to the two parameters `app.issue_payroll_loan` already accepts, with a regression
-test proving the toggle actually reaches the database rather than only appearing on screen.
+**Status `OPEN`** (as first found), Low severity. This was not agent-work to close blind: it
+was a small, concrete UI task (two additional form fields, gated behind a checkbox, wired to
+two already-existing action parameters) rather than a design or authority question, but it
+touched a live tenant-facing form and deserved a deliberate UI/UX pass rather than a
+mechanical field addition.
+
+**`RESOLVED`, 2026-09-01.** Added an "opening balance" checkbox to `IssueLoanForm`
+(`payroll-admin-panel.tsx`) that reveals a "remaining installments" field when checked, styled
+and state-managed the same way `leave-type-panel.tsx`'s own `requiresEvidence` checkbox already
+reveals its "evidence classification" field in this codebase — both fields carry help text
+explaining that an opening balance means a loan carried over from before this system was used,
+with some installments already paid, and the remaining-installments field is capped at the
+term count client-side (`max={termCount}`), matching `app.issue_payroll_loan`'s own live
+0-to-term-count bound.
+
+Unchecked, the form still submits `isOpeningBalance:false` /
+`openingRemainingInstallments:null` exactly as before this closure — no change to the common
+case. The formData-parsing and validation that decides this now lives in a small, pure,
+independently exported function, `parseIssuePayrollLoanFormData` (`server/mutations/
+payroll.ts`), pulled out of `actions.ts` specifically so it is unit-testable: a `"use server"`
+file may only export async functions, and nothing under `app/` is picked up by `pnpm run test`,
+so this was the closest testable seam to the Server Action itself.
+`issuePayrollLoanAction` now calls it and forwards the real checkbox state and field value to
+`issuePayrollLoan` instead of the two hardcoded values. Five new regression tests in
+`server/mutations/payroll.test.ts` prove: an unchecked box still yields `false`/`null` (the
+default-behavior regression guard); a checked box with a valid value passes both through,
+including the `0` (already fully paid off) edge; and an out-of-range or missing
+remaining-installments value is rejected client-side with the same shape of error message as
+this action's other validation, before ever reaching the RPC. No migration — the backend
+(`app.issue_payroll_loan`, `ISS-2026-317`) already fully supported both parameters; this closure
+is UI-and-wiring only.
 
 ### ISS-2026-322 — the loyalty-liability reconciliation exception-type contract never learned the fourth live value `20260828070000` added, crashing the admin dashboard on a real row of that type (found 2026-09-01 while closing `ISS-2026-136`, `RESOLVED` 2026-09-01, Low)
 
