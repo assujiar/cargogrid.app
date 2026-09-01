@@ -3393,7 +3393,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant-parity gap on new public.* wrappers). Items honestly left open, disclosed in each
   // entry: ISS-2026-122 items 1/3, ISS-2026-129 item 2's issuance half, ISS-2026-132 item 3
   // (notification/retry/DLQ), ISS-2026-134 item 1 (cross-currency).
-  migrationSetSha256: "535448e97215618d9ed978e54d0464d243305ca2de8a35dfda4a158cc658e216",
+  // NINETY-SECOND PASS (2026-09-02, ISS-2026-197): 463 files (+1). The FX-rate infrastructure
+  // this entry worried might not exist already did (app.finance_exchange_rates, a real
+  // versioned/dated/approval-workflow table, plus app.resolve_finance_exchange_rate/
+  // app.convert_finance_amount and a real admin UI) -- none of that was rebuilt. The actual gap
+  // was narrow: app.calculate_job_profitability (Operations) never called any of it.
+  // app.job_profitability_snapshots gains 13 additive columns (tenant base_currency, both the
+  // quote-time revenue and the actual invoiced total each with its own converted amount, rate,
+  // as-of date and status -- original-currency figures never discarded); a new internal
+  // app.resolve_operations_fx_conversion is the single uniform conversion call site
+  // (same-currency handled as rate=1 inside the helper, never a special-cased branch).
+  // app.calculate_job_profitability/app.job_profitability_directory rebuilt from their live
+  // bodies. Left OPEN, honestly: closure judgement deferred to HDN-386, only rate_type='spot'
+  // is read, and no new admin UI was built (one already existed) -- new figures are exposed at
+  // the RPC/view/contract layer only, the Operations profitability panel UI itself untouched.
+  migrationSetSha256: "1d295d99d0acb36b226e1c6d592c03deed37cbcba5c7996a3bfc88ab0c85902f",
+  // History: 535448e97215618d9ed978e54d0464d243305ca2de8a35dfda4a158cc658e216
+  // (462 files, ISS-2026-122/129/132/134's staff predicate/reconciliation/handoff/voucher work).
   // History: 360d2de06ce1db681fd3c19495805925cdfd09053d6b28445a3bc03d816738a3
   // (451 files, ISS-2026-060+062's zone/distance pricing and vendor-assignment leg scoping).
   // History: 617c6bef38c490b6228a792362f796d466c05ed313de7ffd67eae9777135a00e
@@ -4053,7 +4069,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // NINETY-FIRST PASS (2026-09-02, ISS-2026-122/129/132/134): 245 files, unchanged in count --
   // 3 extended (customer-complaint-ticket-portal-wiring.sql, customer-loyalty-liability-
   // reconciliation.sql, customer-loyalty-redemption.sql).
-  dbTestSetSha256: "7671e70d0ba9bb43d0c79af8e20c03684f9e437060e5f2793e480aa9c4e7092f",
+  // NINETY-SECOND PASS (2026-09-02, ISS-2026-197): 245 files, unchanged in count --
+  // operations-job-profitability.sql extended: the FX-conversion helper's unit checks, two
+  // pre-existing same-currency jobs proven unaffected (rate=1), and a new USD-quoted/
+  // USD-invoiced job proving two genuinely different approved rates apply correctly at two
+  // genuinely different dates.
+  dbTestSetSha256: "95a06a4c28504d3bfd36777f99c3be50909d38254d9e100d099f8a4353a5abea",
+  // History: 7671e70d0ba9bb43d0c79af8e20c03684f9e437060e5f2793e480aa9c4e7092f
+  // (245 files, ISS-2026-122/129/132/134's regression across three files).
   // History: 0f578386c18a3a72cadd0a31c6e4b0f690837fcaedf21024baa02ce664d96826
   // (245 files, ISS-2026-060/062's zone/distance pricing and leg-scope regression).
   // History: 26004fdc3bdfaeeb083c25e3691370c436786ae6ca402b73b86e53be967aedd4
