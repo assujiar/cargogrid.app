@@ -1387,4 +1387,172 @@ begin
 end;
 $$;
 
+\echo '>> 21. ISS-2026-122 item 4 fix (20260901130000): a customer_user granted a SECOND account ONLY through the newer app.customer_portal_account_memberships (CPL-300) grant table -- never the legacy app.principal_memberships.customer_account_ref marker -- now sees that account''s shipment/invoice/warehouse ticket-link candidates through app._ticket_link_resolve_candidate/app.search_ticket_link_candidates, matching what the ''customer'' branch and this checkpoint''s own newer warehouse_order/document branches already gave it; a legacy-only identity''s own visibility is unchanged'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lnk1');
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-LNK1');
+  v_opportunity uuid := (select opportunity_id from app.quotations where tenant_id = v_tenant1 and quote_number = 'QUO-LNK-0001');
+  v_prospect uuid := (select prospect_id from app.quotations where tenant_id = v_tenant1 and quote_number = 'QUO-LNK-0001');
+  v_ticket_id uuid := (select id from app.tickets where tenant_id = v_tenant1 and idempotency_key = 'idem-lnk-cust-1' and channel = 'customer');
+  v_admin uuid := '00000000-0000-0000-0000-000000292101';
+  v_customer1 uuid := '00000000-0000-0000-0000-000000292110';
+  v_customer3 uuid := '00000000-0000-0000-0000-000000292112';
+  v_account_c uuid;
+  v_quotation_c uuid;
+  v_handoff_c uuid;
+  v_job_order_c uuid;
+  v_billing_handoff_c uuid;
+  v_eval_c uuid;
+  v_shipment_c uuid := '00000000-0000-0000-0000-000000292196';
+  v_invoice_c uuid := '00000000-0000-0000-0000-000000292195';
+  v_warehouse_c uuid;
+  v_link app.ticket_links;
+begin
+  -- A THIRD account, owned by nobody customer1 already has scope to -- its
+  -- own shipment/invoice/warehouse, the same three entity types this fix
+  -- touches. Its own job_order chain reuses the SAME opportunity/prospect
+  -- section 7''s own fixture already established (a second quotation off it
+  -- is the smallest FK-consistent way to get a second job_order -- both
+  -- app.job_order_handoffs and app.job_orders are 1:1 keyed off their own
+  -- quotation/handoff, and app.finance_invoices allows only one 'issued'
+  -- invoice per job_order) -- mirrors this same file's own established
+  -- "direct FK-consistent insert, no full duplicate deep chain" economy.
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant1, 'Lnk Customer C', 'fp-lnk1-c', '{}'::jsonb, v_company, 'tester')
+  returning id into v_account_c;
+
+  v_quotation_c := gen_random_uuid();
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, status, root_quotation_id, created_by)
+  values (v_quotation_c, v_tenant1, 'QUO-LNK-0002', v_opportunity, 1, v_prospect, 'USD', now() + interval '30 days', 'submitted', v_quotation_c, 'tester');
+  insert into app.job_order_handoffs (id, tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, org_unit_id, created_by)
+  values (gen_random_uuid(), v_tenant1, v_quotation_c, v_account_c, '{"note": "fixture-c"}'::jsonb, 'hash-lnk-c', v_admin, v_company, 'tester')
+  returning id into v_handoff_c;
+  insert into app.job_orders (
+    id, tenant_id, job_number, source_handoff_id, quotation_id, account_id,
+    customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot,
+    status, owner_user_id, org_unit_id, created_by
+  ) values (
+    gen_random_uuid(), v_tenant1, 'JOB-LNK-0002', v_handoff_c, v_quotation_c, v_account_c,
+    '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+    'confirmed', v_admin, v_company, 'tester'
+  )
+  returning id into v_job_order_c;
+
+  insert into app.shipment_orders (
+    id, tenant_id, job_order_id, shipment_number, idempotency_key, status, shipper_account_id,
+    consignee_snapshot, cargo_service_snapshot, service_type, mode, origin, destination,
+    owner_user_id, org_unit_id, created_by
+  ) values (
+    v_shipment_c, v_tenant1, v_job_order_c, 'SHP-LNK-0002', 'idem-shp-lnk-2', 'confirmed', v_account_c,
+    '{}'::jsonb, '{}'::jsonb, 'FCL', 'sea', 'Port A', 'Port B',
+    v_admin, v_company, 'tester'
+  );
+
+  insert into app.billing_readiness_evaluations (id, tenant_id, job_order_id, evaluated_status, blockers, evidence, evaluated_by_auth_user_id)
+  values (gen_random_uuid(), v_tenant1, v_job_order_c, 'ready', '[]'::jsonb, '{}'::jsonb, v_admin)
+  returning id into v_eval_c;
+  insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (gen_random_uuid(), v_tenant1, v_job_order_c, v_eval_c, 'idem-br-lnk-3', v_admin, 'admin')
+  returning id into v_billing_handoff_c;
+  insert into app.finance_invoices (
+    id, tenant_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id,
+    currency, status, subtotal_amount, tax_amount, created_by
+  ) values (
+    v_invoice_c, v_tenant1, 'INV-LNK-0002', v_account_c, v_job_order_c, v_billing_handoff_c,
+    'USD', 'issued', 750, 75, 'tester'
+  );
+
+  perform app.create_warehouse(v_tenant1, v_company, 'WH-LNK1-C', 'Lnk Warehouse C', null, 'Asia/Jakarta', null, array['fcl']::text[], v_admin, 'admin');
+  v_warehouse_c := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-LNK1-C');
+  perform app.grant_warehouse_customer_eligibility(v_warehouse_c, v_account_c, v_admin, 'admin');
+
+  -- customer3: the legacy marker on account_a ONLY (so app.can_access_ticket
+  -- admits them as a genuine requester party of the SAME v_ticket customer1
+  -- already uses in section 7 -- app._is_ticket_requester_party is untouched
+  -- by this fix and stays on the legacy resolver, which is correct and out
+  -- of this fix''s own named scope) -- PLUS account_c via a direct insert
+  -- into app.customer_portal_account_memberships ONLY, never a legacy grant
+  -- for account_c. Mirrors customer-warehouse-order-visibility.sql''s own
+  -- established "customer-multi" fixture shape exactly.
+  insert into auth.users (id, email) values (v_customer3, 'customer3@lnk1.test');
+  perform app.invite_user(v_tenant1, v_customer3, 'customer3@lnk1.test', 'Lnk1 Customer Three', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'customer3@lnk1.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership(v_customer3, 'customer_user', v_tenant1, (select requester_customer_account_id from app.tickets where id = v_ticket_id)::text, 'tester');
+  insert into app.customer_portal_account_memberships
+    (tenant_id, auth_user_id, account_id, role, status, invited_by, invited_at, granted_by, granted_at, accepted_at)
+  values
+    (v_tenant1, v_customer3, v_account_c, 'account_admin', 'active', 'tester', now(), 'tester', now(), now());
+
+  if not app.can_access_ticket(v_ticket_id, v_customer3) then
+    raise exception 'FAIL: customer3 (legacy-scoped to the ticket''s own requester account) must be able to access v_ticket -- fixture setup is wrong, not the fix under test';
+  end if;
+
+  -- The fix itself: account_c is visible to customer3 ONLY through the new
+  -- grant table -- before 20260901130000, both app.search_ticket_link_
+  -- candidates and app._ticket_link_resolve_candidate (via app.link_ticket_
+  -- record) composed app.resolve_customer_owner_account_scope here, which
+  -- never sees a new-grant-table-only row, so all three assertions below
+  -- would have found zero rows / raised record_not_eligible before this fix.
+  if not exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'shipment', null, v_customer3, 20) where entity_id = v_shipment_c) then
+    raise exception 'FAIL: customer3, granted account_c ONLY via app.customer_portal_account_memberships, must see account_c''s shipment in app.search_ticket_link_candidates after the ISS-2026-122 item 4 fix';
+  end if;
+  if not exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'invoice', null, v_customer3, 20) where entity_id = v_invoice_c) then
+    raise exception 'FAIL: customer3 must see account_c''s issued invoice in app.search_ticket_link_candidates after the fix';
+  end if;
+  if not exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'warehouse', null, v_customer3, 20) where entity_id = v_warehouse_c) then
+    raise exception 'FAIL: customer3 must see account_c''s eligible warehouse in app.search_ticket_link_candidates after the fix';
+  end if;
+
+  -- app._ticket_link_resolve_candidate is exercised indirectly through the
+  -- REAL durable-link path, app.link_ticket_record -- the same function the
+  -- HRT-292/CPL-311 precedent (20260801160000) used to prove its own fix,
+  -- never a direct call to the internal helper.
+  v_link := app.link_ticket_record(v_ticket_id, 'shipment', v_shipment_c, 'related', v_customer3, 'customer3');
+  if v_link.entity_id <> v_shipment_c then
+    raise exception 'FAIL: customer3 must be able to durably link account_c''s shipment via app.link_ticket_record after the fix';
+  end if;
+  v_link := app.link_ticket_record(v_ticket_id, 'invoice', v_invoice_c, 'related', v_customer3, 'customer3');
+  if v_link.entity_id <> v_invoice_c then
+    raise exception 'FAIL: customer3 must be able to durably link account_c''s issued invoice via app.link_ticket_record after the fix';
+  end if;
+  v_link := app.link_ticket_record(v_ticket_id, 'warehouse', v_warehouse_c, 'related', v_customer3, 'customer3');
+  if v_link.entity_id <> v_warehouse_c then
+    raise exception 'FAIL: customer3 must be able to durably link account_c''s eligible warehouse via app.link_ticket_record after the fix';
+  end if;
+
+  -- Isolation, unchanged: customer1 (the SAME ticket''s requester party, but
+  -- with NO grant of any kind -- legacy or new-table -- to account_c) must
+  -- still see zero of account_c''s candidates. Proves the fix only ADDS
+  -- visibility for an identity actually granted account_c, never widens it
+  -- for anyone else.
+  if exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'shipment', null, v_customer1, 20) where entity_id = v_shipment_c) then
+    raise exception 'CRITICAL: customer1, who holds no grant of any kind to account_c, must not see account_c''s shipment in app.search_ticket_link_candidates';
+  end if;
+  if exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'invoice', null, v_customer1, 20) where entity_id = v_invoice_c) then
+    raise exception 'CRITICAL: customer1 must not see account_c''s invoice';
+  end if;
+  if exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'warehouse', null, v_customer1, 20) where entity_id = v_warehouse_c) then
+    raise exception 'CRITICAL: customer1 must not see account_c''s warehouse';
+  end if;
+  begin
+    perform app.link_ticket_record(v_ticket_id, 'shipment', v_shipment_c, 'related', v_customer1, 'customer1');
+    raise exception 'CRITICAL: customer1 (no grant to account_c) must not be able to link account_c''s shipment';
+  exception
+    when others then
+      if sqlerrm !~ 'record_not_eligible' then raise; end if;
+  end;
+
+  -- customer1''s OWN legacy-only visibility (account_a, section 7''s own
+  -- fixture) is completely unaffected by this fix -- still visible, exactly
+  -- as section 7 already proved, re-asserted here as a direct regression
+  -- guard on THIS fix''s own migration rather than trusting section 7 alone.
+  if not exists (select 1 from app.search_ticket_link_candidates(v_ticket_id, 'shipment', null, v_customer1, 20) where entity_id = '00000000-0000-0000-0000-000000292199') then
+    raise exception 'FAIL: customer1''s own legacy-marker-scoped account_a shipment must remain visible after the ISS-2026-122 item 4 fix -- app.resolve_customer_account_scope must be a strict superset of the legacy resolver, never a narrowing';
+  end if;
+
+  raise notice 'PASS: ISS-2026-122 item 4 -- a customer_user granted a second account only through app.customer_portal_account_memberships now sees that account''s shipment/invoice/warehouse ticket-link candidates (search and durable link), while an identity with no grant to that account still sees none, and a legacy-marker-only identity''s own pre-existing visibility is unchanged';
+end;
+$$;
+
 \echo '>> ticketing-linked-records.sql: ALL PASSED'
