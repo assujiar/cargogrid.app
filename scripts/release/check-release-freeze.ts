@@ -3371,7 +3371,31 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // legs of one shipment simultaneously. Both closures read live function bodies via
   // pg_get_functiondef first and reproduce real drift from the applied-migration text (PRC-259
   // governance routing; a Tier-C batch-3 fix pass) verbatim before adding the change.
-  migrationSetSha256: "360d2de06ce1db681fd3c19495805925cdfd09053d6b28445a3bc03d816738a3",
+  // NINETY-FIRST PASS (2026-09-02, ISS-2026-122 item 2 + ISS-2026-129 item 3 + ISS-2026-132
+  // items 1-2 + ISS-2026-134 items 2/5): 462 files (+11). ISS-2026-122 item 2: a real staff
+  // document-access predicate (app.staff_document_ticket_link_access_ok), a mechanical
+  // composition of app.check_file_action_authority plus the exact per-row logic
+  // app.authorize_file_access already uses, wired into
+  // app._ticket_portal_link_resolve_candidate's document branch. ISS-2026-134 item 2: a real
+  // p_as_of parameter genuinely bounds every raw ledger/event read in the liability
+  // reconciliation run (byte-identical for existing "now" callers). Item 5: a real
+  // Loyalty->Finance handoff mirroring HRT-282's shape, closing ISS-2026-129 item 1 as a
+  // byproduct (item 1 of ISS-2026-134, cross-currency, stays open -- ISS-2026-197's FX
+  // conversion has not landed in this branch's history). ISS-2026-129 item 3: a real
+  // percentage-based voucher model, staff-configured base amount since
+  // app.loyalty_redemptions has no order/invoice reference. ISS-2026-132 item 1: opt-in,
+  // per-reward synchronous auto-approval via a tenant-designated LYL:Edit-holding principal,
+  // never widening the shared RBAC-gated primitives. Item 2: a genuine trust-boundary bug (the
+  // discount_voucher entitlement value was sourced from the reward's own staff-only
+  // internal_cost) fixed with a decoupled voucher_face_value column plus a backward-compat
+  // fallback. Several self-found-and-fixed regressions along the way (an under-scoped access
+  // predicate, a voucher-fallback backward-compat break, an ISS-2026-309-class wrapper
+  // grant-parity gap on new public.* wrappers). Items honestly left open, disclosed in each
+  // entry: ISS-2026-122 items 1/3, ISS-2026-129 item 2's issuance half, ISS-2026-132 item 3
+  // (notification/retry/DLQ), ISS-2026-134 item 1 (cross-currency).
+  migrationSetSha256: "535448e97215618d9ed978e54d0464d243305ca2de8a35dfda4a158cc658e216",
+  // History: 360d2de06ce1db681fd3c19495805925cdfd09053d6b28445a3bc03d816738a3
+  // (451 files, ISS-2026-060+062's zone/distance pricing and vendor-assignment leg scoping).
   // History: 617c6bef38c490b6228a792362f796d466c05ed313de7ffd67eae9777135a00e
   // (447 files, ISS-2026-066 item 3 + ISS-2026-070's scheduler/notification wiring).
   // History: dbe4010106f4be7b89a4a987a9f7f6fd75245991c3a14540e8680a1e3f707f0e
@@ -4026,7 +4050,12 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // NINETIETH PASS (2026-09-02, ISS-2026-060/062): 245 files (+2) --
   // vendor-rate-zone-distance-pricing.sql and vendor-assignment-leg-scope.sql (new), plus
   // rbac-enforcement.sql extended for the new public API wrapper grant-parity coverage.
-  dbTestSetSha256: "0f578386c18a3a72cadd0a31c6e4b0f690837fcaedf21024baa02ce664d96826",
+  // NINETY-FIRST PASS (2026-09-02, ISS-2026-122/129/132/134): 245 files, unchanged in count --
+  // 3 extended (customer-complaint-ticket-portal-wiring.sql, customer-loyalty-liability-
+  // reconciliation.sql, customer-loyalty-redemption.sql).
+  dbTestSetSha256: "7671e70d0ba9bb43d0c79af8e20c03684f9e437060e5f2793e480aa9c4e7092f",
+  // History: 0f578386c18a3a72cadd0a31c6e4b0f690837fcaedf21024baa02ce664d96826
+  // (245 files, ISS-2026-060/062's zone/distance pricing and leg-scope regression).
   // History: 26004fdc3bdfaeeb083c25e3691370c436786ae6ca402b73b86e53be967aedd4
   // (243 files, ISS-2026-066/070's crosswalk-import/overdue-sweep regression).
   // History: 17ca1ad1324ecebcccd8398e8717afcdb1a5cef1e48283deaaf1af2638f5bf1c
