@@ -3314,7 +3314,21 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // payroll-run-failure-recorder.ts into calculatePayrollRunAction -- deliberately silent on
   // routine, already-classified rejections (stale_version, insufficient_authority) to avoid a
   // false-positive alert flood.
-  migrationSetSha256: "5482304116508c7b2307fae64d8a09d5852efc6c3a0ed4f70599fbb31998c557",
+  // EIGHTY-SIXTH PASS (2026-09-02, ISS-2026-141 + ISS-2026-148): 440 files (+1),
+  // migrationSetSha256 only -- dbTestSetSha256 unchanged (no new/edited scripts/db-tests file;
+  // proof is EXPLAIN-based, mirroring PRC-268/269's own established precedent for index-only
+  // fixes). One additive, purely-index-adding migration fixing 5 genuine Seq Scan defects found
+  // by a live 20-tenant synthetic seed under the same ~68% single-tenant-concentration skew
+  // PRC-268/269 established: app.finance_invoices (Phase 8, ~224x), plus Phase 9's
+  // saved_report_views (~95x), scheduled_reports, webhook_deliveries (~94x),
+  // retention_archive_requests (~117x) -- each missing the (tenant_id, updated_at desc, id
+  // desc)-shaped covering index every sibling list surface already had. All 11 Phase 8 and 9
+  // Phase 9 named target-volume surfaces were EXPLAIN-tested; full methodology and every
+  // EXPLAIN output recorded in docs/build-log/phase-08/ISS-2026-141-LOAD-TEST.md and
+  // docs/build-log/phase-09/ISS-2026-148-LOAD-TEST.md.
+  migrationSetSha256: "e1cedbdcd93213a1f4e0dab4fca2911570cd8a3eb1e4b0c46dd6db4a6224dc33",
+  // History: 5482304116508c7b2307fae64d8a09d5852efc6c3a0ed4f70599fbb31998c557
+  // (439 files, ISS-2026-079's payroll-run-failure alerting).
   // History: 0d71dd1007c644be601c6d790a257c6930ed60a7e07b5b85be6c7ada81f8c2bc
   // (438 files, ISS-2026-254's platform-wide security-snapshot scheduler).
   // History: 7c4af19901aebe574510f2372fe10bed496691255cca72cab9126d555be6c461
