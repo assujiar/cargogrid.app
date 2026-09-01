@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 29 — 4 High, 10 Medium, 15 Low |
-| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 239 |
+| `OPEN` | 27 — 4 High, 9 Medium, 14 Low |
+| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 10 — formally ruled, not pending work |
+| `RESOLVED` | 240 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.

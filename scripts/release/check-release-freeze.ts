@@ -3304,7 +3304,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // RPC, with the same three-strikes auto-disable discipline the tenant scheduler already has.
   // docs/runbooks/database-restore.md's restore procedure gains mandatory numbered
   // capture/review steps, replacing the prior voluntary framing.
-  migrationSetSha256: "0d71dd1007c644be601c6d790a257c6930ed60a7e07b5b85be6c7ada81f8c2bc",
+  // EIGHTY-FIFTH PASS (2026-09-02, ISS-2026-079): 439 files (+1). Closes the entry's own gap
+  // by owner decision (alerting only, not a redesign of calculate_payroll_run's transaction
+  // model): a top-level failure has nowhere durable to record itself once a rollback erases it
+  // (the same structural wall ISS-2026-249 already established), so the fix records at the
+  // application boundary that catches the error instead. New
+  // app.record_payroll_run_calculation_failure composes the existing
+  // app.raise_observability_alert (IAE-030), wired from server/policies/
+  // payroll-run-failure-recorder.ts into calculatePayrollRunAction -- deliberately silent on
+  // routine, already-classified rejections (stale_version, insufficient_authority) to avoid a
+  // false-positive alert flood.
+  migrationSetSha256: "5482304116508c7b2307fae64d8a09d5852efc6c3a0ed4f70599fbb31998c557",
+  // History: 0d71dd1007c644be601c6d790a257c6930ed60a7e07b5b85be6c7ada81f8c2bc
+  // (438 files, ISS-2026-254's platform-wide security-snapshot scheduler).
   // History: 7c4af19901aebe574510f2372fe10bed496691255cca72cab9126d555be6c461
   // (437 files, ISS-2026-278+087+122+125+234's five independent closures reviewed together).
   // History: 3bbf41a7e2130d5b4f14a42f75ade2a5078dc1749ba74449970990d133209c6b
@@ -3931,7 +3943,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // configure/list/direct-invoke; a mid-schedule authority revocation fails the next run as
   // unauthorized and auto-disables after three strikes without touching an unrelated schedule;
   // reconfiguring re-authorizes.
-  dbTestSetSha256: "1b981e06903879f92a46af453270d171933c4365140b3409fe9201fc63a18097",
+  // EIGHTY-FIFTH PASS (2026-09-02, ISS-2026-079): 243 files, unchanged in count --
+  // hris-payroll.sql extended: forcing a payroll run to fail produces exactly one new alert
+  // row naming the run, dedups on a repeat failure of the same run, records a separate
+  // incident for a different run, and stays silent for already-classified rejections; zero
+  // anon EXECUTE on the new function.
+  dbTestSetSha256: "de7ef285e54b33bc60e206213604e5e9e87c40800b627d06ff642e1da424b600",
+  // History: 1b981e06903879f92a46af453270d171933c4365140b3409fe9201fc63a18097
+  // (243 files, ISS-2026-254's platform-scheduled-task-scheduler.sql).
   // History: 03b1b5695fed1e953b7c4a322a04a91f6358da8368ec66f81ca9ba08e59bc514
   // (242 files, ISS-2026-278+087+122+125+234's five independent closures reviewed together).
   // History: 134dd227dd814b6ca8621f812b312d26dbb7025e7d940ee81cb1a6b613e85e4c
