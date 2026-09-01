@@ -154,7 +154,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-239` | Low | `OPEN` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
 | `ISS-2026-243` | Low | `RESOLVED` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
 | `ISS-2026-244` | Low | `OPEN` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
-| `ISS-2026-245` | Low | `OPEN` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
+| `ISS-2026-245` | Low | `RESOLVED` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
 | `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
 | `ISS-2026-248` | Low | `RESOLVED` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
 | `ISS-2026-277` | Low | `OPEN` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
@@ -6288,7 +6288,7 @@ Confirmed directly: `/opt/pw-browsers` (this sandbox's `PLAYWRIGHT_BROWSERS_PATH
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — `echo $PLAYWRIGHT_BROWSERS_PATH` still resolves to `/opt/pw-browsers`, which still contains only `chromium-1194/`, `chromium_headless_shell-1194/`, `ffmpeg-1011/`, and a `chromium` symlink; no `webkit-*`/`firefox-*` directory exists anywhere. `playwright.config.ts` still carries only the `chromium` project plus 3 Chromium-engine device-emulation projects that explicitly override `defaultBrowserType: "chromium"` (their native preset default is `webkit`, with an inline comment confirming no WebKit binary exists to launch), citing `ISS-2026-244` by name. A firm sandbox/infrastructure boundary, not a wiring/CI-config oversight — Firefox/WebKit are absent from the binary store entirely. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-245 — no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive web app," not an installable PWA (found at `HDN-381` Browser and Device Compatibility, environment feasibility + source sweep lenses, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-245 — no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive web app," not an installable PWA (found at `HDN-381` Browser and Device Compatibility, environment feasibility + source sweep lenses, `RESOLVED` 2026-09-02 by owner ruling, was Low, owner closed)
 
 Confirmed via direct search: no `manifest.json`/`manifest.webmanifest` file exists anywhere in the repository, no `public/` directory exists at all, `app/layout.tsx` (read in full) has no `<link rel="manifest">` or `theme-color` metadata, and no service-worker file or `navigator.serviceWorker`/`next-pwa` reference exists anywhere under `app|components|lib|server`. This is a genuine, total absence of PWA scaffolding, not a partial/degraded implementation.
 
@@ -6334,6 +6334,60 @@ buyer, auditor or new engineer reads that document as a description of what ship
 `OPEN`**, Low, unchanged. Owner: project owner, one decision between (a) and (b).
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — still no `manifest.json`/`manifest.webmanifest`, no `public/` directory, no `<link rel="manifest">`/`theme-color` in `app/layout.tsx`, no service-worker/`next-pwa` reference anywhere. A product/wording decision, not a code defect. Disposition unchanged, still `OPEN`.
+
+**`RESOLVED`, 2026-09-02.** This entry's own text named two paths and said the choice belongs to the
+owner, "not something a remediation pass should do on its own initiative." The owner has now made
+that choice directly, in the conversation that closed this entry: **path (b) — correct RPD-004's
+wording, do not build any PWA scaffolding.** No manifest.json, no service worker, and no icons were
+built; that remains explicitly out of scope for this closure, exactly as this entry's own text
+anticipated it could be.
+
+**What was actually done, all 2026-09-02:**
+
+- **RPD-004 amendment, not a rewrite.** `docs/ai-agent-build-prompt-package/00-control/
+  02_CONFIRMED_DECISION_REGISTER.md` is a controlled document (its own §1: "Change authority:
+  Steering Committee plus update to the Product Concept Brief"), and this repository's own
+  append-only discipline for that document means RPD-004's row is left exactly as ratified. The
+  clarification is instead recorded as a new, dated §4a "Amendments and clarifications" section
+  directly below the decision table, citing this issue as origin and this exact conversation's
+  owner decision as authorization: RPD-004's "responsive PWA" phrase is scoped to mean "responsive
+  web app" — works well on any device via the browser — not an installable Progressive Web App in
+  the strict technical sense. RPD-004's "online-first, never claim offline/native behavior" half is
+  unaffected.
+- **`docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` corrected directly** — a current-state UX
+  document, not a dated historical citation, and the same document this entry's own text already
+  quoted as "already specific about what was intended." §2.5's heading and body, §8's heading and
+  its installability/offline bullet, §13's two ADR-resolution paragraphs, §14's atomic-backlog row
+  (kept, not deleted, marked removed, so the table's own slice count stays accurate against its
+  history), the §5 "Offline" state's trigger cell, and every other "PWA" occurrence in the document
+  were corrected to "responsive web app" and to state plainly that no manifest/service-worker/
+  cached-shell scaffolding is planned or built — not merely deferred, as the pre-correction text
+  said.
+- **`AGENTS.md` corrected directly** (repository operating rules, version `0.3.0` → `0.3.1`,
+  header note added per that document's own established amendment convention) — its "UX,
+  performance, and accessibility" section named the product "mobile-friendly online-first PWA";
+  now "responsive web app," with an explicit "not an installable PWA" parenthetical.
+- **Every other repository-wide `PWA` occurrence was swept and left alone, deliberately.** Dated
+  historical build-log and prompt-package citations (`docs/build-log/**`, `docs/runtime/
+  CHANGE_MANIFEST.md`, `docs/runtime/TASK_LEDGER.md`, `docs/runtime/CARGOGRID_BUILD_STATUS.md`'s own
+  dated update entries) accurately record what their authors wrote at the time and are not rewritten
+  — this repository's own established doctrine, matching `ISS-2026-281`'s own closure text above.
+  `docs/runtime/CARGOGRID_CONTEXT.md` §3's "online-first responsive PWA" is a paraphrase of RPD-004
+  itself inside an append-only `docs/runtime/` file, not a claim that installability was built; left
+  untouched with the same reasoning. `docs/blueprint/*.md` (the Product Concept Brief and the
+  Business Process/Product Requirements Blueprint RPD-004 and `BP-A07` were themselves derived from)
+  are primary source documents, not current-state documents, and were not touched — notably, the
+  Brief's own §9 already says "Progressive Web App sebagai opsi" (**as an option**), which was never
+  a mandate and needed no correction. A separate, repository-wide "Driver PWA" naming convention
+  (roughly 50 files: `driver_mobile_tracking` migrations, server code, runbooks, build logs) names a
+  still-unbuilt future driver-facing mobile web client — every occurrence found already discloses it
+  as absent ("no Driver PWA frontend exists yet anywhere in this repository... confirmed absent, not
+  merely undocumented," `docs/runbooks/driver-mobile-outage.md`), so none of it asserts installability
+  as shipped or committed. Renaming that established shorthand repository-wide is a separate,
+  much larger terminology exercise this Low-severity, wording-only closure does not attempt.
+
+**No code, migration, manifest, icon, or service worker was written.** This was a documentation-only
+closure, exactly as scoped. Owner: closed.
 
 ### ISS-2026-246 — 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not the originally-reported 6 (found at `HDN-381` Browser and Device Compatibility, responsive/PWA source sweep + attack-surface-style re-verification; widened at `HDN-381` Tier C's own schema-wide completeness sweep lens, `OPEN`, Low, owner a dedicated future task)
 

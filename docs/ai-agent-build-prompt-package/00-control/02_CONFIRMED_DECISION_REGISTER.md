@@ -116,6 +116,36 @@ The following decisions were explicitly ratified on 2026-07-13. They close the n
 | RPD-039 | Search and field security start in PostgreSQL/server policy. | Use PostgreSQL full-text/trigram and server-side projection/view/masking/serialization; external search is introduced only after measured thresholds. |
 | RPD-040 | All non-conflicting Proposed Defaults are approved. | Test-derived thresholds, repository/version discovery, and legal/SME verification remain execution gates, not open product decisions. |
 
+## 4a. Amendments and clarifications
+
+**Amendment note, dated 2026-09-02 — RPD-004 scope clarification (origin: `ISS-2026-245`).**
+This is a clarification of RPD-004's own already-ratified wording, not a change to the decision
+itself, and RPD-004's row above is left untouched per this repository's own append-only/change-
+controlled discipline for this document. It is recorded here, separately and dated, rather than
+by editing that row.
+
+`ISS-2026-245` (`docs/runtime/KNOWN_ISSUES.md`) found that no PWA manifest, service worker, or any
+installability scaffolding exists anywhere in this repository — confirmed true, and not a live
+defect, since the shipped product itself makes no PWA or offline claim anywhere in its own UI. The
+entry's own open question was whether RPD-004's phrase "responsive PWA" should instead be read,
+and possibly reworded, as "responsive web app," since "PWA" (Progressive Web App) is a specific
+technical term implying installability that this application does not implement — or whether a
+real installable-PWA posture should instead be built to match the wording as originally written.
+
+**The project owner has now explicitly ratified, in the conversation that closed `ISS-2026-245`
+(2026-09-02), that RPD-004's "responsive PWA" phrase is scoped to mean "responsive web app"** — a
+single web application that works well on any device via the browser — **and not an installable
+Progressive Web App in the strict technical sense.** No manifest, no service worker, and no app-
+store-style install prompt are required, planned, or implied by RPD-004. The "online-first, never
+claim offline/native behavior" half of RPD-004 is unaffected and continues to bind as written.
+
+This clarifies scope; it does not relax any control. No new obligation is created and none is
+removed — the product remains bound to build a responsive web application, online-first, with no
+native-mobile or offline-sync requirement for first production. `docs/architecture/
+09_UX_DESIGN_SYSTEM_WORKSTREAM.md` (a current-state UX document, not a dated historical citation)
+was corrected the same day to match this clarified scope; see that document's own §2.5/§8/§13/§14
+for the corrected text, and `ISS-2026-245`'s closure note for the full disposition.
+
 ## 5. Decision-change protocol
 
 A proposed change to CPD-001..023 or RPD-001..040 is `BLOCKED` until all of the following exist:

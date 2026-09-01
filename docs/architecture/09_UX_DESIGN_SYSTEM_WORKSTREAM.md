@@ -4,6 +4,20 @@
 **Runtime output of:** `docs/ai-agent-build-prompt-package/03-architecture-and-plan/44_UX_DESIGN_SYSTEM_WORKSTREAM_PROMPT.md`
 **Status:** `VERIFIED`
 
+> **Amendment (2026-09-02, `ISS-2026-245`, owner-ratified):** every "PWA" reference below — §2.5's
+> heading and body, §8's heading and its installability/offline bullet, §13's two ADR-resolution
+> paragraphs, §14's atomic-backlog row, and §5's "Offline" state trigger — described a PWA
+> manifest/service-worker providing installability and a cached-shell offline state as intended or
+> planned. The owner has since ruled, closing `ISS-2026-245`, that RPD-004's "responsive PWA"
+> language is scoped to mean **"responsive web app"** (works on any device via the browser), never
+> an installable Progressive Web App in the strict technical sense: no manifest, no service worker,
+> no app-store-style install prompt, no cached-shell offline state — not merely deferred, out of
+> scope entirely. RPD-004's row itself is unchanged (append-only, `00-control/
+> 02_CONFIRMED_DECISION_REGISTER.md`); its own new §4a records the amendment. The sections named
+> above have each been corrected in place, inline, and marked with this same date/issue citation, so
+> this document is internally consistent rather than requiring the reader to reinterpret the
+> original text through this note alone. Every other part of this document is unaffected.
+
 ## 0. Checkpoint
 
 | Field | Value |
@@ -20,11 +34,11 @@
 - Blueprint `03_CargoGrid_UX_Data_Access_Design.md` §6 (Information Architecture, full: 3-portal map, global navigation, navigation behavior, module navigation, page hierarchy), §7 (7 user-flow diagrams, full), §8 (Screen Inventory, representative rows read in full detail), §9–18 (Form/Table/Dashboard/Responsive/Accessibility/UX-Writing/State/Approval-UX/Configuration-UX/White-label-UX, all full), §29 (Performance-aware UX), §30 (QA Acceptance Framework), §31 (Open Decisions `OD-UX-001/002`, `OD-OPS-001`, `OD-DATA-001`, `OD-SEC-001`, `OD-LOC-001`), §32 (Final Design Guardrails, 10 items, verbatim)
 - Tech Arch §7 (Frontend Architecture, full: App Router structure, Server/Client Component boundaries, Server Actions, Route Handlers, data-fetching/cache strategy, streaming/Suspense, dynamic import, middleware, auth session handling, tenant-aware routing, white-label domain resolution, hydration avoidance, form handling, large-table strategy, bulk-upload strategy)
 - `04_REPOSITORY_TARGET_STRUCTURE.md` §4 (`app/(public|supreme|tenant|customer)/**`, `components/{ui,domain,tables,forms}/`), `docs/discovery/09_ACCESSIBILITY_UX_BASELINE.md` (confirms zero implementation)
-- `00-control/02_CONFIRMED_DECISION_REGISTER.md` RPD-004 (responsive PWA, online-first, no native mobile/offline for first production), RPD-019 (controlled white-label — CargoGrid owns component structure/interaction patterns, tenant customizes logo/colors/domain/email/document presentation only)
+- `00-control/02_CONFIRMED_DECISION_REGISTER.md` RPD-004 (responsive web app, online-first, no native mobile/offline for first production — "PWA" language corrected 2026-09-02 per `ISS-2026-245` and RPD-004's own amendment note in that register; RPD-004's decision text itself is unchanged), RPD-019 (controlled white-label — CargoGrid owns component structure/interaction patterns, tenant customizes logo/colors/domain/email/document presentation only)
 
 ## 1. Scope and method
 
-This document does not create a component, token, route, or design asset (prompt completion gate). It defines the **experience contract layer** every Phase-1–9 UI capability prompt must implement against: portal shells and navigation (§2), the portal/route map (§3), the design-system inventory and its target repository home (§4), component/state contracts (§5), canonical workflow-to-page/route/action maps (§6), access-presentation rules (§7), the responsive/PWA/browser matrix (§8), the accessibility plan (§9), localization/branding rules (§10), performance budgets (§11), test strategy (§12), ADR candidates (§13), the atomic backlog (§14), and acceptance gates (§15).
+This document does not create a component, token, route, or design asset (prompt completion gate). It defines the **experience contract layer** every Phase-1–9 UI capability prompt must implement against: portal shells and navigation (§2), the portal/route map (§3), the design-system inventory and its target repository home (§4), component/state contracts (§5), canonical workflow-to-page/route/action maps (§6), access-presentation rules (§7), the responsive web app/browser matrix (§8), the accessibility plan (§9), localization/branding rules (§10), performance budgets (§11), test strategy (§12), ADR candidates (§13), the atomic backlog (§14), and acceptance gates (§15).
 
 ## 2. Experience architecture
 
@@ -48,9 +62,9 @@ Company/branch/customer/tenant selectors (Blueprint §6.2's top-bar row) are con
 
 Global search (top bar, Blueprint §6.2) returns only RLS/field-masking-compliant results — search is a read path through the identical `06_*.md` §3 evaluation flow every list/detail query uses, backed by RPD-039's PostgreSQL FTS/trigram-first strategy (`06_*.md` §7), never a separate unscoped search index. The notification center groups by approval/exception/SLA/finance/system (Blueprint §6.2) and sources from the Notification Engine (`07_*.md` §3, `config_type = 'notification'`) — payload respects field-level security exactly as a direct query would (Blueprint §6.2's "Notification payload respects field-level security," restated as a hard rule, not a UI nicety). Help/documentation surfaces are out of this workstream's atomic backlog (§14) unless a specific in-app help widget is later scoped by a capability prompt — no generic "help system" is invented ahead of evidence.
 
-### 2.5 Responsive/PWA boundary (portal-level)
+### 2.5 Responsive web app boundary (portal-level)
 
-Per RPD-004 (responsive PWA, online-first — resolves Blueprint `OD-UX-002` "native mobile app timing," see §13), every portal is a single responsive web application, never a separate native codebase; a PWA manifest/service-worker enables installability and basic offline-shell behavior only (§8 details the exact boundary) — this is a portal-shell property, not a per-page opt-in.
+Per RPD-004 (responsive web app, online-first — resolves Blueprint `OD-UX-002` "native mobile app timing," see §13), every portal is a single responsive web application, never a separate native codebase, and never an installable Progressive Web App in the strict technical sense — no manifest, no service worker, no app-store-style install prompt (§8 details the exact boundary). **Corrected 2026-09-02 per `ISS-2026-245`:** this subsection previously described a PWA manifest/service-worker enabling installability and offline-shell behavior as a portal-shell property; the owner has since ruled that language out of scope entirely (RPD-004 amendment note, `00-control/02_CONFIRMED_DECISION_REGISTER.md` §4a), not merely deferred.
 
 ## 3. Portal/route map
 
@@ -108,7 +122,7 @@ Every data-bearing component (table, detail page, form, dashboard widget) implem
 | Loading | Data fetch, background job, export/import, document generation | Skeleton for known layout; progress bar for upload/import/export/generation; never a blank screen (Tech Arch §7.8 Suspense guardrail) |
 | Empty | No data in scope; filter too narrow; module not configured | Explanation + next action, only if the user holds the create permission (Blueprint §32 guardrail #2 extended to actions, not just fields) |
 | Error | Validation, access denied, integration failed, server error | Human-readable message + `error.request_id` (`08_*.md` §4.5's correlation ID) + retry if safe + support link; never a raw exception/SQL detail |
-| Offline | PWA offline-shell activation (§8) | Read-only cached shell where defined; no silent data-loss on a queued mutation — an unsent mutation is visibly pending, not dropped |
+| Offline | *(not currently reachable — no PWA manifest/service-worker/offline-shell is planned or built; corrected 2026-09-02, `ISS-2026-245`; see §8)* | Read-only cached shell where defined; no silent data-loss on a queued mutation — an unsent mutation is visibly pending, not dropped |
 | Partial | Widget-level fetch failure inside a multi-widget dashboard | Only the failed widget shows an error state; the rest of the page remains interactive (Blueprint §15 loading-state note, "Avoid blocking entire page if only widget loads") |
 | Unauthorized | Stage 1/2 (entitlement/tenant membership) denial | Redirect/blocked-page pattern, no partial-page render of data the request never received |
 | Forbidden | Stage 3–6 (RBAC/scope/field/status) denial | Blueprint §14's exact copy pattern: state *what* is inaccessible without describing *why* in a way that leaks existence/shape of hidden data (`"You do not have access to view cost information for this shipment."`) |
@@ -143,11 +157,11 @@ Blueprint §8's Screen Inventory (representative rows read: `SUP-TNT-001/002`, `
 - **Support-mode indicators.** Any page rendered under an active `support_access_grants` row (`06_*.md` §2.3) shows a persistent, non-dismissible impersonation banner naming the grant's reason/case/expiry (Tech Arch §23.9 "Visible banner during impersonation," `06_*.md` §6) — this is a portal-shell-level component (§2), not a per-page opt-in, so no page can be built that forgets it.
 - **Supreme Admin disclosures.** Every screen that could expose a Supreme Admin mutation of a normally-immutable record (§8 of `06_*.md`, RPD-022) must render that mutation's audit trail (before/after values) inline, not just log it silently — the UI is where "CargoGrid must never claim audit/financial records are immutable" (`06_*.md` §8, verbatim) becomes visible to a reviewing human, not only queryable in `audit_logs`.
 
-## 8. Responsive/PWA/browser matrix
+## 8. Responsive web app / browser matrix
 
 - **Browser support:** latest two stable versions of Chrome, Edge, Safari, Firefox (prompt task #7, no blueprint-evidenced wider matrix — IE/legacy browsers are out of scope, consistent with a 2026-launch greenfield product).
 - **Desktop-first internal ERP, mobile-usable field/portal workflows:** Tenant Internal Portal and Supreme Admin Portal are desktop-first (wide tables, split drawers, keyboard shortcuts, canvas/matrix builders — Blueprint §12); field-facing flows (dispatch, warehouse task, ePOD) and the entire Customer Portal are mobile-usable by design, not a cut-down desktop view (Blueprint §12's per-context table, reproduced by reference — internal ERP list/complex form/configuration builder/dashboard rows are desktop-first with tablet/mobile degradation; dispatch/warehouse-task/ePOD/customer-portal rows are mobile-first).
-- **PWA/offline limits (resolves `OD-OPS-001`, see §13):** per RPD-004, the baseline is online-first responsive PWA — installable shell, no per-transaction offline queue/sync at MVP. A PWA manifest and service-worker provide app installability and a cached-shell offline state (§5's "Offline" contract: read-only cached shell, no silent mutation loss) for field-facing routes (dispatch, warehouse task, ePOD) specifically, since those are the routes Blueprint `OD-OPS-001` names as the future-enhancement candidate — this document does not build offline sync, it only ensures the offline-shell state (§5) does not block that future enhancement, per RPD-004's explicit framing ("design should not block it").
+- **Installability and offline limits (resolves `OD-OPS-001`, see §13) — corrected 2026-09-02, `ISS-2026-245`:** per RPD-004 as clarified, the baseline is an online-first responsive web app, not an installable Progressive Web App — no manifest, no service worker, and no cached-shell offline state are planned or built. This bullet previously described a PWA manifest/service-worker providing installability and a cached-shell offline state (§5's "Offline" contract) for field-facing routes (dispatch, warehouse task, ePOD) as a planned future enhancement; the owner has since ruled that scaffolding out of scope entirely, not merely deferred — see `docs/runtime/KNOWN_ISSUES.md` `ISS-2026-245` and the RPD-004 amendment note (`00-control/02_CONFIRMED_DECISION_REGISTER.md` §4a).
 - **Realtime scope:** identical to `06_*.md` §7's allow-listed channels (dispatch board, active shipment timeline, approval counter, ticket assignment, warehouse task queue) — no UI component subscribes to an unlisted channel, and no realtime widget is the primary data source for a page (it augments a server-fetched initial state, per Tech Arch §7.6).
 
 ## 9. Accessibility plan (WCAG 2.2 AA)
@@ -205,9 +219,9 @@ Reproduces Blueprint §29 (UX/data performance requirements) bound to `08_*.md` 
 
 ## 13. ADR candidates — 3 resolved (via existing RPDs, no new document needed), 2 new
 
-**Blueprint `OD-UX-002` resolved**: native mobile app timing is fixed by RPD-004 — responsive PWA, online-first, no native mobile app for first production (§2.5, §8).
+**Blueprint `OD-UX-002` resolved**: native mobile app timing is fixed by RPD-004 — responsive web app, online-first, no native mobile app for first production (§2.5, §8).
 
-**Blueprint `OD-OPS-001` resolved**: offline mode for warehouse/ePOD is fixed by RPD-004's "design should not block it" framing — the offline-shell state (§5, §8) is planned now; offline sync/queue is an explicit future enhancement, not built at MVP.
+**Blueprint `OD-OPS-001` resolved**: offline mode for warehouse/ePOD was originally fixed by RPD-004's "design should not block it" framing, with an offline-shell state (§5, §8) planned as a future enhancement. **Corrected 2026-09-02 per `ISS-2026-245`:** the owner has since ruled that no PWA manifest/service-worker/offline-shell scaffolding is planned or in scope at all — offline sync/queue and the cached-shell state alike remain permanently out of scope, not merely deferred to a later MVP-plus phase.
 
 **Blueprint `OD-UX-001` resolved**: "exact visual design system tokens beyond white-label variables" is fixed by RPD-019 — CargoGrid owns one base token set and component structure; the tenant override surface is exactly RPD-019's five items (logo, colors, domain, email, document presentation), not an open theming API (§10).
 
@@ -236,7 +250,7 @@ Sized 1–3 slices each, sequenced to `01_*.md`'s phase order and this document'
 | HRIS/Ticketing UI | 7 | Employee/Payroll/ESS screens; Ticket queue/SLA/escalation screens | Procurement UI, HRIS/Ticketing REST/GraphQL fields |
 | Loyalty + full Customer Portal | 8 | Program/Tier/Redemption screens; remaining Customer Portal navigation groups (§2.2) | HRIS/Ticketing UI, Loyalty REST/GraphQL fields |
 | Builder Studio + Reports UI | 9 | Report/Dashboard builder (Blueprint §17), scheduled report UI, remaining `REP` dashboards per domain | Loyalty + full Customer Portal, `07_*.md` §13's `report`/`dashboard` config-type adoption |
-| PWA/offline-shell for field routes | 3 (with Operations), hardened through 5 | Manifest/service-worker install + cached-shell offline state (§8) for dispatch/warehouse-task/ePOD routes specifically | Operations + basic WMS + basic Portal UI |
+| ~~PWA/offline-shell for field routes~~ — **removed 2026-09-02, `ISS-2026-245`** | N/A (never executed) | No longer planned at any phase: manifest/service-worker/cached-shell offline scaffolding is out of scope entirely, not deferred. RPD-004 is a responsive web app, not an installable PWA (§2.5, §8, RPD-004 amendment note). Row kept, not deleted, so this table's own slice count stays accurate against its history. | N/A |
 | Accessibility/visual-regression CI gate | 0 (infrastructure), exercised from Phase 1 onward | WCAG 2.2 AA automated checks + screenshot-diff baseline (§12), wired into the same CI pipeline Tech Arch §28.1 already defines | Design-system foundation |
 
 No slice ships a screen for a domain ahead of that domain's own schema/API phase (§3's rule, restated) — the UX workstream never becomes a second, faster track that outruns the data/API layers it depends on.
@@ -247,6 +261,6 @@ Every critical flow (§6's 7 canonical flows) has its full state set defined (§
 
 ## 16. Completion statement
 
-Experience architecture (§2), the portal/route map (§3), the design-system inventory and its target repository home (§4), the 11-state component contract (§5), 7 workflow-to-page/route/action maps (§6), access-presentation rules (§7), the responsive/PWA/browser matrix (§8), the 8-area WCAG 2.2 AA accessibility plan (§9), localization/branding rules (§10), performance budgets aligned to `08_*.md` §12's numbers (§11), and a 10-row test strategy (§12) are all defined as planning artifacts, with zero UI code or design asset created. 3 blueprint-level Open Decisions are resolved by already-ratified RPDs (`OD-UX-001` by RPD-019, `OD-UX-002`/`OD-OPS-001` by RPD-004) rather than left open or re-litigated; 2 new ADR candidates are raised (`020` component-library foundation, `021` design-token mechanism), both non-blocking and deferred to Phase 0 Prompt 90. The 14-slice atomic backlog (§14) sequences every UI slice strictly behind its owning domain's schema/API phase — no UI slice outruns the data layer it depends on.
+Experience architecture (§2), the portal/route map (§3), the design-system inventory and its target repository home (§4), the 11-state component contract (§5), 7 workflow-to-page/route/action maps (§6), access-presentation rules (§7), the responsive web app/browser matrix (§8), the 8-area WCAG 2.2 AA accessibility plan (§9), localization/branding rules (§10), performance budgets aligned to `08_*.md` §12's numbers (§11), and a 10-row test strategy (§12) are all defined as planning artifacts, with zero UI code or design asset created. 3 blueprint-level Open Decisions are resolved by already-ratified RPDs (`OD-UX-001` by RPD-019, `OD-UX-002`/`OD-OPS-001` by RPD-004) rather than left open or re-litigated; 2 new ADR candidates are raised (`020` component-library foundation, `021` design-token mechanism), both non-blocking and deferred to Phase 0 Prompt 90. The 14-slice atomic backlog (§14) sequences every UI slice strictly behind its owning domain's schema/API phase — no UI slice outruns the data layer it depends on.
 
 Next eligible prompt: `03-architecture-and-plan/45_TESTING_WORKSTREAM_PROMPT.md` → `docs/architecture/10_TESTING_WORKSTREAM.md`.

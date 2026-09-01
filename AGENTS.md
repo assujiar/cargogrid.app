@@ -1,7 +1,7 @@
 # AGENTS.md — CargoGrid Repository Operating Rules
 
 **Instance of:** `CG-AABPP-GOV-011` (template `docs/ai-agent-build-prompt-package/01-agent-governance/11_AGENTS.md`)
-**Instance version:** `0.3.0` (2026-08-07 — added "Execution cadence (batched review, from Prompt 257)" and its cross-references, per `docs/adr/ADR-0021-batched-review-and-fix-execution-cadence.md`; no existing rule weakened or removed)
+**Instance version:** `0.3.1` (2026-09-02 — corrected §"UX, performance, and accessibility"'s "PWA" wording to "responsive web app," per `ISS-2026-245` and the RPD-004 amendment note in `docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md` §4a; no manifest/service-worker/installability requirement was ever built or is now intended; no existing rule weakened or removed). Prior: `0.3.0` (2026-08-07 — added "Execution cadence (batched review, from Prompt 257)" and its cross-references, per `docs/adr/ADR-0021-batched-review-and-fix-execution-cadence.md`; no existing rule weakened or removed)
 **Status:** `ACTIVE` (repository-native instance)
 **Instantiated:** 2026-07-14T09:58:59+07:00 by runtime agent during Step 2 Prompt 21 (Repository Discovery)
 **Persistent context location:** `docs/runtime/` (`CARGOGRID_CONTEXT.md`, `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `CHANGE_MANIFEST.md`, `ERROR_LEDGER.md`, `KNOWN_ISSUES.md`, `HANDOFF.md`) — ratified as canonical by reconciliation `CG-S2-DISC-001-R1` (`docs/runtime/CHANGE_MANIFEST.md` `CHG-2026-002`) after a repo-root duplicate set caused a merge collision. Do not recreate a competing context set at repo root; see `docs/runtime/KNOWN_ISSUES.md` `ISS-2026-002` (single-writer discipline).
@@ -140,7 +140,7 @@ Supreme Admin has ratified absolute CRUD, including audit and ledger records. Do
 ## UX, performance, and accessibility
 
 - Implement complete states: loading, empty, error, success, denied, degraded, validation, and unsaved changes.
-- Internal ERP is desktop-first responsive; customer/field flows are mobile-friendly online-first PWA.
+- Internal ERP is desktop-first responsive; customer/field flows are mobile-friendly, online-first responsive web app (RPD-004; not an installable PWA — no manifest/service worker is required or planned, `ISS-2026-245`).
 - Use server-side filter/sort/search/pagination; cursor pagination for high-volume streams. Never load an entire large dataset into the browser or use `SELECT *` in transactional APIs.
 - Live dashboard queries require read-only access, budgets, timeout, pagination, and caching. Add replicas/read models only after measured thresholds or an approved performance task.
 - Conform to WCAG 2.2 AA and the supported browser matrix.
