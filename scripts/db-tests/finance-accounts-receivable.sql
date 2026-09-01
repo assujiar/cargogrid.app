@@ -13,6 +13,118 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-319 fixture helpers (docs/runtime/KNOWN_ISSUES.md). The new
+-- app.validate_finance_open_item_source guard (20260901060000) now rejects a
+-- fabricated source_document_id on app.finance_ar_open_items/
+-- app.finance_ap_open_items, so this file's own direct
+-- app.post_finance_ar_open_item/app.post_finance_ap_open_item calls below can no
+-- longer pass gen_random_uuid() and expect it to be accepted. These pg_temp
+-- functions mint a genuinely real, minimal row in the actual target table each
+-- source_document_type resolves against (app.finance_invoices/
+-- app.finance_vendor_bills/app.import_staging_rows) via direct INSERT rather than
+-- the full Commercial->Operations RPC pipeline -- the same "direct fixture
+-- insert, out of scope for this capability's own test" convention this file
+-- already uses for its own minimal app.accounts row below, extended one layer
+-- deeper because the new guard now checks one layer deeper. pg_temp is
+-- session-scoped, matching scripts/db-tests/run.sh's one-psql-connection-per-file
+-- execution model, so these are defined once and reused by every DO block below.
+
+create function pg_temp.iss319_build_job_order(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_lead_id uuid;
+  v_prospect_id uuid;
+  v_opportunity_id uuid;
+  v_opp_version integer;
+  v_quotation_id uuid := gen_random_uuid();
+  v_joh_id uuid;
+  v_job_order_id uuid;
+begin
+  insert into app.leads (tenant_id, source, contact_name, email, created_by)
+  values (p_tenant_id, 'manual', p_seed, p_seed || '@iss319-fixture.test', p_actor_label)
+  returning id into v_lead_id;
+
+  insert into app.prospects (tenant_id, lead_id, legal_name, contact_name, created_by)
+  values (p_tenant_id, v_lead_id, p_seed || ' Co', p_seed, p_actor_label)
+  returning id into v_prospect_id;
+
+  insert into app.opportunities (tenant_id, prospect_id, name, created_by)
+  values (p_tenant_id, v_prospect_id, p_seed || ' opportunity', p_actor_label)
+  returning id, record_version into v_opportunity_id, v_opp_version;
+
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, root_quotation_id, created_by)
+  values (v_quotation_id, p_tenant_id, p_seed || '-QUOTE', v_opportunity_id, v_opp_version, v_prospect_id, 'USD', now() + interval '30 days', v_quotation_id, p_actor_label);
+
+  insert into app.job_order_handoffs (tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, created_by)
+  values (p_tenant_id, v_quotation_id, p_account_id, '{}'::jsonb, 'iss319-fixture-hash', p_actor_auth_user_id, p_actor_label)
+  returning id into v_joh_id;
+
+  insert into app.job_orders (tenant_id, job_number, source_handoff_id, quotation_id, account_id, customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot, created_by)
+  values (p_tenant_id, p_seed || '-JOB', v_joh_id, v_quotation_id, p_account_id, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, p_actor_label)
+  returning id into v_job_order_id;
+
+  return v_job_order_id;
+end;
+$fn$;
+
+-- Mints one real, minimal (draft, never issued -- so it never posts its own AR
+-- open item) app.finance_invoices row and returns its id, so a direct
+-- app.post_finance_ar_open_item(..., 'invoice', <this id>, ...) call below
+-- resolves against a genuinely existing invoice instead of a fabricated one.
+create function pg_temp.iss319_mint_invoice(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_order_id uuid;
+  v_eval_id uuid;
+  v_handoff_id uuid;
+  v_invoice_id uuid;
+begin
+  v_job_order_id := pg_temp.iss319_build_job_order(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+
+  insert into app.billing_readiness_evaluations (tenant_id, job_order_id, evaluated_status, is_overridden, override_reason, overridden_by_auth_user_id, overridden_by, evaluated_by_auth_user_id, evaluated_by, created_by)
+  values (p_tenant_id, v_job_order_id, 'not_ready', true, 'ISS-2026-319 fixture: minted so the new source-lineage guard has a real invoice to resolve', p_actor_auth_user_id, p_actor_label, p_actor_auth_user_id, p_actor_label, p_actor_label)
+  returning id into v_eval_id;
+
+  insert into app.billing_readiness_handoffs (tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (p_tenant_id, v_job_order_id, v_eval_id, p_seed || '-handoff', p_actor_auth_user_id, p_actor_label)
+  returning id into v_handoff_id;
+
+  insert into app.finance_invoices (tenant_id, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, created_by)
+  values (p_tenant_id, p_account_id, v_job_order_id, v_handoff_id, 'USD', p_actor_label)
+  returning id into v_invoice_id;
+
+  return v_invoice_id;
+end;
+$fn$;
+
+-- Mints one real app.import_staging_rows row and returns its id -- the correct
+-- target for source_document_type = 'opening_balance' on both open-item tables
+-- (app.commit_finance_opening_balance_import_job passes the staged row's own id,
+-- not the open item's, per 20260901060000's own header).
+create function pg_temp.iss319_mint_staging_row(p_tenant_id uuid, p_actor_auth_user_id uuid, p_actor_label text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_id uuid;
+  v_row_id uuid;
+begin
+  insert into app.jobs (tenant_id, job_type, requested_by_auth_user_id, created_by)
+  values (p_tenant_id, 'import', p_actor_auth_user_id, p_actor_label)
+  returning job_id into v_job_id;
+
+  insert into app.import_staging_rows (tenant_id, job_id, row_number, raw_payload)
+  values (p_tenant_id, v_job_id, 1, '{}'::jsonb)
+  returning id into v_row_id;
+
+  return v_row_id;
+end;
+$fn$;
+
 \echo '>> setup: two tenants; tenant A gets a Finance Manager (FIN:Edit/Approve/View), a Finance Editor (FIN:Edit/View only, no Approve), and a Plain User with no FIN grant; tenant B gets its own Finance Manager; tenant A gets one active fiscal period (2026-03) and one customer account'
 do $$
 declare
@@ -102,12 +214,13 @@ do $$
 declare
   v_tenant_a uuid;
   v_customer_id uuid;
-  v_source_id uuid := gen_random_uuid();
+  v_source_id uuid;
   v_item app.finance_ar_open_items;
   v_retry app.finance_ar_open_items;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  v_source_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-ar-idempotent-posting');
 
   begin
     perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_source_id, 'USD', 1000, '2026-03-10'::date, '2026-04-09'::date, '00000000-0000-0000-0000-000000026504', 'plainusera');
@@ -174,11 +287,12 @@ do $$
 declare
   v_tenant_a uuid;
   v_customer_id uuid;
-  v_source_id uuid := gen_random_uuid();
+  v_source_id uuid;
   v_item app.finance_ar_open_items;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  v_source_id := pg_temp.iss319_mint_staging_row(v_tenant_a, '00000000-0000-0000-0000-000000026502', 'financemanagera');
 
   begin
     perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'opening_balance', v_source_id, 'USD', 500, '2026-03-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000026503', 'financeeditora');
@@ -200,11 +314,12 @@ do $$
 declare
   v_tenant_a uuid;
   v_customer_id uuid;
-  v_source_id uuid := gen_random_uuid();
+  v_source_id uuid;
   v_item app.finance_ar_open_items;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  v_source_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-ar-allocation');
   select * into v_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_source_id, 'USD', 1000, '2026-03-05'::date, '2026-04-04'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
 
   begin
@@ -240,11 +355,12 @@ do $$
 declare
   v_tenant_a uuid;
   v_customer_id uuid;
-  v_source_id uuid := gen_random_uuid();
+  v_source_id uuid;
   v_item app.finance_ar_open_items;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  v_source_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-ar-deallocation');
   select * into v_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_source_id, 'USD', 500, '2026-03-06'::date, '2026-04-05'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
   select * into v_item from app.apply_finance_ar_allocation(v_item.id, 500, 'receipt', gen_random_uuid(), 'alloc-dealloc-1', '00000000-0000-0000-0000-000000026502', 'financemanagera');
 
@@ -278,11 +394,12 @@ do $$
 declare
   v_tenant_a uuid;
   v_customer_id uuid;
-  v_source_id uuid := gen_random_uuid();
+  v_source_id uuid;
   v_item app.finance_ar_open_items;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  v_source_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-ar-hold-release');
   select * into v_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_source_id, 'USD', 250, '2026-03-07'::date, '2026-04-06'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
 
   begin
@@ -385,5 +502,81 @@ begin
   if v_count < 3 then
     raise exception 'assertion failed: expected at least 3 audit events across this fixture''s own post/allocate/reverse calls, found %', v_count;
   end if;
+end;
+$$;
+
+\echo '>> ISS-2026-319: app.finance_ar_open_items.source_document_id is resolved against the table its own source_document_type names -- a real invoice posts; a fabricated invoice id is refused; a real staged opening-balance row posts; a fabricated opening-balance id is refused -- proven against a DIRECT insert too, not merely through the RPC'
+do $$
+declare
+  v_tenant_a uuid;
+  v_customer_id uuid;
+  v_real_invoice_id uuid;
+  v_real_staging_row_id uuid;
+  v_item app.finance_ar_open_items;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeara');
+  v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+
+  -- Positive proof, invoice: a genuinely real, minted app.finance_invoices row
+  -- resolves and posts.
+  v_real_invoice_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-regression-real-invoice');
+  select * into v_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_real_invoice_id, 'USD', 1000, '2026-03-10'::date, '2026-04-09'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  if v_item.source_document_id <> v_real_invoice_id then
+    raise exception 'assertion failed: expected the posted AR item to carry the real invoice id %, got %', v_real_invoice_id, v_item.source_document_id;
+  end if;
+
+  -- Negative proof, invoice: a fabricated, non-resolving invoice id is refused
+  -- with the new named exception, via the RPC.
+  begin
+    perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 1000, '2026-03-11'::date, '2026-04-10'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_open_item_orphan_source for a fabricated invoice id';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_open_item_orphan_source' then
+        raise exception 'assertion failed: expected finance_open_item_orphan_source, got %', sqlerrm;
+      end if;
+  end;
+
+  -- Negative proof, invoice, DIRECT insert: the guard is on the table, not
+  -- merely the RPC -- a direct service_role insert with a fabricated
+  -- source_document_id is refused identically.
+  begin
+    insert into app.finance_ar_open_items (
+      tenant_id, customer_account_id, source_document_type, source_document_id,
+      currency, original_amount, invoice_date, due_date, created_by
+    ) values (
+      v_tenant_a, v_customer_id, 'invoice', gen_random_uuid(),
+      'USD', 100, '2026-03-10'::date, '2026-04-09'::date, 'tester'
+    );
+    raise exception 'assertion failed: expected finance_open_item_orphan_source on a direct insert with a fabricated invoice id';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_open_item_orphan_source' then
+        raise exception 'assertion failed: expected finance_open_item_orphan_source on direct insert, got %', sqlerrm;
+      end if;
+  end;
+
+  -- Positive proof, opening_balance: this source_document_type is its own case,
+  -- not the invoice/vendor_bill pattern -- it resolves against the staged
+  -- import row that asserted the balance (app.import_staging_rows), not a
+  -- downstream document and not the open item itself. A real staged row posts.
+  v_real_staging_row_id := pg_temp.iss319_mint_staging_row(v_tenant_a, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  select * into v_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'opening_balance', v_real_staging_row_id, 'USD', 500, '2026-03-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  if v_item.source_document_id <> v_real_staging_row_id then
+    raise exception 'assertion failed: expected the posted opening_balance AR item to carry the real staging row id %, got %', v_real_staging_row_id, v_item.source_document_id;
+  end if;
+
+  -- Negative proof, opening_balance: a fabricated staging-row id is refused,
+  -- exactly like the invoice/vendor_bill branches -- opening_balance is a
+  -- different TARGET table, not an exemption from the guard.
+  begin
+    perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'opening_balance', gen_random_uuid(), 'USD', 500, '2026-03-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_open_item_orphan_source for a fabricated opening_balance id';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_open_item_orphan_source' then
+        raise exception 'assertion failed: expected finance_open_item_orphan_source, got %', sqlerrm;
+      end if;
+  end;
 end;
 $$;

@@ -27,6 +27,90 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-319 fixture helpers (docs/runtime/KNOWN_ISSUES.md). The new
+-- app.validate_finance_open_item_source guard (20260901060000) now rejects a
+-- fabricated source_document_id on a direct app.finance_ar_open_items insert,
+-- so this file's own direct inserts below (source_document_type = 'invoice')
+-- can no longer name a synthetic id that resolves to no real app.finance_invoices
+-- row. These pg_temp functions mint a genuinely real, minimal app.finance_invoices
+-- row via direct INSERT rather than the full Commercial->Operations RPC
+-- pipeline, extended one layer deeper than this file's own established "direct
+-- fixture insert" precedent because the new guard now checks one layer deeper.
+-- pg_temp is session-scoped, matching scripts/db-tests/run.sh's
+-- one-psql-connection-per-file execution model.
+
+create function pg_temp.iss319_build_job_order(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_lead_id uuid;
+  v_prospect_id uuid;
+  v_opportunity_id uuid;
+  v_opp_version integer;
+  v_quotation_id uuid := gen_random_uuid();
+  v_joh_id uuid;
+  v_job_order_id uuid;
+begin
+  insert into app.leads (tenant_id, source, contact_name, email, created_by)
+  values (p_tenant_id, 'manual', p_seed, p_seed || '@iss319-fixture.test', p_actor_label)
+  returning id into v_lead_id;
+
+  insert into app.prospects (tenant_id, lead_id, legal_name, contact_name, created_by)
+  values (p_tenant_id, v_lead_id, p_seed || ' Co', p_seed, p_actor_label)
+  returning id into v_prospect_id;
+
+  insert into app.opportunities (tenant_id, prospect_id, name, created_by)
+  values (p_tenant_id, v_prospect_id, p_seed || ' opportunity', p_actor_label)
+  returning id, record_version into v_opportunity_id, v_opp_version;
+
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, root_quotation_id, created_by)
+  values (v_quotation_id, p_tenant_id, p_seed || '-QUOTE', v_opportunity_id, v_opp_version, v_prospect_id, 'USD', now() + interval '30 days', v_quotation_id, p_actor_label);
+
+  insert into app.job_order_handoffs (tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, created_by)
+  values (p_tenant_id, v_quotation_id, p_account_id, '{}'::jsonb, 'iss319-fixture-hash', p_actor_auth_user_id, p_actor_label)
+  returning id into v_joh_id;
+
+  insert into app.job_orders (tenant_id, job_number, source_handoff_id, quotation_id, account_id, customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot, created_by)
+  values (p_tenant_id, p_seed || '-JOB', v_joh_id, v_quotation_id, p_account_id, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, p_actor_label)
+  returning id into v_job_order_id;
+
+  return v_job_order_id;
+end;
+$fn$;
+
+-- Mints one real, minimal (draft, never issued -- so it never posts its own AR
+-- open item) app.finance_invoices row and returns its id, so a direct
+-- app.finance_ar_open_items insert below resolves against a genuinely
+-- existing invoice instead of a fabricated one.
+create function pg_temp.iss319_mint_invoice(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_order_id uuid;
+  v_eval_id uuid;
+  v_handoff_id uuid;
+  v_invoice_id uuid;
+begin
+  v_job_order_id := pg_temp.iss319_build_job_order(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+
+  insert into app.billing_readiness_evaluations (tenant_id, job_order_id, evaluated_status, is_overridden, override_reason, overridden_by_auth_user_id, overridden_by, evaluated_by_auth_user_id, evaluated_by, created_by)
+  values (p_tenant_id, v_job_order_id, 'not_ready', true, 'ISS-2026-319 fixture: minted so the new source-lineage guard has a real invoice to resolve', p_actor_auth_user_id, p_actor_label, p_actor_auth_user_id, p_actor_label, p_actor_label)
+  returning id into v_eval_id;
+
+  insert into app.billing_readiness_handoffs (tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (p_tenant_id, v_job_order_id, v_eval_id, p_seed || '-handoff', p_actor_auth_user_id, p_actor_label)
+  returning id into v_handoff_id;
+
+  insert into app.finance_invoices (tenant_id, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, created_by)
+  values (p_tenant_id, p_account_id, v_job_order_id, v_handoff_id, 'USD', p_actor_label)
+  returning id into v_invoice_id;
+
+  return v_invoice_id;
+end;
+$fn$;
+
 \echo '>> setup: tenant loy1 (org unit, roles: Loyalty Manager [LYL Create/Edit/View/Configure], Loyalty Viewer [LYL View only], Plain User [no LYL grant]; customer accounts Alpha/Beta/Delta/Echo, customer_user identities for Alpha/Beta; an impersonator identity), tenant loy2 (its own Loyalty Manager, customer account Gamma)'
 do $$
 declare
@@ -140,20 +224,20 @@ begin
   -- 336103 paid+HELD, 336104 paid but below the v1 minimum, 336105
   -- paid/eligible (-> event2 under v2, after v1 is superseded).
   insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
-    ('00000000-0000-0000-0000-000000336101', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000336201', 'USD', 1000, 1000, 'paid', false, '2026-08-01', '2026-08-31', 'tester'),
-    ('00000000-0000-0000-0000-000000336102', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000336202', 'USD', 500, 0, 'open', false, '2026-08-05', '2026-09-04', 'tester'),
-    ('00000000-0000-0000-0000-000000336103', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000336203', 'USD', 400, 400, 'paid', true, '2026-08-06', '2026-09-05', 'tester'),
-    ('00000000-0000-0000-0000-000000336104', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000336204', 'USD', 20, 20, 'paid', false, '2026-08-07', '2026-09-06', 'tester'),
-    ('00000000-0000-0000-0000-000000336105', v_tenant1, v_account_alpha, 'invoice', '00000000-0000-0000-0000-000000336205', 'USD', 2000, 2000, 'paid', false, '2026-08-08', '2026-09-07', 'tester');
+    ('00000000-0000-0000-0000-000000336101', v_tenant1, v_account_alpha, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_alpha, v_manager1, 'manager1', 'iss319-loy-alpha-1'), 'USD', 1000, 1000, 'paid', false, '2026-08-01', '2026-08-31', 'tester'),
+    ('00000000-0000-0000-0000-000000336102', v_tenant1, v_account_alpha, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_alpha, v_manager1, 'manager1', 'iss319-loy-alpha-2'), 'USD', 500, 0, 'open', false, '2026-08-05', '2026-09-04', 'tester'),
+    ('00000000-0000-0000-0000-000000336103', v_tenant1, v_account_alpha, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_alpha, v_manager1, 'manager1', 'iss319-loy-alpha-3'), 'USD', 400, 400, 'paid', true, '2026-08-06', '2026-09-05', 'tester'),
+    ('00000000-0000-0000-0000-000000336104', v_tenant1, v_account_alpha, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_alpha, v_manager1, 'manager1', 'iss319-loy-alpha-4'), 'USD', 20, 20, 'paid', false, '2026-08-07', '2026-09-06', 'tester'),
+    ('00000000-0000-0000-0000-000000336105', v_tenant1, v_account_alpha, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_alpha, v_manager1, 'manager1', 'iss319-loy-alpha-5'), 'USD', 2000, 2000, 'paid', false, '2026-08-08', '2026-09-07', 'tester');
   update app.finance_ar_open_items set hold_reason = 'loy fixture dispute hold', held_by = 'tester', held_at = now() where id = '00000000-0000-0000-0000-000000336103';
   -- Beta: 336106 paid, used for the no_published_rule_version negative test
   -- (Second Program never gets a rule version in this fixture). Echo: 336107
   -- paid, used for loyalty_account_not_active (Echo is never enrolled).
   insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
-    ('00000000-0000-0000-0000-000000336106', v_tenant1, v_account_beta, 'invoice', '00000000-0000-0000-0000-000000336206', 'USD', 300, 300, 'paid', false, '2026-08-09', '2026-09-08', 'tester'),
-    ('00000000-0000-0000-0000-000000336107', v_tenant1, v_account_echo, 'invoice', '00000000-0000-0000-0000-000000336207', 'USD', 100, 100, 'paid', false, '2026-08-09', '2026-09-08', 'tester');
+    ('00000000-0000-0000-0000-000000336106', v_tenant1, v_account_beta, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_beta, v_manager1, 'manager1', 'iss319-loy-beta'), 'USD', 300, 300, 'paid', false, '2026-08-09', '2026-09-08', 'tester'),
+    ('00000000-0000-0000-0000-000000336107', v_tenant1, v_account_echo, 'invoice', pg_temp.iss319_mint_invoice(v_tenant1, v_account_echo, v_manager1, 'manager1', 'iss319-loy-echo'), 'USD', 100, 100, 'paid', false, '2026-08-09', '2026-09-08', 'tester');
   insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
-    ('00000000-0000-0000-0000-000000337101', v_tenant2, v_account_gamma, 'invoice', '00000000-0000-0000-0000-000000337201', 'USD', 800, 800, 'paid', false, '2026-08-01', '2026-08-31', 'tester');
+    ('00000000-0000-0000-0000-000000337101', v_tenant2, v_account_gamma, 'invoice', pg_temp.iss319_mint_invoice(v_tenant2, v_account_gamma, v_manager2, 'manager2', 'iss319-loy-gamma'), 'USD', 800, 800, 'paid', false, '2026-08-01', '2026-08-31', 'tester');
 end $$;
 
 \echo '>> app.create_loyalty_program: LYL:Create required (Plain User denied); duplicate name rejected; non-empty name required'

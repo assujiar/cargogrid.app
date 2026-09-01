@@ -14,6 +14,91 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-319 fixture helpers (docs/runtime/KNOWN_ISSUES.md). The new
+-- app.validate_finance_open_item_source guard (20260901060000) now rejects a
+-- fabricated source_document_id on app.finance_ar_open_items, so this file's
+-- own direct app.post_finance_ar_open_item calls below can no longer pass
+-- gen_random_uuid() and expect it to be accepted. These pg_temp functions mint
+-- a genuinely real, minimal app.finance_invoices row via direct INSERT rather
+-- than the full Commercial->Operations RPC pipeline -- the same "direct fixture
+-- insert, out of scope for this capability's own test" convention this file
+-- already uses for its own minimal app.accounts row below, extended one layer
+-- deeper because the new guard now checks one layer deeper. pg_temp is
+-- session-scoped, matching scripts/db-tests/run.sh's one-psql-connection-per-file
+-- execution model, so these are defined once and reused by every DO block below.
+
+create function pg_temp.iss319_build_job_order(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_lead_id uuid;
+  v_prospect_id uuid;
+  v_opportunity_id uuid;
+  v_opp_version integer;
+  v_quotation_id uuid := gen_random_uuid();
+  v_joh_id uuid;
+  v_job_order_id uuid;
+begin
+  insert into app.leads (tenant_id, source, contact_name, email, created_by)
+  values (p_tenant_id, 'manual', p_seed, p_seed || '@iss319-fixture.test', p_actor_label)
+  returning id into v_lead_id;
+
+  insert into app.prospects (tenant_id, lead_id, legal_name, contact_name, created_by)
+  values (p_tenant_id, v_lead_id, p_seed || ' Co', p_seed, p_actor_label)
+  returning id into v_prospect_id;
+
+  insert into app.opportunities (tenant_id, prospect_id, name, created_by)
+  values (p_tenant_id, v_prospect_id, p_seed || ' opportunity', p_actor_label)
+  returning id, record_version into v_opportunity_id, v_opp_version;
+
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, root_quotation_id, created_by)
+  values (v_quotation_id, p_tenant_id, p_seed || '-QUOTE', v_opportunity_id, v_opp_version, v_prospect_id, 'USD', now() + interval '30 days', v_quotation_id, p_actor_label);
+
+  insert into app.job_order_handoffs (tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, created_by)
+  values (p_tenant_id, v_quotation_id, p_account_id, '{}'::jsonb, 'iss319-fixture-hash', p_actor_auth_user_id, p_actor_label)
+  returning id into v_joh_id;
+
+  insert into app.job_orders (tenant_id, job_number, source_handoff_id, quotation_id, account_id, customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot, created_by)
+  values (p_tenant_id, p_seed || '-JOB', v_joh_id, v_quotation_id, p_account_id, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, p_actor_label)
+  returning id into v_job_order_id;
+
+  return v_job_order_id;
+end;
+$fn$;
+
+-- Mints one real, minimal (draft, never issued -- so it never posts its own AR
+-- open item) app.finance_invoices row and returns its id, so a direct
+-- app.post_finance_ar_open_item(..., 'invoice', <this id>, ...) call below
+-- resolves against a genuinely existing invoice instead of a fabricated one.
+create function pg_temp.iss319_mint_invoice(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_order_id uuid;
+  v_eval_id uuid;
+  v_handoff_id uuid;
+  v_invoice_id uuid;
+begin
+  v_job_order_id := pg_temp.iss319_build_job_order(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+
+  insert into app.billing_readiness_evaluations (tenant_id, job_order_id, evaluated_status, is_overridden, override_reason, overridden_by_auth_user_id, overridden_by, evaluated_by_auth_user_id, evaluated_by, created_by)
+  values (p_tenant_id, v_job_order_id, 'not_ready', true, 'ISS-2026-319 fixture: minted so the new source-lineage guard has a real invoice to resolve', p_actor_auth_user_id, p_actor_label, p_actor_auth_user_id, p_actor_label, p_actor_label)
+  returning id into v_eval_id;
+
+  insert into app.billing_readiness_handoffs (tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (p_tenant_id, v_job_order_id, v_eval_id, p_seed || '-handoff', p_actor_auth_user_id, p_actor_label)
+  returning id into v_handoff_id;
+
+  insert into app.finance_invoices (tenant_id, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, created_by)
+  values (p_tenant_id, p_account_id, v_job_order_id, v_handoff_id, 'USD', p_actor_label)
+  returning id into v_invoice_id;
+
+  return v_invoice_id;
+end;
+$fn$;
+
 \echo '>> setup: two tenants; tenant A gets a Finance Manager (FIN:Create/Edit/Approve/View, tenant_admin), a Finance Editor (FIN:Edit/View only, no Approve), and a Plain User with no FIN grant; tenant B gets its own Finance Manager; tenant A gets one open fiscal period covering all of 2026 and one customer account'
 do $$
 declare
@@ -239,16 +324,16 @@ begin
   end;
 
   -- Current: due 2026-07-20, as-of 2026-07-15 (not yet due)
-  select * into v_current_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 100, '2026-07-01'::date, '2026-07-20'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
+  select * into v_current_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000035002', 'financemanagera', 'iss319-aging-current'), 'USD', 100, '2026-07-01'::date, '2026-07-20'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
   -- 1-60 bucket: due 2026-06-20, as-of 2026-07-15 -> 25 days overdue
-  select * into v_bucket2_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 200, '2026-06-01'::date, '2026-06-20'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
+  select * into v_bucket2_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000035002', 'financemanagera', 'iss319-aging-bucket2'), 'USD', 200, '2026-06-01'::date, '2026-06-20'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
   -- 61+ bucket: due 2026-04-01, as-of 2026-07-15 -> 105 days overdue
-  select * into v_bucket3_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 50, '2026-03-01'::date, '2026-04-01'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
+  select * into v_bucket3_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000035002', 'financemanagera', 'iss319-aging-bucket3'), 'USD', 50, '2026-03-01'::date, '2026-04-01'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
   -- a held item, included by default, excludable
-  select * into v_held_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 30, '2026-06-01'::date, '2026-06-25'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
+  select * into v_held_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000035002', 'financemanagera', 'iss319-aging-held'), 'USD', 30, '2026-06-01'::date, '2026-06-25'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
   perform app.place_finance_ar_hold(v_held_item.id, v_held_item.record_version, 'dispute under review', '00000000-0000-0000-0000-000000035002', 'financemanagera');
   -- a fully-paid item (open_amount=0 via full allocation), must never appear
-  select * into v_paid_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 75, '2026-06-01'::date, '2026-06-25'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
+  select * into v_paid_item from app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000035002', 'financemanagera', 'iss319-aging-paid'), 'USD', 75, '2026-06-01'::date, '2026-06-25'::date, '00000000-0000-0000-0000-000000035002', 'financemanagera');
   perform app.apply_finance_ar_allocation(v_paid_item.id, 75, 'receipt', gen_random_uuid(), null, '00000000-0000-0000-0000-000000035002', 'financemanagera');
 
   select count(*) into v_detail_count from app.get_finance_aging_report(v_tenant_a, null, 'ar', '2026-07-15'::date, true, '00000000-0000-0000-0000-000000035002');

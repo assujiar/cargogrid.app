@@ -12,6 +12,94 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-319 fixture helpers (docs/runtime/KNOWN_ISSUES.md). The new
+-- app.validate_finance_open_item_source guard (20260901060000) now rejects a
+-- fabricated source_document_id on app.finance_ap_open_items, so this file's
+-- own direct app.post_finance_ap_open_item calls below can no longer pass
+-- gen_random_uuid() and expect it to be accepted. These pg_temp functions mint
+-- a genuinely real, minimal app.finance_vendor_bills row via direct INSERT
+-- rather than the full Commercial->Operations RPC pipeline -- the same "direct
+-- fixture insert, out of scope for this capability's own test" convention this
+-- file already uses for app.create_master_record's own vendor row, extended one
+-- layer deeper because the new guard now checks one layer deeper. pg_temp is
+-- session-scoped, matching scripts/db-tests/run.sh's one-psql-connection-per-file
+-- execution model, so these are defined once and reused by every DO block below.
+
+create function pg_temp.iss319_build_job_order(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_lead_id uuid;
+  v_prospect_id uuid;
+  v_opportunity_id uuid;
+  v_opp_version integer;
+  v_quotation_id uuid := gen_random_uuid();
+  v_joh_id uuid;
+  v_job_order_id uuid;
+begin
+  insert into app.leads (tenant_id, source, contact_name, email, created_by)
+  values (p_tenant_id, 'manual', p_seed, p_seed || '@iss319-fixture.test', p_actor_label)
+  returning id into v_lead_id;
+
+  insert into app.prospects (tenant_id, lead_id, legal_name, contact_name, created_by)
+  values (p_tenant_id, v_lead_id, p_seed || ' Co', p_seed, p_actor_label)
+  returning id into v_prospect_id;
+
+  insert into app.opportunities (tenant_id, prospect_id, name, created_by)
+  values (p_tenant_id, v_prospect_id, p_seed || ' opportunity', p_actor_label)
+  returning id, record_version into v_opportunity_id, v_opp_version;
+
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, root_quotation_id, created_by)
+  values (v_quotation_id, p_tenant_id, p_seed || '-QUOTE', v_opportunity_id, v_opp_version, v_prospect_id, 'USD', now() + interval '30 days', v_quotation_id, p_actor_label);
+
+  insert into app.job_order_handoffs (tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, created_by)
+  values (p_tenant_id, v_quotation_id, p_account_id, '{}'::jsonb, 'iss319-fixture-hash', p_actor_auth_user_id, p_actor_label)
+  returning id into v_joh_id;
+
+  insert into app.job_orders (tenant_id, job_number, source_handoff_id, quotation_id, account_id, customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot, created_by)
+  values (p_tenant_id, p_seed || '-JOB', v_joh_id, v_quotation_id, p_account_id, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, p_actor_label)
+  returning id into v_job_order_id;
+
+  return v_job_order_id;
+end;
+$fn$;
+
+-- Mints one real, minimal (draft, never posted -- so it never posts its own AP
+-- open item) app.finance_vendor_bills row and returns its id, so a direct
+-- app.post_finance_ap_open_item(..., 'vendor_bill', <this id>, ...) call below
+-- resolves against a genuinely existing vendor bill instead of a fabricated one.
+create function pg_temp.iss319_mint_vendor_bill(p_tenant_id uuid, p_account_id uuid, p_vendor_master_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_order_id uuid;
+  v_shipment_id uuid;
+  v_cost_id uuid;
+  v_bill_id uuid;
+begin
+  v_job_order_id := pg_temp.iss319_build_job_order(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+
+  insert into app.shipment_orders (tenant_id, job_order_id, shipment_number, idempotency_key, shipper_account_id, consignee_snapshot, cargo_service_snapshot, service_type, mode, origin, destination, created_by)
+  values (p_tenant_id, v_job_order_id, p_seed || '-SHIP', p_seed || '-ship-idem', p_account_id, '{}'::jsonb, '{}'::jsonb, 'ocean_freight', 'sea', 'Jakarta', 'Surabaya', p_actor_label)
+  returning id into v_shipment_id;
+
+  insert into app.shipment_actual_costs (tenant_id, shipment_order_id, currency, status, created_by)
+  values (p_tenant_id, v_shipment_id, 'USD', 'approved', p_actor_label)
+  returning id into v_cost_id;
+
+  insert into app.shipment_actual_cost_components (tenant_id, actual_cost_id, category, source_type, vendor_id, description, quantity, rate, amount, currency, created_by)
+  values (p_tenant_id, v_cost_id, 'freight', 'vendor', p_vendor_master_id, 'ISS-2026-319 fixture freight component', 1, 100, 100, 'USD', p_actor_label);
+
+  insert into app.finance_vendor_bills (tenant_id, vendor_master_id, shipment_order_id, actual_cost_id, currency, bill_date, due_date, created_by)
+  values (p_tenant_id, p_vendor_master_id, v_shipment_id, v_cost_id, 'USD', current_date, current_date + 30, p_actor_label)
+  returning id into v_bill_id;
+
+  return v_bill_id;
+end;
+$fn$;
+
 \echo '>> setup: two tenants; tenant A gets a Finance Manager (FIN:Edit/Approve/View), a Finance Editor (FIN:Edit/View only, no Approve), and a Plain User with no FIN grant; tenant B gets its own Finance Manager; tenant A gets one active fiscal period (2026-03) and one active vendor reference'
 do $$
 declare
@@ -85,6 +173,15 @@ begin
 
   -- One active vendor reference (OPS-172's own 'vendor' master_type).
   select * into v_vendor from app.create_master_record('vendor', v_tenant_a, 'VEND-SETL-1', 'Contoso Freight', '[]'::jsonb, '{}'::jsonb, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+
+  -- ISS-2026-319 fixture: a minimal, valid customer account for tenant A,
+  -- purely so pg_temp.iss319_mint_vendor_bill (below) has an account to
+  -- satisfy app.job_orders/app.shipment_orders' own account FK -- the AP side
+  -- of this capability has no customer of its own, exactly like the direct
+  -- fixture insert finance-accounts-receivable.sql already uses for the same
+  -- reason on its own AR side.
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant_a, 'Acme Settlement Fixture Shipper Pte Ltd', 'acmesetl-shipper-fixture-fingerprint', '{}'::jsonb, v_team_a, 'tester');
 end;
 $$;
 
@@ -141,9 +238,9 @@ begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select * into v_item_1 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 1000, '2026-03-10'::date, '2026-04-09'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
-  select * into v_item_2 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 500, '2026-03-11'::date, '2026-04-10'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
-  select * into v_held_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 300, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item_1 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-1'), 'USD', 1000, '2026-03-10'::date, '2026-04-09'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item_2 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-2'), 'USD', 500, '2026-03-11'::date, '2026-04-10'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_held_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-held'), 'USD', 300, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_held_item from app.place_finance_ap_hold(v_held_item.id, v_held_item.record_version, 'disputed', '00000000-0000-0000-0000-000000029603', 'financeeditora');
 
   begin
@@ -291,8 +388,8 @@ begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select * into v_item_1 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 700, '2026-03-05'::date, '2026-04-04'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
-  select * into v_item_2 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 300, '2026-03-06'::date, '2026-04-05'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item_1 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-multi-1'), 'USD', 700, '2026-03-05'::date, '2026-04-04'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item_2 from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-multi-2'), 'USD', 300, '2026-03-06'::date, '2026-04-05'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
 
   select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-FULL-1', 'Bank ***1234', 'USD', '2026-03-20'::date,
     jsonb_build_array(
@@ -381,7 +478,7 @@ begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 250, '2026-03-08'::date, '2026-04-07'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-post'), 'USD', 250, '2026-03-08'::date, '2026-04-07'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-REV-1', 'Bank ***1234', 'USD', '2026-03-22'::date,
     jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 250)), 0, 'prep-rev-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
 
@@ -454,7 +551,7 @@ begin
     raise exception 'assertion failed: authenticated must retain EXECUTE on app.request_finance_settlement_reversal -- RGL-BLK-009''s own reachability regression';
   end if;
 
-  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 400, '2026-03-09'::date, '2026-04-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-idempotent'), 'USD', 400, '2026-03-09'::date, '2026-04-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-GL-REV-1', 'Bank ***1234', 'USD', '2026-03-23'::date,
     jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 400)), 0, 'prep-gl-rev-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.submit_finance_settlement_for_approval(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
@@ -531,7 +628,7 @@ begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 400, '2026-06-08'::date, '2026-07-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-period'), 'USD', 400, '2026-06-08'::date, '2026-07-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-REV-LOCK-1', 'Bank ***5678', 'USD', '2026-06-15'::date,
     jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 400)), 0, 'prep-rev-lock-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.submit_finance_settlement_for_approval(v_settlement.id, v_settlement.record_version, '00000000-0000-0000-0000-000000029602', 'financemanagera');
@@ -597,7 +694,7 @@ begin
   v_tenant_a := (select id from app.tenants where slug = 'acmesetla');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 150, '2026-03-09'::date, '2026-04-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-reversal'), 'USD', 150, '2026-03-09'::date, '2026-04-08'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-DISC-1', 'Bank ***1234', 'USD', '2026-03-23'::date,
     jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 150)), 0, 'prep-disc-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.discard_finance_settlement_draft(v_settlement.id, v_settlement.record_version, 'duplicate entry', '00000000-0000-0000-0000-000000029602', 'financemanagera');
@@ -638,7 +735,7 @@ begin
   v_tenant_b := (select id from app.tenants where slug = 'acmesetlb');
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-SETL-1');
 
-  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', gen_random_uuid(), 'USD', 90, '2026-03-13'::date, '2026-04-12'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
+  select * into v_item from app.post_finance_ap_open_item(v_tenant_a, null, v_vendor_id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, (select id from app.accounts where tenant_id = v_tenant_a), v_vendor_id, '00000000-0000-0000-0000-000000029602', 'financemanagera', 'iss319-settlement-holdrelease'), 'USD', 90, '2026-03-13'::date, '2026-04-12'::date, '00000000-0000-0000-0000-000000029602', 'financemanagera');
   select * into v_settlement from app.prepare_finance_settlement(v_tenant_a, null, v_vendor_id, 'PMT-LIST-1', 'Bank ***1234', 'USD', '2026-03-24'::date,
     jsonb_build_array(jsonb_build_object('apOpenItemId', v_item.id, 'amount', 90)), 0, 'prep-list-1', '00000000-0000-0000-0000-000000029602', 'financemanagera');
 

@@ -190,8 +190,34 @@ begin
   insert into app.billing_readiness_handoffs (id, tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by) values
     ('00000000-0000-0000-0000-000000326201', v_tenant2, v_job_order_delta, v_eval_delta, 'idem-cpv-br-d1', v_supreme, 'tester');
 
-  -- AR open items -- inserted BEFORE their own referencing invoice row (no
-  -- FK from finance_ar_open_items.source_document_id to any table).
+  -- ISS-2026-319 reorder: app.finance_invoices now MUST exist before any
+  -- app.finance_ar_open_items row can claim to be sourced from one --
+  -- 20260901060000's own app.validate_finance_open_item_source resolves
+  -- source_document_id against a real app.finance_invoices row on every
+  -- INSERT. Invoices are therefore inserted FIRST here, each with
+  -- ar_open_item_id left null; the open items are inserted second (now
+  -- resolving against a real, already-existing invoice); a follow-up UPDATE
+  -- below links ar_open_item_id back onto each invoice, the mirror image of
+  -- this file's original "invoice sets ar_open_item_id directly" ordering.
+  --
+  -- Alpha's 4 invoices -- 3 issued (paid/partial/open+held), 1 void-before-
+  -- ever-issued (ar_open_item_id null -- payment_status must resolve to
+  -- not_posted with an empty allocations array).
+  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, issued_by, issued_at, created_by) values
+    ('00000000-0000-0000-0000-000000325101', v_tenant1, v_company1, 'INV-CPV-000001', v_account_alpha, v_job_order_alpha_inv1, '00000000-0000-0000-0000-000000325201', 'USD', 'issued', 1000, 0, '2026-07-01', '2026-07-31', 'tester', now(), 'tester'),
+    ('00000000-0000-0000-0000-000000325102', v_tenant1, v_company1, 'INV-CPV-000002', v_account_alpha, v_job_order_alpha_inv2, '00000000-0000-0000-0000-000000325202', 'USD', 'issued', 500, 0, '2026-08-01', '2026-08-31', 'tester', now(), 'tester'),
+    ('00000000-0000-0000-0000-000000325103', v_tenant1, v_company1, 'INV-CPV-000003', v_account_alpha, v_job_order_alpha_inv3, '00000000-0000-0000-0000-000000325203', 'USD', 'issued', 300, 0, '2026-08-05', '2026-09-04', 'tester', now(), 'tester');
+  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, void_reason, voided_by, voided_at, created_by) values
+    ('00000000-0000-0000-0000-000000325104', v_tenant1, v_company1, null, v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000325204', 'USD', 'void', 150, 0, 'cpv fixture void before issuance', 'tester', now(), 'tester');
+
+  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, issued_by, issued_at, created_by) values
+    ('00000000-0000-0000-0000-000000325120', v_tenant1, v_company1, 'INV-CPV-BETA-0001', v_account_beta, v_job_order_beta, '00000000-0000-0000-0000-000000325220', 'USD', 'issued', 400, 0, '2026-08-01', '2026-08-31', 'tester', now(), 'tester');
+
+  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, issued_by, issued_at, created_by) values
+    ('00000000-0000-0000-0000-000000326101', v_tenant2, v_company2, 'INV-CPV-DELTA-0001', v_account_delta, v_job_order_delta, '00000000-0000-0000-0000-000000326201', 'USD', 'issued', 250, 0, '2026-08-01', '2026-08-31', 'tester', now(), 'tester');
+
+  -- AR open items -- each source_document_id now resolves against the real
+  -- invoice row inserted immediately above.
   -- AR-A1 (paid, two applied allocations 700+300=1000); AR-A2 (partial,
   -- one applied allocation 200 of 500); AR-A3 (open, HELD, zero
   -- allocations -- must surface as blocked/on-hold, hold_reason NEVER leaks).
@@ -205,21 +231,13 @@ begin
   insert into app.finance_ar_open_items (id, tenant_id, customer_account_id, source_document_type, source_document_id, currency, original_amount, allocated_amount, status, is_held, invoice_date, due_date, created_by) values
     ('00000000-0000-0000-0000-000000326301', v_tenant2, v_account_delta, 'invoice', '00000000-0000-0000-0000-000000326101', 'USD', 250, 100, 'partial', false, '2026-08-01', '2026-08-31', 'tester');
 
-  -- Alpha's 4 invoices -- 3 issued (paid/partial/open+held), 1 void-before-
-  -- ever-issued (ar_open_item_id null -- payment_status must resolve to
-  -- not_posted with an empty allocations array).
-  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, ar_open_item_id, issued_by, issued_at, created_by) values
-    ('00000000-0000-0000-0000-000000325101', v_tenant1, v_company1, 'INV-CPV-000001', v_account_alpha, v_job_order_alpha_inv1, '00000000-0000-0000-0000-000000325201', 'USD', 'issued', 1000, 0, '2026-07-01', '2026-07-31', '00000000-0000-0000-0000-000000325301', 'tester', now(), 'tester'),
-    ('00000000-0000-0000-0000-000000325102', v_tenant1, v_company1, 'INV-CPV-000002', v_account_alpha, v_job_order_alpha_inv2, '00000000-0000-0000-0000-000000325202', 'USD', 'issued', 500, 0, '2026-08-01', '2026-08-31', '00000000-0000-0000-0000-000000325302', 'tester', now(), 'tester'),
-    ('00000000-0000-0000-0000-000000325103', v_tenant1, v_company1, 'INV-CPV-000003', v_account_alpha, v_job_order_alpha_inv3, '00000000-0000-0000-0000-000000325203', 'USD', 'issued', 300, 0, '2026-08-05', '2026-09-04', '00000000-0000-0000-0000-000000325303', 'tester', now(), 'tester');
-  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, void_reason, voided_by, voided_at, created_by) values
-    ('00000000-0000-0000-0000-000000325104', v_tenant1, v_company1, null, v_account_alpha, v_job_order_alpha, '00000000-0000-0000-0000-000000325204', 'USD', 'void', 150, 0, 'cpv fixture void before issuance', 'tester', now(), 'tester');
-
-  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, ar_open_item_id, issued_by, issued_at, created_by) values
-    ('00000000-0000-0000-0000-000000325120', v_tenant1, v_company1, 'INV-CPV-BETA-0001', v_account_beta, v_job_order_beta, '00000000-0000-0000-0000-000000325220', 'USD', 'issued', 400, 0, '2026-08-01', '2026-08-31', '00000000-0000-0000-0000-000000325320', 'tester', now(), 'tester');
-
-  insert into app.finance_invoices (id, tenant_id, company_id, invoice_number, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, status, subtotal_amount, tax_amount, issue_date, due_date, ar_open_item_id, issued_by, issued_at, created_by) values
-    ('00000000-0000-0000-0000-000000326101', v_tenant2, v_company2, 'INV-CPV-DELTA-0001', v_account_delta, v_job_order_delta, '00000000-0000-0000-0000-000000326201', 'USD', 'issued', 250, 0, '2026-08-01', '2026-08-31', '00000000-0000-0000-0000-000000326301', 'tester', now(), 'tester');
+  -- Link each issued invoice back to its own AR open item (the mirror image
+  -- of the original single-INSERT ar_open_item_id assignment).
+  update app.finance_invoices set ar_open_item_id = '00000000-0000-0000-0000-000000325301' where id = '00000000-0000-0000-0000-000000325101';
+  update app.finance_invoices set ar_open_item_id = '00000000-0000-0000-0000-000000325302' where id = '00000000-0000-0000-0000-000000325102';
+  update app.finance_invoices set ar_open_item_id = '00000000-0000-0000-0000-000000325303' where id = '00000000-0000-0000-0000-000000325103';
+  update app.finance_invoices set ar_open_item_id = '00000000-0000-0000-0000-000000325320' where id = '00000000-0000-0000-0000-000000325120';
+  update app.finance_invoices set ar_open_item_id = '00000000-0000-0000-0000-000000326301' where id = '00000000-0000-0000-0000-000000326101';
 
   -- Receipts -- every bank_account_label AND payer_name carries a
   -- distinctive, grep-able sentinel substring. R-A4 is captured but fully

@@ -21,6 +21,36 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-319 fixture helper (docs/runtime/KNOWN_ISSUES.md). The new
+-- app.validate_finance_open_item_source guard (20260901060000) now rejects a
+-- fabricated source_document_id on app.finance_ap_open_items, so this file's own
+-- direct app.post_finance_ap_open_item(..., 'opening_balance', ...) call below can
+-- no longer pass gen_random_uuid() and expect it to be accepted. This mints a
+-- genuinely real app.import_staging_rows row -- the correct target for
+-- source_document_type = 'opening_balance' (app.commit_finance_opening_balance_
+-- import_job passes the staged row's own id, not the open item's, per
+-- 20260901060000's own header). pg_temp is session-scoped, matching
+-- scripts/db-tests/run.sh's one-psql-connection-per-file execution model.
+create function pg_temp.iss319_mint_staging_row(p_tenant_id uuid, p_actor_auth_user_id uuid, p_actor_label text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_id uuid;
+  v_row_id uuid;
+begin
+  insert into app.jobs (tenant_id, job_type, requested_by_auth_user_id, created_by)
+  values (p_tenant_id, 'import', p_actor_auth_user_id, p_actor_label)
+  returning job_id into v_job_id;
+
+  insert into app.import_staging_rows (tenant_id, job_id, row_number, raw_payload)
+  values (p_tenant_id, v_job_id, 1, '{}'::jsonb)
+  returning id into v_row_id;
+
+  return v_row_id;
+end;
+$fn$;
+
 \echo '>> setup: two tenants; tenant A gets a Finance Manager (FIN:Create/Edit/Approve/View, tenant_admin) and a Plain User with no FIN grant; tenant B gets its own Finance Manager; tenant A gets one open fiscal period (2026-03), a small real chart of accounts, a published finance_posting_map, and one active vendor reference'
 do $$
 declare
@@ -296,7 +326,7 @@ begin
   v_vendor_id := (select id from app.master_records where tenant_id = v_tenant_a and code = 'VEND-LIFE-1');
 
   select * into v_open_item from app.post_finance_ap_open_item(
-    v_tenant_a, null, v_vendor_id, 'opening_balance', gen_random_uuid(), 'USD', 1000.00,
+    v_tenant_a, null, v_vendor_id, 'opening_balance', pg_temp.iss319_mint_staging_row(v_tenant_a, '00000000-0000-0000-0000-000000029911', 'financemanagera'), 'USD', 1000.00,
     '2026-03-01'::date, '2026-04-01'::date, '00000000-0000-0000-0000-000000029911', 'financemanagera'
   );
 

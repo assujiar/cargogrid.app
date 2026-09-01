@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 40 — 4 High, 13 Medium, 23 Low |
+| `OPEN` | 39 — 4 High, 13 Medium, 22 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 227 |
+| `RESOLVED` | 228 |
 | **Total records** | **276** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -112,7 +112,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-316` | Low | `RESOLVED` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
 | `ISS-2026-317` | Low | `RESOLVED` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
-| `ISS-2026-319` | Low | `OPEN` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
+| `ISS-2026-319` | Low | `RESOLVED` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
 | `ISS-2026-320` | Low | `OPEN` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
 | `ISS-2026-321` | Low | `OPEN` | the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
@@ -8893,7 +8893,7 @@ found was an attribute, not a body. If a body drift is ever suspected, the metho
 works: build the disposable database, dump both sides, compare.
 
 
-### ISS-2026-319 — `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named (found 2026-08-31 while closing `ISS-2026-206`, `OPEN`, Low)
+### ISS-2026-319 — `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named (found 2026-08-31 while closing `ISS-2026-206`, `RESOLVED` 2026-09-01, Low)
 
 `ISS-2026-206` named four tables and all four are now closed. While reworking
 `scripts/db-tests/finance-subledger.sql`'s fixtures to pass resolvable ids, a fifth instance of
@@ -8904,7 +8904,7 @@ the same class surfaced: that file calls
 have no validation trigger. An open item can therefore claim to be the receivable for an
 invoice that never existed.
 
-**Why it is Low and not Medium**, unlike `ISS-2026-206` itself. `ISS-2026-206`'s severity came
+**Why it was Low and not Medium**, unlike `ISS-2026-206` itself. `ISS-2026-206`'s severity came
 from `app.finance_subledger_batches` sitting directly beneath `ISS-2026-202`'s own guard on
 `app.finance_journals`, so an unguarded batch measurably weakened a fix that had just shipped —
 a journal could pass the new guard while still being lineage-less at its root. Nothing sits
@@ -8912,20 +8912,86 @@ beneath these two open-item tables in the same way; the defect is a false claim 
 not a hole under an existing guarantee. And the reconciliation that matters commercially
 already works on `source_document_type` and `open_amount`, never on `source_document_id`.
 
-**Risk in plain terms:** a receivable or payable can record which document it came from
-incorrectly, and nothing catches it. No legitimate code path does this today — the real callers
-(`app.issue_finance_invoice`, `app.post_finance_vendor_bill`, and the opening-balance import)
-all pass real ids — so this is a structural absence rather than a live defect, exactly as
-`ISS-2026-206` was before it was live-forced.
+**`RESOLVED`, 2026-09-01, `supabase/migrations/20260901060000_harden_finance_open_item_source_lineage.sql`.**
+Live-verified first, against project `awdlicmwzdxquopwtcfd`: `pg_get_constraintdef` on both
+tables' own `source_type_check` constraints confirmed the live CHECK values match the migrations
+exactly (`finance_ar_open_items`: `invoice`/`opening_balance`; `finance_ap_open_items`:
+`vendor_bill`/`opening_balance` — `vendor_bill` never occurs on the AR table and `invoice` never
+occurs on the AP table, so the entry's "includes `invoice`, `vendor_bill`, `opening_balance`"
+description is accurate only as the union across both siblings), no trigger beyond each table's
+own `touch_row` existed on either table, and both tables were empty live (no historical drift to
+reconcile). `app.validate_finance_open_item_source` is one `BEFORE INSERT OR UPDATE` guard
+function serving both tables (branching on `TG_TABLE_NAME`), mirroring `20260831310000`'s exact
+shape: `invoice` resolves against `app.finance_invoices` (the real caller,
+`app.issue_finance_invoice`, passes the invoice's own id); `vendor_bill` resolves against
+`app.finance_vendor_bills` (`app.post_finance_vendor_bill`, the bill's own id); an unreachable
+else-branch fails loudly if either CHECK constraint is ever widened without widening this
+function first.
 
-**Status `OPEN`**, Low. **What would close it:** the same `BEFORE INSERT OR UPDATE` guard
-pattern `20260831310000` uses, resolving `invoice` → `app.finance_invoices`, `vendor_bill` →
-`app.finance_vendor_bills`, and `opening_balance` → no document (it is the opening balance
-itself, so the id there is not a document reference and must be treated as its own case rather
-than forced into the pattern). **The real cost is the same one that deferred `ISS-2026-206` for
-two rounds:** several finance test fixtures pass `gen_random_uuid()` to
-`app.post_finance_ar_open_item` on purpose, and closing this means making those real first —
-bounded, mechanical, and genuinely a separate change with its own evidence.
+**`opening_balance` treated as its own case, exactly as this entry's own closure plan required —
+not forced into the invoice/vendor_bill pattern.** Read live rather than assumed:
+`app.commit_finance_opening_balance_import_job` (`20260830130000:781/810`) passes `v_row.id` —
+the staged `app.import_staging_rows` row's own id — as `source_document_id`, with the migration's
+own header stating plainly why: "The staged row id IS the source document id... a second
+provenance column would be a competing source of truth." So `opening_balance` on **either**
+table resolves against `app.import_staging_rows`, not a downstream business document and not the
+open item itself. This is deliberately **not** the same target `20260831310000`'s own
+`opening_balance` branch on `app.finance_subledger_batches.source_id` resolves to (the AR/AP open
+item, one hop further downstream) — the two tables sit at different points in the same lineage
+chain, and forcing this table's branch through either the invoice/vendor_bill resolver or the
+subledger-batch resolver would have rejected every real opening-balance-sourced open item ever
+posted. `source_document_id` is `NOT NULL` on both tables, so — unlike `20260831170000`'s own
+optional `matched_source_id` — there is no legitimate absent case to preserve; every branch
+requires a real, resolving id.
+
+**The real cost this entry itself disclosed, paid in full rather than deferred a third time.**
+Every db-test fixture passing a synthetic id to `app.post_finance_ar_open_item`/
+`app.post_finance_ap_open_item`, or directly inserting into either table with one, was found
+(not just the ones this entry named) and given a genuinely real document instead:
+- `scripts/db-tests/finance-accounts-receivable.sql`, `finance-accounts-payable.sql`,
+  `finance-aging.sql`, `finance-cash-bank.sql`, `finance-receipt-allocation.sql`,
+  `finance-reconciliation.sql`, `finance-settlement.sql`, `finance-subledger.sql`, and
+  `finance-lifecycle-state-control.sql` — 43 direct-RPC call sites across 9 files — now each
+  mint a real, minimal `app.finance_invoices`/`app.finance_vendor_bills` row (a `pg_temp` helper
+  building a genuine, minimal lead → prospect → opportunity → quotation → job-order-handoff →
+  job-order chain via direct `INSERT`, then the invoice/vendor-bill row itself, never through the
+  full Commercial → Operations RPC pipeline this session's own `ISS-2026-206` closure disclosed
+  as the reason this was deferred twice) or a real `app.import_staging_rows` row for
+  `opening_balance`, instead of `gen_random_uuid()`. This is the same "direct fixture insert,
+  out of scope for this capability's own test" convention these files already use for their own
+  minimal `app.accounts` rows, extended one layer deeper because the new guard now checks one
+  layer deeper.
+- Five more files never surfaced by the original grep because they bypass the RPC entirely via a
+  **direct** `insert into app.finance_ar_open_items` naming an invoice-shaped id that was never
+  backed by a real row: `customer-loyalty-expiry-fraud-prevention.sql`,
+  `customer-loyalty-liability-reconciliation.sql`, `customer-loyalty-membership-tier.sql`,
+  `customer-loyalty-points-ledger.sql`, `customer-loyalty-program-earning.sql` — 35 occurrences,
+  fixed with the identical mint-a-real-invoice helper.
+- Two more files (`customer-invoice-billing-visibility.sql`, `customer-payment-visibility.sql`)
+  already inserted real `app.finance_invoices` rows, but **after** the `app.finance_ar_open_items`
+  rows that referenced them — legal before this guard (both tables' own header comment said so
+  explicitly: "no FK ... so ordering is free"), no longer legal after. Both were reordered
+  (invoices first, `ar_open_item_id` left null; open items second, now resolving against a real,
+  already-existing invoice; a follow-up `UPDATE` links `ar_open_item_id` back onto each invoice —
+  the mirror image of the original single-`INSERT` assignment), with no change to either file's
+  own fixture *data* or assertions.
+- No fixture assertion was skipped, weakened, or routed around, and the new guard was not
+  relaxed to tolerate any of them — every fix is a real, resolvable document or a corrected
+  insert order.
+
+**Evidence.** A new regression block (append-only) in each of `finance-accounts-receivable.sql`
+and `finance-accounts-payable.sql` proves, per table: a real invoice/vendor-bill-backed open item
+posts successfully and carries the real id; a fabricated id is refused via the RPC with
+`finance_open_item_orphan_source`; the identical fabricated-id rejection reproduces on a
+**direct** `INSERT` against the table (the guard is on the table, not merely the RPC — the same
+threat model `ISS-2026-206`'s own regression established); and, on the AR side, the same
+positive/negative pair for `opening_balance` against a real/fabricated `app.import_staging_rows`
+id. Full `pnpm run db:test` — every file in `scripts/db-tests/`, including all 14 files this
+closure touched — `ALL PASSED`. `pnpm run typecheck` and `pnpm run lint` both clean (0 errors).
+`pnpm run test` passes 5850/5851; the one failure is `check-release-freeze.test.ts` reporting
+that the db-test set digest has drifted — expected and correct, since this closure edited 14
+files under `scripts/db-tests/`, and left for the orchestrating session to re-freeze rather than
+amended here.
 
 ### ISS-2026-320 — the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened (found 2026-08-31 while closing `ISS-2026-304`, `OPEN`, Low)
 

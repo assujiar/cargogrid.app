@@ -16,6 +16,153 @@
 
 \set ON_ERROR_STOP on
 
+-- ISS-2026-319 fixture helpers (docs/runtime/KNOWN_ISSUES.md). The new
+-- app.validate_finance_open_item_source guard (20260901060000) now rejects a
+-- fabricated source_document_id on app.finance_ar_open_items/
+-- app.finance_ap_open_items, so this file's own direct
+-- app.post_finance_ar_open_item/app.post_finance_ap_open_item calls below can no
+-- longer pass gen_random_uuid() and expect it to be accepted. These pg_temp
+-- functions mint a genuinely real, minimal row in the actual target table each
+-- source_document_type resolves against (app.finance_invoices/
+-- app.finance_vendor_bills/app.import_staging_rows) via direct INSERT rather than
+-- the full Commercial->Operations RPC pipeline -- the same "direct fixture
+-- insert, out of scope for this capability's own test" convention this file
+-- already uses for its own minimal app.accounts row below, extended one layer
+-- deeper because the new guard now checks one layer deeper. pg_temp is
+-- session-scoped, matching scripts/db-tests/run.sh's one-psql-connection-per-file
+-- execution model, so these are defined once and reused by every DO block below.
+
+create function pg_temp.iss319_build_job_order(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_lead_id uuid;
+  v_prospect_id uuid;
+  v_opportunity_id uuid;
+  v_opp_version integer;
+  v_quotation_id uuid := gen_random_uuid();
+  v_joh_id uuid;
+  v_job_order_id uuid;
+begin
+  insert into app.leads (tenant_id, source, contact_name, email, created_by)
+  values (p_tenant_id, 'manual', p_seed, p_seed || '@iss319-fixture.test', p_actor_label)
+  returning id into v_lead_id;
+
+  insert into app.prospects (tenant_id, lead_id, legal_name, contact_name, created_by)
+  values (p_tenant_id, v_lead_id, p_seed || ' Co', p_seed, p_actor_label)
+  returning id into v_prospect_id;
+
+  insert into app.opportunities (tenant_id, prospect_id, name, created_by)
+  values (p_tenant_id, v_prospect_id, p_seed || ' opportunity', p_actor_label)
+  returning id, record_version into v_opportunity_id, v_opp_version;
+
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, root_quotation_id, created_by)
+  values (v_quotation_id, p_tenant_id, p_seed || '-QUOTE', v_opportunity_id, v_opp_version, v_prospect_id, 'USD', now() + interval '30 days', v_quotation_id, p_actor_label);
+
+  insert into app.job_order_handoffs (tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, created_by)
+  values (p_tenant_id, v_quotation_id, p_account_id, '{}'::jsonb, 'iss319-fixture-hash', p_actor_auth_user_id, p_actor_label)
+  returning id into v_joh_id;
+
+  insert into app.job_orders (tenant_id, job_number, source_handoff_id, quotation_id, account_id, customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot, created_by)
+  values (p_tenant_id, p_seed || '-JOB', v_joh_id, v_quotation_id, p_account_id, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, p_actor_label)
+  returning id into v_job_order_id;
+
+  return v_job_order_id;
+end;
+$fn$;
+
+-- Mints one real, minimal (draft, never issued -- so it never posts its own AR
+-- open item) app.finance_invoices row and returns its id, so a direct
+-- app.post_finance_ar_open_item(..., 'invoice', <this id>, ...) call below
+-- resolves against a genuinely existing invoice instead of a fabricated one.
+create function pg_temp.iss319_mint_invoice(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_order_id uuid;
+  v_eval_id uuid;
+  v_handoff_id uuid;
+  v_invoice_id uuid;
+begin
+  v_job_order_id := pg_temp.iss319_build_job_order(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+
+  insert into app.billing_readiness_evaluations (tenant_id, job_order_id, evaluated_status, is_overridden, override_reason, overridden_by_auth_user_id, overridden_by, evaluated_by_auth_user_id, evaluated_by, created_by)
+  values (p_tenant_id, v_job_order_id, 'not_ready', true, 'ISS-2026-319 fixture: minted so the new source-lineage guard has a real invoice to resolve', p_actor_auth_user_id, p_actor_label, p_actor_auth_user_id, p_actor_label, p_actor_label)
+  returning id into v_eval_id;
+
+  insert into app.billing_readiness_handoffs (tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (p_tenant_id, v_job_order_id, v_eval_id, p_seed || '-handoff', p_actor_auth_user_id, p_actor_label)
+  returning id into v_handoff_id;
+
+  insert into app.finance_invoices (tenant_id, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, created_by)
+  values (p_tenant_id, p_account_id, v_job_order_id, v_handoff_id, 'USD', p_actor_label)
+  returning id into v_invoice_id;
+
+  return v_invoice_id;
+end;
+$fn$;
+
+-- Mints one real, minimal (draft, never posted -- so it never posts its own AP
+-- open item) app.finance_vendor_bills row and returns its id, so a direct
+-- app.post_finance_ap_open_item(..., 'vendor_bill', <this id>, ...) call below
+-- resolves against a genuinely existing vendor bill instead of a fabricated one.
+create function pg_temp.iss319_mint_vendor_bill(p_tenant_id uuid, p_account_id uuid, p_vendor_master_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_order_id uuid;
+  v_shipment_id uuid;
+  v_cost_id uuid;
+  v_bill_id uuid;
+begin
+  v_job_order_id := pg_temp.iss319_build_job_order(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+
+  insert into app.shipment_orders (tenant_id, job_order_id, shipment_number, idempotency_key, shipper_account_id, consignee_snapshot, cargo_service_snapshot, service_type, mode, origin, destination, created_by)
+  values (p_tenant_id, v_job_order_id, p_seed || '-SHIP', p_seed || '-ship-idem', p_account_id, '{}'::jsonb, '{}'::jsonb, 'ocean_freight', 'sea', 'Jakarta', 'Surabaya', p_actor_label)
+  returning id into v_shipment_id;
+
+  insert into app.shipment_actual_costs (tenant_id, shipment_order_id, currency, status, created_by)
+  values (p_tenant_id, v_shipment_id, 'USD', 'approved', p_actor_label)
+  returning id into v_cost_id;
+
+  insert into app.shipment_actual_cost_components (tenant_id, actual_cost_id, category, source_type, vendor_id, description, quantity, rate, amount, currency, created_by)
+  values (p_tenant_id, v_cost_id, 'freight', 'vendor', p_vendor_master_id, 'ISS-2026-319 fixture freight component', 1, 100, 100, 'USD', p_actor_label);
+
+  insert into app.finance_vendor_bills (tenant_id, vendor_master_id, shipment_order_id, actual_cost_id, currency, bill_date, due_date, created_by)
+  values (p_tenant_id, p_vendor_master_id, v_shipment_id, v_cost_id, 'USD', current_date, current_date + 30, p_actor_label)
+  returning id into v_bill_id;
+
+  return v_bill_id;
+end;
+$fn$;
+
+-- Mints one real app.import_staging_rows row and returns its id -- the correct
+-- target for source_document_type = 'opening_balance' on both open-item tables
+-- (app.commit_finance_opening_balance_import_job passes the staged row's own id,
+-- not the open item's, per 20260901060000's own header).
+create function pg_temp.iss319_mint_staging_row(p_tenant_id uuid, p_actor_auth_user_id uuid, p_actor_label text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_job_id uuid;
+  v_row_id uuid;
+begin
+  insert into app.jobs (tenant_id, job_type, requested_by_auth_user_id, created_by)
+  values (p_tenant_id, 'import', p_actor_auth_user_id, p_actor_label)
+  returning job_id into v_job_id;
+
+  insert into app.import_staging_rows (tenant_id, job_id, row_number, raw_payload)
+  values (p_tenant_id, v_job_id, 1, '{}'::jsonb)
+  returning id into v_row_id;
+
+  return v_row_id;
+end;
+$fn$;
+
 \echo '>> setup: two tenants; tenant A gets a Finance Manager (FIN:Create/Edit/Approve/View, tenant_admin), a Finance Editor (FIN:Edit/View only, no Approve), and a Plain User with no FIN grant; tenant B gets its own Finance Manager with no posting map ever published; tenant A gets one open fiscal period (2026-03), a small real chart of accounts, and a published finance_posting_map covering every key this checkpoint uses except a deliberately-held-back key, plus one draft (not-yet-active) account and one activated control (non-postable) account for negative-path coverage'
 do $$
 declare
@@ -431,11 +578,14 @@ begin
   values (v_tenant_a, 'Acme Subledger Customer', 'acmesubl-customer-fixture-fingerprint', '{}'::jsonb, (select id from app.org_units where tenant_id = v_tenant_a limit 1), 'tester');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
 
-  v_ar_item := app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', gen_random_uuid(), 'USD', 500, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
-  -- ISS-2026-206: v_ar_item.source_document_id is itself a gen_random_uuid() -- app.finance_
-  -- ar_open_items.source_document_id carries the same unresolved-polymorphic-id shape and is
-  -- registered separately as ISS-2026-319. A real settlement is used for the batch's own
-  -- source_id; the AR/AP totals this block actually asserts on come from the open items'
+  v_ar_item := app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000029702', 'financemanagera', 'iss319-subledger-ar'), 'USD', 500, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
+  -- ISS-2026-206/ISS-2026-319: v_ar_item.source_document_id used to be a bare
+  -- gen_random_uuid() -- app.finance_ar_open_items.source_document_id carried the
+  -- same unresolved-polymorphic-id shape ISS-2026-206 closed one hop further in,
+  -- and is now guarded by 20260901060000's own app.validate_finance_open_item_source
+  -- (ISS-2026-319), so it now points at a real, minted app.finance_invoices row.
+  -- A real settlement is still used for the subledger batch's own source_id below;
+  -- the AR/AP totals this block actually asserts on come from the open items'
   -- source_document_TYPE and open_amount, never from the batch's source_type.
   perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
     (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-3'), '2026-03-12'::date, 'USD',
@@ -446,7 +596,7 @@ begin
     '00000000-0000-0000-0000-000000029702', 'financemanagera');
 
   select * into v_vendor from app.create_master_record('vendor', v_tenant_a, 'VEND-SUBL-1', 'Subledger Vendor', '[]'::jsonb, '{}'::jsonb, '00000000-0000-0000-0000-000000029702', 'financemanagera');
-  v_ap_item := app.post_finance_ap_open_item(v_tenant_a, null, v_vendor.id, 'vendor_bill', gen_random_uuid(), 'USD', 300, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
+  v_ap_item := app.post_finance_ap_open_item(v_tenant_a, null, v_vendor.id, 'vendor_bill', pg_temp.iss319_mint_vendor_bill(v_tenant_a, v_customer_id, v_vendor.id, '00000000-0000-0000-0000-000000029702', 'financemanagera', 'iss319-subledger-ap'), 'USD', 300, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
   perform app.post_finance_subledger_batch(v_tenant_a, null, 'settlement',
     (select id from app.finance_settlements where tenant_id = v_tenant_a and idempotency_key = 'iss206-subl-4'), '2026-03-12'::date, 'USD',
     jsonb_build_array(
@@ -480,7 +630,7 @@ begin
   -- arOpeningBalanceNotPostedToGl rather than vanishing into a filter. That distinction
   -- is the whole point: Prompt 385 §24's "exact reconciliation" means being able to see a
   -- difference, not excluding it from the comparison.
-  v_extra_item := app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'opening_balance', gen_random_uuid(), 'USD', 999, '2026-03-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
+  v_extra_item := app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'opening_balance', pg_temp.iss319_mint_staging_row(v_tenant_a, '00000000-0000-0000-0000-000000029702', 'financemanagera'), 'USD', 999, '2026-03-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000029702', 'financemanagera');
   select app.get_finance_subledger_reconciliation_summary(v_tenant_a, '00000000-0000-0000-0000-000000029702') into v_summary;
   if (v_summary ->> 'arReconciled')::boolean is not true or (v_summary ->> 'arOpenItemTotal')::numeric <> 500 + (v_summary_before ->> 'arOpenItemTotal')::numeric then
     raise exception 'assertion failed: expected arReconciled to remain true and arOpenItemTotal unmoved by the un-posted opening_balance item, got before=% after=%', v_summary_before, v_summary;
