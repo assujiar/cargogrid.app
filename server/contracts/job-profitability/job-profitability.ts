@@ -18,6 +18,8 @@ export const JobProfitabilitySnapshotSchema = z.object({
   isCurrent: z.boolean(),
   status: z.enum(["calculated", "unavailable"]),
   blockedReason: z.string().nullable(),
+  /** ISS-2026-197: fixed marker distinguishing this quote-time operational estimate from app.finance_job_profitability_facts' own 'billed' basis. Metadata, never null even when status is unavailable. */
+  revenueBasis: z.literal("quoted"),
   revenueCurrency: z.string().nullable(),
   revenueAmount: z.number().nullable(),
   costCurrency: z.string().nullable(),
@@ -48,6 +50,7 @@ export function parseJobProfitabilitySnapshot(row: Record<string, unknown>): Job
     isCurrent: row.is_current,
     status: row.status,
     blockedReason: row.blocked_reason ?? null,
+    revenueBasis: row.revenue_basis,
     revenueCurrency: row.revenue_currency ?? null,
     revenueAmount: toNullableNumber(row.revenue_amount),
     costCurrency: row.cost_currency ?? null,

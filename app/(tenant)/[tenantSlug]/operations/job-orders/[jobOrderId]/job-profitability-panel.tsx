@@ -21,6 +21,8 @@ export function JobProfitabilityPanel({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-neutral-500">Operational margin only -- not accounting P&amp;L or recognized revenue.</p>
+      {/* ISS-2026-197: revenue_basis is metadata, never masked -- shown regardless of margin_masked/status so a viewer can never mistake this quote-time figure for a billed one. */}
+      {snapshot ? <p className="text-xs text-neutral-500">Revenue basis: quoted (quote-time estimate, not billed -- see Finance profitability for the billed figure).</p> : null}
 
       {!snapshot ? (
         <p className="text-sm text-neutral-500">No profitability snapshot has been calculated yet.</p>
@@ -33,7 +35,7 @@ export function JobProfitabilityPanel({
         </div>
       ) : (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <dt className="text-neutral-600">Revenue</dt>
+          <dt className="text-neutral-600">Revenue ({snapshot.revenueBasis})</dt>
           <dd className="text-neutral-900">
             {snapshot.revenueAmount?.toLocaleString()} {snapshot.revenueCurrency}
           </dd>

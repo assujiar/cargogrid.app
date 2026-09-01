@@ -4012,6 +4012,50 @@ product-scope/BIG-class question (building real multi-currency FX conversion), c
 per this entry's own prior disposition. Owner and scope unchanged (`HDN-386`); the newly-found
 `blocked_reason = 'mixed_currency'` compensating control recorded here for the next reader.
 
+**Labeling fragment closed (2026-09-01).** This entry's own finding 2 ended on an unaudited
+worry: "nothing in the UI contract layer was audited to confirm a viewer cannot mistake the
+Operations-side planned figure for a final, invoiced margin." That fragment — a pure labeling
+gap, not the FX-conversion question itself — is now closed, additively, via
+`20260901050000_label_operations_job_profitability_revenue_basis.sql`. `app.job_profitability_
+snapshots` (Operations, OPS-179) gains `revenue_basis text not null default 'quoted'` plus a
+single-value `CHECK (revenue_basis = 'quoted')` constraint — the identical self-describing
+marker its Finance-side sibling `app.finance_job_profitability_facts` already carried
+(`revenue_basis` fixed to `'billed'`, `FIN-212`). `app.calculate_job_profitability` (rebuilt via
+`CREATE OR REPLACE FUNCTION`, body re-verified byte-for-byte against the LIVE
+`pg_get_functiondef` output before editing — no drift found since `20260728120000`;
+`language plpgsql`/`security definer`/`set search_path = app, pg_temp` all restated explicitly)
+and `app.job_profitability_directory` (rebuilt via `CREATE OR REPLACE VIEW`, `revenue_basis`
+appended as the view's last column, deliberately outside every `app.has_view_job_margin(...)`
+masking `CASE` — it is metadata, never a computed figure, so it stays visible even when
+`margin_masked=true` or `status='unavailable'`) both now surface it; so do the Zod contract
+(`server/contracts/job-profitability/job-profitability.ts`, `revenueBasis: z.literal('quoted')`)
+and the Operations job-order profitability panel UI, which now shows "Revenue (quoted)" next to
+the figure — mirroring the Finance panel's own "Revenue (billed)" pattern exactly. A new
+regression block appended to `scripts/db-tests/operations-job-profitability.sql` (nothing above
+it edited, including the deliberate mixed-currency fixture from finding 1) live-proves: a fresh
+calculation carries `revenue_basis='quoted'`; the label survives on an `unavailable`/
+`mixed_currency` row (metadata is never nulled alongside a blocked calculation); a second Job
+Order with a real, separately-issued Finance invoice at a genuinely different amount than the
+quote (the quote's own tax-inclusive total vs. the invoice's own pre-tax billed subtotal — a
+real product distinction, not a fabricated one) shows the Operations snapshot and the Finance
+fact reporting their own different figures under their own different, independently-correct
+basis labels from the same Job Order and the same approved cost; and the directory view still
+returns `revenue_basis` for a margin-masked actor. **This does not touch, weaken, or resolve
+the FX-conversion/currency-blocking behavior above** — no currency-conversion primitive was
+wired into `app.calculate_job_profitability`, it still reads the quote-time
+`revenue_snapshot.totalAmount` verbatim, and a currency mismatch still yields
+`status='unavailable'`/`blocked_reason='mixed_currency'` rather than converting. Re-verified
+live (disposable Postgres, this migration set applied through `20260901040000` plus the new
+migration) that `app.convert_finance_amount`/`app.resolve_finance_exchange_rate` (`FIN-194`,
+real and working) are called only from Procurement (`app._normalize_vendor_comparison_currency`
+`PRC-258`, `app._evaluate_procurement_currency_threshold` `ISS-2026-045`) — no quotation, Job
+Order, invoice, or profitability function anywhere calls either — so this entry's own
+"nothing in the revenue chain reads it" claim independently re-confirmed accurate, not merely
+carried forward. **Status unchanged (`OPEN`)** — the entry's own subject, real multi-currency FX
+conversion for the revenue chain, remains a genuine, correctly-deferred product-scope question
+for `HDN-386`, not something this migration builds or claims to build. Only the labeling
+fragment is closed.
+
 ### ISS-2026-198 — `app.prepare_finance_vendor_bill_from_actual_cost`'s idempotency replay lookup had no `status <> 'void'` predicate, silently returning a discarded draft instead of allowing a fresh one (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, Medium, owner `HDN-374`)
 
 **Disclosure correction, not a new fix** — this fix was already shipped, mechanically, inside

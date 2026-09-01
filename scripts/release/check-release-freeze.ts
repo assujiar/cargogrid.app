@@ -3188,7 +3188,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // so a tenant's own configured default applies rather than a hardcoded literal. Item 3 (no
   // HRIS e2e/axe coverage) closed with a portal-guard spec mirroring this repository's own
   // established no-live-backend fail-safe-state pattern.
-  migrationSetSha256: "5ee83b6325c1001342815654894e7e321ef7815976969d3681b115cd41ccb4dd",
+  //
+  // SEVENTY-NINTH PASS (2026-09-01, ISS-2026-197): 427 files (+1). Closes only the labeling
+  // fragment of a partly-stale entry -- the FX-conversion question itself stays OPEN,
+  // correctly deferred to HDN-386, and is NOT touched by this pass. app.job_profitability_
+  // snapshots (Operations, OPS-179) gains revenue_basis text, fixed to 'quoted' via a
+  // single-value CHECK, mirroring the identical marker its Finance-side sibling
+  // app.finance_job_profitability_facts already carries fixed to 'billed'. app.calculate_
+  // job_profitability and app.job_profitability_directory rebuilt to surface it (language/
+  // security definer/search_path restated explicitly on the function, per ISS-2026-318's own
+  // documented recurrence risk; the new view column appended last, outside every margin-
+  // masking CASE, since a basis label is metadata a masked viewer still needs). No currency-
+  // conversion primitive was wired in; the deliberate mixed-currency test fixture this entry's
+  // own first finding relies on is untouched, only appended to.
+  migrationSetSha256: "1c3ab068c7dcf6e2f1630c884192207e96b508847163d297452142a757962dc4",
+  // History: 5ee83b6325c1001342815654894e7e321ef7815976969d3681b115cd41ccb4dd
+  // (426 files, ISS-2026-064's HRS:Edit-gated employee document upload).
   // History: a6fc27e86de8487012c81a70ce89e5c81b84980a77c51f29b8214f34d0f90d19
   // (425 files, ISS-2026-127's loyalty program tier readiness surface).
   // History: df91a2262da4e297bdf17bde197b1d0a6541eb0c271b1eb781cf79883c423cae
@@ -3734,7 +3749,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // tenant's own configured default, never a hardcoded literal; a terminated employee still
   // accepts uploads while an archived one is refused; idempotency replay/conflict both proven;
   // anon holds zero EXECUTE on either function.
-  dbTestSetSha256: "6247e07c73fcf41910829d0f38123a6817cd8b42aaf10b32150f089a225eb6c5",
+  //
+  // SEVENTY-NINTH PASS (2026-09-01, ISS-2026-197): 239 files, unchanged in count -- one
+  // extended, no existing line touched (including the deliberate mixed-currency fixture).
+  // operations-job-profitability.sql gains 4 assertions: a fresh calculation carries
+  // revenue_basis='quoted'; the label survives on an unavailable/mixed_currency row (metadata
+  // is never nulled alongside a blocked calculation); a second Job Order with a real,
+  // separately-issued Finance invoice at a genuinely different amount than the quote (the
+  // quote's own tax-inclusive total vs. the invoice's own pre-tax billed subtotal) shows
+  // Operations and Finance reporting their own independently-correct figures under their own
+  // different basis labels from the same Job Order and the same approved cost; and the
+  // directory view still returns revenue_basis for a margin-masked actor.
+  dbTestSetSha256: "d9449d7be9c1626b7c8f16e1a20e0fe95c210838c88c310b2b159de59741b0dc",
+  // History: 6247e07c73fcf41910829d0f38123a6817cd8b42aaf10b32150f089a225eb6c5
+  // (239 files, ISS-2026-064's HRS:Edit-gated employee document upload regression block).
   // History: 515e20e05dc857834f788f15eec36c2028506da1ca02b3925e3ff86aa3cea4e7
   // (239 files, ISS-2026-127's loyalty tier readiness regression block).
   // History: ee38d214808d120ed461cb27bb31e4baad30a573e262774ef371b2d182a29a42

@@ -29,6 +29,7 @@ const SNAPSHOT_ROW = {
   is_current: true,
   status: "calculated",
   blocked_reason: null,
+  revenue_basis: "quoted",
   revenue_currency: "IDR",
   revenue_amount: 15000000,
   cost_currency: "IDR",

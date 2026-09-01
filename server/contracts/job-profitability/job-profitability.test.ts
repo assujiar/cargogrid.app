@@ -15,6 +15,7 @@ const BASE_ROW = {
   is_current: true,
   status: "calculated",
   blocked_reason: null,
+  revenue_basis: "quoted",
   revenue_currency: "IDR",
   revenue_amount: 15000000,
   cost_currency: "IDR",
@@ -37,6 +38,7 @@ describe("parseJobProfitabilitySnapshot", () => {
     assert.equal(snapshot.status, "calculated");
     assert.equal(snapshot.marginAmount, 7000000);
     assert.equal(snapshot.marginPercent, 46.6667);
+    assert.equal(snapshot.revenueBasis, "quoted");
   });
 
   test("maps an unavailable snapshot with null money fields", () => {
@@ -52,6 +54,8 @@ describe("parseJobProfitabilitySnapshot", () => {
     assert.equal(snapshot.status, "unavailable");
     assert.equal(snapshot.blockedReason, "mixed_currency");
     assert.equal(snapshot.marginAmount, null);
+    // ISS-2026-197: revenue_basis is metadata, not a computed figure -- never nulled out alongside a blocked calculation.
+    assert.equal(snapshot.revenueBasis, "quoted");
   });
 });
 
