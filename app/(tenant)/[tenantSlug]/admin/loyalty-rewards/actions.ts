@@ -13,9 +13,28 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
+import { assertPermission, RbacDenialError } from "../../../../../server/policies/permission-check.ts";
+import type { RbacRpcClient } from "../../../../../server/queries/rbac.ts";
 import { createLoyaltyRewardDraft, updateLoyaltyRewardDraft, publishLoyaltyReward, pauseLoyaltyReward, resumeLoyaltyReward, archiveLoyaltyReward, LoyaltyRewardMutationError } from "../../../../../server/mutations/customer-portal-loyalty-rewards.ts";
+import {
+  uploadLoyaltyRewardMediaFile,
+  publishLoyaltyRewardTermsDocumentTypeDefinition,
+  LoyaltyRewardMediaMutationError,
+  type LoyaltyRewardMediaMutationRpcClient,
+  type PublishLoyaltyRewardTermsDocumentTypeRpcClient,
+} from "../../../../../server/mutations/loyalty-reward-media.ts";
 import type { LoyaltyRewardType } from "../../../../../server/contracts/customer-portal-loyalty-rewards/customer-portal-loyalty-rewards.ts";
+
+/**
+ * The real Supabase client's own `rpc` overload set does not structurally satisfy
+ * these mutation modules' narrower literal-function-name interfaces -- identical
+ * adapter shape to procurement/compliance/vendors/actions.ts's own toDocumentClient.
+ */
+function toMediaClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): LoyaltyRewardMediaMutationRpcClient & PublishLoyaltyRewardTermsDocumentTypeRpcClient {
+  return client as unknown as LoyaltyRewardMediaMutationRpcClient & PublishLoyaltyRewardTermsDocumentTypeRpcClient;
+}
 
 export interface LoyaltyRewardAdminFormState {
   readonly error: string | null;
@@ -66,12 +85,89 @@ function readDraftFields(formData: FormData): { rewardName: string; rewardType: 
   };
 }
 
+interface MediaFields {
+  readonly originalFilename: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+}
+
+/** Present only when a real file was chosen in the new `<input type="file">` -- absent for the pasted-fileId-only path (unchanged, still supported below). */
+function readMediaFields(formData: FormData): MediaFields | null {
+  const originalFilename = readNullableText(formData, "mediaOriginalFilename");
+  const mimeType = readNullableText(formData, "mediaMimeType");
+  const sizeBytes = Number(formData.get("mediaSizeBytes") ?? 0);
+  if (!originalFilename || !mimeType || !(sizeBytes > 0)) return null;
+  return { originalFilename, mimeType, sizeBytes };
+}
+
+/**
+ * Uploads a chosen reward media/terms file, returning the resulting `app.
+ * files.id` to use in place of any pasted-text fallback. Re-checks LYL:
+ * Create/Edit through app.evaluate_permission BEFORE the upload itself --
+ * app.check_file_action_authority (the gate app.initiate_file_upload
+ * actually enforces) only proves standing tenant membership, not LYL
+ * authority, so without this pre-check any active tenant-admin-portal
+ * member could create a real app.files row here even without LYL:Create/
+ * Edit, regardless of what the downstream create/update RPC would later
+ * reject. Both this check and the upload itself MUST run through the
+ * service-role client: app.evaluate_permission and app.initiate_file_upload
+ * are both granted to `service_role` only, never `authenticated` (confirmed
+ * live and in lib/supabase/service-role.ts's own header) -- the "ordinary
+ * RLS-scoped client" cannot call either one. The actor's real identity is
+ * still the one resolved from the RLS-scoped resolveTenantAdminAccessForRequest
+ * call the caller already made; it is only the RPC call itself that has to
+ * go through service_role, exactly the same "explicit actor, service-role
+ * execution" shape every other PLT-128 call site in this repository uses.
+ */
+async function uploadMediaFileOrThrow(tenantId: string, authUserId: string, action: "Create" | "Edit", recordId: string, media: MediaFields): Promise<string> {
+  const client = createSupabaseServiceRoleClient();
+  await assertPermission(client as unknown as RbacRpcClient, { authUserId, tenantId, resourceModuleCode: "LYL", action });
+  const uploaded = await uploadLoyaltyRewardMediaFile(toMediaClient(client), {
+    tenantId,
+    recordId,
+    originalFilename: media.originalFilename,
+    mimeType: media.mimeType,
+    sizeBytes: media.sizeBytes,
+    idempotencyKey: null,
+    actorAuthUserId: authUserId,
+    actorLabel: authUserId,
+  });
+  return uploaded.id;
+}
+
+function describeMediaUploadError(error: unknown): string {
+  if (error instanceof RbacDenialError) {
+    return "You don't have permission to attach reward media (requires Loyalty Create/Edit authority).";
+  }
+  if (error instanceof LoyaltyRewardMediaMutationError) {
+    if (error.code === "document_type_not_configured") {
+      return "Reward media uploads are not enabled for this organization yet -- use \"Enable reward media uploads\" below, then try again.";
+    }
+    return `Could not upload the media file: ${error.message}`;
+  }
+  throw error;
+}
+
 export async function createLoyaltyRewardDraftAction(tenantSlug: string, programId: string, _prevState: LoyaltyRewardAdminFormState, formData: FormData): Promise<LoyaltyRewardAdminFormState> {
   const access = await resolveTenantAdminAccessForRequest(tenantSlug);
   if (access.status !== "allowed") return { error: "You don't have access to this organization's admin workspace." };
 
   const fields = readDraftFields(formData);
   if ("error" in fields) return fields;
+
+  // A real chosen file overrides any pasted-text fileId (the pasted-id path
+  // stays available below for anyone who already has one, e.g. from the
+  // Document Center) -- see uploadMediaFileOrThrow's own header for why this
+  // pre-checks LYL:Create through the service-role client before the upload.
+  let fileId = fields.fileId;
+  const media = readMediaFields(formData);
+  if (media) {
+    try {
+      fileId = await uploadMediaFileOrThrow(access.tenant.id, access.authUserId, "Create", programId, media);
+    } catch (error) {
+      return { error: describeMediaUploadError(error) };
+    }
+  }
 
   const supabase = await createSupabaseServerClient();
   try {
@@ -87,7 +183,7 @@ export async function createLoyaltyRewardDraftAction(tenantSlug: string, program
       totalStock: fields.totalStock,
       internalCost: fields.internalCost,
       vendorRef: fields.vendorRef,
-      fileId: fields.fileId,
+      fileId,
       actorAuthUserId: access.authUserId,
       actorLabel: access.authUserId,
     });
@@ -114,6 +210,16 @@ export async function updateLoyaltyRewardDraftAction(
   const fields = readDraftFields(formData);
   if ("error" in fields) return fields;
 
+  let fileId = fields.fileId;
+  const media = readMediaFields(formData);
+  if (media) {
+    try {
+      fileId = await uploadMediaFileOrThrow(access.tenant.id, access.authUserId, "Edit", rewardId, media);
+    } catch (error) {
+      return { error: describeMediaUploadError(error) };
+    }
+  }
+
   const supabase = await createSupabaseServerClient();
   try {
     await updateLoyaltyRewardDraft(supabase, {
@@ -129,7 +235,7 @@ export async function updateLoyaltyRewardDraftAction(
       totalStock: fields.totalStock,
       internalCost: fields.internalCost,
       vendorRef: fields.vendorRef,
-      fileId: fields.fileId,
+      fileId,
       actorAuthUserId: access.authUserId,
       actorLabel: access.authUserId,
     });
@@ -199,6 +305,33 @@ export async function archiveLoyaltyRewardAction(tenantSlug: string, programId: 
     await archiveLoyaltyReward(supabase, { tenantId: access.tenant.id, rewardId, expectedVersion, reason: readNullableText(formData, "reason"), actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof LoyaltyRewardMutationError) return { error: `Could not archive this reward: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(pathFor(tenantSlug, programId));
+  return INITIAL_STATE;
+}
+
+/**
+ * One-time (re-runnable) per-tenant setup: publishes this tenant's own
+ * `document:reward_terms` document-type definition, the precondition
+ * app.resolve_document_type_definition requires before ANY reward media
+ * upload can succeed. Gated by the identical resolveTenantAdminAccessForRequest
+ * guard every other action in this file already uses -- no new authority
+ * check invented for this one, matching the rest of this admin area.
+ */
+export async function enableLoyaltyRewardMediaUploadsAction(tenantSlug: string, programId: string, _prevState: LoyaltyRewardAdminFormState, _formData: FormData): Promise<LoyaltyRewardAdminFormState> {
+  const access = await resolveTenantAdminAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") return { error: "You don't have access to this organization's admin workspace." };
+
+  try {
+    await publishLoyaltyRewardTermsDocumentTypeDefinition(toMediaClient(createSupabaseServiceRoleClient()), {
+      tenantId: access.tenant.id,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof LoyaltyRewardMediaMutationError) return { error: `Could not enable reward media uploads: ${error.message}` };
     throw error;
   }
 

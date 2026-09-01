@@ -1136,4 +1136,94 @@ begin
   end;
 end $$;
 
+\echo '>> ISS-2026-131 item 3 regression (docs/runtime/KNOWN_ISSUES.md): supabase/migrations/20260901020000_register_loyalty_reward_terms_document_type.sql''s own idempotent insert does not disturb this fixture''s own app.register_document_type(''reward_terms'', ...) call above; a real reward_terms/loyalty_reward upload round-trips correctly; a file belonging to rwd1 is rejected (invalid_file_id) when attached to an rwd2 reward draft (tenant isolation); the pending-file customer-projection behavior (no metadata surfaced, access denied while scanning) is unchanged'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rwd1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'rwd2');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000343001';
+  v_manager2 uuid := '00000000-0000-0000-0000-000000343101';
+  v_customer_alpha uuid := '00000000-0000-0000-0000-000000343010';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'rwd1') and name = 'Reward Catalogue Program');
+  v_program2_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'rwd2') and name = 'Reward Catalogue Program 2');
+  v_loyalty_account_alpha uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rwd1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rwd1') and legal_name = 'Rwd Account Alpha'));
+  v_new_file app.files;
+  v_new_pending_file app.files;
+  v_reward app.loyalty_rewards;
+  v_pending_reward app.loyalty_rewards;
+  v_row record;
+  v_log_result text;
+  v_log_reason text;
+begin
+  -- (a) migration idempotency: the fixture's own setup block above already
+  -- registered 'reward_terms'/'document:reward_terms' via
+  -- app.register_document_type -- exactly one row of each must exist before
+  -- the migration's own insert runs.
+  if (select count(*) from app.document_types where code = 'reward_terms') <> 1
+     or (select count(*) from app.config_types where code = 'document:reward_terms') <> 1 then
+    raise exception 'assertion failed: expected exactly one reward_terms document_type row and one document:reward_terms config_type row before the migration''s own insert';
+  end if;
+
+  -- Re-runs the migration's own two statements verbatim (supabase/
+  -- migrations/20260901020000_register_loyalty_reward_terms_document_type.
+  -- sql) -- must be a genuine no-op against a row this fixture's own
+  -- app.register_document_type call already created, never a duplicate row
+  -- or an error.
+  insert into app.document_types (code, name, owner_primitive_code, registered_by)
+  values ('reward_terms', 'Reward Terms Document', 'LYL', 'system')
+  on conflict (code) do nothing;
+  insert into app.config_types (code, name, owner_primitive_code, registered_by)
+  values ('document:reward_terms', 'Reward Terms Document', 'LYL', 'system')
+  on conflict (code) do nothing;
+
+  if (select count(*) from app.document_types where code = 'reward_terms') <> 1
+     or (select count(*) from app.config_types where code = 'document:reward_terms') <> 1
+     or (select name from app.document_types where code = 'reward_terms') <> 'Reward Terms Document'
+  then
+    raise exception 'assertion failed: expected the migration''s own idempotent insert to be a genuine no-op against this fixture''s already-registered reward_terms row';
+  end if;
+
+  -- (b) a real upload against reward_terms/loyalty_reward round-trips
+  -- correctly for a brand-new record (independent of the clean/pending
+  -- pair the malware-scan-gated test above already covers).
+  v_new_file := app.initiate_file_upload(v_tenant1, 'reward_terms', 'loyalty_reward', gen_random_uuid(), 'iss-2026-131-roundtrip.pdf', 'application/pdf', 4096, null, false, null, '{}', null, 'idem-iss-2026-131-roundtrip', v_manager1, 'manager1');
+  if v_new_file.tenant_id <> v_tenant1 or v_new_file.document_type_code <> 'reward_terms' or v_new_file.record_type <> 'loyalty_reward' or v_new_file.original_filename <> 'iss-2026-131-roundtrip.pdf' or v_new_file.malware_scan_status <> 'pending' then
+    raise exception 'assertion failed: expected a real reward_terms/loyalty_reward file to round-trip its own tenant/document_type_code/record_type/filename correctly, got %', v_new_file;
+  end if;
+
+  -- (c) tenant isolation: rwd1's own file is rejected when attached to an
+  -- rwd2 reward draft -- the already-shipped cross-tenant guard in
+  -- app.create_loyalty_reward_draft, unaffected by this migration.
+  begin
+    perform app.create_loyalty_reward_draft(v_tenant2, v_program2_id, 'Cross Tenant File Reward', 'physical_item', null, null, null, null, null, null, null, v_new_file.id, v_manager2, 'manager2');
+    raise exception 'assertion failed: expected invalid_file_id when attaching rwd1''s own file to an rwd2 reward draft';
+  exception when others then if sqlerrm not like 'invalid_file_id%' then raise; end if;
+  end;
+
+  -- (d) the SAME file is accepted normally inside its own tenant (rwd1),
+  -- proving (c) failed on tenant ownership, not on the file being
+  -- generally unusable.
+  v_reward := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'ISS-2026-131 Roundtrip Reward', 'physical_item', null, null, null, null, null, null, null, v_new_file.id, v_manager1, 'manager1');
+  if v_reward.file_id <> v_new_file.id then
+    raise exception 'assertion failed: expected the new reward draft to carry the uploaded file id, got %', v_reward;
+  end if;
+
+  -- (e) pending-file customer-projection behavior (no metadata surfaced,
+  -- access denied while scanning) is unchanged by this addition -- a FRESH
+  -- pending file/reward pair, independent of the malware-scan-gated test
+  -- above.
+  v_new_pending_file := app.initiate_file_upload(v_tenant1, 'reward_terms', 'loyalty_reward', gen_random_uuid(), 'iss-2026-131-still-pending.pdf', 'application/pdf', 4096, null, false, null, '{}', null, 'idem-iss-2026-131-pending', v_manager1, 'manager1');
+  v_pending_reward := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'ISS-2026-131 Pending Terms Reward', 'discount_voucher', null, 'See attached terms.', null, null, null, null, null, v_new_pending_file.id, v_manager1, 'manager1');
+  v_pending_reward := app.publish_loyalty_reward(v_tenant1, v_pending_reward.id, v_pending_reward.record_version, null, v_manager1, 'manager1');
+
+  select * into v_row from app.get_customer_portal_loyalty_reward(v_tenant1, v_pending_reward.id, v_loyalty_account_alpha, v_customer_alpha);
+  if not v_row.has_terms_file or v_row.terms_file_scan_status <> 'pending' or v_row.terms_file_name is not null or v_row.terms_file_mime_type is not null or v_row.terms_file_size_bytes is not null then
+    raise exception 'assertion failed: expected a still-pending file''s own real scan status (pending) with NO metadata, unchanged by this migration, got %', v_row;
+  end if;
+  select result, reason into v_log_result, v_log_reason from app.file_access_logs where file_id = v_new_pending_file.id and accessed_by_auth_user_id = v_customer_alpha order by accessed_at desc limit 1;
+  if v_log_result <> 'denied' or v_log_reason <> 'document_not_yet_scanned' then
+    raise exception 'assertion failed: expected a DENIED app.file_access_logs row (document_not_yet_scanned) for the pending file, unchanged by this migration, got result=% reason=%', v_log_result, v_log_reason;
+  end if;
+end $$;
+
 \echo 'ALL PASSED: CPL-320 Reward Catalogue'

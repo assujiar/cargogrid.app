@@ -219,6 +219,52 @@ export const ReserveLoyaltyRewardStockUnitInputSchema = z.object({
 export type ReserveLoyaltyRewardStockUnitInput = z.input<typeof ReserveLoyaltyRewardStockUnitInputSchema>;
 
 // ===========================================================================
+// Reward media/terms file upload (ISS-2026-131 item 3) -- reuses PLT-128
+// (app.initiate_file_upload) exactly like server/contracts/customer-quote-
+// request/customer-quote-request.ts's own UploadCustomerQuoteRequestAttach
+// mentInputSchema does for CPL-302: not a direct RPC 1:1 input, composed by
+// server/mutations/loyalty-reward-media.ts into the existing call with
+// documentTypeCode/recordType fixed by this capability
+// ('reward_terms'/'loyalty_reward'). `recordId` is deliberately generic (no
+// FK -- app.files.record_id has none, per PLT-128's own disclosed
+// polymorphic-reference design) so a caller can pass the reward's own id
+// once it exists (editing an existing draft) or the owning program's id
+// when none exists yet (a brand-new reward being created in the same
+// request the file is attached to).
+// ===========================================================================
+
+/** This tenant's own currently-configured allowlist for the 'reward_terms' document type -- exported so the admin UI's own `<input accept>` can mirror it exactly instead of duplicating the list, and so server/mutations/loyalty-reward-media.ts's own publish helper stays the single source of truth for what it actually configures. */
+export const LOYALTY_REWARD_TERMS_ALLOWED_MIME_TYPES = ["application/pdf"] as const;
+
+export const UploadLoyaltyRewardMediaInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  recordId: z.string().uuid(),
+  originalFilename: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  idempotencyKey: z.string().nullable().optional(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type UploadLoyaltyRewardMediaInput = z.input<typeof UploadLoyaltyRewardMediaInputSchema>;
+
+/**
+ * Input for publishing the tenant's own `document:reward_terms` document-
+ * type definition (PLT-121 config engine) -- the one-time per-tenant step
+ * app.resolve_document_type_definition requires before ANY upload against
+ * 'reward_terms' can succeed (document_type_not_configured otherwise).
+ * Composed by server/mutations/loyalty-reward-media.ts from three already-
+ * shipped primitives (createConfigDraft/setConfigItems/
+ * publishDocumentTypeDefinition) -- this is not a new RPC.
+ */
+export const PublishLoyaltyRewardTermsDocumentTypeInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type PublishLoyaltyRewardTermsDocumentTypeInput = z.input<typeof PublishLoyaltyRewardTermsDocumentTypeInputSchema>;
+
+// ===========================================================================
 // Cursor pagination
 // ===========================================================================
 

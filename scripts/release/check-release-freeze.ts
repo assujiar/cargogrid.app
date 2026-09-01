@@ -3142,7 +3142,26 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // because it arrives as a file. Fixed by checking both authorities up front, before the loop,
   // so a committer missing either one gets one clear refusal instead of failing loan-by-loan
   // mid-commit.
-  migrationSetSha256: "37aa1701f15c42b5b9dc5a9111892194eaedec2faccd2d3ddf4571a5554b2984",
+  //
+  // SEVENTY-SIXTH PASS (2026-09-01, ISS-2026-131): 424 files (+1). Closes item 3 of a mostly-
+  // resolved entry: the admin reward create/edit forms took an app.files.id by pasted free
+  // text only, with no uploader anywhere in the loyalty UI, even though the backend (PLT-128)
+  // already fully supported it. 20260901020000 registers the reward_terms document type and
+  // document:reward_terms config type (additive, on-conflict-do-nothing) that
+  // scripts/db-tests/customer-loyalty-reward-catalogue.sql's own fixture already exercised in
+  // its disposable test DB but which had never been made real in the shared/live schema --
+  // live-verified before writing: app.config_objects had ZERO document:% rows project-wide, so
+  // every tenant's own document-type definition, for every document type, was unpublished.
+  //
+  // A plan correction found and fixed during the build, not forced through: the original plan
+  // called for pre-checking LYL:Create/Edit authority "through the ordinary RLS-scoped client"
+  // before an upload. app.evaluate_permission is granted to service_role only, never
+  // authenticated (confirmed live) -- the RLS-scoped client cannot call it. Fixed by running
+  // that pre-check through the service-role client instead, the same "real identity, explicit
+  // param, service-role execution" shape every other PLT-128 call site in this repository uses.
+  migrationSetSha256: "df91a2262da4e297bdf17bde197b1d0a6541eb0c271b1eb781cf79883c423cae",
+  // History: 37aa1701f15c42b5b9dc5a9111892194eaedec2faccd2d3ddf4571a5554b2984
+  // (423 files, ISS-2026-317's payroll loan cutover import adapter).
   // History: c098026ee4f311f262cb6524c7ffabc9f555296dcd264ec7259b95989d39b4b8
   // (422 files, ISS-2026-138's RPD-023 step-up classification fix).
   // History: 6f5d8cd8f7055d7f8fbc6877818192a56d46fedf36600685cecd00ca1790e24b
@@ -3652,7 +3671,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // the exact decision the entry called unanswered), invalid rows are refused with reasons at
   // validation, a caller holding HRS:Import and HRS:Approve but no administrative authority is
   // refused regardless, and a re-commit is a no-op rather than a second loan.
-  dbTestSetSha256: "3f444cf22b18131792f8529a672af2b830febdb0cac6ed3483e9c8879063012f",
+  //
+  // SEVENTY-SIXTH PASS (2026-09-01, ISS-2026-131): 239 files, unchanged in count -- one
+  // extended, never edited elsewhere. customer-loyalty-reward-catalogue.sql gains a block,
+  // appended after its own existing final assertion, proving the new migration's idempotent
+  // insert does not disturb the fixture's own app.register_document_type('reward_terms', ...)
+  // call; a real reward_terms/loyalty_reward upload round-trips correctly; a file belonging to
+  // one tenant is rejected (invalid_file_id) when attached to a different tenant's reward
+  // draft; and the pre-existing pending-file customer-projection behavior (no metadata
+  // surfaced, access denied while scanning) is unchanged by the new upload path.
+  dbTestSetSha256: "ee38d214808d120ed461cb27bb31e4baad30a573e262774ef371b2d182a29a42",
+  // History: 3f444cf22b18131792f8529a672af2b830febdb0cac6ed3483e9c8879063012f
+  // (239 files, ISS-2026-317's payroll-loan-cutover-import regression block).
   // History: 6670568cd302a6d835fe7129b65ddea1c27f0260962a132ee87480072fc5e233
   // (239 files, ISS-2026-307's non-transactional evidence plus ISS-2026-138's MFA regression
   // extension).

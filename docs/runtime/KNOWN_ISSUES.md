@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 43 — 4 High, 13 Medium, 26 Low |
+| `OPEN` | 42 — 4 High, 13 Medium, 25 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 224 |
+| `RESOLVED` | 225 |
 | **Total records** | **276** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -137,7 +137,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-127` | Low | `OPEN` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
 | `ISS-2026-128` | Low | `RESOLVED` | Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied par |
 | `ISS-2026-129` | Low | `OPEN` | Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expir |
-| `ISS-2026-131` | Low | `OPEN` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
+| `ISS-2026-131` | Low | `RESOLVED` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
 | `ISS-2026-132` | Low | `OPEN` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
 | `ISS-2026-133` | Low | `RESOLVED` | Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level |
 | `ISS-2026-134` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects c |
@@ -2478,7 +2478,7 @@ Live-verified this checkpoint (`scripts/db-tests/customer-portal-loyalty-ledger-
 
 **New residual disclosure — `app.loyalty_account_tier_movements` carries the identical gap and was NOT included in this migration.** This table was named in this issue's own ORIGINAL four-table list (Batch 4, before `CPL-320`/`CPL-321` existed) but was omitted from this checkpoint's own explicit 5-table remediation scope (which instead named the two newer Batch-5 tables, `app.loyalty_reward_stock_reservations`/`app.loyalty_redemption_events`, that postdate this issue's own original disclosure). Grep-confirmed: `app.loyalty_account_tier_movements` still grants only `select, insert` to `service_role` (`supabase/migrations/20260801190000_create_customer_portal_loyalty_membership_tier.sql:1192`), zero `UPDATE`/`DELETE` to any role. Tracked as new issue `ISS-2026-137` (below) rather than silently left unaddressed or silently folded into this now-`RESOLVED` entry's own closed scope.
 
-### ISS-2026-131 — Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race-safe stock-reservation primitive has no production caller yet; reward media/config UI has no file-upload flow of its own (Phase 8, Batch 5, `CG-S13-CPL-022`, OPEN — item 3 only, items 1-2 `RESOLVED` 2026-08-20 at CPL-324, Low)
+### ISS-2026-131 — Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race-safe stock-reservation primitive has no production caller yet; reward media/config UI has no file-upload flow of its own (Phase 8, Batch 5, `CG-S13-CPL-022`, `RESOLVED` in full 2026-09-01 — items 1-2 `RESOLVED` 2026-08-20 at CPL-324, item 3 built for real this pass, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-022` (Prompt 320, Reward Catalogue, the first prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801220000_create_customer_portal_loyalty_reward_catalogue.sql`, not defects found afterward.
 
@@ -2491,6 +2491,62 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-022` (Prompt 320, Reward Catalo
 **Not fixed here** — item 3 is a deliberate, disclosed design simplification, not an oversight, and remains `OPEN`. Items 1 and 2 are `RESOLVED` (see above — `CPL-321` closed both on its own already-scoped terms). **Status `OPEN`** (item 3 only), Low severity for all three items (no data fabricated or leaked; every RPC this checkpoint ships is real, complete, and correctly gated — including live-proven optimistic-concurrency NULL-bypass regressions across all five version-checked functions, a real two-process concurrent stock-reservation race, and a structurally-provable internal-cost/vendor-ref-never-leaked guarantee; no existing caller or test is affected). Recommended fix for whichever future checkpoint picks this up: item 1, `CPL-321` itself, per its own already-scoped "Redemption Approval and Fulfillment" task, composing `app.reserve_loyalty_reward_stock_unit` (or an equivalent) after its own eligibility/effective-date re-validation; item 2, none required beyond `CPL-321` wiring a real caller; item 3, a future capability could add a proper file-picker/uploader to the admin reward form, reusing PLT-128's own `app.initiate_file_upload` the same way the Document Center's own UI already does.
 
 **Update (`2026-08-28`, Track B Batch 4):** re-verified — items 1-2 confirmed correctly already `RESOLVED`: `app._compose_loyalty_redemption_decision` (`20260801230000...sql:638`) calls `app.reserve_loyalty_reward_stock_unit`, and both `app.submit_loyalty_redemption`/`app.decide_loyalty_redemption` are granted (lines 1529-1530). Item 3 confirmed still open: the admin reward form still has a plain text `<input>` for `app.files.id`, no uploader widget — a new UI capability, not boundable via migration/test. Disposition unchanged, still `OPEN` (item 3 only).
+
+**`RESOLVED` in full, 2026-09-01 — item 3 built for real.** Independently re-verified live against
+the hosted project (`awdlicmwzdxquopwtcfd`, Supabase Management API) before writing anything:
+`app.document_types` had no `reward_terms` row, `app.config_types` had no `document:reward_terms`
+row, and `app.config_objects` had ZERO rows with `config_type_code like 'document:%'`
+project-wide — every tenant's own document-type definition, for every document type, was
+unpublished; the admin reward form still took only a pasted `app.files.id`.
+
+Built: `supabase/migrations/20260901020000_register_loyalty_reward_terms_document_type.sql`
+(additive, `on conflict (code) do nothing`, registers `reward_terms`/`document:reward_terms` —
+the code `scripts/db-tests/customer-loyalty-reward-catalogue.sql`'s own fixture already exercises,
+made real in the shared schema, not a second one); a new contract section in
+`server/contracts/customer-portal-loyalty-rewards/customer-portal-loyalty-rewards.ts`
+(`UploadLoyaltyRewardMediaInputSchema`, `PublishLoyaltyRewardTermsDocumentTypeInputSchema`,
+`LOYALTY_REWARD_TERMS_ALLOWED_MIME_TYPES`); a new mutation module
+`server/mutations/loyalty-reward-media.ts` (`uploadLoyaltyRewardMediaFile`, a near-copy of
+`customer-quote-request-attachment.ts`'s own direct-RPC/own-error-type shape; and
+`publishLoyaltyRewardTermsDocumentTypeDefinition`, composing the already-shipped
+`createConfigDraft`/`setConfigItems`/`publishDocumentTypeDefinition` with the identical
+allowlist/size/retention/classification values `scripts/db-tests/customer-loyalty-reward-catalogue.sql`
+already live-tests) with its own `server/mutations/loyalty-reward-media.test.ts`; `actions.ts` wired
+with a real `<input type="file">` in `loyalty-rewards-admin-panel.tsx` above the surviving
+(relabeled) manual-fallback text field, plus a new `enableLoyaltyRewardMediaUploadsAction` the UI
+surfaces as a one-time "Enable reward media uploads for this organization" button whenever an
+upload fails `document_type_not_configured`.
+
+**One correction to the plan this closed against, found and fixed rather than forced through:**
+the plan called for pre-checking `LYL:Create`/`Edit` authority "through the ordinary RLS-scoped
+client" before an upload. Live-checked (`information_schema.routine_privileges`) and confirmed in
+`lib/supabase/service-role.ts`'s own header: `app.evaluate_permission` is granted to
+`service_role` only, never `authenticated` — the RLS-scoped client cannot call it at all (it would
+fail closed with a Postgres permission error, not a clean denial). The pre-check runs through the
+service-role client instead, exactly the same "real identity resolved via the RLS-scoped session,
+then passed explicitly to a service-role RPC" shape every other PLT-128 call site in this
+repository already uses (see `lib/supabase/service-role.ts`'s own header, and
+`procurement/compliance/vendors/actions.ts`'s identical justification for `initiate_file_upload`
+itself) — not a new pattern invented to route around the gate. Without this pre-check, any active
+tenant-admin-portal member could otherwise create a real `app.files` row via the new upload path
+even without `LYL:Create`/`Edit`, regardless of what the downstream create/update RPC would later
+reject.
+
+DB regression appended (never edited) to `scripts/db-tests/customer-loyalty-reward-catalogue.sql`,
+after its existing final assertion: the migration's idempotent insert does not disturb the
+fixture's own `app.register_document_type('reward_terms', ...)` call; a real
+`reward_terms`/`loyalty_reward` upload round-trips correctly; a file belonging to `rwd1` is
+rejected (`invalid_file_id`) when attached to a `rwd2` reward draft (tenant isolation, via the
+already-shipped cross-tenant check in `app.create_loyalty_reward_draft`); and the pre-existing
+pending-file customer-projection behavior (no metadata surfaced, `app.file_access_logs` access
+denied while scanning) is unchanged by this addition.
+
+Evidence: `pnpm run typecheck` (clean), `pnpm run lint` (0 errors, 400 warnings — identical count
+to the pre-change baseline, confirmed by diffing against `git stash`), `pnpm run test` (5,831
+passed, 0 failed, including the new `loyalty-reward-media.test.ts`), `pnpm run db:test` (full suite
+`ALL PASSED`, including the four new assertions above). The new migration is left unapplied to the
+live/hosted project for the orchestrating session's own review, per this task's own charter.
+**Status `RESOLVED`** in full.
 
 ### ISS-2026-132 — Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardless of reward_type; discount_voucher entitlement value is sourced from the reward's own staff-only internal_cost; no notification/retry/DLQ mechanism exists yet (Phase 8, Batch 5, `CG-S13-CPL-023`, OPEN, Low)
 

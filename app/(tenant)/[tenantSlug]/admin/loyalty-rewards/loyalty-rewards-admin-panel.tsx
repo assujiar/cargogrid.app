@@ -7,16 +7,32 @@
  * panel.tsx`).
  */
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
-import type { LoyaltyReward } from "../../../../../server/contracts/customer-portal-loyalty-rewards/customer-portal-loyalty-rewards.ts";
+import { LOYALTY_REWARD_TERMS_ALLOWED_MIME_TYPES, type LoyaltyReward } from "../../../../../server/contracts/customer-portal-loyalty-rewards/customer-portal-loyalty-rewards.ts";
 import type { LoyaltyTierDefinition } from "../../../../../server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
-import { createLoyaltyRewardDraftAction, updateLoyaltyRewardDraftAction, publishLoyaltyRewardAction, pauseLoyaltyRewardAction, resumeLoyaltyRewardAction, archiveLoyaltyRewardAction, type LoyaltyRewardAdminFormState } from "./actions.ts";
+import {
+  createLoyaltyRewardDraftAction,
+  updateLoyaltyRewardDraftAction,
+  publishLoyaltyRewardAction,
+  pauseLoyaltyRewardAction,
+  resumeLoyaltyRewardAction,
+  archiveLoyaltyRewardAction,
+  enableLoyaltyRewardMediaUploadsAction,
+  type LoyaltyRewardAdminFormState,
+} from "./actions.ts";
 
 const INITIAL_STATE: LoyaltyRewardAdminFormState = { error: null };
 
 const REWARD_STATUS_TONE = { draft: "neutral", published: "success", paused: "warning", superseded: "neutral", archived: "neutral" } as const;
+
+const MEDIA_UPLOAD_ACCEPT = LOYALTY_REWARD_TERMS_ALLOWED_MIME_TYPES.join(",");
+
+/** describeMediaUploadError in actions.ts phrases this specific failure with this exact wording -- matched here (not a new server call) to decide when to surface the one-time enable action inline. */
+function needsMediaUploadsEnabled(error: string | null): boolean {
+  return !!error && error.includes("Enable reward media uploads");
+}
 
 function ErrorBanner({ error }: { error: string | null }) {
   if (!error) return null;
@@ -24,6 +40,35 @@ function ErrorBanner({ error }: { error: string | null }) {
     <p role="alert" className="text-sm text-danger">
       {error}
     </p>
+  );
+}
+
+/** Shown inline once a reward media upload fails with document_type_not_configured -- a one-time (re-runnable) per-tenant setup step, gated identically to every other action in this admin area. */
+function EnableMediaUploadsButton({ tenantSlug, programId }: { tenantSlug: string; programId: string }) {
+  const [state, formAction, pending] = useActionState(enableLoyaltyRewardMediaUploadsAction.bind(null, tenantSlug, programId), INITIAL_STATE);
+  return (
+    <form action={formAction} className="mt-1 flex flex-col items-start gap-1" noValidate>
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Enabling…" className="w-fit">
+        Enable reward media uploads for this organization
+      </Button>
+      <ErrorBanner error={state.error} />
+    </form>
+  );
+}
+
+function RewardMediaFileField({ id }: { id: string }) {
+  const [selected, setSelected] = useState<File | null>(null);
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className="text-xs font-medium text-text-secondary">
+        Upload terms/media file
+      </label>
+      <input id={id} type="file" accept={MEDIA_UPLOAD_ACCEPT} onChange={(event) => setSelected(event.currentTarget.files?.[0] ?? null)} className="text-xs" />
+      <input type="hidden" name="mediaOriginalFilename" value={selected?.name ?? ""} />
+      <input type="hidden" name="mediaMimeType" value={selected?.type || "application/octet-stream"} />
+      <input type="hidden" name="mediaSizeBytes" value={selected?.size ?? 0} />
+      <p className="text-[11px] text-text-secondary">Choosing a file here overrides the manual file id fallback below.</p>
+    </div>
   );
 }
 
@@ -96,14 +141,16 @@ export function CreateLoyaltyRewardForm({ tenantSlug, programId, publishedTiers 
           </label>
           <input id="lr-vendor-ref" name="vendorRef" type="text" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
         </div>
+        <RewardMediaFileField id="lr-media-file" />
         <div className="flex flex-col gap-1">
           <label htmlFor="lr-file-id" className="text-xs font-medium text-text-secondary">
-            Terms/media file id (optional)
+            Manual fallback: an existing file id (e.g. from the Document Center)
           </label>
           <input id="lr-file-id" name="fileId" type="text" placeholder="app.files.id" className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
         </div>
       </div>
       <ErrorBanner error={state.error} />
+      {needsMediaUploadsEnabled(state.error) ? <EnableMediaUploadsButton tenantSlug={tenantSlug} programId={programId} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Add reward
       </Button>
@@ -166,14 +213,16 @@ export function EditLoyaltyRewardDraftForm({ tenantSlug, programId, reward, publ
             </label>
             <input id={`lr-edit-vendor-ref-${reward.id}`} name="vendorRef" type="text" defaultValue={reward.vendorRef ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
           </div>
+          <RewardMediaFileField id={`lr-edit-media-file-${reward.id}`} />
           <div className="flex flex-col gap-1">
             <label htmlFor={`lr-edit-file-id-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Terms/media file id
+              Manual fallback: an existing file id (e.g. from the Document Center)
             </label>
             <input id={`lr-edit-file-id-${reward.id}`} name="fileId" type="text" defaultValue={reward.fileId ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
           </div>
         </div>
         <ErrorBanner error={state.error} />
+        {needsMediaUploadsEnabled(state.error) ? <EnableMediaUploadsButton tenantSlug={tenantSlug} programId={programId} /> : null}
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
           Save draft
         </Button>
