@@ -3123,7 +3123,28 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // after the entry was written. Closing it as pure documentation would have closed it on a false
   // premise; the real, narrower, still-open gap -- LYL was the one platform-default tuple missing
   // from the classification -- is what this migration closes instead.
-  migrationSetSha256: "c098026ee4f311f262cb6524c7ffabc9f555296dcd264ec7259b95989d39b4b8",
+  //
+  // SEVENTY-FIFTH PASS (2026-09-01, ISS-2026-317): 423 files (+1). The seventh PLT-131 import
+  // adapter (payroll loan cutover), closing an entry whose own stated reason for filing rather
+  // than building -- three "business decisions" about rate/principal/mid-term-change -- does
+  // not survive re-checking against the live schema: app.payroll_loans has no rate column at
+  // all, and app.issue_payroll_loan (already shipped) already numbers surviving installments
+  // as the tail of the original schedule. 20260901010000 widens app.issue_payroll_loan with one
+  // trailing, default-valued p_source_import_staging_row_id parameter (DROP + CREATE, never
+  // CREATE OR REPLACE across a changed argument list -- ISS-2026-260), adds the same column to
+  // app.payroll_loans with a partial unique index as the idempotency backstop, and adds the
+  // validate/commit pair following the established PLT-131 shape.
+  //
+  // A real gate bug was found and fixed during the regression test, not merely disclosed: the
+  // first draft of app.commit_payroll_loan_cutover_import_job checked only HRS:Import before
+  // looping, but app.issue_payroll_loan itself additionally demands HRS:Approve of its own
+  // caller for every single-loan issuance -- a bulk import is not exempt from that rule just
+  // because it arrives as a file. Fixed by checking both authorities up front, before the loop,
+  // so a committer missing either one gets one clear refusal instead of failing loan-by-loan
+  // mid-commit.
+  migrationSetSha256: "37aa1701f15c42b5b9dc5a9111892194eaedec2faccd2d3ddf4571a5554b2984",
+  // History: c098026ee4f311f262cb6524c7ffabc9f555296dcd264ec7259b95989d39b4b8
+  // (422 files, ISS-2026-138's RPD-023 step-up classification fix).
   // History: 6f5d8cd8f7055d7f8fbc6877818192a56d46fedf36600685cecd00ca1790e24b
   // (420 files, ISS-2026-206's finance subledger source-lineage guard plus ISS-2026-259's
   // tripwire extension).
@@ -3619,7 +3640,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // genuinely obtainable where it previously raised mfa_step_up_not_required, a real verified
   // challenge restores the ordinary role_grant decision, and a tenant with MFA off reaches an
   // identical decision to before this fix.
-  dbTestSetSha256: "6670568cd302a6d835fe7129b65ddea1c27f0260962a132ee87480072fc5e233",
+  //
+  // SEVENTY-FIFTH PASS (2026-09-01, ISS-2026-317): 239 files, unchanged in count -- one
+  // extended. hris-payroll.sql gains the payroll-loan-cutover-import regression block, placed
+  // deliberately AFTER the Sept freeze/calculate assertions rather than beside the ordinary
+  // loan issuance a few lines earlier: emp2's Sept net_pay is pinned to exactly one active
+  // loan, and the calculation engine deducts the next scheduled installment of EVERY active
+  // loan an employee holds, so issuing the cutover loan any earlier would have silently changed
+  // an already-asserted figure instead of adding independent coverage. Proves a 12-installment
+  // loan with 5 remaining posts exactly 5 rows numbered 8..12 (never renumbered 1..5, pinning
+  // the exact decision the entry called unanswered), invalid rows are refused with reasons at
+  // validation, a caller holding HRS:Import and HRS:Approve but no administrative authority is
+  // refused regardless, and a re-commit is a no-op rather than a second loan.
+  dbTestSetSha256: "3f444cf22b18131792f8529a672af2b830febdb0cac6ed3483e9c8879063012f",
+  // History: 6670568cd302a6d835fe7129b65ddea1c27f0260962a132ee87480072fc5e233
+  // (239 files, ISS-2026-307's non-transactional evidence plus ISS-2026-138's MFA regression
+  // extension).
   // History: 48724bb1ceb67b9f46c05a1c71d36078a5ef5afc4a7826f4835127a258361a57
   // (239 files, ISS-2026-206's finance subledger regression plus ISS-2026-259's tripwire
   // coverage sweep).

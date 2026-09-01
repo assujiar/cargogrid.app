@@ -479,6 +479,207 @@ begin
   raise notice 'OK: full calculation chain correct -- gross=%, deductions=%, reimb=%, loan=%, net=%', v_result.gross_earnings, v_result.total_deductions, v_result.total_reimbursement, v_result.total_loan_repayment, v_result.net_pay;
 end $$;
 
+\echo '>> ISS-2026-317 setup: pay1''s own published payroll_loan_cutover_import column definition -- the seventh PLT-131 adapter, reusing emp2 and the already-issued ordinary loan this file created. Run AFTER the Sept freeze/calculate assertions above (never before): emp2''s calculated Sept results are pinned to exactly one active loan (v_loan, term=3) at lines 471-479, and app._calculate_payroll_run_for_employee deducts the next scheduled installment of EVERY active loan an employee holds, so issuing a second loan for emp2 earlier in the file would silently change that already-asserted net_pay.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pay1');
+  v_admin uuid := '00000000-0000-0000-0000-000000028201';
+  v_supreme uuid := '00000000-0000-0000-0000-000000028299';
+  v_doctype_draft app.config_versions;
+  v_draft app.config_versions;
+begin
+  -- app.register_document_type returns an existing row unchanged, so this stays correct
+  -- whichever test file gets there first.
+  perform app.register_document_type('master_data_import_source', 'Master Data Import Source File', 'COM', v_supreme, 'supreme');
+  v_doctype_draft := app.create_config_draft('document:master_data_import_source', v_tenant1, 'tenant', null, v_admin, 'tenant admin');
+  perform app.set_config_items(v_doctype_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'allowed_mime_types', 'value', jsonb_build_array('text/csv')),
+    jsonb_build_object('key', 'max_size_bytes', 'value', to_jsonb(10485760)),
+    jsonb_build_object('key', 'retention_class', 'value', to_jsonb('operational_contract_plus_90d'::text)),
+    jsonb_build_object('key', 'default_classification', 'value', to_jsonb('internal'::text)),
+    jsonb_build_object('key', 'legal_hold_eligible', 'value', to_jsonb(false))
+  ), v_admin, 'tenant admin');
+  perform app.publish_document_type_definition(v_doctype_draft.id, v_admin, now(), 'tenant admin');
+
+  v_draft := app.create_config_draft('import_export:payroll_loan_cutover_import', v_tenant1, 'tenant', null, v_admin, 'tenant admin');
+  perform app.set_config_items(
+    v_draft.id,
+    jsonb_build_array(jsonb_build_object('key', 'columns', 'value', jsonb_build_array(
+      jsonb_build_object('key', 'employee_number', 'label', 'Employee number', 'required', true, 'data_type', 'text'),
+      jsonb_build_object('key', 'principal_amount', 'label', 'Original principal', 'required', true, 'data_type', 'number'),
+      jsonb_build_object('key', 'currency', 'label', 'Currency', 'required', false, 'data_type', 'text'),
+      jsonb_build_object('key', 'installment_amount', 'label', 'Installment amount', 'required', true, 'data_type', 'number'),
+      jsonb_build_object('key', 'term_count', 'label', 'Term (installments)', 'required', true, 'data_type', 'number'),
+      jsonb_build_object('key', 'remaining_installments', 'label', 'Remaining installments as of cutover', 'required', true, 'data_type', 'number'),
+      jsonb_build_object('key', 'notes', 'label', 'Notes', 'required', false, 'data_type', 'text')
+    ), 'canonical_ref', null)),
+    v_admin, 'tenant admin'
+  );
+  perform app.publish_import_export_schema(v_draft.id, v_admin, now(), 'tenant admin');
+
+  -- admin1 is already tenant_admin (is_support_grant_authority passes) but holds no payroll
+  -- module permission of its own -- the adapter demands Import, so without this grant the
+  -- admin-gate negative test below would prove nothing (the module gate would fire first).
+  -- Granted BY the Supreme Admin, not self-granted: app.assign_role correctly refuses
+  -- self_escalation.
+  perform app.assign_role(
+    v_tenant1,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id
+     where r.tenant_id = v_tenant1 and r.name = 'HR Payroll' and rv.status = 'published'),
+    v_admin, v_supreme, 'supreme'
+  );
+  -- app.issue_payroll_loan (called once per row by the commit function) additionally demands
+  -- HRS:Approve of its own caller for every ordinary, single-loan issuance -- a bulk cutover
+  -- import is not exempt just because it arrives as a file, so the committing actor needs
+  -- this role too, not only the import-side one above.
+  perform app.assign_role(
+    v_tenant1,
+    (select rv.id from app.role_versions rv join app.roles r on r.id = rv.role_id
+     where r.tenant_id = v_tenant1 and r.name = 'Payroll Approver' and rv.status = 'published'),
+    v_admin, v_supreme, 'supreme'
+  );
+end $$;
+
+\echo '>> ISS-2026-317: payroll_loan_cutover_import -- an unresolvable/inactive employee, non-positive principal/installment amounts, an out-of-range term count and a remaining-installments count outside [0, term_count] are refused at VALIDATION; a valid row posts a real loan through app.issue_payroll_loan(..., p_is_opening_balance=true, ...) flagged as an opening balance, with EXACTLY the stated remaining_installments rows numbered as the TAIL of the schedule (never renumbered from 1); a caller holding HRS:Import but no administrative authority is refused even though the module gate alone would pass; re-committing is a no-op, not a second loan'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pay1');
+  v_admin uuid := '00000000-0000-0000-0000-000000028201';
+  v_hr uuid := '00000000-0000-0000-0000-000000028202';
+  v_emp2_code text;
+  v_source_file app.files;
+  v_job app.jobs;
+  v_updated app.jobs;
+  v_recommit app.jobs;
+  v_ids uuid[];
+  v_idx integer;
+  v_status text;
+  v_error text;
+  v_loan_id uuid;
+  v_installment_count integer;
+  v_min_installment integer;
+  v_max_installment integer;
+  v_loan_count integer;
+begin
+  select m.code into v_emp2_code from app.employees e join app.master_records m on m.id = e.master_record_id
+  where e.tenant_id = v_tenant1 and e.work_email = 'emp2work@pay1.test';
+  if coalesce(v_emp2_code, '') = '' then
+    raise exception 'assertion failed: emp2 must carry a resolvable master-record code -- employee_number is what a payroll export actually contains';
+  end if;
+
+  v_source_file := app.initiate_file_upload(
+    v_tenant1, 'master_data_import_source', 'import_source', gen_random_uuid(),
+    'loan-cutover.csv', 'text/csv', 2048, 'internal', false, null, null, null,
+    'idem-pay1-loanob-source', v_admin, 'tenant admin'
+  );
+  perform app.record_file_scan_result(v_source_file.id, 'clean', 'test-scanner', v_admin, 'tenant admin');
+  v_job := app.create_import_export_job(v_tenant1, 'import', 'payroll_loan_cutover_import', v_source_file.id, '{}'::jsonb, 'idem-pay1-loanob-job', v_admin, 'tenant admin');
+
+  perform app.stage_import_rows(
+    v_job.job_id,
+    jsonb_build_array(
+      -- 1: valid -- a 12-installment loan with 5 remaining as of cutover.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '6000000', 'currency', 'IDR', 'installment_amount', '500000', 'term_count', '12', 'remaining_installments', '5', 'notes', 'legacy loan cutover'),
+      -- 2: an employee number that belongs to nobody in this tenant.
+      jsonb_build_object('employee_number', 'EMP-NOBODY', 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '10', 'remaining_installments', '5'),
+      -- 3: zero principal.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '0', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '10', 'remaining_installments', '5'),
+      -- 4: negative installment amount.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '-5', 'term_count', '10', 'remaining_installments', '5'),
+      -- 5: term count zero.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '0', 'remaining_installments', '0'),
+      -- 6: term count above the 360 ceiling.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '361', 'remaining_installments', '5'),
+      -- 7: negative remaining_installments.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '10', 'remaining_installments', '-1'),
+      -- 8: remaining_installments exceeds term_count.
+      jsonb_build_object('employee_number', v_emp2_code, 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '10', 'remaining_installments', '11'),
+      -- 9: a formula-injection prefix in a text cell.
+      jsonb_build_object('employee_number', '=cmd|calc', 'principal_amount', '1000000', 'currency', 'IDR', 'installment_amount', '100000', 'term_count', '10', 'remaining_installments', '5')
+    ),
+    v_admin, 'tenant admin'
+  );
+
+  select array_agg(id order by row_number) into v_ids from app.import_staging_rows where job_id = v_job.job_id;
+
+  for v_idx in 1..9 loop
+    perform app.validate_payroll_loan_cutover_import_row(v_ids[v_idx], v_admin, 'tenant admin');
+  end loop;
+
+  select validation_status into v_status from app.import_staging_rows where id = v_ids[1];
+  if v_status <> 'valid' then
+    raise exception 'assertion failed: row 1 should be valid, got % (%)', v_status, (select error from app.import_staging_rows where id = v_ids[1]);
+  end if;
+
+  for v_idx in 2..9 loop
+    select validation_status, error into v_status, v_error from app.import_staging_rows where id = v_ids[v_idx];
+    if v_status <> 'invalid' then
+      raise exception 'assertion failed: row % should be invalid, got %', v_idx, v_status;
+    end if;
+    if coalesce(v_error, '') = '' then
+      raise exception 'assertion failed: row % is invalid but carries no reason -- an importer cannot fix what they are not told', v_idx;
+    end if;
+  end loop;
+
+  -- The administrative gate is genuinely independent of the module permission: hr@pay1
+  -- holds BOTH HRS:Import and HRS:Approve (granted at fixture setup) but is not tenant_admin,
+  -- so a caller stopping at the module check alone would wrongly let this commit through.
+  begin
+    perform app.commit_payroll_loan_cutover_import_job(v_job.job_id, true, v_hr, 'hr');
+    raise exception 'assertion failed: expected a caller without administrative (tenant_admin/Supreme) authority to be refused even holding HRS:Import';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' and sqlerrm not like 'job_actor_unauthorized%' then raise; end if;
+  end;
+
+  v_updated := app.commit_payroll_loan_cutover_import_job(v_job.job_id, true, v_admin, 'tenant admin');
+  if v_updated.status <> 'completed' then
+    raise exception 'assertion failed: expected a completed job, got %', v_updated.status;
+  end if;
+  if (v_updated.payload ->> 'loaded_count')::integer <> 1 then
+    raise exception 'assertion failed: expected 1 loaded row, got %', v_updated.payload ->> 'loaded_count';
+  end if;
+
+  select id into v_loan_id from app.payroll_loans where tenant_id = v_tenant1 and source_import_staging_row_id = v_ids[1];
+  if v_loan_id is null then
+    raise exception 'assertion failed: expected a loan row linked back to the staging row via source_import_staging_row_id';
+  end if;
+  if not (select is_opening_balance from app.payroll_loans where id = v_loan_id) then
+    raise exception 'assertion failed: a loan created by this adapter must be flagged is_opening_balance=true';
+  end if;
+
+  -- Pins the numbering decision the entry wrongly called unanswered: with term_count=12 and
+  -- remaining_installments=5, the surviving rows must be numbered 8..12 (the TAIL of the
+  -- original schedule, exactly what app.issue_payroll_loan already did before this migration),
+  -- never renumbered 1..5.
+  select count(*), min(installment_number), max(installment_number)
+  into v_installment_count, v_min_installment, v_max_installment
+  from app.payroll_loan_installments where loan_id = v_loan_id;
+  if v_installment_count <> 5 or v_min_installment <> 8 or v_max_installment <> 12 then
+    raise exception 'assertion failed: expected exactly 5 installments numbered 8..12, got count=% min=% max=%', v_installment_count, v_min_installment, v_max_installment;
+  end if;
+
+  -- The invalid rows created no loan at all.
+  if exists (select 1 from app.payroll_loans where tenant_id = v_tenant1 and source_import_staging_row_id = any(v_ids[2:9])) then
+    raise exception 'assertion failed: an invalid row must create no loan';
+  end if;
+
+  -- Re-committing is a no-op rather than a second loan. A cutover that half-succeeded and was
+  -- retried must not hand the same employee a duplicate opening-balance loan.
+  update app.jobs set status = 'in_progress' where job_id = v_job.job_id;
+  v_recommit := app.commit_payroll_loan_cutover_import_job(v_job.job_id, true, v_admin, 'tenant admin');
+  if (v_recommit.payload ->> 'loaded_count')::integer <> 0 or (v_recommit.payload ->> 'skipped_count')::integer <> 1 then
+    raise exception 'assertion failed: a re-commit must load 0 and skip 1, got loaded=% skipped=%',
+      v_recommit.payload ->> 'loaded_count', v_recommit.payload ->> 'skipped_count';
+  end if;
+  select count(*) into v_loan_count from app.payroll_loans where tenant_id = v_tenant1 and source_import_staging_row_id = v_ids[1];
+  if v_loan_count <> 1 then
+    raise exception 'assertion failed: a re-commit must not create a second loan from the same staging row, got %', v_loan_count;
+  end if;
+
+  raise notice 'PASS: payroll loan cutover imports in bulk through the existing app.issue_payroll_loan primitive with is_opening_balance=true, installments numbered as the tail of the schedule (8..12), invalid rows are refused with reasons at validation time, the administrative gate is independent of the module permission, and a retry is a no-op';
+end $$;
+
 \echo '>> correction run: create a correction linked to the ALREADY-FINALIZED August run, requires adjusts_run_id and a finalized target'
 do $$
 declare

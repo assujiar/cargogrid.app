@@ -45,8 +45,8 @@ written.
 |---|---|
 | `OPEN` | 43 — 4 High, 13 Medium, 26 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 9 — formally ruled, not pending work |
-| `RESOLVED` | 223 |
-| **Total records** | **275** |
+| `RESOLVED` | 224 |
+| **Total records** | **276** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
 
@@ -110,10 +110,11 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-314` | Medium | `RESOLVED` | `scheduled-reports.sql`'s two-process concurrency assertion fails intermittently — a real double-advance, or a fragile test, and today nobody knows which |
 | `ISS-2026-315` | Medium | `RESOLVED` | `app.list_timesheet_entries` never returned `unpaid_break_minutes`, which its own TypeScript reader requires as non-nullable — the HR workspace would have thrown a ZodError on its first real row |
 | `ISS-2026-316` | Low | `RESOLVED` | the sandbox no longer carries the Chromium build the pinned Playwright requires, so `pnpm test:e2e` cannot run here at all — CI is unaffected |
-| `ISS-2026-317` | Low | `OPEN` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
+| `ISS-2026-317` | Low | `RESOLVED` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-319` | Low | `OPEN` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
 | `ISS-2026-320` | Low | `OPEN` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
+| `ISS-2026-321` | Low | `OPEN` | the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself |
 | `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `OPEN` | Procurement dashboard query-budget mechanism has no dedicated test; large-scale load proof covers 4 of ~9 named surfaces |
@@ -8543,39 +8544,56 @@ CI gates on, not a substitute for it. That residual — this sandbox never holdi
 pinned build or a non-Chromium engine — is `ISS-2026-244`'s own subject and stays there; no
 code change supplies a missing binary. Every cross-reference elsewhere in this file claiming
 "the e2e suite cannot run in this sandbox at all" is corrected alongside this entry.
-### ISS-2026-317 — payroll loan cutover has no import path, and it is not opening-balance-shaped (found 2026-08-31 while closing `ISS-2026-303`, `OPEN`, Low)
+### ISS-2026-317 — payroll loan cutover has no import path, and it is not opening-balance-shaped (found 2026-08-31 while closing `ISS-2026-303`, `RESOLVED` 2026-09-01, Low)
 
 `ISS-2026-273` named three domains whose opening-balance handling was bespoke and
 disconnected from `PLT-131`. Finance closed on 2026-08-30 (`20260830130000`); Inventory and
 the leave half of HRIS closed on 2026-08-31 (`20260831260000`, `ISS-2026-303`). The third
-HRIS scope that entry named — payroll loan cutover — is still open, and is being recorded
-separately rather than left inside a closure it is not actually part of.
+HRIS scope that entry named — payroll loan cutover — was filed separately on the theory that
+three business decisions (which instalments are considered paid, whether outstanding or
+original principal is authoritative, how a mid-term rate change carries across) blocked
+building it without owner input.
 
-**Why it was not folded into `ISS-2026-303`.** The two adapters built there follow one
-shape: a number, an as-of date, and a single call to an existing single-record primitive
-that already knows how to post it. A payroll loan carried over from a previous system is not
-that. It is a liability with a principal, a rate, a remaining term and a repayment schedule
-already part-consumed — importing one means importing a plan, and deciding what the previous
-system's already-made deductions mean in this one. Which instalments are considered paid,
-whether the outstanding principal or the original principal is authoritative, and how a
-mid-term rate change carries across are business decisions, not mapping decisions. Building
-a numeric "opening balance" adapter over that would produce a loan whose balance is right
-and whose schedule is wrong — the worst of both, and silently so, because payroll would
-happily deduct against it.
+**None of the three survived re-checking against the live schema.** `app.payroll_loans` has
+no rate column of any kind — `principal_amount` has zero financial effect anywhere in the
+deduction engine; only `installment_amount` (a fixed per-period amount) does, so there is no
+rate to be authoritative over and no mid-term change to carry across. And
+`app.issue_payroll_loan` (already shipped, pre-dating this closure) already answers the
+instalment-numbering question: it takes `p_is_opening_balance` and
+`p_opening_remaining_installments`, and inserts exactly that many rows into
+`app.payroll_loan_installments`, numbered as the **tail** of the original schedule
+(`term_count - remaining + 1 .. term_count`) — the already-paid instalments never exist as
+rows at all. So the real gap was never a business decision; it was that nobody had re-read
+the primitive's own live signature before filing this. Closed by `20260901010000` with the
+seventh `PLT-131` adapter (`app.validate_payroll_loan_cutover_import_row` /
+`app.commit_payroll_loan_cutover_import_job`), following the same shape as the other six:
+validate at the row level, commit by calling the single-record primitive once per row,
+idempotency via a durable `source_import_staging_row_id` link column, never a file-supplied
+key.
 
-**Status `OPEN`**, Low severity. **Risk in plain terms:** a company migrating in that has
-staff loans still being repaid must re-enter each loan by hand. That is real work, but it is
-bounded — a company has far fewer active staff loans than it has SKUs or employees — and
-nothing is silently wrong: the single-record path that exists is correct and audited, and
-entering a loan by hand forces exactly the judgement calls an importer would have had to
-guess at.
+**One real gate bug found and fixed during the regression test, disclosed rather than left
+implicit.** The first version of `commit_payroll_loan_cutover_import_job` checked only
+`HRS:Import` before looping. `app.issue_payroll_loan` itself additionally demands
+`HRS:Approve` of its own caller for every ordinary, single-loan issuance — a batch import is
+not exempt from that just because it arrives as a file. Without the fix, a committer holding
+only `HRS:Import` would fail loan-by-loan mid-commit with a confusing error instead of a
+clear, up-front refusal. Fixed by checking both authorities before the loop.
 
-**What would close it:** a payroll-loan import adapter built against the existing
-single-record loan primitive, following the same never-write-business-rows-yourself
-discipline the six existing `PLT-131` adapters use — but only after the owner (or whoever
-runs the migration) settles the three questions above, since the adapter has to encode an
-answer to each. That makes this owner-input work, not purely engineering work, which is why
-it is filed rather than built.
+**Worse than the original entry said in one respect, filed separately as `ISS-2026-321`
+rather than folded into this closure:** the opening-balance parameters
+`app.issue_payroll_loan` already exposed (and this closure now imports through) are
+reachable from no UI at all — `app/(tenant)/[tenantSlug]/hris/payroll/actions.ts` hardcodes
+`isOpeningBalance:false` / `openingRemainingInstallments:null`, and `IssueLoanForm` exposes
+no fields for them.
+
+**Regression evidence:** `scripts/db-tests/hris-payroll.sql` — a 12-instalment loan with 5
+remaining as of cutover posts exactly 5 rows numbered 8..12 (never renumbered 1..5, pinning
+the exact numbering decision the entry called unanswered); an unresolvable/inactive employee,
+non-positive principal/instalment amounts, an out-of-range term count, and a
+remaining-instalments count outside `[0, term_count]` are all refused at validation with a
+reason; a caller holding `HRS:Import` (and, after the fix, `HRS:Approve` too) but no
+administrative authority is refused even though both module gates would pass; re-committing
+is a no-op, not a second loan.
 
 ### ISS-2026-318 — 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it (found and live-reproduced 2026-08-31 while closing `ISS-2026-302`, `RESOLVED` 2026-08-31, Medium)
 
@@ -8766,3 +8784,30 @@ stale claim to survive. All three are corrected in place with dated notes, stati
 
 Status stays `OPEN`: the second-host page itself is not built, and remains the owner's call for
 the access reason above, not a cost one.
+
+### ISS-2026-321 — the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself (found 2026-09-01 while closing `ISS-2026-317`, `OPEN`, Low)
+
+While closing `ISS-2026-317`, re-reading `app.issue_payroll_loan`'s live signature turned up
+that `p_is_opening_balance` and `p_opening_remaining_installments` — the two parameters the
+import adapter now depends on — already existed on the primitive before this closure, but
+were reachable from nowhere: `app/(tenant)/[tenantSlug]/hris/payroll/actions.ts:208`
+hardcodes `isOpeningBalance:false` and `openingRemainingInstallments:null` on every call, and
+`IssueLoanForm` exposes no fields for either value. The only caller that ever exercised the
+opening-balance path before this closure's own regression test was, apparently, none.
+
+**Risk in plain terms:** an HR administrator issuing a loan through the ordinary "Issue Loan"
+screen has no way to record that a loan is a carried-over opening balance with some
+instalments already paid — every loan entered through the UI is treated as brand new, term
+count in full. That is not a data-correctness bug (the field defaults are safe, and the bulk
+import path this entry's sibling built now reaches the real code); it is a missing UI
+affordance for a case the backend already supports and the ordinary "issue one loan" screen
+does not.
+
+**Status `OPEN`**, Low severity. This is not agent-work to close blind: it is a small,
+concrete UI task (two additional form fields, gated behind a checkbox, wired to two
+already-existing action parameters) rather than a design or authority question, but it
+touches a live tenant-facing form and deserves a deliberate UI/UX pass rather than a
+mechanical field addition. **What would close it:** add an "opening balance" toggle to
+`IssueLoanForm` that reveals a "remaining instalments" field when checked, wired through
+`actions.ts` to the two parameters `app.issue_payroll_loan` already accepts, with a regression
+test proving the toggle actually reaches the database rather than only appearing on screen.
