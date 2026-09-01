@@ -3,6 +3,10 @@
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { CustomerQuoteRequestActionState } from "../actions.ts";
 import type { CustomerQuoteRequest, CustomerQuoteRequestFile, QuoteRequestStatus } from "../../../../../server/contracts/customer-quote-request/customer-quote-request.ts";
 
@@ -48,47 +52,46 @@ function StatusTimeline({ detail }: { detail: CustomerQuoteRequest }) {
 
 function EditDraftForm({ detail, updateAction }: { detail: CustomerQuoteRequest; updateAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(updateAction, INITIAL_STATE);
+  const errorId = "edit-draft-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">Edit draft</h2>
-      <label className="text-xs text-neutral-500">
-        Service type
-        <input name="serviceType" defaultValue={detail.serviceType ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id="edit-service-type" label={<span className="text-xs text-neutral-500">Service type</span>}>
+        <Input id="edit-service-type" name="serviceType" defaultValue={detail.serviceType ?? ""} aria-describedby={describedBy} />
+      </FormField>
       <div />
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Cargo description
-        <textarea name="cargoDescription" defaultValue={detail.cargoDescription ?? ""} rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Origin label
-        <input name="originLabel" defaultValue={typeof detail.origin.label === "string" ? detail.origin.label : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Destination label
-        <input name="destinationLabel" defaultValue={typeof detail.destination.label === "string" ? detail.destination.label : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Requested pickup date
-        <input type="date" name="requestedPickupDate" defaultValue={detail.requestedPickupDate ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Requested delivery date
-        <input type="date" name="requestedDeliveryDate" defaultValue={detail.requestedDeliveryDate ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Notes
-        <textarea name="notes" defaultValue={detail.notes ?? ""} rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <div className="sm:col-span-2">
+        <FormField id="edit-cargo-description" label={<span className="text-xs text-neutral-500">Cargo description</span>}>
+          <Textarea id="edit-cargo-description" name="cargoDescription" defaultValue={detail.cargoDescription ?? ""} rows={2} aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <FormField id="edit-origin-label" label={<span className="text-xs text-neutral-500">Origin label</span>}>
+        <Input id="edit-origin-label" name="originLabel" defaultValue={typeof detail.origin.label === "string" ? detail.origin.label : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="edit-destination-label" label={<span className="text-xs text-neutral-500">Destination label</span>}>
+        <Input id="edit-destination-label" name="destinationLabel" defaultValue={typeof detail.destination.label === "string" ? detail.destination.label : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="edit-pickup-date" label={<span className="text-xs text-neutral-500">Requested pickup date</span>}>
+        <Input id="edit-pickup-date" type="date" name="requestedPickupDate" defaultValue={detail.requestedPickupDate ?? ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="edit-delivery-date" label={<span className="text-xs text-neutral-500">Requested delivery date</span>}>
+        <Input id="edit-delivery-date" type="date" name="requestedDeliveryDate" defaultValue={detail.requestedDeliveryDate ?? ""} aria-describedby={describedBy} />
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="edit-notes" label={<span className="text-xs text-neutral-500">Notes</span>}>
+          <Textarea id="edit-notes" name="notes" defaultValue={detail.notes ?? ""} rows={2} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <div className="sm:col-span-2">
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
           Save changes
         </Button>
       </div>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -101,27 +104,35 @@ function SubmitForm({ submitAction }: { submitAction: BoundAction }) {
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…">
         Submit to Commercial
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function CancelForm({ cancelAction }: { cancelAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(cancelAction, INITIAL_STATE);
+  const errorId = "cancel-request-error";
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      <input name="reason" required placeholder="Cancellation reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+      <label htmlFor="cancel-request-reason" className="sr-only">
+        Cancellation reason
+      </label>
+      <Input
+        id="cancel-request-reason"
+        name="reason"
+        required
+        placeholder="Cancellation reason (required)"
+        className="min-w-[12rem] flex-1 text-xs"
+        invalid={Boolean(state.error)}
+        aria-describedby={state.error ? errorId : undefined}
+      />
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…">
         Cancel request
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -166,7 +177,10 @@ function AttachmentsSection({
               if (!selected) event.preventDefault();
             }}
           >
-            <input type="file" required onChange={(event) => setSelected(event.currentTarget.files?.[0] ?? null)} className="text-xs" />
+            <label htmlFor="quote-attachment-file" className="sr-only">
+              Attachment file
+            </label>
+            <input id="quote-attachment-file" type="file" required onChange={(event) => setSelected(event.currentTarget.files?.[0] ?? null)} className="text-xs" />
             <input type="hidden" name="originalFilename" value={selected?.name ?? ""} />
             <input type="hidden" name="mimeType" value={selected?.type || "application/octet-stream"} />
             <input type="hidden" name="sizeBytes" value={selected?.size ?? 0} />
@@ -175,11 +189,7 @@ function AttachmentsSection({
             </Button>
           </form>
           <p className="text-xs text-neutral-500">Files remain private and are scanned before being shared with anyone other than the uploader.</p>
-          {state.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {state.error}
-            </p>
-          ) : null}
+          {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
         </>
       ) : (
         <p className="text-xs text-neutral-500">Attachments can only be added while this request is still a draft.</p>

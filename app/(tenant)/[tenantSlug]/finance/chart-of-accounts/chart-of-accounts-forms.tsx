@@ -4,6 +4,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { ChartOfAccountsFormState } from "./actions.ts";
 import type { FinanceAccount } from "../../../../../server/contracts/chart-of-accounts/chart-of-accounts.ts";
 
@@ -19,25 +24,16 @@ export function CreateFinanceAccountForm({ action, parentCandidates }: { action:
       <h2 className="text-sm font-semibold text-text-primary">Create an account (draft)</h2>
       <p className="text-xs text-text-secondary">Requires FIN:Create to draft; FIN:Approve to activate.</p>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="code" className="text-sm font-medium text-text-primary">
-          Code
-        </label>
-        <input id="code" name="code" type="text" required maxLength={20} className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="code" label="Code">
+        <Input id="code" name="code" type="text" required maxLength={20} className="w-48" invalid={Boolean(state.error)} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="name" className="text-sm font-medium text-text-primary">
-          Name
-        </label>
-        <input id="name" name="name" type="text" required className="w-full max-w-md rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="name" label="Name">
+        <Input id="name" name="name" type="text" required className="w-full max-w-md" invalid={Boolean(state.error)} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="accountType" className="text-sm font-medium text-text-primary">
-          Account type
-        </label>
-        <select id="accountType" name="accountType" required defaultValue="" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm">
+      <FormField id="accountType" label="Account type" helpText="Normal balance is derived automatically from the account type -- never independently configurable (canonical accounting identity).">
+        <Select id="accountType" name="accountType" required defaultValue="" className="w-48" invalid={Boolean(state.error)}>
           <option value="" disabled>
             Select a type…
           </option>
@@ -46,36 +42,23 @@ export function CreateFinanceAccountForm({ action, parentCandidates }: { action:
           <option value="equity">Equity (credit)</option>
           <option value="revenue">Revenue (credit)</option>
           <option value="expense">Expense (debit)</option>
-        </select>
-        <p className="text-xs text-text-secondary">Normal balance is derived automatically from the account type -- never independently configurable (canonical accounting identity).</p>
-      </div>
+        </Select>
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="parentAccountId" className="text-sm font-medium text-text-primary">
-          Parent account (optional)
-        </label>
-        <select id="parentAccountId" name="parentAccountId" defaultValue="" className="w-full max-w-md rounded-md border border-neutral-300 px-3 py-2 text-sm">
+      <FormField id="parentAccountId" label="Parent account (optional)">
+        <Select id="parentAccountId" name="parentAccountId" defaultValue="" className="w-full max-w-md">
           <option value="">No parent -- a root account</option>
           {parentCandidates.map((account) => (
             <option key={account.id} value={account.id}>
               {account.code} -- {account.name}
             </option>
           ))}
-        </select>
-      </div>
+        </Select>
+      </FormField>
 
-      <div className="flex items-center gap-2">
-        <input id="isControlAccount" name="isControlAccount" type="checkbox" className="h-4 w-4" />
-        <label htmlFor="isControlAccount" className="text-sm text-text-primary">
-          Control account (never directly postable)
-        </label>
-      </div>
+      <Checkbox id="isControlAccount" name="isControlAccount" label="Control account (never directly postable)" />
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create account (draft)
@@ -89,11 +72,7 @@ export function ActivateFinanceAccountForm({ action }: { action: BoundAction }) 
 
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Activating…" variant="secondary">
         Activate
       </Button>
@@ -106,12 +85,11 @@ export function DeactivateFinanceAccountForm({ action }: { action: BoundAction }
 
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input type="text" name="reason" placeholder="Reason (required)" required className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="deactivate-account-reason" className="sr-only">
+        Reason
+      </label>
+      <Input id="deactivate-account-reason" type="text" name="reason" placeholder="Reason (required)" required className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Deactivating…" variant="destructive">
         Deactivate
       </Button>

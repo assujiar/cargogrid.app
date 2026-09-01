@@ -4,6 +4,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceCashBankFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceCashBankFormState = { error: null };
@@ -19,43 +24,34 @@ export function CreateFinanceBankAccountForm({ action }: { action: BoundAction }
       <p className="text-xs text-text-secondary">Requires FIN:Approve. Only the last 1-4 characters of the account number are ever stored.</p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-accountName" className="text-sm font-medium text-text-primary">
-            Account name
-          </label>
-          <input id="cb-accountName" name="accountName" type="text" required className="w-56 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-56">
+          <FormField id="cb-accountName" label="Account name">
+            <Input id="cb-accountName" name="accountName" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-bankName" className="text-sm font-medium text-text-primary">
-            Bank name
-          </label>
-          <input id="cb-bankName" name="bankName" type="text" required className="w-56 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-56">
+          <FormField id="cb-bankName" label="Bank name">
+            <Input id="cb-bankName" name="bankName" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-accountNumberLast4" className="text-sm font-medium text-text-primary">
-            Last 4 digits
-          </label>
-          <input id="cb-accountNumberLast4" name="accountNumberLast4" type="text" required maxLength={4} className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-24">
+          <FormField id="cb-accountNumberLast4" label="Last 4 digits">
+            <Input id="cb-accountNumberLast4" name="accountNumberLast4" type="text" required maxLength={4} invalid={Boolean(state.error)} />
+          </FormField>
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-currency" className="text-sm font-medium text-text-primary">
-            Currency
-          </label>
-          <input id="cb-currency" name="currency" type="text" required maxLength={3} placeholder="USD" className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm uppercase" />
+        <div className="w-24">
+          <FormField id="cb-currency" label="Currency">
+            <Input id="cb-currency" name="currency" type="text" required maxLength={3} placeholder="USD" className="uppercase" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-glAccountId" className="text-sm font-medium text-text-primary">
-            GL account ID
-          </label>
-          <input id="cb-glAccountId" name="glAccountId" type="text" required className="w-72 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-72">
+          <FormField id="cb-glAccountId" label="GL account ID">
+            <Input id="cb-glAccountId" name="glAccountId" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Adding…" className="w-fit">
         Add account
@@ -76,38 +72,32 @@ export function ImportFinanceBankStatementForm({ action }: { action: BoundAction
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-bankAccountId" className="text-sm font-medium text-text-primary">
-            Bank account ID
-          </label>
-          <input id="cb-bankAccountId" name="bankAccountId" type="text" required className="w-72 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-72">
+          <FormField id="cb-bankAccountId" label="Bank account ID">
+            <Input id="cb-bankAccountId" name="bankAccountId" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="cb-sourceReference" className="text-sm font-medium text-text-primary">
-            Source reference
-          </label>
-          <input id="cb-sourceReference" name="sourceReference" type="text" required className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="cb-sourceReference" label="Source reference">
+            <Input id="cb-sourceReference" name="sourceReference" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="cb-linesJson" className="text-sm font-medium text-text-primary">
-            Lines (JSON array)
-          </label>
-          <textarea
-            id="cb-linesJson"
-            name="linesJson"
-            required
-            rows={3}
-            placeholder='[{"transactionDate":"2026-07-01","direction":"credit","amount":500,"reference":"REF-1"}]'
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
-          />
+        <div className="flex-1">
+          <FormField id="cb-linesJson" label="Lines (JSON array)">
+            <Textarea
+              id="cb-linesJson"
+              name="linesJson"
+              required
+              rows={3}
+              placeholder='[{"transactionDate":"2026-07-01","direction":"credit","amount":500,"reference":"REF-1"}]'
+              className="font-mono text-xs"
+              invalid={Boolean(state.error)}
+            />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Importing…" className="w-fit">
         Import statement
@@ -120,17 +110,19 @@ export function MatchFinanceBankTransactionForm({ action }: { action: BoundActio
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <select name="matchedSourceType" required defaultValue="manual" className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-xs">
+      <label htmlFor="match-source-type" className="sr-only">
+        Matched source type
+      </label>
+      <Select id="match-source-type" name="matchedSourceType" required defaultValue="manual" className="w-28 text-xs" invalid={Boolean(state.error)}>
         <option value="receipt">receipt</option>
         <option value="settlement">settlement</option>
         <option value="manual">manual</option>
-      </select>
-      <input name="matchedSourceId" type="text" placeholder="Source ID (optional)" className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      </Select>
+      <label htmlFor="match-source-id" className="sr-only">
+        Source ID
+      </label>
+      <Input id="match-source-id" name="matchedSourceId" type="text" placeholder="Source ID (optional)" className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Matching…">
         Match
       </Button>
@@ -142,12 +134,11 @@ export function UnmatchFinanceBankTransactionForm({ action }: { action: BoundAct
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" required placeholder="Reason (required)" className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="unmatch-reason" className="sr-only">
+        Reason
+      </label>
+      <Input id="unmatch-reason" name="reason" type="text" required placeholder="Reason (required)" className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Unmatching…">
         Unmatch
       </Button>

@@ -4,6 +4,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceAgingFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceAgingFormState = { error: null };
@@ -23,36 +27,31 @@ export function SetFinanceAgingBucketConfigForm({ action }: { action: BoundActio
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="aging-entityType" className="text-sm font-medium text-text-primary">
-            Entity type
-          </label>
-          <select id="aging-entityType" name="entityType" required defaultValue="ar" className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm">
-            <option value="ar">ar</option>
-            <option value="ap">ap</option>
-          </select>
+        <div className="w-24">
+          <FormField id="aging-entityType" label="Entity type">
+            <Select id="aging-entityType" name="entityType" required defaultValue="ar" invalid={Boolean(state.error)}>
+              <option value="ar">ar</option>
+              <option value="ap">ap</option>
+            </Select>
+          </FormField>
         </div>
 
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="aging-bucketsJson" className="text-sm font-medium text-text-primary">
-            Buckets (JSON array)
-          </label>
-          <textarea
-            id="aging-bucketsJson"
-            name="bucketsJson"
-            required
-            rows={3}
-            placeholder='[{"label":"Current","minDays":-999999,"maxDays":0},{"label":"1-30","minDays":1,"maxDays":30},{"label":"31+","minDays":31,"maxDays":null}]'
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs"
-          />
+        <div className="flex-1">
+          <FormField id="aging-bucketsJson" label="Buckets (JSON array)">
+            <Textarea
+              id="aging-bucketsJson"
+              name="bucketsJson"
+              required
+              rows={3}
+              placeholder='[{"label":"Current","minDays":-999999,"maxDays":0},{"label":"1-30","minDays":1,"maxDays":30},{"label":"31+","minDays":31,"maxDays":null}]'
+              className="font-mono text-xs"
+              invalid={Boolean(state.error)}
+            />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Saving…" className="w-fit">
         Save bucket configuration

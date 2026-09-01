@@ -3,6 +3,11 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { CustomerTicketActionState, CustomerTicketLinkSearchActionState, CustomerTicketPortalLinkSearchActionState } from "../actions.ts";
 import type {
   CustomerTicketDetail,
@@ -86,9 +91,8 @@ function CustomerLinkedRecordsSection({
       <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
         <h3 className="text-xs font-semibold text-neutral-700">Find a record to link</h3>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Record type
-            <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+          <FormField id="link-entity-type" label={<span className="text-xs text-neutral-600">Record type</span>}>
+            <Select id="link-entity-type" name="entityType" required defaultValue={searchState.entityType ?? ""} className="text-xs">
               <option value="" disabled>
                 Select…
               </option>
@@ -97,28 +101,27 @@ function CustomerLinkedRecordsSection({
                   {CUSTOMER_LINK_ENTITY_TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Relationship
-            <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+            </Select>
+          </FormField>
+          <FormField id="link-relationship" label={<span className="text-xs text-neutral-600">Relationship</span>}>
+            <Select id="link-relationship" name="relationship" defaultValue={searchState.relationship} className="text-xs">
               {TICKET_LINK_RELATIONSHIPS.map((r) => (
                 <option key={r} value={r}>
                   {CUSTOMER_LINK_RELATIONSHIP_LABELS[r]}
                 </option>
               ))}
-            </select>
-          </label>
-          <input name="searchText" placeholder="Search by number/name…" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+            </Select>
+          </FormField>
+          <div className="min-w-[12rem] flex-1">
+            <FormField id="link-search-text" label={<span className="sr-only">Search by number/name</span>}>
+              <Input id="link-search-text" name="searchText" placeholder="Search by number/name…" className="text-xs" />
+            </FormField>
+          </div>
           <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
             Search
           </Button>
         </div>
-        {searchState.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {searchState.error}
-          </p>
-        ) : null}
+        {searchState.error ? <ValidationMessage>{searchState.error}</ValidationMessage> : null}
         {searchState.entityType ? (
           searchState.results.length === 0 ? (
             <p className="text-xs text-neutral-500">No matching records found on your account.</p>
@@ -156,16 +159,15 @@ function CustomerLinkedRecordRow({ link, unlinkAction }: { link: TicketLinkRow; 
         )}
       </div>
       <form action={formAction} className="flex items-center gap-2">
-        <input name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1 text-xs" />
+        <label htmlFor={`unlink-reason-${link.id}`} className="sr-only">
+          Unlink reason
+        </label>
+        <Input id={`unlink-reason-${link.id}`} name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] text-xs" invalid={Boolean(state.error)} />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Unlinking…">
           Unlink
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -192,9 +194,9 @@ function CustomerLinkCandidateRow({
         </Button>
       </form>
       {state.error ? (
-        <p role="alert" className="w-full text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </li>
   );
@@ -239,9 +241,8 @@ function CustomerPortalLinkedRecordsSection({
       <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
         <h3 className="text-xs font-semibold text-neutral-700">Find a record to link</h3>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Record type
-            <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+          <FormField id="portal-link-entity-type" label={<span className="text-xs text-neutral-600">Record type</span>}>
+            <Select id="portal-link-entity-type" name="entityType" required defaultValue={searchState.entityType ?? ""} className="text-xs">
               <option value="" disabled>
                 Select…
               </option>
@@ -250,28 +251,27 @@ function CustomerPortalLinkedRecordsSection({
                   {CUSTOMER_PORTAL_LINK_ENTITY_TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Relationship
-            <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+            </Select>
+          </FormField>
+          <FormField id="portal-link-relationship" label={<span className="text-xs text-neutral-600">Relationship</span>}>
+            <Select id="portal-link-relationship" name="relationship" defaultValue={searchState.relationship} className="text-xs">
               {TICKET_LINK_RELATIONSHIPS.map((r) => (
                 <option key={r} value={r}>
                   {CUSTOMER_LINK_RELATIONSHIP_LABELS[r]}
                 </option>
               ))}
-            </select>
-          </label>
-          <input name="searchText" placeholder="Search by number/name…" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+            </Select>
+          </FormField>
+          <div className="min-w-[12rem] flex-1">
+            <FormField id="portal-link-search-text" label={<span className="sr-only">Search by number/name</span>}>
+              <Input id="portal-link-search-text" name="searchText" placeholder="Search by number/name…" className="text-xs" />
+            </FormField>
+          </div>
           <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
             Search
           </Button>
         </div>
-        {searchState.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {searchState.error}
-          </p>
-        ) : null}
+        {searchState.error ? <ValidationMessage>{searchState.error}</ValidationMessage> : null}
         {searchState.entityType ? (
           searchState.results.length === 0 ? (
             <p className="text-xs text-neutral-500">No matching records found on your account.</p>
@@ -309,16 +309,15 @@ function CustomerPortalLinkedRecordRow({ link, unlinkAction }: { link: TicketPor
         )}
       </div>
       <form action={formAction} className="flex items-center gap-2">
-        <input name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1 text-xs" />
+        <label htmlFor={`unlink-reason-${link.id}`} className="sr-only">
+          Unlink reason
+        </label>
+        <Input id={`unlink-reason-${link.id}`} name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] text-xs" invalid={Boolean(state.error)} />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Unlinking…">
           Unlink
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -422,37 +421,35 @@ function ReplyForm({ replyAction }: { replyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(replyAction, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Add a reply
-        <textarea name="body" required minLength={1} rows={3} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id="ticket-reply-body" label={<span className="text-xs text-neutral-500">Add a reply</span>} error={state.error ?? undefined}>
+        <Textarea id="ticket-reply-body" name="body" required minLength={1} rows={3} invalid={Boolean(state.error)} aria-describedby={state.error ? "ticket-reply-body-error" : undefined} />
+      </FormField>
       <div>
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Sending…">
           Send
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
     </form>
   );
 }
 
 function TransitionForm({ toStatus, label, requiresReason, transitionAction }: { toStatus: TicketStatus; label: string; requiresReason: boolean; transitionAction: (toStatus: TicketStatus) => BoundAction }) {
   const [state, formAction, pending] = useActionState(transitionAction(toStatus), INITIAL_STATE);
+  const fieldId = `transition-reason-${toStatus}`;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      {requiresReason ? <input name="reason" required placeholder="Reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" /> : null}
+      {requiresReason ? (
+        <>
+          <label htmlFor={fieldId} className="sr-only">
+            Reason
+          </label>
+          <Input id={fieldId} name="reason" required placeholder="Reason (required)" className="min-w-[10rem] flex-1 text-xs" invalid={Boolean(state.error)} />
+        </>
+      ) : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Updating…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

@@ -1,6 +1,7 @@
 import { Link } from "../../../../components/ui/link.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
 import { CUSTOMER_PORTAL_RECEIPT_STATUS_LABELS, type CustomerPortalReceipt, type CustomerPortalReceiptStatus } from "../../../../server/contracts/customer-portal-payment/customer-portal-payment.ts";
 
 const RECEIPT_STATUS_TONE: Record<CustomerPortalReceiptStatus, StatusTone> = {
@@ -44,14 +45,14 @@ export function CustomerReceiptsPanel({
           <label htmlFor="status" className="text-xs font-medium text-neutral-600">
             Status
           </label>
-          <select id="status" name="status" defaultValue={statusFilter} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+          <Select id="status" name="status" defaultValue={statusFilter}>
             <option value="">Any status</option>
             {statuses.map((status) => (
               <option key={status} value={status}>
                 {CUSTOMER_PORTAL_RECEIPT_STATUS_LABELS[status]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-neutral-50">
           Apply filter

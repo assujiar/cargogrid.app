@@ -4,6 +4,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceTaxRuleFormState, CalculateFinanceTaxFormState } from "./actions.ts";
 import type { FinanceTaxCode } from "../../../../../server/contracts/tax-baseline/tax-baseline.ts";
 
@@ -22,50 +26,42 @@ export function CreateFinanceTaxRuleDraftForm({ action, taxCodes }: { action: Bo
       <p className="text-xs text-text-secondary">Requires FIN:Edit. No rate/rule may be invented -- attach real SME evidence before requesting approval. A draft has no calculation effect until an authorized SME approves it.</p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="taxCodeId" className="text-sm font-medium text-text-primary">
-            Tax code
-          </label>
-          <select id="taxCodeId" name="taxCodeId" required className="w-64 rounded-md border border-neutral-300 px-3 py-2 text-sm">
-            <option value="">Select a tax code…</option>
-            {taxCodes.map((code) => (
-              <option key={code.id} value={code.id}>
-                {code.code} — {code.name}
-              </option>
-            ))}
-          </select>
+        <div className="w-64">
+          <FormField id="taxCodeId" label="Tax code">
+            <Select id="taxCodeId" name="taxCodeId" required invalid={Boolean(state.error)}>
+              <option value="">Select a tax code…</option>
+              {taxCodes.map((code) => (
+                <option key={code.id} value={code.id}>
+                  {code.code} — {code.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rateBasis" className="text-sm font-medium text-text-primary">
-            Rate basis
-          </label>
-          <select id="rateBasis" name="rateBasis" defaultValue="percentage" className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm">
-            <option value="percentage">Percentage</option>
-            <option value="fixed_amount">Fixed amount</option>
-          </select>
+        <div className="w-40">
+          <FormField id="rateBasis" label="Rate basis">
+            <Select id="rateBasis" name="rateBasis" defaultValue="percentage" invalid={Boolean(state.error)}>
+              <option value="percentage">Percentage</option>
+              <option value="fixed_amount">Fixed amount</option>
+            </Select>
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rateValue" className="text-sm font-medium text-text-primary">
-            Rate value
-          </label>
-          <input id="rateValue" name="rateValue" type="number" step="0.000001" min="0" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="rateValue" label="Rate value">
+            <Input id="rateValue" name="rateValue" type="number" step="0.000001" min="0" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="effectiveFrom" className="text-sm font-medium text-text-primary">
-            Effective from
-          </label>
-          <input id="effectiveFrom" name="effectiveFrom" type="date" required className="w-44 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-44">
+          <FormField id="effectiveFrom" label="Effective from">
+            <Input id="effectiveFrom" name="effectiveFrom" type="date" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create draft
@@ -78,12 +74,11 @@ export function AttachFinanceTaxRuleEvidenceForm({ action }: { action: (prevStat
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="evidenceNote" type="text" placeholder="SME evidence note / reference" required className="w-56 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="evidence-note" className="sr-only">
+        SME evidence note / reference
+      </label>
+      <Input id="evidence-note" name="evidenceNote" type="text" placeholder="SME evidence note / reference" required className="w-56 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Attaching…">
         Attach evidence
       </Button>
@@ -95,11 +90,7 @@ export function DiscardFinanceTaxRuleDraftForm({ action }: { action: BoundAction
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Discarding…">
         Discard
       </Button>
@@ -111,11 +102,7 @@ export function ApproveFinanceTaxRuleForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Approving…">
         Approve (SME)
       </Button>
@@ -132,26 +119,20 @@ export function CalculateFinanceTaxForm({ action }: { action: BoundCalculateActi
       <p className="text-xs text-text-secondary">Requires FIN:View. Read-only. Rejected -- never silently zero -- when no approved rule covers this tax code.</p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="taxCode" className="text-sm font-medium text-text-primary">
-            Tax code
-          </label>
-          <input id="taxCode" name="taxCode" type="text" placeholder="PPN" required className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm uppercase" />
+        <div className="w-32">
+          <FormField id="calc-taxCode" label="Tax code">
+            <Input id="calc-taxCode" name="taxCode" type="text" placeholder="PPN" required className="uppercase" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="baseAmount" className="text-sm font-medium text-text-primary">
-            Base amount
-          </label>
-          <input id="baseAmount" name="baseAmount" type="number" step="0.01" min="0" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="baseAmount" label="Base amount">
+            <Input id="baseAmount" name="baseAmount" type="number" step="0.01" min="0" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       {state.result ? (
         <p className="text-sm text-text-primary">

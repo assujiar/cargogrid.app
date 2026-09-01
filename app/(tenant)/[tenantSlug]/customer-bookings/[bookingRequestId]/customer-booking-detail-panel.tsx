@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { CustomerBookingRequestActionState } from "../actions.ts";
 import type { BookingRequestStatus, CustomerBookingRequest } from "../../../../../server/contracts/customer-booking-request/customer-booking-request.ts";
 
@@ -72,42 +76,42 @@ function StatusTimeline({ detail }: { detail: CustomerBookingRequest }) {
 
 function EditDraftForm({ detail, updateAction }: { detail: CustomerBookingRequest; updateAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(updateAction, INITIAL_STATE);
+  const errorId = "edit-booking-draft-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">Edit draft</h2>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Cargo description
-        <textarea name="cargoDescription" defaultValue={detail.cargoDescription ?? ""} rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Pickup label / address
-        <input name="pickupLabel" defaultValue={typeof detail.pickup.label === "string" ? detail.pickup.label : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Delivery label / address
-        <input name="deliveryLabel" defaultValue={typeof detail.delivery.label === "string" ? detail.delivery.label : ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Requested pickup date/time
-        <input type="datetime-local" name="requestedPickupAt" defaultValue={toDatetimeLocalValue(detail.requestedPickupAt)} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Requested delivery date/time
-        <input type="datetime-local" name="requestedDeliveryAt" defaultValue={toDatetimeLocalValue(detail.requestedDeliveryAt)} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Special instructions
-        <textarea name="specialInstructions" defaultValue={detail.specialInstructions ?? ""} rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <div className="sm:col-span-2">
+        <FormField id="edit-booking-cargo-description" label={<span className="text-xs text-neutral-500">Cargo description</span>}>
+          <Textarea id="edit-booking-cargo-description" name="cargoDescription" defaultValue={detail.cargoDescription ?? ""} rows={2} aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <FormField id="edit-booking-pickup-label" label={<span className="text-xs text-neutral-500">Pickup label / address</span>}>
+        <Input id="edit-booking-pickup-label" name="pickupLabel" defaultValue={typeof detail.pickup.label === "string" ? detail.pickup.label : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="edit-booking-delivery-label" label={<span className="text-xs text-neutral-500">Delivery label / address</span>}>
+        <Input id="edit-booking-delivery-label" name="deliveryLabel" defaultValue={typeof detail.delivery.label === "string" ? detail.delivery.label : ""} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="edit-booking-pickup-at" label={<span className="text-xs text-neutral-500">Requested pickup date/time</span>}>
+        <Input id="edit-booking-pickup-at" type="datetime-local" name="requestedPickupAt" defaultValue={toDatetimeLocalValue(detail.requestedPickupAt)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="edit-booking-delivery-at" label={<span className="text-xs text-neutral-500">Requested delivery date/time</span>}>
+        <Input id="edit-booking-delivery-at" type="datetime-local" name="requestedDeliveryAt" defaultValue={toDatetimeLocalValue(detail.requestedDeliveryAt)} aria-describedby={describedBy} />
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="edit-booking-special-instructions" label={<span className="text-xs text-neutral-500">Special instructions</span>}>
+          <Textarea id="edit-booking-special-instructions" name="specialInstructions" defaultValue={detail.specialInstructions ?? ""} rows={2} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <div className="sm:col-span-2">
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
           Save changes
         </Button>
       </div>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -120,61 +124,64 @@ function SubmitForm({ submitAction }: { submitAction: BoundAction }) {
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…">
         Submit to Operations
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function RescheduleForm({ rescheduleAction }: { rescheduleAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(rescheduleAction, INITIAL_STATE);
+  const errorId = "reschedule-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Request a reschedule</h2>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          New requested pickup date/time
-          <input type="datetime-local" name="requestedPickupAt" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          New requested delivery date/time
-          <input type="datetime-local" name="requestedDeliveryAt" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id="reschedule-pickup-at" label={<span className="text-xs text-neutral-500">New requested pickup date/time</span>}>
+          <Input id="reschedule-pickup-at" type="datetime-local" name="requestedPickupAt" aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="reschedule-delivery-at" label={<span className="text-xs text-neutral-500">New requested delivery date/time</span>}>
+          <Input id="reschedule-delivery-at" type="datetime-local" name="requestedDeliveryAt" aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <label className="text-xs text-neutral-500">
-        Reason (required)
-        <input name="reason" required placeholder="Why do you need to reschedule?" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id="reschedule-reason" label={<span className="text-xs text-neutral-500">Reason (required)</span>}>
+        <Input id="reschedule-reason" name="reason" required placeholder="Why do you need to reschedule?" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Requesting…">
           Request reschedule
         </Button>
       </div>
       <p className="text-xs text-neutral-500">This is a request only -- Operations reviews and confirms any schedule change; your current requested dates are not changed automatically.</p>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function CancelForm({ cancelAction, requiresOperationsReview }: { cancelAction: BoundAction; requiresOperationsReview: boolean }) {
   const [state, formAction, pending] = useActionState(cancelAction, INITIAL_STATE);
+  const errorId = "cancel-booking-error";
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      <input name="reason" required placeholder="Cancellation reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+      <label htmlFor="cancel-booking-reason" className="sr-only">
+        Cancellation reason
+      </label>
+      <Input
+        id="cancel-booking-reason"
+        name="reason"
+        required
+        placeholder="Cancellation reason (required)"
+        className="min-w-[12rem] flex-1 text-xs"
+        invalid={Boolean(state.error)}
+        aria-describedby={state.error ? errorId : undefined}
+      />
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…">
         {requiresOperationsReview ? "Request cancellation" : "Cancel booking"}
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

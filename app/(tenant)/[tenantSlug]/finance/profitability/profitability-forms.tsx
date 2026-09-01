@@ -5,6 +5,9 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { FINANCE_JOB_PROFITABILITY_STATUS_TONE_MAP } from "../../../../../components/domain/status-tone-map.ts";
 import type { FinanceProfitabilityFormState } from "./actions.ts";
 
@@ -25,26 +28,20 @@ export function CalculateFinanceJobProfitabilityForm({ action }: { action: Bound
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="profitability-jobOrderId" className="text-sm font-medium text-text-primary">
-            Job Order id
-          </label>
-          <input id="profitability-jobOrderId" name="jobOrderId" type="text" required className="w-80 rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
+        <div className="w-80">
+          <FormField id="profitability-jobOrderId" label="Job Order id">
+            <Input id="profitability-jobOrderId" name="jobOrderId" type="text" required className="font-mono text-xs" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="profitability-recalculationReason" className="text-sm font-medium text-text-primary">
-            Recalculation reason (only required if a fact already exists)
-          </label>
-          <input id="profitability-recalculationReason" name="recalculationReason" type="text" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="flex-1">
+          <FormField id="profitability-recalculationReason" label="Recalculation reason (only required if a fact already exists)">
+            <Input id="profitability-recalculationReason" name="recalculationReason" type="text" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       {state.fact ? (
         <dl className="grid grid-cols-2 gap-2 rounded-md border border-neutral-200 p-3 text-sm sm:grid-cols-4">

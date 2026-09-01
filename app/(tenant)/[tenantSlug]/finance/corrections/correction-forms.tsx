@@ -4,6 +4,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceCorrectionFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceCorrectionFormState = { error: null };
@@ -22,47 +25,38 @@ export function PrepareFinanceJournalReversalForm({ action }: { action: BoundAct
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rev-originalJournalId" className="text-sm font-medium text-text-primary">
-            Original journal ID
-          </label>
-          <input id="rev-originalJournalId" name="originalJournalId" type="text" required className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-96">
+          <FormField id="rev-originalJournalId" label="Original journal ID">
+            <Input id="rev-originalJournalId" name="originalJournalId" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rev-correctionDate" className="text-sm font-medium text-text-primary">
-            Correction date
-          </label>
-          <input id="rev-correctionDate" name="correctionDate" type="date" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="rev-correctionDate" label="Correction date">
+            <Input id="rev-correctionDate" name="correctionDate" type="date" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rev-reason" className="text-sm font-medium text-text-primary">
-            Reason
-          </label>
-          <input id="rev-reason" name="reason" type="text" required className="w-72 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-72">
+          <FormField id="rev-reason" label="Reason">
+            <Input id="rev-reason" name="reason" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rev-evidenceRef" className="text-sm font-medium text-text-primary">
-            Evidence reference (optional)
-          </label>
-          <input id="rev-evidenceRef" name="evidenceRef" type="text" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="rev-evidenceRef" label="Evidence reference (optional)">
+            <Input id="rev-evidenceRef" name="evidenceRef" type="text" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="rev-idempotencyKey" className="text-sm font-medium text-text-primary">
-            Idempotency key
-          </label>
-          <input id="rev-idempotencyKey" name="idempotencyKey" type="text" required className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="rev-idempotencyKey" label="Idempotency key">
+            <Input id="rev-idempotencyKey" name="idempotencyKey" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Preparing…" className="w-fit">
         Prepare reversal
@@ -83,68 +77,56 @@ export function PrepareFinanceJournalAdjustmentForm({ action }: { action: BoundA
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-originalJournalId" className="text-sm font-medium text-text-primary">
-            Original journal ID
-          </label>
-          <input id="adj-originalJournalId" name="originalJournalId" type="text" required className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-96">
+          <FormField id="adj-originalJournalId" label="Original journal ID">
+            <Input id="adj-originalJournalId" name="originalJournalId" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-accountIds" className="text-sm font-medium text-text-primary">
-            Account IDs (comma-separated)
-          </label>
-          <input id="adj-accountIds" name="accountIds" type="text" required className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-96">
+          <FormField id="adj-accountIds" label="Account IDs (comma-separated)">
+            <Input id="adj-accountIds" name="accountIds" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-directions" className="text-sm font-medium text-text-primary">
-            Directions (comma-separated)
-          </label>
-          <input id="adj-directions" name="directions" type="text" required placeholder="debit, credit" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="adj-directions" label="Directions (comma-separated)">
+            <Input id="adj-directions" name="directions" type="text" required placeholder="debit, credit" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-amounts" className="text-sm font-medium text-text-primary">
-            Amounts (comma-separated)
-          </label>
-          <input id="adj-amounts" name="amounts" type="text" required placeholder="500, 500" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="adj-amounts" label="Amounts (comma-separated)">
+            <Input id="adj-amounts" name="amounts" type="text" required placeholder="500, 500" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-correctionDate" className="text-sm font-medium text-text-primary">
-            Correction date
-          </label>
-          <input id="adj-correctionDate" name="correctionDate" type="date" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="adj-correctionDate" label="Correction date">
+            <Input id="adj-correctionDate" name="correctionDate" type="date" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-reason" className="text-sm font-medium text-text-primary">
-            Reason
-          </label>
-          <input id="adj-reason" name="reason" type="text" required className="w-72 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-72">
+          <FormField id="adj-reason" label="Reason">
+            <Input id="adj-reason" name="reason" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-evidenceRef" className="text-sm font-medium text-text-primary">
-            Evidence reference (optional)
-          </label>
-          <input id="adj-evidenceRef" name="evidenceRef" type="text" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="adj-evidenceRef" label="Evidence reference (optional)">
+            <Input id="adj-evidenceRef" name="evidenceRef" type="text" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="adj-idempotencyKey" className="text-sm font-medium text-text-primary">
-            Idempotency key
-          </label>
-          <input id="adj-idempotencyKey" name="idempotencyKey" type="text" required className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="adj-idempotencyKey" label="Idempotency key">
+            <Input id="adj-idempotencyKey" name="idempotencyKey" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Preparing…" className="w-fit">
         Prepare adjustment
@@ -157,11 +139,7 @@ export function SubmitFinanceCorrectionForApprovalForm({ action }: { action: Bou
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
         Submit
       </Button>
@@ -173,12 +151,11 @@ export function DiscardFinanceCorrectionDraftForm({ action }: { action: BoundAct
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" placeholder="Reason (optional)" className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="discard-correction-reason" className="sr-only">
+        Reason
+      </label>
+      <Input id="discard-correction-reason" name="reason" type="text" placeholder="Reason (optional)" className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Discarding…">
         Discard
       </Button>
@@ -190,11 +167,7 @@ export function ApproveFinanceCorrectionForm({ action }: { action: BoundAction }
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Approving…">
         Approve
       </Button>
@@ -206,11 +179,7 @@ export function PostFinanceCorrectionForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Posting…">
         Post
       </Button>

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import NextLink from "next/link";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { describeLoyaltyRewardEligibility, type CustomerPortalLoyaltyRewardDetail } from "../../../../../server/contracts/customer-portal-loyalty-rewards/customer-portal-loyalty-rewards.ts";
 import { submitLoyaltyRedemptionAction, type SubmitLoyaltyRedemptionFormState } from "../actions.ts";
 
@@ -29,9 +30,9 @@ function RedeemForm({ tenantSlug, loyaltyAccountId, rewardId }: { tenantSlug: st
   return (
     <form action={formAction} noValidate>
       {state.error ? (
-        <p role="alert" className="mb-2 text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="mb-2">
+          <ValidationMessage>{state.error}</ValidationMessage>
+        </div>
       ) : null}
       <Button type="submit" loading={pending} loadingLabel="Redeeming…" className="w-fit">
         Redeem this reward

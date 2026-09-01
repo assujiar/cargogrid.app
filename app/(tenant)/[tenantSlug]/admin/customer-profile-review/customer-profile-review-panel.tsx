@@ -4,6 +4,9 @@ import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { readCustomerProfileProposedValue, CUSTOMER_PROFILE_WRITABLE_FIELD_LABELS, type CustomerProfileChangeRequest } from "../../../../../server/contracts/customer-portal-profile/customer-portal-profile.ts";
 import { CUSTOMER_LEGAL_IDENTITY_WRITABLE_FIELD_LABELS, type CustomerLegalIdentityChangeRequest } from "../../../../../server/contracts/customer-portal-legal-identity/customer-portal-legal-identity.ts";
 import type { CustomerContactChangeRequest } from "../../../../../server/contracts/customer-portal-contact-change/customer-portal-contact-change.ts";
@@ -29,34 +32,40 @@ function DecisionForms({ requestId, expectedVersion, decideAction }: { requestId
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-2">
         <form action={approveFormAction} className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-neutral-500">
-            Reason
-            <input name="reviewReason" required placeholder="Why this decision" className="ml-1 w-56 rounded border border-neutral-300 p-1.5 text-sm" />
-          </label>
+          <FormField id={`approve-reason-${requestId}`} label={<span className="text-xs text-neutral-500">Reason</span>}>
+            <Input
+              id={`approve-reason-${requestId}`}
+              name="reviewReason"
+              required
+              placeholder="Why this decision"
+              className="w-56"
+              invalid={Boolean(approveState.error)}
+              aria-describedby={approveState.error ? `approve-reason-${requestId}-error` : undefined}
+            />
+          </FormField>
           <Button type="submit" loading={approvePending} loadingLabel="Approving…">
             Approve
           </Button>
         </form>
         <form action={rejectFormAction} className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-neutral-500">
-            Reason
-            <input name="reviewReason" required placeholder="Why this decision" className="ml-1 w-56 rounded border border-neutral-300 p-1.5 text-sm" />
-          </label>
+          <FormField id={`reject-reason-${requestId}`} label={<span className="text-xs text-neutral-500">Reason</span>}>
+            <Input
+              id={`reject-reason-${requestId}`}
+              name="reviewReason"
+              required
+              placeholder="Why this decision"
+              className="w-56"
+              invalid={Boolean(rejectState.error)}
+              aria-describedby={rejectState.error ? `reject-reason-${requestId}-error` : undefined}
+            />
+          </FormField>
           <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">
             Reject
           </Button>
         </form>
       </div>
-      {approveState.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {approveState.error}
-        </p>
-      ) : null}
-      {rejectState.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {rejectState.error}
-        </p>
-      ) : null}
+      {approveState.error ? <ValidationMessage id={`approve-reason-${requestId}-error`}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={`reject-reason-${requestId}-error`}>{rejectState.error}</ValidationMessage> : null}
     </div>
   );
 }

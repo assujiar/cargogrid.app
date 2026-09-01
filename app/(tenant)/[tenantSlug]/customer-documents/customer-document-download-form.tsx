@@ -16,6 +16,7 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import type { CustomerDocumentActionState } from "./actions.ts";
 
 const INITIAL_STATE: CustomerDocumentActionState = { error: null, confirmedAt: null };
@@ -39,11 +40,7 @@ export function CustomerDocumentDownloadForm({
         Download
       </Button>
       {state.confirmedAt ? <p className="text-xs text-success">Access verified and logged. Live file delivery activates once this environment&apos;s storage delivery layer is provisioned.</p> : null}
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

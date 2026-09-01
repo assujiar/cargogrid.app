@@ -1,6 +1,7 @@
 import { Link } from "../../../../components/ui/link.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
 import {
   CUSTOMER_WAREHOUSE_ORDER_STATUS_LABELS,
   CUSTOMER_INBOUND_ORDER_STATUS_LABELS,
@@ -93,20 +94,20 @@ export function CustomerWarehouseOrdersPanel({
           <label htmlFor="warehouseId" className="text-xs font-medium text-neutral-600">
             Warehouse
           </label>
-          <select id="warehouseId" name="warehouseId" defaultValue={warehouseId} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+          <Select id="warehouseId" name="warehouseId" defaultValue={warehouseId}>
             <option value="">All eligible warehouses</option>
             {distinctWarehouseIds.map((id) => (
               <option key={id} value={id}>
                 WH-{shortId(id)}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="status" className="text-xs font-medium text-neutral-600">
             Status
           </label>
-          <select id="status" name="status" defaultValue={statusFilter} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+          <Select id="status" name="status" defaultValue={statusFilter}>
             <option value="">Any status</option>
             {statuses.map((status) => (
               <option key={status} value={status}>
@@ -114,7 +115,7 @@ export function CustomerWarehouseOrdersPanel({
                 {outboundOnlyStatuses.has(status) ? "" : " (inbound only)"}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-neutral-50">
           Apply filter

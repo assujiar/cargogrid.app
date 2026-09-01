@@ -5,6 +5,11 @@ import Link from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import type { CustomerBookingRequestActionState } from "./actions.ts";
 import type { BookingRequestStatus, CustomerBookingRequest } from "../../../../server/contracts/customer-booking-request/customer-booking-request.ts";
 import type { CustomerQuoteRequest } from "../../../../server/contracts/customer-quote-request/customer-quote-request.ts";
@@ -66,14 +71,15 @@ function CreateBookingForm({
 }) {
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
   const defaultAccountId = prefill?.accountId ?? (accounts.length === 1 ? accounts[0]?.accountId : "");
+  const errorId = "create-booking-error";
+  const describedBy = state.error ? errorId : undefined;
 
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">Book a shipment</h2>
 
-      <label className="text-xs text-neutral-500">
-        Account
-        <select name="accountId" required defaultValue={defaultAccountId} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="create-booking-account" label={<span className="text-xs text-neutral-500">Account</span>}>
+        <Select id="create-booking-account" name="accountId" required defaultValue={defaultAccountId} aria-describedby={describedBy}>
           {accounts.length !== 1 || defaultAccountId === "" ? (
             <option value="" disabled>
               Select an account
@@ -84,74 +90,67 @@ function CreateBookingForm({
               {a.accountName}
             </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </FormField>
 
-      <label className="text-xs text-neutral-500">
-        Originating accepted quote (optional)
-        <select name="linkedQuoteRequestId" defaultValue={prefill?.id ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="create-booking-linked-quote" label={<span className="text-xs text-neutral-500">Originating accepted quote (optional)</span>}>
+        <Select id="create-booking-linked-quote" name="linkedQuoteRequestId" defaultValue={prefill?.id ?? ""} aria-describedby={describedBy}>
           <option value="">Direct booking (no quote)</option>
           {acceptedQuoteRequests.map((q) => (
             <option key={q.id} value={q.id}>
               {q.cargoDescription || "Untitled quote"} ({q.serviceType ?? "—"})
             </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </FormField>
 
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Cargo description
-        <textarea name="cargoDescription" rows={2} defaultValue={prefill?.cargoDescription ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="What are you shipping?" />
-      </label>
+      <div className="sm:col-span-2">
+        <FormField id="create-booking-cargo-description" label={<span className="text-xs text-neutral-500">Cargo description</span>}>
+          <Textarea id="create-booking-cargo-description" name="cargoDescription" rows={2} defaultValue={prefill?.cargoDescription ?? ""} placeholder="What are you shipping?" aria-describedby={describedBy} />
+        </FormField>
+      </div>
 
       <fieldset className="rounded border border-neutral-100 p-2 sm:col-span-2">
         <legend className="px-1 text-xs font-medium text-neutral-500">Pickup</legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-xs text-neutral-500">
-            Label / address
-            <input name="pickupLabel" defaultValue={locationDefault(prefill?.origin, "label")} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Contact name
-            <input name="pickupContactName" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Contact phone
-            <input name="pickupContactPhone" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Requested pickup date/time
-            <input type="datetime-local" name="requestedPickupAt" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
+          <FormField id="create-booking-pickup-label" label={<span className="text-xs text-neutral-500">Label / address</span>}>
+            <Input id="create-booking-pickup-label" name="pickupLabel" defaultValue={locationDefault(prefill?.origin, "label")} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="create-booking-pickup-contact-name" label={<span className="text-xs text-neutral-500">Contact name</span>}>
+            <Input id="create-booking-pickup-contact-name" name="pickupContactName" aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="create-booking-pickup-contact-phone" label={<span className="text-xs text-neutral-500">Contact phone</span>}>
+            <Input id="create-booking-pickup-contact-phone" name="pickupContactPhone" aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="create-booking-pickup-at" label={<span className="text-xs text-neutral-500">Requested pickup date/time</span>}>
+            <Input id="create-booking-pickup-at" type="datetime-local" name="requestedPickupAt" aria-describedby={describedBy} />
+          </FormField>
         </div>
       </fieldset>
 
       <fieldset className="rounded border border-neutral-100 p-2 sm:col-span-2">
         <legend className="px-1 text-xs font-medium text-neutral-500">Delivery</legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-xs text-neutral-500">
-            Label / address
-            <input name="deliveryLabel" defaultValue={locationDefault(prefill?.destination, "label")} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Contact name
-            <input name="deliveryContactName" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Contact phone
-            <input name="deliveryContactPhone" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Requested delivery date/time
-            <input type="datetime-local" name="requestedDeliveryAt" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
+          <FormField id="create-booking-delivery-label" label={<span className="text-xs text-neutral-500">Label / address</span>}>
+            <Input id="create-booking-delivery-label" name="deliveryLabel" defaultValue={locationDefault(prefill?.destination, "label")} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="create-booking-delivery-contact-name" label={<span className="text-xs text-neutral-500">Contact name</span>}>
+            <Input id="create-booking-delivery-contact-name" name="deliveryContactName" aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="create-booking-delivery-contact-phone" label={<span className="text-xs text-neutral-500">Contact phone</span>}>
+            <Input id="create-booking-delivery-contact-phone" name="deliveryContactPhone" aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="create-booking-delivery-at" label={<span className="text-xs text-neutral-500">Requested delivery date/time</span>}>
+            <Input id="create-booking-delivery-at" type="datetime-local" name="requestedDeliveryAt" aria-describedby={describedBy} />
+          </FormField>
         </div>
       </fieldset>
 
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Special instructions
-        <textarea name="specialInstructions" rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <div className="sm:col-span-2">
+        <FormField id="create-booking-special-instructions" label={<span className="text-xs text-neutral-500">Special instructions</span>}>
+          <Textarea id="create-booking-special-instructions" name="specialInstructions" rows={2} aria-describedby={describedBy} />
+        </FormField>
+      </div>
 
       <div className="sm:col-span-2">
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Starting…" disabled={accounts.length === 0}>
@@ -160,9 +159,9 @@ function CreateBookingForm({
       </div>
       {accounts.length === 0 ? <p className="text-xs text-neutral-500 sm:col-span-2">No account is linked to your customer profile yet.</p> : null}
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

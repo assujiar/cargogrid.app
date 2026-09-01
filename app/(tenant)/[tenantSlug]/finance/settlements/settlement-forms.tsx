@@ -4,6 +4,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceSettlementFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceSettlementFormState = { error: null };
@@ -22,75 +25,62 @@ export function PrepareFinanceSettlementForm({ action }: { action: BoundAction }
       </p>
 
       <div className="flex flex-wrap gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="vendorMasterId" className="text-sm font-medium text-text-primary">
-            Vendor master ID
-          </label>
-          <input id="vendorMasterId" name="vendorMasterId" type="text" required className="w-80 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-80">
+          <FormField id="vendorMasterId" label="Vendor master ID">
+            <Input id="vendorMasterId" name="vendorMasterId" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="apOpenItemIds" className="text-sm font-medium text-text-primary">
-            AP open item IDs (comma-separated)
-          </label>
-          <input id="apOpenItemIds" name="apOpenItemIds" type="text" required className="w-80 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-80">
+          <FormField id="apOpenItemIds" label="AP open item IDs (comma-separated)">
+            <Input id="apOpenItemIds" name="apOpenItemIds" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="amounts" className="text-sm font-medium text-text-primary">
-            Amounts (comma-separated)
-          </label>
-          <input id="amounts" name="amounts" type="text" required placeholder="400, 500" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="amounts" label="Amounts (comma-separated)">
+            <Input id="amounts" name="amounts" type="text" required placeholder="400, 500" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="currency" className="text-sm font-medium text-text-primary">
-            Currency
-          </label>
-          <input id="currency" name="currency" type="text" required maxLength={3} placeholder="USD" className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm uppercase" />
+        <div className="w-24">
+          <FormField id="currency" label="Currency">
+            <Input id="currency" name="currency" type="text" required maxLength={3} placeholder="USD" className="uppercase" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="settlementDate" className="text-sm font-medium text-text-primary">
-            Settlement date
-          </label>
-          <input id="settlementDate" name="settlementDate" type="date" required className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-40">
+          <FormField id="settlementDate" label="Settlement date">
+            <Input id="settlementDate" name="settlementDate" type="date" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="feeAmount" className="text-sm font-medium text-text-primary">
-            Fee amount (optional)
-          </label>
-          <input id="feeAmount" name="feeAmount" type="number" step="0.01" min="0" defaultValue={0} className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-32">
+          <FormField id="feeAmount" label="Fee amount (optional)">
+            <Input id="feeAmount" name="feeAmount" type="number" step="0.01" min="0" defaultValue={0} invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="paymentReference" className="text-sm font-medium text-text-primary">
-            Payment reference (optional)
-          </label>
-          <input id="paymentReference" name="paymentReference" type="text" maxLength={100} className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="paymentReference" label="Payment reference (optional)">
+            <Input id="paymentReference" name="paymentReference" type="text" maxLength={100} invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="bankAccountLabel" className="text-sm font-medium text-text-primary">
-            Bank account label (optional)
-          </label>
-          <input id="bankAccountLabel" name="bankAccountLabel" type="text" maxLength={100} placeholder="Bank ***1234" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="bankAccountLabel" label="Bank account label (optional)">
+            <Input id="bankAccountLabel" name="bankAccountLabel" type="text" maxLength={100} placeholder="Bank ***1234" invalid={Boolean(state.error)} />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="idempotencyKey" className="text-sm font-medium text-text-primary">
-            Idempotency key
-          </label>
-          <input id="idempotencyKey" name="idempotencyKey" type="text" required className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-48">
+          <FormField id="idempotencyKey" label="Idempotency key">
+            <Input id="idempotencyKey" name="idempotencyKey" type="text" required invalid={Boolean(state.error)} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Preparing…" className="w-fit">
         Prepare settlement
@@ -103,11 +93,7 @@ export function SubmitFinanceSettlementForApprovalForm({ action }: { action: Bou
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
         Submit
       </Button>
@@ -119,12 +105,11 @@ export function DiscardFinanceSettlementDraftForm({ action }: { action: BoundAct
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" placeholder="Reason (optional)" className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="discard-settlement-reason" className="sr-only">
+        Reason
+      </label>
+      <Input id="discard-settlement-reason" name="reason" type="text" placeholder="Reason (optional)" className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Voiding…">
         Discard
       </Button>
@@ -136,11 +121,7 @@ export function ApproveFinanceSettlementForm({ action }: { action: BoundAction }
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Approving…">
         Approve
       </Button>
@@ -152,12 +133,11 @@ export function ExecuteFinanceSettlementForm({ action }: { action: BoundAction }
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="executionReference" type="text" placeholder="Bank/payment reference (optional)" className="w-48 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="execution-reference" className="sr-only">
+        Bank/payment reference
+      </label>
+      <Input id="execution-reference" name="executionReference" type="text" placeholder="Bank/payment reference (optional)" className="w-48 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Recording execution…">
         Record execution
       </Button>
@@ -169,11 +149,7 @@ export function PostFinanceSettlementForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Posting…">
         Post (post to AP)
       </Button>
@@ -185,12 +161,11 @@ export function RequestFinanceSettlementReversalForm({ action }: { action: (prev
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-1" noValidate>
-      <input name="reason" type="text" required placeholder="Reason (required)" className="w-48 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <label htmlFor="settlement-reversal-reason" className="sr-only">
+        Reason
+      </label>
+      <Input id="settlement-reversal-reason" name="reason" type="text" required placeholder="Reason (required)" className="w-48 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Reversing…">
         Request reversal
       </Button>
