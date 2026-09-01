@@ -55,7 +55,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-065` | High | `RESOLVED` | Employee Master (HRT-274): no effective-dated employee identity/lifecycle mechanism, despite a binding, repeated Prompt 274 requirement |
 | `ISS-2026-151` | Medium | `RESOLVED` | the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers |
 | `ISS-2026-249` | High | `RESOLVED` | IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's o |
-| `ISS-2026-254` | Medium | `OPEN` | a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control |
+| `ISS-2026-254` | Medium | `RESOLVED` | a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control |
 | `ISS-2026-255` | High | `OPEN` | real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in thi |
 | `ISS-2026-261` | High | `OPEN` | CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unco |
 | `ISS-2026-289` | High | `OPEN` | GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repos |
@@ -6673,7 +6673,7 @@ Live-forced directly: started the real production server with `SUPABASE_SERVICE_
 
 **`RESOLVED` (2026-08-28, Track B Batch 6, `app/api/ready/route.ts`, TypeScript-only, no migration).** The client-visible response shape is byte-identical on every failure branch (still a bare 503, no secret/stack-trace text ever returned) but every branch now also emits one structured, server-side log event via `scripts/observability/logger.ts`'s `log()` — this repository's first real caller of that module (it existed only as a tested-but-unused foundation before this fix, per `ISS-2026-252`). Three failure shapes are now distinguished: `ready_check_db_unreachable` (the RPC itself returned an error), `ready_check_missing_env_var` (severity `critical` — client construction threw because a required env var is unset, detected via `requireEnv()`'s own message shape; only the var NAME is logged, never a value), and `ready_check_unexpected_exception` (any other exception). Live-verified safe to log verbatim: `requireEnv()`'s own thrown message names only the unset env var, never a secret value, and this route touches no tenant data or secret before this point. `pnpm run typecheck`/`lint` re-verified green. Owner: closed.
 
-### ISS-2026-254 — a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control (found at `HDN-383` Backup and Restore, live investigation; widened at `HDN-383`'s own Tier C review with 2 additional live-reproduced instances of the same shape; independently reconfirmed at `HDN-384` against a second restore procedure, `OPEN`, Medium, owner a dedicated future task)
+### ISS-2026-254 — a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control (found at `HDN-383` Backup and Restore, live investigation; widened at `HDN-383`'s own Tier C review with 2 additional live-reproduced instances of the same shape; independently reconfirmed at `HDN-384` against a second restore procedure, `RESOLVED`, Medium, owner a dedicated future task)
 
 A legal hold is itself ordinary application data (`app.legal_holds`, `supabase/migrations/20260807500000_create_intelligence_data_retention_archival.sql`; the `app.files.legal_hold` bridge, `20260814000000_harden_storage_signed_url_audit_findings.sql`), stored inside the exact same schema a database restore recovers. `app._is_under_legal_hold()` gates `app.request_retention_archive` (blocking `blocked_legal_hold` on delete/archive) and a physical-DELETE-blocking trigger on `app.files` — confirmed as the complete enforcement surface via `docs/build-log/phase-09/INTELLIGENCE_ENTERPRISE_RUNBOOKS.md` §6, which does not mention backup or restore anywhere. RPD-025's own ratified text (`docs/ai-agent-build-prompt-package/00-control/02_CONFIRMED_DECISION_REGISTER.md`) states "backups: 35 days; legal hold overrides deletion" in the same sentence, but nothing extends "overrides deletion" to "overrides being superseded by an older restore."
 
@@ -6688,6 +6688,89 @@ A legal hold is itself ordinary application data (`app.legal_holds`, `supabase/m
 **Status `OPEN`**, High severity (a real reversion-risk vector against explicit legal/regulatory and security controls — RPD-025's own binding text for legal holds, and ordinary access-control expectations for the 2 widened cases — not a live breach today since no restore has ever been executed against real production data, but a real, structural gap with no compensating control across all three instances). **Not fixed by this checkpoint** — the correct fix (e.g., "never restore to a point predating the earliest active hold/revocation/suspension" as an enforced precondition, or a real, platform-wide, live-queried export/reconciliation tool covering all three state categories) is a real design decision requiring product/legal/security input, outside this checkpoint's own "5-15 files, bounded repair" charter. Disclosed and widened as a diagnosis-step precheck in `docs/runbooks/database-restore.md` §3 item 2 in the interim (manual vigilance + audit-log cross-check, not a structural fix). Owner: a dedicated future task.
 
 **`RESOLVED` (partial, disclosed as voluntary), 2026-08-25 (Step 16 historical-issue-backlog remediation).** This entry's own text is correct that the real fix is a product/legal/security design decision, not a bounded mechanical repair — that root cause is **not** closed by this pass. What this pass adds is a real, usable, but explicitly voluntary compensating control: `supabase/migrations/20260826080000_harden_restore_security_state_reconciliation.sql` creates `public.security_state_snapshots` (deliberately in `public` schema, not `app`, so it survives the in-place restore procedure's own `app`-schema drop — the same technique already established for `ISS-2026-267`'s advisory lock), `app.capture_security_state_snapshot(p_actor_label text)` (run before a restore; records the current IDs of every active legal hold, revoked API key, disabled webhook endpoint, and suspended/revoked user/membership), and `app.detect_reverted_security_state(p_snapshot_id uuid)` (run after a restore; a real, live, catalog-queried comparison reporting exactly which of those decisions no longer hold — not a documentation-only warning). Both ship with matching `public.*` Option 2 wrappers. **This does not close the gap for a restore where no snapshot was ever captured** — no trigger or migration-level mechanism forces the snapshot step, since the actual restore procedure runs entirely outside any RPC this schema controls (raw `psql`/`pg_restore`, per `docs/runbooks/database-restore.md`). `docs/runbooks/database-restore.md` gains a new step calling `capture_security_state_snapshot` before restore and `detect_reverted_security_state` after. Verified via a full local `db-tests` suite re-run, `ALL PASSED`. Applied to the live hosted project via `apply_migration`, live-reconfirmed via `has_function_privilege` that both new `public.*` wrappers are `service_role`-only (see `ISS-2026-298` for why that check is now done explicitly on every new wrapper). Severity downgraded to **Medium** for the narrower remaining gap (no compensating control exists only for the "snapshot never taken" case, versus this entry's original "no compensating control exists at all"); the underlying design decision itself remains genuinely open. Owner: unchanged, a dedicated future task, now scoped specifically to making the snapshot step non-bypassable (e.g. wiring it into the restore runbook's own tooling, or a scheduled periodic snapshot independent of any specific restore).
+
+**`RESOLVED`, 2026-09-02 (owner-authorized remediation, `ADR-0027`).** Closes the narrow gap the
+partial resolution above left open by name: "no trigger or migration-level mechanism forces the
+snapshot to happen." The owner's decision, carried out here: make restoring without a
+checked-recent snapshot effectively impossible under normal operation, via the closest true
+technical equivalent to intercepting the restore itself — a periodic, automatic,
+non-bypassable snapshot, so a fresh one always exists — plus making the post-restore check a
+mandatory runbook step rather than an optional one.
+
+**Why this could not simply reuse the existing tenant task scheduler.**
+`supabase/migrations/20260831090000_create_tenant_configurable_task_scheduler.sql` (`app.
+scheduled_task_definitions`/`app.tenant_scheduled_tasks`/`app.run_due_scheduled_tasks`) already
+gives this repository a real, authority-checked periodic-task mechanism — but it is strictly
+per-tenant (`tenant_id uuid not null references app.tenants(id)`), because every task in its
+catalogue sweeps one tenant's own data. `app.capture_security_state_snapshot` is deliberately
+the opposite shape: platform-wide, across every tenant at once, because a restore is a
+whole-database operation. Picking an arbitrary tenant to "own" a platform-wide snapshot
+schedule would misrepresent who is accountable for it; widening `tenant_id` to nullable on the
+existing table would let a null-tenant row silently coexist with real tenant rows sharing the
+same dispatcher and unique key, a correctness hazard for zero benefit. The fix, applied via
+`supabase/migrations/20260902020000_create_platform_wide_security_snapshot_scheduler.sql`, is a
+small additive sibling schema — `app.platform_scheduled_task_definitions`, `app.
+platform_scheduled_tasks`, `app.platform_scheduled_task_runs` — mirroring the tenant scheduler's
+shape exactly (same columns, same `min_interval_minutes`/`default_interval_minutes` guard
+rails, same touch trigger) with `tenant_id` simply absent rather than nullable, and its own
+one-row catalogue (`security_state_snapshot`, 15-minute floor, hourly default) kept separate
+from `app.scheduled_task_definitions` rather than shared with it — a shared catalogue would
+have let a Supreme Admin accidentally register the platform-wide task through `app.
+configure_tenant_scheduled_task` against some arbitrary tenant, which the tenant dispatcher
+would then fail on forever with `scheduled_task_not_dispatchable`.
+
+**Authority discipline is unchanged from the tenant scheduler's own design, not weakened for
+this platform-level lane.** A new entry point, `app.run_security_state_snapshot_capture(p_actor_
+auth_user_id, p_actor_label)`, adds nothing to `app.capture_security_state_snapshot`'s own
+logic — it is a pure Supreme-Admin authority gate in front of it (`app.is_supreme_admin`,
+re-checked on every call, never cached), because the original capture function was built as a
+`service_role`-only manual-operator primitive with no actor argument at all. The platform
+dispatcher (`app._run_platform_scheduled_task_once`) passes the schedule's own `authorized_by_
+auth_user_id` to this new entry point exactly as the tenant dispatcher passes its own
+authorizing identity to an RBAC-gated sweep. A revoked Supreme Admin grant makes the very next
+scheduled run fail `unauthorized` rather than succeed or silently skip, and three consecutive
+`unauthorized` runs auto-disable the schedule with the reason recorded — identical to the
+tenant scheduler's three-strikes design, live-proved by revoking a real `principal_memberships`
+row mid-schedule, not merely asserted.
+
+**`docs/runbooks/database-restore.md` is updated to make both calls mandatory, numbered steps
+in the actual composed restore procedure, not a diagnosis-step suggestion.** Step (0b), right
+after acquiring the mutual-exclusion advisory lock and before touching the schema, now requires
+calling `app.run_security_state_snapshot_capture` and recording the returned snapshot id; step
+(k), after the restore's own audit event is recorded, now requires calling `app.
+detect_reverted_security_state` with that id and reading every returned row before declaring
+the restore complete. §3 item 2 and the revision history (0.8.0) are updated in place with the
+same discipline this runbook already uses for its own dated corrections.
+
+**Regression proof**: `scripts/db-tests/platform-scheduled-task-scheduler.sql`, mirroring `scripts/
+db-tests/task-scheduler.sql`'s own shape on the four questions that matter for this design — a
+Supreme Admin configures the platform-wide schedule and the dispatcher run produces a real new
+`public.security_state_snapshots` row (not merely a `succeeded` status); a non-Supreme-Admin
+identity is refused configuring, reading, *and* directly invoking `app.run_security_state_
+snapshot_capture`; a mid-schedule authority revocation fails the very next run `unauthorized`
+and three consecutive failures auto-disable the schedule with the reason recorded, while an
+unrelated schedule authorized by someone else is unaffected; re-authorizing by reconfiguring
+transfers the schedule to a currently-authorized Supreme Admin and clears the disabled state.
+Full local `db-tests` suite re-run, `ALL PASSED`. Applied live to the hosted project
+(`awdlicmwzdxquopwtcfd`) via `apply_migration` and recorded in `supabase_migrations.
+schema_migrations`; grants live-reconfirmed via `has_function_privilege`/`has_table_privilege`
+(`anon` holds nothing on any new function; `authenticated` cannot reach the dispatcher or the
+runner, directly or through its `public.*` wrapper; the platform catalogue stays readable as a
+menu; the schedule/run tables stay writable only through the authority-gated RPCs).
+
+**What genuinely changed, and what did not, stated honestly.** What changed: "a snapshot was
+never taken" stops being a realistic failure mode once a Supreme Admin configures this schedule
+and something drives `app.run_due_platform_scheduled_tasks` on an interval (pg_cron, or the
+`scripts/jobs/` worker pattern — turning that on remains the same deliberate, disclosed,
+not-yet-flipped infrastructure step `20260831090000` already left to the operator for the
+tenant scheduler) — a fresh snapshot exists independent of any specific operator's memory
+before any specific restore, and the post-restore check is now a numbered, mandatory runbook
+step rather than an optional one. What did not change, and cannot: Postgres has no hook into a
+process outside itself, so nothing here literally intercepts or blocks an external `pg_restore`
+invocation — a determined or careless operator can still run it without the schedule ever
+having been configured. This is the closest true technical equivalent to that literal
+interception, not a claim of achieving it. Owner: none remaining — this was the last item the
+partial resolution above scoped to a dedicated future task.
 
 ### ISS-2026-255 — real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in this sandbox (found at `HDN-383` Backup and Restore, live investigation, `OPEN`, High, `TRACKED_GAP`, owner a dedicated future task)
 
