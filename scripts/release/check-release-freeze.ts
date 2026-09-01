@@ -3291,7 +3291,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // silently dropped alongside their own recreated columns. All five independently gate-verified
   // and cross-reviewed (ISS-2026-122's own db:test run caught the postgis migration's
   // then-still-missing app.create_warehouse fix before this pass finished).
-  migrationSetSha256: "7c4af19901aebe574510f2372fe10bed496691255cca72cab9126d555be6c461",
+  // EIGHTY-FOURTH PASS (2026-09-02, ISS-2026-254): 438 files (+1). Closes the entry's own
+  // remaining gap ("nothing forces a security-state snapshot before a restore actually
+  // happens") with a new, additive platform-wide scheduler sibling
+  // (app.platform_scheduled_task_definitions/app.platform_scheduled_tasks/
+  // app.platform_scheduled_task_runs) deliberately separate from the existing per-tenant
+  // scheduler, since app.capture_security_state_snapshot is genuinely platform-wide (spans
+  // every tenant, because a restore is a whole-database operation) and the tenant scheduler's
+  // own tenant_id is NOT NULL -- widening it would have misrepresented who is accountable for
+  // a platform-wide run. New app.run_security_state_snapshot_capture composes a live,
+  // never-cached Supreme Admin authority recheck in front of the existing (unmodified) capture
+  // RPC, with the same three-strikes auto-disable discipline the tenant scheduler already has.
+  // docs/runbooks/database-restore.md's restore procedure gains mandatory numbered
+  // capture/review steps, replacing the prior voluntary framing.
+  migrationSetSha256: "0d71dd1007c644be601c6d790a257c6930ed60a7e07b5b85be6c7ada81f8c2bc",
+  // History: 7c4af19901aebe574510f2372fe10bed496691255cca72cab9126d555be6c461
+  // (437 files, ISS-2026-278+087+122+125+234's five independent closures reviewed together).
   // History: 3bbf41a7e2130d5b4f14a42f75ade2a5078dc1749ba74449970990d133209c6b
   // (432 files, ISS-2026-123's legal-identity/contact change-request capability plus its staff review surface).
   // History: fab7182c7693621d60342f66ae426a5c7578b2ffe81dadfef03496d58258d3d2
@@ -3909,7 +3924,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // exact type/nullability, all 4 GiST indexes still usable, a real round-trip through every one
   // of the 35 recreated/search-path-fixed functions, and the ISS-2026-309 anon-reachability guard
   // re-asserted). No existing line touched in any of the 9 files.
-  dbTestSetSha256: "03b1b5695fed1e953b7c4a322a04a91f6358da8368ec66f81ca9ba08e59bc514",
+  // EIGHTY-FOURTH PASS (2026-09-02, ISS-2026-254): 243 files (+1). New
+  // platform-scheduled-task-scheduler.sql mirrors task-scheduler.sql's own shape: Supreme
+  // Admin configures the new platform-wide snapshot schedule and a dispatcher run produces a
+  // real new public.security_state_snapshots row; a non-Supreme-Admin caller is refused on
+  // configure/list/direct-invoke; a mid-schedule authority revocation fails the next run as
+  // unauthorized and auto-disables after three strikes without touching an unrelated schedule;
+  // reconfiguring re-authorizes.
+  dbTestSetSha256: "1b981e06903879f92a46af453270d171933c4365140b3409fe9201fc63a18097",
+  // History: 03b1b5695fed1e953b7c4a322a04a91f6358da8368ec66f81ca9ba08e59bc514
+  // (242 files, ISS-2026-278+087+122+125+234's five independent closures reviewed together).
   // History: 134dd227dd814b6ca8621f812b312d26dbb7025e7d940ee81cb1a6b613e85e4c
   // (239 files, ISS-2026-123's legal-identity/contact-change/staff-review regression across three new files).
   // History: 4556d0d8d1760b34d32e98d41e05ca13e8db4dd4385fce35fd4c224e42d54d04
