@@ -3431,7 +3431,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ISS-2026-197: closure judgment finalized under ADR-0027 (no more HDN-386 checkpoint to
   // defer to) after re-verifying live that app.calculate_job_profitability's body matches
   // 20260902050000 byte-for-byte with no drift.
-  migrationSetSha256: "d76771837af955a8b43d8cbfbda04d06c38a34cbaaa3ef87e8f6e22ae2918f2b",
+  // NINETY-FIFTH PASS (2026-09-02, ISS-2026-146 batch 2, Commercial + Operations): 473 files
+  // (+2). Re-running the classifier surfaced a bug in the classifier itself, not just drift:
+  // its function-body-marker search window (400 chars after the parameter list) silently
+  // dropped any function with a long RETURNS TABLE(...) clause from every prior scan --
+  // fixed to 1000 chars, correcting the true baseline from 561/518 to 705 occurrences / 654
+  // distinct functions. Fixes 99 more (Commercial 42 of 46, Operations core 57 of 58,
+  // Advanced TMS/WMS deliberately excluded as a separate future-pass sub-module), same
+  // established fix shape as the first pass. Cumulative: 219 of 654 fixed, 436 remain
+  // (Advanced TMS/WMS 196, Procurement 103, Finance 34, Other/Platform 30, Intelligence/AI
+  // 28, HRIS 22, Ticketing 17, Commercial 5, Operations core 1).
+  migrationSetSha256: "1997d977bc354df83a3bd28823edab5620e5182166a3354e0c59e06d86f43e05",
+  // History: d76771837af955a8b43d8cbfbda04d06c38a34cbaaa3ef87e8f6e22ae2918f2b
+  // (471 files, ISS-2026-125 item 2's session/API-key revocation on portal suspend/revoke).
   // History: b39666ed041ced11ce0b8536eb2b590332e192e777d0ddce742d76068d0d6370
   // (469 files, ISS-2026-146's first tenant_id-disclosure fix pass, 120 of 561 functions).
   // History: 1d295d99d0acb36b226e1c6d592c03deed37cbcba5c7996a3bfc88ab0c85902f
@@ -4111,7 +4123,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // customer-user-management.sql extended: a membership with live sessions/API keys
   // transitions to suspended/revoked and both are proven revoked afterward; reactivation
   // leaves sessions untouched; an unrelated identity's own sessions are unaffected.
-  dbTestSetSha256: "a774f7d11ac575c28b9e1e9f5c9bc311aaf42ae94ca3cde222b4d2ae90a0b1ae",
+  // NINETY-FIFTH PASS (2026-09-02, ISS-2026-146 batch 2): 247 files (+1). New
+  // tenant-id-error-message-redaction-batch2.sql plus 11 pre-existing files updated where
+  // their own fixtures asserted the now-superseded insufficient_authority shape for a
+  // zero-membership caller against one of the 99 newly-fixed functions.
+  dbTestSetSha256: "fb9ddf8c14a3c7aecc6e5cc614c3e4d692c543daf46004ee239de632387730cf",
+  // History: a774f7d11ac575c28b9e1e9f5c9bc311aaf42ae94ca3cde222b4d2ae90a0b1ae
+  // (246 files, ISS-2026-125 item 2's session/API-key revocation regression).
   // History: 5662e5b47a4cbda10a35e24c9085857ebdc8b96e92d2e829c980eb0641e0f7b1
   // (246 files, ISS-2026-146's tenant-id-error-message-redaction.sql regression).
   // History: 95a06a4c28504d3bfd36777f99c3be50909d38254d9e100d099f8a4353a5abea
