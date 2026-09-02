@@ -451,7 +451,10 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
     purpose: "Modal, focus-trapped, built on Radix Dialog.",
     sourceFile: "components/ui/dialog.tsx",
     importSnippet: 'import { Dialog } from "@/components/ui/dialog.tsx";',
-    consumers: ["components/ui/drawer.tsx (positioning variant)"],
+    consumers: [
+      "components/ui/drawer.tsx (positioning variant)",
+      "reached from real screens through ConfirmationDialog below, which renders this component (ISS-2026-246 overlays lane)",
+    ],
     productionReady: true,
     citation: CHECKPOINT_4_CITATION,
   },
@@ -462,9 +465,12 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
     purpose: "Dialog variant requiring an explicit confirm click for a destructive/override action — never closes via the confirm path on backdrop/Escape alone.",
     sourceFile: "components/ui/dialog.tsx",
     importSnippet: 'import { ConfirmationDialog } from "@/components/ui/dialog.tsx";',
-    consumers: [],
+    consumers: [
+      "app/(tenant)/[tenantSlug]/saved-views/[savedViewId]/saved-view-detail-panel.tsx (hard delete of a saved view)",
+      "app/(tenant)/[tenantSlug]/admin/api-keys/api-keys-admin-panel.tsx (irreversible API key/vendor key/n8n connector revocation)",
+    ],
     productionReady: true,
-    citation: CHECKPOINT_4_CITATION,
+    citation: CHECKPOINT_4_CITATION + "; first real consumers adopted ISS-2026-246 overlays lane, 2026-09-02",
   },
   { name: "Drawer", category: "Overlays", status: "IMPLEMENTED", purpose: "Side-anchored panel, built on Radix Dialog positioned as a side panel (no slide-in transition — tailwindcss-animate is not a dependency).", sourceFile: "components/ui/drawer.tsx", importSnippet: 'import { Drawer } from "@/components/ui/drawer.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
   { name: "Sheet", category: "Overlays", status: "IMPLEMENTED", purpose: "Same implementation as Drawer (side=\"bottom\") — the spec's own \"same shape as Drawer\" is literal here, not a separate component.", sourceFile: "components/ui/drawer.tsx", importSnippet: 'import { Drawer } from "@/components/ui/drawer.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
@@ -476,9 +482,9 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
     purpose: "Hover/focus-triggered supplementary text, built on Radix Tooltip (correct hover+focus trigger and Escape-dismiss for free).",
     sourceFile: "components/ui/tooltip.tsx",
     importSnippet: 'import { Tooltip, TooltipProvider } from "@/components/ui/tooltip.tsx";',
-    consumers: [],
+    consumers: ["app/(tenant)/[tenantSlug]/admin/api-keys/api-keys-admin-panel.tsx (rotation-overlap help on both rotate forms)"],
     productionReady: true,
-    citation: CHECKPOINT_4_CITATION,
+    citation: CHECKPOINT_4_CITATION + "; first real consumer adopted ISS-2026-246 overlays lane, 2026-09-02",
   },
 
   // ---- Tables ----

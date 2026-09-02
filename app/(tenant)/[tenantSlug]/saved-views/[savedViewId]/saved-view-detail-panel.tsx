@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../../../../components/ui/dialog.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
 import { Textarea } from "../../../../../components/forms/textarea.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
@@ -36,6 +37,27 @@ export function SavedViewDetailPanel({
   const [deleteState, deleteFormAction, deletePending] = useActionState(deleteAction, INITIAL_STATE);
   const [exportState, exportFormAction, exportPending] = useActionState(exportAction, INITIAL_STATE);
   const updateDescribedBy = updateState.error ? "saved-view-update-error" : undefined;
+  /**
+   * `ISS-2026-246` (overlays lane): `app.delete_saved_report_view` is a real `delete from
+   * app.saved_report_views` -- there is no soft-delete column, no restore RPC, and no undo
+   * anywhere in this capability, so a single click here permanently destroyed a saved view's
+   * columns/filters/sharing scope with no confirmation step at all. This is exactly the
+   * "destructive confirmation" state `components/ui/dialog.tsx`'s own `ConfirmationDialog`
+   * exists for, and the first real (non-showcase) consumer of it.
+   *
+   * The `<form>` and its `deleteFormAction` are untouched: the visible button now opens the
+   * dialog instead of submitting directly, and the dialog's confirm calls `requestSubmit()` on
+   * that same form, so the server action, its `useActionState` error surface, and the button's
+   * own `loading`/`loadingLabel` states all still behave exactly as before.
+   *
+   * The `onSubmit` guard makes "this form only ever submits through the dialog" an invariant of
+   * the form itself rather than of its current button markup -- so a later edit that adds a
+   * field (and with it HTML implicit submission on Enter) or a second submit button cannot
+   * silently reopen the unconfirmed delete path.
+   */
+  const deleteFormRef = useRef<HTMLFormElement>(null);
+  const deleteConfirmedRef = useRef(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,16 +151,47 @@ export function SavedViewDetailPanel({
       {isOwner ? (
         <section className="rounded-md border border-neutral-200 p-4">
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">Delete</h2>
-          <form action={deleteFormAction} className="flex flex-col gap-2">
+          <form
+            ref={deleteFormRef}
+            action={deleteFormAction}
+            className="flex flex-col gap-2"
+            onSubmit={(event) => {
+              if (!deleteConfirmedRef.current) {
+                event.preventDefault();
+                setDeleteConfirmOpen(true);
+                return;
+              }
+              deleteConfirmedRef.current = false;
+            }}
+          >
             {deleteState.error ? (
               <p role="alert" className="text-sm text-danger">
                 {deleteState.error}
               </p>
             ) : null}
-            <Button type="submit" variant="destructive" loading={deletePending} loadingLabel="Deleting…" className="w-fit">
+            <Button
+              type="button"
+              variant="destructive"
+              loading={deletePending}
+              loadingLabel="Deleting…"
+              className="w-fit"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
               Delete saved view
             </Button>
           </form>
+          <ConfirmationDialog
+            open={deleteConfirmOpen}
+            onOpenChange={setDeleteConfirmOpen}
+            title="Delete this saved view?"
+            description={`"${view.name}" and its saved columns, filters and sharing scope are deleted permanently. This cannot be undone, and anyone this view is shared with loses it too.`}
+            confirmLabel="Delete saved view"
+            onConfirm={() => {
+              deleteConfirmedRef.current = true;
+              setDeleteConfirmOpen(false);
+              deleteFormRef.current?.requestSubmit();
+            }}
+          />
         </section>
       ) : null}
     </div>
