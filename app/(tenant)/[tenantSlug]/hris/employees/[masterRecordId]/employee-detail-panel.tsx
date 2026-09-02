@@ -4,6 +4,9 @@ import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
+import { Breadcrumb } from "../../../../../../components/ui/breadcrumb.tsx";
+import { Tabs } from "../../../../../../components/ui/tabs.tsx";
+import { DescriptionList } from "../../../../../../components/ui/description-list.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
@@ -340,34 +343,32 @@ export function EmployeeDetailPanel({
   decideChangeRequestAction: (requestId: string, expectedVersion: number) => BoundAction;
   uploadDocumentAction: BoundAction;
 }) {
-  const [tab, setTab] = useState<"personal" | "employment" | "organization" | "documents" | "history">("personal");
-  const orgUnitName = (id: string | null) => (id ? orgUnits.find((u) => u.id === id)?.name ?? id : "—");
   const pendingDuplicates = duplicates.filter((d) => d.decision === "pending");
-  const pendingChangeRequests = changeRequests.filter((r) => r.status === "pending");
-
-  const TABS: { key: typeof tab; label: string }[] = [
-    { key: "personal", label: "Personal" },
-    { key: "employment", label: "Employment" },
-    { key: "organization", label: "Organization" },
-    { key: "documents", label: "Documents" },
-    { key: "history", label: "History" },
-  ];
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-900">
-            {profile.fullName} <span className="text-sm font-normal text-neutral-500">({profile.employeeNumber})</span>
-          </h1>
-          <div className="mt-1 flex items-center gap-2">
-            <StatusBadge tone={STATUS_TONE[profile.lifecycleStatus]} label={profile.lifecycleStatus.replace(/_/g, " ")} />
-            {profile.userId ? <span className="text-xs text-neutral-500">Linked to a Platform user</span> : <span className="text-xs text-warning">No Platform user linked yet</span>}
-          </div>
+      {/* `ISS-2026-246`: this page sits three levels below the tenant root
+          (`/{tenant}/hris/employees/{id}`) and offered only a single "Back to
+          directory" link. `Breadcrumb` renders the whole trail instead; the "HRIS"
+          crumb carries no `href` on purpose -- there is no `/{tenant}/hris` index
+          page in this repository, and a breadcrumb must never link to a route that
+          does not exist. */}
+      <Breadcrumb
+        items={[
+          { label: "HRIS" },
+          { label: "Employees", href: `/${tenantSlug}/hris/employees` },
+          { label: profile.fullName },
+        ]}
+      />
+
+      <div>
+        <h1 className="text-xl font-semibold text-neutral-900">
+          {profile.fullName} <span className="text-sm font-normal text-neutral-500">({profile.employeeNumber})</span>
+        </h1>
+        <div className="mt-1 flex items-center gap-2">
+          <StatusBadge tone={STATUS_TONE[profile.lifecycleStatus]} label={profile.lifecycleStatus.replace(/_/g, " ")} />
+          {profile.userId ? <span className="text-xs text-neutral-500">Linked to a Platform user</span> : <span className="text-xs text-warning">No Platform user linked yet</span>}
         </div>
-        <a href={`/${tenantSlug}/hris/employees`} className="text-sm text-primary underline">
-          Back to directory
-        </a>
       </div>
 
       {pendingDuplicates.length > 0 ? (
@@ -389,446 +390,514 @@ export function EmployeeDetailPanel({
         archiveAction={archiveAction}
       />
 
-      <div role="tablist" aria-label="Employee detail sections" className="flex gap-1 border-b border-neutral-200">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            role="tab"
-            id={`tab-${t.key}`}
-            aria-selected={tab === t.key}
-            aria-controls={`panel-${t.key}`}
-            tabIndex={tab === t.key ? 0 : -1}
-            onClick={() => setTab(t.key)}
-            className={`rounded-t-md px-3 py-2 text-sm font-medium ${tab === t.key ? "border-b-2 border-primary text-primary" : "text-neutral-600 hover:text-neutral-900"}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* `ISS-2026-246`: was a hand-rolled `role="tablist"` with five interleaved
+          `{tab === "x" ? … : null}` panels. `Tabs` (Radix) supplies the same roles and
+          the roving tabindex this file already emulated, plus the arrow-key navigation
+          it did not. Radix mounts only the active `Content`, so each panel's
+          `useActionState` forms keep the exact same mount/reset lifecycle they had
+          under the conditional render. Panel bodies moved to the components below --
+          module-scope, never defined inline, so switching tabs does not remount them
+          for a different reason than it did before. */}
+      <Tabs
+        ariaLabel="Employee detail sections"
+        items={[
+          {
+            value: "personal",
+            label: "Personal",
+            content: (
+              <PersonalPanel
+                profile={profile}
+                contacts={contacts}
+                duplicates={duplicates}
+                changeRequests={changeRequests}
+                addContactAction={addContactAction}
+                removeContactAction={removeContactAction}
+                decideDuplicateAction={decideDuplicateAction}
+                decideChangeRequestAction={decideChangeRequestAction}
+              />
+            ),
+          },
+          {
+            value: "employment",
+            label: "Employment",
+            content: (
+              <EmploymentPanel
+                profile={profile}
+                orgUnits={orgUnits}
+                updateDraftAction={updateDraftAction}
+                decideApprovalAction={decideApprovalAction}
+                linkUserAction={linkUserAction}
+              />
+            ),
+          },
+          {
+            value: "organization",
+            label: "Organization",
+            content: <OrganizationPanel tenantSlug={tenantSlug} profile={profile} orgUnits={orgUnits} transferAction={transferAction} />,
+          },
+          {
+            value: "documents",
+            label: "Documents",
+            content: <DocumentsPanel files={files} uploadDocumentAction={uploadDocumentAction} />,
+          },
+          {
+            value: "history",
+            label: "History",
+            content: <HistoryPanel history={history} />,
+          },
+        ]}
+      />
+    </div>
+  );
+}
 
-      {tab === "personal" ? (
-        <div id="panel-personal" role="tabpanel" aria-labelledby="tab-personal" className="flex flex-col gap-4">
-          {profile.personalDataMasked ? (
-            <p className="rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600">
-              Sensitive personal fields are masked. You need HRS:View personal data to see them, or this must be your own linked profile.
-            </p>
-          ) : null}
-          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs text-neutral-500">Personal email</dt>
-              <dd className="text-sm">{profile.personalDataMasked ? "•••• (masked)" : profile.personalEmail ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">Personal phone</dt>
-              <dd className="text-sm">{profile.personalDataMasked ? "•••• (masked)" : profile.personalPhone ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">National ID number</dt>
-              <dd className="text-sm">{profile.personalDataMasked ? "•••• (masked)" : profile.nationalIdNumber ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">Date of birth</dt>
-              <dd className="text-sm">{profile.personalDataMasked ? "•••• (masked)" : profile.dateOfBirth ?? "—"}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="text-xs text-neutral-500">Personal address</dt>
-              <dd className="text-sm">
-                {profile.personalDataMasked
-                  ? "•••• (masked)"
-                  : [profile.personalAddressStreet, profile.personalAddressCity, profile.personalAddressProvince, profile.personalAddressPostalCode, profile.personalAddressCountry].filter(Boolean).join(", ") || "—"}
-              </dd>
-            </div>
-          </dl>
+function PersonalPanel({
+  profile,
+  contacts,
+  duplicates,
+  changeRequests,
+  addContactAction,
+  removeContactAction,
+  decideDuplicateAction,
+  decideChangeRequestAction,
+}: {
+  profile: EmployeeProfile;
+  contacts: readonly EmployeeEmergencyContact[];
+  duplicates: readonly EmployeeDuplicateCandidate[];
+  changeRequests: readonly EmployeeChangeRequest[];
+  addContactAction: BoundAction;
+  removeContactAction: (contactId: string, expectedVersion: number) => BoundAction;
+  decideDuplicateAction: (candidateId: string, expectedVersion: number) => BoundAction;
+  decideChangeRequestAction: (requestId: string, expectedVersion: number) => BoundAction;
+}) {
+  const pendingDuplicates = duplicates.filter((d) => d.decision === "pending");
+  const maskedOr = (value: string | null) => (profile.personalDataMasked ? "•••• (masked)" : value ?? "—");
 
-          <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-            <h2 className="text-sm font-semibold text-neutral-900">Emergency contacts</h2>
-            {contacts.length === 0 ? (
-              <EmptyState title="No emergency contacts yet" description="Required before this profile can be submitted for approval." />
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {contacts.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-2 text-sm">
-                    <span>
-                      {c.name} {c.relationship ? `(${c.relationship})` : ""} {c.isPrimary ? <StatusBadge tone="info" label="Primary" /> : null}
-                      <br />
-                      <span className="text-xs text-neutral-500">{c.phone ?? "•••• (masked)"} {c.email ? `· ${c.email}` : ""}</span>
-                    </span>
-                    <ActionForm action={removeContactAction(c.id, c.recordVersion)} label="Remove" variant="destructive" />
-                  </li>
-                ))}
-              </ul>
-            )}
-            <FormWithState action={addContactAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {(pending, error, describedBy) => (
-                <>
-                  <label className="sr-only" htmlFor="new-contact-name">
-                    Name
-                  </label>
-                  <Input id="new-contact-name" name="name" type="text" placeholder="Name" required invalid={Boolean(error)} aria-describedby={describedBy} />
-                  <label className="sr-only" htmlFor="new-contact-relationship">
-                    Relationship
-                  </label>
-                  <Input id="new-contact-relationship" name="relationship" type="text" placeholder="Relationship" invalid={Boolean(error)} aria-describedby={describedBy} />
-                  <label className="sr-only" htmlFor="new-contact-phone">
-                    Phone
-                  </label>
-                  <Input id="new-contact-phone" name="phone" type="tel" placeholder="Phone" invalid={Boolean(error)} aria-describedby={describedBy} />
-                  <label className="sr-only" htmlFor="new-contact-email">
-                    Email
-                  </label>
-                  <Input id="new-contact-email" name="email" type="email" placeholder="Email" invalid={Boolean(error)} aria-describedby={describedBy} />
-                  <Checkbox name="isPrimary" label="Primary" />
-                  <Button type="submit" loading={pending} loadingLabel="Adding…">
-                    Add contact
-                  </Button>
-                  {error ? (
-                    <div className="col-span-full">
-                      <ValidationMessage id={describedBy}>{error}</ValidationMessage>
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </FormWithState>
-          </section>
+  return (
+  <div className="flex flex-col gap-4">
+    {profile.personalDataMasked ? (
+      <p className="rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-600">
+        Sensitive personal fields are masked. You need HRS:View personal data to see them, or this must be your own linked profile.
+      </p>
+    ) : null}
+    {/* `ISS-2026-246`: hand-rolled `<dl>` replaced by `DescriptionList`. The
+        masking branch is unchanged -- it stays the caller's decision here, never
+        the primitive's, so a masked field renders exactly the same string it did
+        before. The address keeps its full-row span via the primitive's `wide`. */}
+    <DescriptionList
+      items={[
+        { term: "Personal email", value: maskedOr(profile.personalEmail) },
+        { term: "Personal phone", value: maskedOr(profile.personalPhone) },
+        { term: "National ID number", value: maskedOr(profile.nationalIdNumber) },
+        { term: "Date of birth", value: maskedOr(profile.dateOfBirth) },
+        {
+          term: "Personal address",
+          wide: true,
+          value: profile.personalDataMasked
+            ? "•••• (masked)"
+            : [profile.personalAddressStreet, profile.personalAddressCity, profile.personalAddressProvince, profile.personalAddressPostalCode, profile.personalAddressCountry].filter(Boolean).join(", ") || "—",
+        },
+      ]}
+    />
 
-          {pendingDuplicates.length > 0 ? (
-            <section className="flex flex-col gap-2 rounded-md border border-warning/40 p-3">
-              <h2 className="text-sm font-semibold text-neutral-900">Unresolved duplicate candidates</h2>
-              <ul className="flex flex-col gap-2">
-                {pendingDuplicates.map((d) => (
-                  <li key={d.id} className="rounded-md border border-neutral-100 p-2 text-sm">
-                    <p className="text-xs text-neutral-500">Basis: {d.similarityBasis} {d.similarityScore != null ? `(score ${d.similarityScore})` : ""}</p>
-                    <FormWithState action={decideDuplicateAction(d.id, d.recordVersion)} className="mt-1 flex flex-wrap items-center gap-2">
-                      {(pending, error, describedBy) => (
-                        <>
-                          <label className="sr-only" htmlFor={`duplicate-reason-${d.id}`}>
-                            Reason
-                          </label>
-                          <Input id={`duplicate-reason-${d.id}`} name="reason" type="text" placeholder="Reason (required)" required invalid={Boolean(error)} aria-describedby={describedBy} />
-                          <Button type="submit" name="decision" value="dismissed" variant="secondary" loading={pending}>
-                            Not a duplicate
-                          </Button>
-                          <Button type="submit" name="decision" value="linked" variant="destructive" loading={pending}>
-                            Confirm duplicate
-                          </Button>
-                          {error ? (
-                            <div className="w-full">
-                              <ValidationMessage id={describedBy}>{error}</ValidationMessage>
-                            </div>
-                          ) : null}
-                        </>
-                      )}
-                    </FormWithState>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+    <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+      <h2 className="text-sm font-semibold text-neutral-900">Emergency contacts</h2>
+      {contacts.length === 0 ? (
+        <EmptyState title="No emergency contacts yet" description="Required before this profile can be submitted for approval." />
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {contacts.map((c) => (
+            <li key={c.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-2 text-sm">
+              <span>
+                {c.name} {c.relationship ? `(${c.relationship})` : ""} {c.isPrimary ? <StatusBadge tone="info" label="Primary" /> : null}
+                <br />
+                <span className="text-xs text-neutral-500">{c.phone ?? "•••• (masked)"} {c.email ? `· ${c.email}` : ""}</span>
+              </span>
+              <ActionForm action={removeContactAction(c.id, c.recordVersion)} label="Remove" variant="destructive" />
+            </li>
+          ))}
+        </ul>
+      )}
+      <FormWithState action={addContactAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {(pending, error, describedBy) => (
+          <>
+            <label className="sr-only" htmlFor="new-contact-name">
+              Name
+            </label>
+            <Input id="new-contact-name" name="name" type="text" placeholder="Name" required invalid={Boolean(error)} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="new-contact-relationship">
+              Relationship
+            </label>
+            <Input id="new-contact-relationship" name="relationship" type="text" placeholder="Relationship" invalid={Boolean(error)} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="new-contact-phone">
+              Phone
+            </label>
+            <Input id="new-contact-phone" name="phone" type="tel" placeholder="Phone" invalid={Boolean(error)} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="new-contact-email">
+              Email
+            </label>
+            <Input id="new-contact-email" name="email" type="email" placeholder="Email" invalid={Boolean(error)} aria-describedby={describedBy} />
+            <Checkbox name="isPrimary" label="Primary" />
+            <Button type="submit" loading={pending} loadingLabel="Adding…">
+              Add contact
+            </Button>
+            {error ? (
+              <div className="col-span-full">
+                <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+              </div>
+            ) : null}
+          </>
+        )}
+      </FormWithState>
+    </section>
 
-          {changeRequests.length > 0 ? (
-            <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-              <h2 className="text-sm font-semibold text-neutral-900">Self-service correction requests</h2>
-              <ul className="flex flex-col gap-2">
-                {changeRequests.map((r) => (
-                  <li key={r.id} className="rounded-md border border-neutral-100 p-2 text-sm">
-                    <p>
-                      <span className="font-medium">{r.fieldKey.replace(/_/g, " ")}</span>: {r.currentValueSnapshot ?? "—"} → {r.requestedValue ?? "—"}
-                    </p>
-                    {r.reason ? <p className="text-xs text-neutral-500">Reason: {r.reason}</p> : null}
-                    <p className="text-xs text-neutral-500">
-                      Status: <StatusBadge tone={r.status === "pending" ? "info" : r.status === "approved" ? "success" : "danger"} label={r.status} />
-                    </p>
-                    {r.status === "pending" ? (
-                      <FormWithState action={decideChangeRequestAction(r.id, r.recordVersion)} className="mt-1 flex flex-wrap items-center gap-2">
-                        {(pending, error, describedBy) => (
-                          <>
-                            <label className="sr-only" htmlFor={`change-request-reason-${r.id}`}>
-                              Reason
-                            </label>
-                            <Input id={`change-request-reason-${r.id}`} name="decidedReason" type="text" placeholder="Reason (required)" required invalid={Boolean(error)} aria-describedby={describedBy} />
-                            <Button type="submit" name="decision" value="rejected" variant="secondary" loading={pending}>
-                              Reject
-                            </Button>
-                            <Button type="submit" name="decision" value="approved" variant="primary" loading={pending}>
-                              Approve
-                            </Button>
-                            {error ? (
-                              <div className="w-full">
-                                <ValidationMessage id={describedBy}>{error}</ValidationMessage>
-                              </div>
-                            ) : null}
-                          </>
-                        )}
-                      </FormWithState>
+    {pendingDuplicates.length > 0 ? (
+      <section className="flex flex-col gap-2 rounded-md border border-warning/40 p-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Unresolved duplicate candidates</h2>
+        <ul className="flex flex-col gap-2">
+          {pendingDuplicates.map((d) => (
+            <li key={d.id} className="rounded-md border border-neutral-100 p-2 text-sm">
+              <p className="text-xs text-neutral-500">Basis: {d.similarityBasis} {d.similarityScore != null ? `(score ${d.similarityScore})` : ""}</p>
+              <FormWithState action={decideDuplicateAction(d.id, d.recordVersion)} className="mt-1 flex flex-wrap items-center gap-2">
+                {(pending, error, describedBy) => (
+                  <>
+                    <label className="sr-only" htmlFor={`duplicate-reason-${d.id}`}>
+                      Reason
+                    </label>
+                    <Input id={`duplicate-reason-${d.id}`} name="reason" type="text" placeholder="Reason (required)" required invalid={Boolean(error)} aria-describedby={describedBy} />
+                    <Button type="submit" name="decision" value="dismissed" variant="secondary" loading={pending}>
+                      Not a duplicate
+                    </Button>
+                    <Button type="submit" name="decision" value="linked" variant="destructive" loading={pending}>
+                      Confirm duplicate
+                    </Button>
+                    {error ? (
+                      <div className="w-full">
+                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                      </div>
                     ) : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-      ) : null}
+                  </>
+                )}
+              </FormWithState>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null}
 
-      {tab === "employment" ? (
-        <div id="panel-employment" role="tabpanel" aria-labelledby="tab-employment" className="flex flex-col gap-4">
-          {profile.lifecycleStatus === "draft" ? (
-            <EmployeeEditForm profile={profile} orgUnits={orgUnits} action={updateDraftAction} />
-          ) : (
-            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-neutral-500">Employment type</dt>
-                <dd className="text-sm">{profile.employmentType.replace(/_/g, " ")}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-neutral-500">Hire date</dt>
-                <dd className="text-sm">{profile.hireDate ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-neutral-500">Probation end date</dt>
-                <dd className="text-sm">{profile.probationEndDate ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-neutral-500">Employment end date</dt>
-                <dd className="text-sm">{profile.employmentEndDate ?? "—"}</dd>
-              </div>
-              {profile.revisionReason ? (
-                <div className="sm:col-span-2">
-                  <dt className="text-xs text-neutral-500">Last revision reason</dt>
-                  <dd className="text-sm">{profile.revisionReason}</dd>
+    {changeRequests.length > 0 ? (
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Self-service correction requests</h2>
+        <ul className="flex flex-col gap-2">
+          {changeRequests.map((r) => (
+            <li key={r.id} className="rounded-md border border-neutral-100 p-2 text-sm">
+              <p>
+                <span className="font-medium">{r.fieldKey.replace(/_/g, " ")}</span>: {r.currentValueSnapshot ?? "—"} → {r.requestedValue ?? "—"}
+              </p>
+              {r.reason ? <p className="text-xs text-neutral-500">Reason: {r.reason}</p> : null}
+              <p className="text-xs text-neutral-500">
+                Status: <StatusBadge tone={r.status === "pending" ? "info" : r.status === "approved" ? "success" : "danger"} label={r.status} />
+              </p>
+              {r.status === "pending" ? (
+                <FormWithState action={decideChangeRequestAction(r.id, r.recordVersion)} className="mt-1 flex flex-wrap items-center gap-2">
+                  {(pending, error, describedBy) => (
+                    <>
+                      <label className="sr-only" htmlFor={`change-request-reason-${r.id}`}>
+                        Reason
+                      </label>
+                      <Input id={`change-request-reason-${r.id}`} name="decidedReason" type="text" placeholder="Reason (required)" required invalid={Boolean(error)} aria-describedby={describedBy} />
+                      <Button type="submit" name="decision" value="rejected" variant="secondary" loading={pending}>
+                        Reject
+                      </Button>
+                      <Button type="submit" name="decision" value="approved" variant="primary" loading={pending}>
+                        Approve
+                      </Button>
+                      {error ? (
+                        <div className="w-full">
+                          <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </FormWithState>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null}
+  </div>
+  );
+}
+
+function EmploymentPanel({
+  profile,
+  orgUnits,
+  updateDraftAction,
+  decideApprovalAction,
+  linkUserAction,
+}: {
+  profile: EmployeeProfile;
+  orgUnits: readonly OrgUnit[];
+  updateDraftAction: BoundAction;
+  decideApprovalAction: BoundAction;
+  linkUserAction: BoundAction;
+}) {
+  return (
+  <div className="flex flex-col gap-4">
+    {profile.lifecycleStatus === "draft" ? (
+      <EmployeeEditForm profile={profile} orgUnits={orgUnits} action={updateDraftAction} />
+    ) : (
+      <>
+        {/* `ISS-2026-246`: hand-rolled `<dl>` replaced by `DescriptionList`. The
+            trailing note was a `<p>` rendered as a direct child of `<dl>`, which is
+            not permitted content there -- it now sits after the list, same text,
+            same styling, valid markup. */}
+        <DescriptionList
+          items={[
+            { term: "Employment type", value: profile.employmentType.replace(/_/g, " ") },
+            { term: "Hire date", value: profile.hireDate ?? "—" },
+            { term: "Probation end date", value: profile.probationEndDate ?? "—" },
+            { term: "Employment end date", value: profile.employmentEndDate ?? "—" },
+            ...(profile.revisionReason ? [{ term: "Last revision reason", value: profile.revisionReason, wide: true }] : []),
+          ]}
+        />
+        <p className="text-xs text-neutral-500">Only a draft profile can be edited directly. Use Transfer (Organization tab) to change company/branch/department/position/manager once active.</p>
+      </>
+    )}
+
+    {profile.lifecycleStatus === "submitted" ? (
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Approval decision</h2>
+        <FormWithState action={decideApprovalAction} className="flex flex-wrap items-center gap-2">
+          {(pending, error, describedBy) => (
+            <>
+              <label className="sr-only" htmlFor="approval-decision-reason">
+                Reason
+              </label>
+              <Input id="approval-decision-reason" name="reason" type="text" placeholder="Reason (required to reject)" invalid={Boolean(error)} aria-describedby={describedBy} />
+              <Button type="submit" name="decision" value="reject" variant="destructive" loading={pending}>
+                Reject
+              </Button>
+              <Button type="submit" name="decision" value="approve" variant="primary" loading={pending}>
+                Approve
+              </Button>
+              {error ? (
+                <div className="w-full">
+                  <ValidationMessage id={describedBy}>{error}</ValidationMessage>
                 </div>
               ) : null}
-              <p className="col-span-full text-xs text-neutral-500">Only a draft profile can be edited directly. Use Transfer (Organization tab) to change company/branch/department/position/manager once active.</p>
-            </dl>
+            </>
           )}
+        </FormWithState>
+      </section>
+    ) : null}
 
-          {profile.lifecycleStatus === "submitted" ? (
-            <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-              <h2 className="text-sm font-semibold text-neutral-900">Approval decision</h2>
-              <FormWithState action={decideApprovalAction} className="flex flex-wrap items-center gap-2">
-                {(pending, error, describedBy) => (
-                  <>
-                    <label className="sr-only" htmlFor="approval-decision-reason">
-                      Reason
-                    </label>
-                    <Input id="approval-decision-reason" name="reason" type="text" placeholder="Reason (required to reject)" invalid={Boolean(error)} aria-describedby={describedBy} />
-                    <Button type="submit" name="decision" value="reject" variant="destructive" loading={pending}>
-                      Reject
-                    </Button>
-                    <Button type="submit" name="decision" value="approve" variant="primary" loading={pending}>
-                      Approve
-                    </Button>
-                    {error ? (
-                      <div className="w-full">
-                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </FormWithState>
-            </section>
-          ) : null}
-
-          {!profile.userId && profile.lifecycleStatus !== "terminated" && profile.lifecycleStatus !== "archived" ? (
-            <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-              <h2 className="text-sm font-semibold text-neutral-900">Link a Platform user</h2>
-              <p className="text-xs text-neutral-500">This profile was created before a Platform user account existed. Link one now to enable self-service access.</p>
-              <FormWithState action={linkUserAction} className="flex flex-wrap items-center gap-2">
-                {(pending, error, describedBy) => (
-                  <>
-                    <label className="sr-only" htmlFor="link-user-id">
-                      Platform user id
-                    </label>
-                    <Input id="link-user-id" name="userId" type="text" placeholder="Platform user id (uuid)" required invalid={Boolean(error)} aria-describedby={describedBy} />
-                    <Button type="submit" loading={pending} loadingLabel="Linking…">
-                      Link user
-                    </Button>
-                    {error ? (
-                      <div className="w-full">
-                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </FormWithState>
-            </section>
-          ) : null}
-        </div>
-      ) : null}
-
-      {tab === "organization" ? (
-        <div id="panel-organization" role="tabpanel" aria-labelledby="tab-organization" className="flex flex-col gap-4">
-          <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs text-neutral-500">Company</dt>
-              <dd className="text-sm">{orgUnitName(profile.companyOrgUnitId)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">Branch</dt>
-              <dd className="text-sm">{orgUnitName(profile.branchOrgUnitId)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">Department</dt>
-              <dd className="text-sm">{orgUnitName(profile.departmentOrgUnitId)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">Position title</dt>
-              <dd className="text-sm">{profile.positionTitle ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-neutral-500">Manager (employee id)</dt>
-              <dd className="text-sm">{profile.managerEmployeeId ?? "—"}</dd>
-            </div>
-          </dl>
-
-          <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
-            <p className="text-sm font-medium text-neutral-900">Governed position, grade and reporting assignment</p>
-            <p className="mt-1 text-xs text-neutral-600">
-              The free-text transfer below (position title, manager id) is HRT-274&apos;s original, ungoverned quick edit. For a governed position/grade linked to the canonical organization tree, with effective-dated history, capacity
-              enforcement and reorganization impact preview, use the assignment timeline page.
-            </p>
-            <a href={`/${tenantSlug}/hris/employees/${profile.masterRecordId}/positions`} className="mt-2 inline-block text-sm font-medium text-primary underline">
-              Open position &amp; assignment timeline
-            </a>
-          </div>
-
-          {profile.lifecycleStatus !== "terminated" && profile.lifecycleStatus !== "archived" ? (
-            <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-              <h2 className="text-sm font-semibold text-neutral-900">Transfer (free-text, ungoverned)</h2>
-              <p className="text-xs text-neutral-500">Full before/after history is preserved (see the History tab). Cyclic reporting lines are rejected. Prefer the governed assignment timeline above when a position/grade catalogue exists for this role.</p>
-              <FormWithState action={transferAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {(pending, error, describedBy) => (
-                  <>
-                    <label className="sr-only" htmlFor="transfer-company">
-                      Company
-                    </label>
-                    <Select id="transfer-company" name="companyOrgUnitId" defaultValue={profile.companyOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
-                      <option value="">Company: —</option>
-                      {orgUnits.filter((u) => u.unitType === "company").map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <label className="sr-only" htmlFor="transfer-branch">
-                      Branch
-                    </label>
-                    <Select id="transfer-branch" name="branchOrgUnitId" defaultValue={profile.branchOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
-                      <option value="">Branch: —</option>
-                      {orgUnits.filter((u) => u.unitType === "branch").map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <label className="sr-only" htmlFor="transfer-department">
-                      Department
-                    </label>
-                    <Select id="transfer-department" name="departmentOrgUnitId" defaultValue={profile.departmentOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
-                      <option value="">Department: —</option>
-                      {orgUnits.filter((u) => u.unitType === "department").map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <label className="sr-only" htmlFor="transfer-position-title">
-                      Position title
-                    </label>
-                    <Input id="transfer-position-title" name="positionTitle" type="text" placeholder="Position title" defaultValue={profile.positionTitle ?? ""} invalid={Boolean(error)} aria-describedby={describedBy} />
-                    <label className="sr-only" htmlFor="transfer-manager-id">
-                      Manager employee id
-                    </label>
-                    <Input
-                      id="transfer-manager-id"
-                      name="managerEmployeeId"
-                      type="text"
-                      placeholder="Manager employee id (uuid, optional)"
-                      defaultValue={profile.managerEmployeeId ?? ""}
-                      className="sm:col-span-2"
-                      invalid={Boolean(error)}
-                      aria-describedby={describedBy}
-                    />
-                    <label className="sr-only" htmlFor="transfer-reason">
-                      Reason
-                    </label>
-                    <Input id="transfer-reason" name="reason" type="text" placeholder="Reason (optional)" className="sm:col-span-2" invalid={Boolean(error)} aria-describedby={describedBy} />
-                    {error ? (
-                      <div className="col-span-full">
-                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
-                      </div>
-                    ) : null}
-                    <div className="col-span-full">
-                      <Button type="submit" loading={pending} loadingLabel="Transferring…">
-                        Transfer
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </FormWithState>
-            </section>
-          ) : null}
-        </div>
-      ) : null}
-
-      {tab === "documents" ? (
-        <div id="panel-documents" role="tabpanel" aria-labelledby="tab-documents">
-          {files.length === 0 ? (
-            <EmptyState title="No documents uploaded" description="Employee documents are stored via the private, scanned Document Engine (app.files) -- never a second file table." />
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {files.map((f) => (
-                <li key={f.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-2 text-sm">
-                  <span>
-                    {f.originalFilename} <span className="text-xs text-neutral-500">({f.mimeType}, {Math.round(f.sizeBytes / 1024)} KB)</span>
-                  </span>
-                  <StatusBadge
-                    tone={f.malwareScanStatus === "clean" ? "success" : f.malwareScanStatus === "infected" ? "danger" : "warning"}
-                    label={`scan: ${f.malwareScanStatus}`}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-          <FormWithState action={uploadDocumentAction} className="mt-3 flex flex-col gap-2 rounded-md border border-dashed border-neutral-300 p-3 sm:flex-row sm:items-end sm:gap-3">
-            {(pending, error, describedBy) => (
-              <>
-                <div className="flex-1">
-                  <FormField id="employee-document-file" label="Upload a document">
-                    <Input id="employee-document-file" name="file" type="file" required invalid={Boolean(error)} aria-describedby={describedBy} />
-                  </FormField>
+    {!profile.userId && profile.lifecycleStatus !== "terminated" && profile.lifecycleStatus !== "archived" ? (
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Link a Platform user</h2>
+        <p className="text-xs text-neutral-500">This profile was created before a Platform user account existed. Link one now to enable self-service access.</p>
+        <FormWithState action={linkUserAction} className="flex flex-wrap items-center gap-2">
+          {(pending, error, describedBy) => (
+            <>
+              <label className="sr-only" htmlFor="link-user-id">
+                Platform user id
+              </label>
+              <Input id="link-user-id" name="userId" type="text" placeholder="Platform user id (uuid)" required invalid={Boolean(error)} aria-describedby={describedBy} />
+              <Button type="submit" loading={pending} loadingLabel="Linking…">
+                Link user
+              </Button>
+              {error ? (
+                <div className="w-full">
+                  <ValidationMessage id={describedBy}>{error}</ValidationMessage>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <Button type="submit" loading={pending} loadingLabel="Uploading…">
-                    Upload
-                  </Button>
-                  {error ? <ValidationMessage id={describedBy}>{error}</ValidationMessage> : null}
-                </div>
-              </>
-            )}
-          </FormWithState>
-          <p className="mt-2 text-xs text-neutral-500">Upload is server-mediated through app.initiate_file_upload (RPD-032 true quarantine) -- metadata (filename, MIME type, size, classification) is recorded and malware-scanned once a scan provider reports a result; this repository has no Supabase Storage integration anywhere, so the file&apos;s bytes themselves are not persisted to an object store yet (disclosed NOT_RUN, see ISS-2026-064).</p>
-        </div>
-      ) : null}
-
-      {tab === "history" ? (
-        <div id="panel-history" role="tabpanel" aria-labelledby="tab-history">
-          {history.length === 0 ? (
-            <EmptyState title="No lifecycle history yet" />
-          ) : (
-            <ol className="flex flex-col gap-2 border-l border-neutral-200 pl-4">
-              {history.map((e) => (
-                <li key={e.id} className="text-sm">
-                  <p className="font-medium">
-                    {e.fromStatus} → {e.toStatus} <span className="text-xs font-normal text-neutral-500">{new Date(e.occurredAt).toLocaleString()}</span>
-                  </p>
-                  {e.reason ? <p className="text-xs text-neutral-600">Reason: {e.reason}</p> : null}
-                  {e.actorLabel ? <p className="text-xs text-neutral-500">By: {e.actorLabel}</p> : null}
-                </li>
-              ))}
-            </ol>
+              ) : null}
+            </>
           )}
-        </div>
-      ) : null}
+        </FormWithState>
+      </section>
+    ) : null}
+  </div>
+  );
+}
+
+function OrganizationPanel({
+  tenantSlug,
+  profile,
+  orgUnits,
+  transferAction,
+}: {
+  tenantSlug: string;
+  profile: EmployeeProfile;
+  orgUnits: readonly OrgUnit[];
+  transferAction: BoundAction;
+}) {
+  const orgUnitName = (id: string | null) => (id ? orgUnits.find((u) => u.id === id)?.name ?? id : "—");
+
+  return (
+  <div className="flex flex-col gap-4">
+    {/* `ISS-2026-246`: hand-rolled `<dl>` replaced by `DescriptionList`. */}
+    <DescriptionList
+      items={[
+        { term: "Company", value: orgUnitName(profile.companyOrgUnitId) },
+        { term: "Branch", value: orgUnitName(profile.branchOrgUnitId) },
+        { term: "Department", value: orgUnitName(profile.departmentOrgUnitId) },
+        { term: "Position title", value: profile.positionTitle ?? "—" },
+        { term: "Manager (employee id)", value: profile.managerEmployeeId ?? "—" },
+      ]}
+    />
+
+    <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+      <p className="text-sm font-medium text-neutral-900">Governed position, grade and reporting assignment</p>
+      <p className="mt-1 text-xs text-neutral-600">
+        The free-text transfer below (position title, manager id) is HRT-274&apos;s original, ungoverned quick edit. For a governed position/grade linked to the canonical organization tree, with effective-dated history, capacity
+        enforcement and reorganization impact preview, use the assignment timeline page.
+      </p>
+      <a href={`/${tenantSlug}/hris/employees/${profile.masterRecordId}/positions`} className="mt-2 inline-block text-sm font-medium text-primary underline">
+        Open position &amp; assignment timeline
+      </a>
     </div>
+
+    {profile.lifecycleStatus !== "terminated" && profile.lifecycleStatus !== "archived" ? (
+      <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+        <h2 className="text-sm font-semibold text-neutral-900">Transfer (free-text, ungoverned)</h2>
+        <p className="text-xs text-neutral-500">Full before/after history is preserved (see the History tab). Cyclic reporting lines are rejected. Prefer the governed assignment timeline above when a position/grade catalogue exists for this role.</p>
+        <FormWithState action={transferAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(pending, error, describedBy) => (
+            <>
+              <label className="sr-only" htmlFor="transfer-company">
+                Company
+              </label>
+              <Select id="transfer-company" name="companyOrgUnitId" defaultValue={profile.companyOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
+                <option value="">Company: —</option>
+                {orgUnits.filter((u) => u.unitType === "company").map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
+              <label className="sr-only" htmlFor="transfer-branch">
+                Branch
+              </label>
+              <Select id="transfer-branch" name="branchOrgUnitId" defaultValue={profile.branchOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
+                <option value="">Branch: —</option>
+                {orgUnits.filter((u) => u.unitType === "branch").map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
+              <label className="sr-only" htmlFor="transfer-department">
+                Department
+              </label>
+              <Select id="transfer-department" name="departmentOrgUnitId" defaultValue={profile.departmentOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
+                <option value="">Department: —</option>
+                {orgUnits.filter((u) => u.unitType === "department").map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </Select>
+              <label className="sr-only" htmlFor="transfer-position-title">
+                Position title
+              </label>
+              <Input id="transfer-position-title" name="positionTitle" type="text" placeholder="Position title" defaultValue={profile.positionTitle ?? ""} invalid={Boolean(error)} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="transfer-manager-id">
+                Manager employee id
+              </label>
+              <Input
+                id="transfer-manager-id"
+                name="managerEmployeeId"
+                type="text"
+                placeholder="Manager employee id (uuid, optional)"
+                defaultValue={profile.managerEmployeeId ?? ""}
+                className="sm:col-span-2"
+                invalid={Boolean(error)}
+                aria-describedby={describedBy}
+              />
+              <label className="sr-only" htmlFor="transfer-reason">
+                Reason
+              </label>
+              <Input id="transfer-reason" name="reason" type="text" placeholder="Reason (optional)" className="sm:col-span-2" invalid={Boolean(error)} aria-describedby={describedBy} />
+              {error ? (
+                <div className="col-span-full">
+                  <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                </div>
+              ) : null}
+              <div className="col-span-full">
+                <Button type="submit" loading={pending} loadingLabel="Transferring…">
+                  Transfer
+                </Button>
+              </div>
+            </>
+          )}
+        </FormWithState>
+      </section>
+    ) : null}
+  </div>
+  );
+}
+
+function DocumentsPanel({ files, uploadDocumentAction }: { files: readonly HrisFile[]; uploadDocumentAction: BoundAction }) {
+  return (
+  <div>
+    {files.length === 0 ? (
+      <EmptyState title="No documents uploaded" description="Employee documents are stored via the private, scanned Document Engine (app.files) -- never a second file table." />
+    ) : (
+      <ul className="flex flex-col gap-2">
+        {files.map((f) => (
+          <li key={f.id} className="flex items-center justify-between rounded-md border border-neutral-100 p-2 text-sm">
+            <span>
+              {f.originalFilename} <span className="text-xs text-neutral-500">({f.mimeType}, {Math.round(f.sizeBytes / 1024)} KB)</span>
+            </span>
+            <StatusBadge
+              tone={f.malwareScanStatus === "clean" ? "success" : f.malwareScanStatus === "infected" ? "danger" : "warning"}
+              label={`scan: ${f.malwareScanStatus}`}
+            />
+          </li>
+        ))}
+      </ul>
+    )}
+    <FormWithState action={uploadDocumentAction} className="mt-3 flex flex-col gap-2 rounded-md border border-dashed border-neutral-300 p-3 sm:flex-row sm:items-end sm:gap-3">
+      {(pending, error, describedBy) => (
+        <>
+          <div className="flex-1">
+            <FormField id="employee-document-file" label="Upload a document">
+              <Input id="employee-document-file" name="file" type="file" required invalid={Boolean(error)} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Button type="submit" loading={pending} loadingLabel="Uploading…">
+              Upload
+            </Button>
+            {error ? <ValidationMessage id={describedBy}>{error}</ValidationMessage> : null}
+          </div>
+        </>
+      )}
+    </FormWithState>
+    <p className="mt-2 text-xs text-neutral-500">Upload is server-mediated through app.initiate_file_upload (RPD-032 true quarantine) -- metadata (filename, MIME type, size, classification) is recorded and malware-scanned once a scan provider reports a result; this repository has no Supabase Storage integration anywhere, so the file&apos;s bytes themselves are not persisted to an object store yet (disclosed NOT_RUN, see ISS-2026-064).</p>
+  </div>
+  );
+}
+
+function HistoryPanel({ history }: { history: readonly EmployeeLifecycleEvent[] }) {
+  return (
+  <div>
+    {history.length === 0 ? (
+      <EmptyState title="No lifecycle history yet" />
+    ) : (
+      <ol className="flex flex-col gap-2 border-l border-neutral-200 pl-4">
+        {history.map((e) => (
+          <li key={e.id} className="text-sm">
+            <p className="font-medium">
+              {e.fromStatus} → {e.toStatus} <span className="text-xs font-normal text-neutral-500">{new Date(e.occurredAt).toLocaleString()}</span>
+            </p>
+            {e.reason ? <p className="text-xs text-neutral-600">Reason: {e.reason}</p> : null}
+            {e.actorLabel ? <p className="text-xs text-neutral-500">By: {e.actorLabel}</p> : null}
+          </li>
+        ))}
+      </ol>
+    )}
+  </div>
   );
 }

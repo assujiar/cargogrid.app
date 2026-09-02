@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Accordion } from "../../../../../../components/ui/accordion.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
 import { Textarea } from "../../../../../../components/forms/textarea.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
@@ -23,30 +24,38 @@ function ErrorLine({ error, id }: { error: string | null; id?: string }) {
   return error ? <ValidationMessage id={id}>{error}</ValidationMessage> : null;
 }
 
-function PayslipCard({ row }: { row: PayslipRow }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
-      <div className="flex items-center justify-between">
-        <span>Pay period ending — net pay {row.netPay} {row.currency}</span>
-        <Button type="button" variant="secondary" onClick={() => setExpanded((v) => !v)}>{expanded ? "Hide detail" : "Show detail"}</Button>
+/**
+ * `ISS-2026-246`: the payslip list was a hand-rolled disclosure -- one `useState` per row
+ * and a "Show detail"/"Hide detail" `<Button>` that carried no `aria-expanded` and no
+ * association with the region it revealed, so assistive technology was told only that a
+ * button existed. `Accordion` is `<details>`/`<summary>`, which is that association, that
+ * state, and the keyboard behaviour, natively and with no client JS at all.
+ *
+ * Every value still rendered is the same value, formatted the same way: the amounts are
+ * `money` strings straight off the contract (`server/contracts/payroll/payroll.ts`) and are
+ * printed verbatim, never parsed, rounded, or put through a numeric input -- the `AGENTS.md`
+ * money rule. `id` is the payslip's own uuid, because two pay periods can share a net-pay
+ * figure and the summary text alone is not a unique key.
+ */
+function payslipSections(payslips: readonly PayslipRow[]) {
+  return payslips.map((row) => ({
+    id: row.id,
+    title: `Pay period ending — net pay ${row.netPay} ${row.currency}`,
+    content: (
+      <div className="flex flex-col gap-1 text-xs text-neutral-600">
+        <div>Gross earnings: {row.grossEarnings} {row.currency}</div>
+        <div>Deductions: {row.totalDeductions} {row.currency}</div>
+        <div>Tax: {row.totalTax} {row.currency}</div>
+        <div>Reimbursement: {row.totalReimbursement} {row.currency}</div>
+        <div>Loan repayment: {row.totalLoanRepayment} {row.currency}</div>
+        <ul className="mt-2 flex flex-col gap-1 border-t border-neutral-100 pt-2">
+          {row.lineItems.map((li, idx) => (
+            <li key={idx}>{li.description ?? li.lineType} — {li.amount} {li.currency}</li>
+          ))}
+        </ul>
       </div>
-      {expanded ? (
-        <div className="flex flex-col gap-1 text-xs text-neutral-600">
-          <div>Gross earnings: {row.grossEarnings} {row.currency}</div>
-          <div>Deductions: {row.totalDeductions} {row.currency}</div>
-          <div>Tax: {row.totalTax} {row.currency}</div>
-          <div>Reimbursement: {row.totalReimbursement} {row.currency}</div>
-          <div>Loan repayment: {row.totalLoanRepayment} {row.currency}</div>
-          <ul className="mt-2 flex flex-col gap-1 border-t border-neutral-100 pt-2">
-            {row.lineItems.map((li, idx) => (
-              <li key={idx}>{li.description ?? li.lineType} — {li.amount} {li.currency}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </li>
-  );
+    ),
+  }));
 }
 
 function CreateReimbursementForm({ createMyReimbursementRequestAction }: { createMyReimbursementRequestAction: BoundAction }) {
@@ -131,7 +140,7 @@ export function MyPayrollPanel({
         {payslips.length === 0 ? (
           <EmptyState title="No payslips yet" description="A payslip appears here once a payroll run covering you is finalized." />
         ) : (
-          <ul className="flex flex-col gap-2">{payslips.map((p) => <PayslipCard key={p.id} row={p} />)}</ul>
+          <Accordion items={payslipSections(payslips)} />
         )}
       </section>
 

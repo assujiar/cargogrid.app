@@ -4,6 +4,7 @@ import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
+import { Breadcrumb } from "../../../../../../../components/ui/breadcrumb.tsx";
 import { Input } from "../../../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../../components/forms/form-field.tsx";
@@ -82,16 +83,25 @@ export function EmployeePositionPanel({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-neutral-900">
-            Position &amp; assignment timeline <span className="text-sm font-normal text-neutral-500">— {profile.fullName}</span>
-          </h1>
-          <p className="text-xs text-neutral-500">Effective-dated position/grade/manager history. This table is the source of truth; the employee&apos;s own record carries a synced convenience pointer only.</p>
-        </div>
-        <a href={`/${tenantSlug}/hris/employees/${profile.masterRecordId}`} className="text-sm text-primary underline">
-          Back to employee
-        </a>
+      {/* `ISS-2026-246`: the deepest route in the HRIS module
+          (`/{tenant}/hris/employees/{id}/positions`) previously offered one "Back to
+          employee" link and no indication of where the page sat. `Breadcrumb` renders
+          the whole trail; the employee crumb keeps the exact href the back link had.
+          "HRIS" carries no `href` -- there is no `/{tenant}/hris` index page. */}
+      <Breadcrumb
+        items={[
+          { label: "HRIS" },
+          { label: "Employees", href: `/${tenantSlug}/hris/employees` },
+          { label: profile.fullName, href: `/${tenantSlug}/hris/employees/${profile.masterRecordId}` },
+          { label: "Position & assignment timeline" },
+        ]}
+      />
+
+      <div>
+        <h1 className="text-xl font-semibold text-neutral-900">
+          Position &amp; assignment timeline <span className="text-sm font-normal text-neutral-500">— {profile.fullName}</span>
+        </h1>
+        <p className="text-xs text-neutral-500">Effective-dated position/grade/manager history. This table is the source of truth; the employee&apos;s own record carries a synced convenience pointer only.</p>
       </div>
 
       <AssignmentTimeline history={history} decideAction={decideAction} cancelAction={cancelAction} />

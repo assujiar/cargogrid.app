@@ -84,6 +84,14 @@ export interface ComponentEntry {
 
 const CHECKPOINT_4_CITATION = "docs/design-system/07_GAP_ANALYSIS_AND_ROADMAP.md §10 (checkpoint 4, 2026-07-26)";
 
+/**
+ * `ISS-2026-246` (navigation lane, 2026-09-02): several primitives below were built well and
+ * then never imported by anything but this registry and the internal showcase. This citation
+ * marks the entries whose `consumers` are now real application files. A registry import has
+ * never counted as adoption -- this file imports every component by construction.
+ */
+const ISS_2026_246_CITATION = "ISS-2026-246 navigation-lane adoption (2026-09-02)";
+
 export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
   // ---- Actions ----
   {
@@ -320,23 +328,23 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
     purpose: "User/entity image or initials, with automatic fallback on image-load failure.",
     sourceFile: "components/ui/avatar.tsx",
     importSnippet: 'import { Avatar } from "@/components/ui/avatar.tsx";',
-    consumers: ["components/ui/user-menu.tsx"],
+    consumers: ["components/ui/user-menu.tsx (reached in the real app since ISS-2026-246: AccountMenu renders UserMenu in the Tenant Admin, Commercial and Supreme shells)"],
     productionReady: true,
-    citation: CHECKPOINT_4_CITATION,
+    citation: CHECKPOINT_4_CITATION + "; " + ISS_2026_246_CITATION,
   },
-  { name: "Description List", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Native <dl> label/value pairs — the pattern every real detail page already renders inline, extracted.", sourceFile: "components/ui/description-list.tsx", importSnippet: 'import { DescriptionList } from "@/components/ui/description-list.tsx";', consumers: [], productionReady: true, citation: "Not previously named in any CargoGrid design-system document — disclosed as a gap when first requested, then implemented. " + CHECKPOINT_4_CITATION },
+  { name: "Description List", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Native <dl> label/value pairs — the pattern every real detail page already renders inline, extracted.", sourceFile: "components/ui/description-list.tsx", importSnippet: 'import { DescriptionList } from "@/components/ui/description-list.tsx";', consumers: ["app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/employee-detail-panel.tsx (Personal, Employment and Organization tabs)", "app/(tenant)/[tenantSlug]/hris/my/profile/my-profile-panel.tsx"], productionReady: true, citation: "Not previously named in any CargoGrid design-system document — disclosed as a gap when first requested, then implemented. " + CHECKPOINT_4_CITATION + "; " + ISS_2026_246_CITATION },
   { name: "Stat", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Bare label/value pair, the inline counterpart to KPI Card.", sourceFile: "components/ui/stat.tsx", importSnippet: 'import { Stat } from "@/components/ui/stat.tsx";', consumers: [], productionReady: true, citation: "Not previously named in any CargoGrid design-system document — disclosed as a gap when first requested, then implemented. " + CHECKPOINT_4_CITATION },
   { name: "Timeline", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Chronological event list; ActivityItem is the single entry, with optional before/after value disclosure.", sourceFile: "components/ui/timeline.tsx", importSnippet: 'import { Timeline, ActivityItem } from "@/components/ui/timeline.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
   { name: "Activity Item", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Single timeline entry (catalogue name: \"Activity item / Audit item\").", sourceFile: "components/ui/timeline.tsx", importSnippet: 'import { ActivityItem } from "@/components/ui/timeline.tsx";', consumers: ["components/ui/timeline.tsx"], productionReady: true, citation: CHECKPOINT_4_CITATION },
-  { name: "Accordion", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Collapsible content sections — native <details>/<summary>, zero client JS.", sourceFile: "components/ui/accordion.tsx", importSnippet: 'import { Accordion } from "@/components/ui/accordion.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
+  { name: "Accordion", category: "DataDisplay", status: "IMPLEMENTED", purpose: "Collapsible content sections — native <details>/<summary>, zero client JS.", sourceFile: "components/ui/accordion.tsx", importSnippet: 'import { Accordion } from "@/components/ui/accordion.tsx";', consumers: ["app/(tenant)/[tenantSlug]/hris/my/payroll/my-payroll-panel.tsx (payslip detail sections)"], productionReady: true, citation: CHECKPOINT_4_CITATION + "; " + ISS_2026_246_CITATION },
   { name: "Kanban board", category: "DataDisplay", status: "DOCUMENTED_ONLY", purpose: "Drag/status-column view.", productionReady: false, citation: "docs/design-system/02_COMPONENTS.md §2 — not built this checkpoint: needs a drag-and-drop dependency and no real consumer/data model exists yet to build the right shape against." },
   { name: "Calendar", category: "DataDisplay", status: "DOCUMENTED_ONLY", purpose: "Date-grid scheduling view.", productionReady: false, citation: "docs/design-system/02_COMPONENTS.md §2 — not built this checkpoint (DateInput/DateRangeInput cover the entry use case; a full scheduling grid has no real consumer yet)." },
   { name: "Document preview", category: "DataDisplay", status: "BLOCKED", purpose: "Signed-URL-gated file preview.", productionReady: false, citation: "docs/design-system/02_COMPONENTS.md §2 — blocked on the same storage pipeline as File upload." },
   { name: "Attachment list", category: "DataDisplay", status: "BLOCKED", purpose: "List of uploaded files with status.", productionReady: false, citation: "docs/design-system/02_COMPONENTS.md §2 — blocked on the same storage pipeline." },
 
   // ---- Navigation ----
-  { name: "Tabs", category: "Navigation", status: "IMPLEMENTED", purpose: "Same-page view switch, built on Radix Tabs for correct roving-tabindex keyboard behavior.", sourceFile: "components/ui/tabs.tsx", importSnippet: 'import { Tabs } from "@/components/ui/tabs.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
-  { name: "Breadcrumbs", category: "Navigation", status: "IMPLEMENTED", purpose: "Hierarchical location trail.", sourceFile: "components/ui/breadcrumb.tsx", importSnippet: 'import { Breadcrumb } from "@/components/ui/breadcrumb.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
+  { name: "Tabs", category: "Navigation", status: "IMPLEMENTED", purpose: "Same-page view switch, built on Radix Tabs for correct roving-tabindex keyboard behavior.", sourceFile: "components/ui/tabs.tsx", importSnippet: 'import { Tabs } from "@/components/ui/tabs.tsx";', consumers: ["app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/employee-detail-panel.tsx"], productionReady: true, citation: CHECKPOINT_4_CITATION + "; " + ISS_2026_246_CITATION },
+  { name: "Breadcrumbs", category: "Navigation", status: "IMPLEMENTED", purpose: "Hierarchical location trail.", sourceFile: "components/ui/breadcrumb.tsx", importSnippet: 'import { Breadcrumb } from "@/components/ui/breadcrumb.tsx";', consumers: ["app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/employee-detail-panel.tsx", "app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/positions/employee-position-panel.tsx", "app/(tenant)/[tenantSlug]/procurement/compliance/vendors/[vendorMasterRecordId]/documents/[versionGroupId]/document-version-panel.tsx"], productionReady: true, citation: CHECKPOINT_4_CITATION + "; " + ISS_2026_246_CITATION },
   { name: "Sidebar item", category: "Navigation", status: "DOCUMENTED_ONLY", purpose: "Both real portals use a flat top-bar link list today — no sidebar exists at all (appropriate at ≤2 top-level destinations per portal).", productionReady: false, citation: "docs/design-system/03_LAYOUT_NAVIGATION.md §1 — needs an actual shell redesign, not a single component; not attempted this checkpoint." },
   { name: "Navigation group", category: "Navigation", status: "DOCUMENTED_ONLY", purpose: "Grouped/collapsible navigation sections — no sidebar exists yet for a group to belong to.", productionReady: false, citation: "docs/design-system/03_LAYOUT_NAVIGATION.md §1" },
   {
@@ -363,17 +371,17 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
   },
   { name: "Page header", category: "Layout", status: "DOCUMENTED_ONLY", purpose: "Record-detail page header (title, status, primary actions) — each detail page renders its own ad hoc header today (catalogue name: \"Workspace header\").", productionReady: false, citation: "docs/design-system/03_LAYOUT_NAVIGATION.md §1 — not attempted this checkpoint." },
   { name: "Context menu", category: "Overlays", status: "IMPLEMENTED", purpose: "Right-click action list, built on Radix ContextMenu, same item shape as Dropdown menu.", sourceFile: "components/ui/context-menu.tsx", importSnippet: 'import { ContextMenu } from "@/components/ui/context-menu.tsx";', consumers: [], productionReady: true, citation: CHECKPOINT_4_CITATION },
-  { name: "Persistent top bar", category: "Layout", status: "DOCUMENTED_ONLY", purpose: "Portal name, primary nav, org-context selector, global search, notifications, user menu — both real layouts render a minimal 2-link header today.", productionReady: false, citation: "docs/design-system/03_LAYOUT_NAVIGATION.md §1 — needs an actual shell redesign; User menu itself is now built (below) for whichever future shell adopts it." },
+  { name: "Persistent top bar", category: "Layout", status: "DOCUMENTED_ONLY", purpose: "Portal name, primary nav, org-context selector, global search, notifications, user menu — the three real shells render a link list plus (since ISS-2026-246) a user menu; the org-context selector, global search and notifications are still absent.", productionReady: false, citation: "docs/design-system/03_LAYOUT_NAVIGATION.md §1 — still needs an actual shell redesign; only the User menu slot is filled (" + ISS_2026_246_CITATION + ")." },
   {
     name: "User menu",
     category: "Navigation",
     status: "IMPLEMENTED",
-    purpose: "Account/session actions, top-bar — composed from Avatar + DropdownMenu. No real layout has adopted it into its top bar yet.",
+    purpose: "Account/session actions, top-bar — composed from Avatar + DropdownMenu. Adopted by all three portal shells via components/layout/account-menu.tsx.",
     sourceFile: "components/ui/user-menu.tsx",
     importSnippet: 'import { UserMenu } from "@/components/ui/user-menu.tsx";',
-    consumers: [],
+    consumers: ["components/layout/account-menu.tsx", "app/(tenant)/[tenantSlug]/admin/layout.tsx", "app/(tenant)/[tenantSlug]/commercial/layout.tsx", "app/(supreme)/supreme/layout.tsx"],
     productionReady: true,
-    citation: CHECKPOINT_4_CITATION,
+    citation: CHECKPOINT_4_CITATION + "; " + ISS_2026_246_CITATION,
   },
 
   // ---- Feedback ----

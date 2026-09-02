@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { resolveSupremeAdminAccessForRequest } from "../../../lib/portal/resolve-supreme-admin-access.server.ts";
 import { Banner } from "../../../components/ui/banner.tsx";
+import { resolveSignedInUserLabelForRequest } from "../../../lib/auth/resolve-signed-in-user-label.server.ts";
+import { AccountMenu } from "../../../components/layout/account-menu.tsx";
 
 /**
  * Supreme Admin portal shell (PLT-136, CG-S6-PLT-033). Every request through this
@@ -41,21 +43,31 @@ export default async function SupremeLayout({ children }: { children: ReactNode 
     );
   }
 
+  /**
+   * `ISS-2026-246`: presentation-only, resolved after the guard already allowed the render.
+   * This is the principal's own CargoGrid-staff email, never tenant-derived branding -- the
+   * ADR-0017 §4 rule this shell's header restates is untouched.
+   */
+  const signedInUserLabel = await resolveSignedInUserLabelForRequest();
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-3">
         <span className="text-sm font-semibold text-neutral-900">CargoGrid — Control Plane</span>
-        <nav aria-label="Supreme navigation" className="flex gap-4 text-sm">
-          <a href="/supreme" className="text-neutral-700 hover:text-neutral-900">
-            Home
-          </a>
-          <a href="/supreme/tenants" className="text-neutral-700 hover:text-neutral-900">
-            Tenants
-          </a>
-          <a href="/supreme/helpdesk" className="text-neutral-700 hover:text-neutral-900">
-            Helpdesk
-          </a>
-        </nav>
+        <div className="flex items-center gap-4">
+          <nav aria-label="Supreme navigation" className="flex gap-4 text-sm">
+            <a href="/supreme" className="text-neutral-700 hover:text-neutral-900">
+              Home
+            </a>
+            <a href="/supreme/tenants" className="text-neutral-700 hover:text-neutral-900">
+              Tenants
+            </a>
+            <a href="/supreme/helpdesk" className="text-neutral-700 hover:text-neutral-900">
+              Helpdesk
+            </a>
+          </nav>
+          {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
+        </div>
       </header>
       <Banner variant="warning">
         Supreme Admin holds absolute CRUD authority, including over audit and ledger records (RPD-022). No action in this

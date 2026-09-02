@@ -7,6 +7,7 @@ import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
+import { DescriptionList } from "../../../../../../components/ui/description-list.tsx";
 import { useToastOnSettled } from "../../../../../../components/ui/toast.tsx";
 import { EMPLOYEE_CHANGE_REQUEST_FIELDS, type EmployeeLifecycleStatus, type EmployeeOwnProfile } from "../../../../../../server/contracts/employee/employee.ts";
 import type { MyProfileActionState } from "./actions.ts";
@@ -55,38 +56,27 @@ export function MyProfilePanel({ profile, requestChangeAction }: { profile: Empl
         <StatusBadge tone={STATUS_TONE[profile.lifecycleStatus]} label={profile.lifecycleStatus.replace(/_/g, " ")} />
       </div>
 
-      <dl className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
-        <div>
-          <dt className="text-xs text-neutral-500">Employment type</dt>
-          <dd className="text-sm">{profile.employmentType.replace(/_/g, " ")}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-neutral-500">Hire date</dt>
-          <dd className="text-sm">{profile.hireDate ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-neutral-500">Work email</dt>
-          <dd className="text-sm">{profile.workEmail ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-neutral-500">Position</dt>
-          <dd className="text-sm">{profile.positionTitle ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-neutral-500">Personal email</dt>
-          <dd className="text-sm">{profile.personalEmail ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-neutral-500">Personal phone</dt>
-          <dd className="text-sm">{profile.personalPhone ?? "—"}</dd>
-        </div>
-        <div className="sm:col-span-2">
-          <dt className="text-xs text-neutral-500">Personal address</dt>
-          <dd className="text-sm">
-            {[profile.personalAddressStreet, profile.personalAddressCity, profile.personalAddressProvince, profile.personalAddressPostalCode, profile.personalAddressCountry].filter(Boolean).join(", ") || "—"}
-          </dd>
-        </div>
-      </dl>
+      {/* `ISS-2026-246`: hand-rolled `<dl>` replaced by `DescriptionList` -- the same
+          `<dl>`/`<div>`/`<dt>`/`<dd>` structure this file already wrote by hand. The
+          bordered card stays here, where it belongs (the primitive renders the list, not
+          a container); the address keeps its full-row span via `wide`. */}
+      <div className="rounded-md border border-neutral-200 p-4">
+        <DescriptionList
+          items={[
+            { term: "Employment type", value: profile.employmentType.replace(/_/g, " ") },
+            { term: "Hire date", value: profile.hireDate ?? "—" },
+            { term: "Work email", value: profile.workEmail ?? "—" },
+            { term: "Position", value: profile.positionTitle ?? "—" },
+            { term: "Personal email", value: profile.personalEmail ?? "—" },
+            { term: "Personal phone", value: profile.personalPhone ?? "—" },
+            {
+              term: "Personal address",
+              wide: true,
+              value: [profile.personalAddressStreet, profile.personalAddressCity, profile.personalAddressProvince, profile.personalAddressPostalCode, profile.personalAddressCountry].filter(Boolean).join(", ") || "—",
+            },
+          ]}
+        />
+      </div>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Request a correction</h2>
