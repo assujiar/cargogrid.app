@@ -6,10 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
-import type { OnboardingActionState } from "./actions.ts";
+import { OnboardingExportForm, type OnboardingExportActionState } from "../../../../../components/domain/onboarding-export-form.tsx";
+import type { OnboardingActionState, OnboardingPreviewActionState } from "./actions.ts";
 import { CASE_TYPES, CASE_STATUSES, SOURCE_TYPES, type CaseListRow, type CaseType, type CaseStatus, type TemplateListRow } from "../../../../../server/contracts/onboarding/onboarding.ts";
 
 const INITIAL_STATE: OnboardingActionState = { error: null };
+const INITIAL_PREVIEW_STATE: OnboardingPreviewActionState = { error: null, preview: null };
 
 const STATUS_TONE: Record<CaseStatus, StatusTone> = {
   draft: "neutral",
@@ -27,6 +29,8 @@ export function OnboardingCaseListPanel({
   statusFilter,
   search,
   startCaseAction,
+  previewCaseAction,
+  exportCasesAction,
 }: {
   tenantSlug: string;
   cases: readonly CaseListRow[];
@@ -35,12 +39,17 @@ export function OnboardingCaseListPanel({
   statusFilter: CaseStatus | null;
   search: string;
   startCaseAction: (prevState: OnboardingActionState, formData: FormData) => Promise<OnboardingActionState>;
+  previewCaseAction: (prevState: OnboardingPreviewActionState, formData: FormData) => Promise<OnboardingPreviewActionState>;
+  exportCasesAction: (prevState: OnboardingExportActionState, formData: FormData) => Promise<OnboardingExportActionState>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(startCaseAction, INITIAL_STATE);
+  const [previewState, previewFormAction, previewPending] = useActionState(previewCaseAction, INITIAL_PREVIEW_STATE);
   const [sourceType, setSourceType] = useState<string>("direct_hire");
   const [caseType, setCaseType] = useState<string>("onboarding");
+  const [sourceJobOfferId, setSourceJobOfferId] = useState<string>("");
+  const [employeeMasterRecordId, setEmployeeMasterRecordId] = useState<string>("");
 
   function applyFilter(nextCaseType: string, nextStatus: string, nextSearch: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -139,6 +148,12 @@ export function OnboardingCaseListPanel({
         )}
       </section>
 
+      <OnboardingExportForm
+        label="Export cases"
+        description="Downloads the current status filter's cases as CSV (case type, source, employee, status, effective date, initiated at). HRS:Export required."
+        action={exportCasesAction}
+      />
+
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Start a new case</h2>
         {publishedTemplateCount === 0 ? (
@@ -175,7 +190,16 @@ export function OnboardingCaseListPanel({
               <label htmlFor="sourceJobOfferId" className="text-xs font-medium text-neutral-600">
                 Accepted job offer ID
               </label>
-              <input id="sourceJobOfferId" name="sourceJobOfferId" type="text" required placeholder="UUID of an app.job_offers row with status=accepted" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+              <input
+                id="sourceJobOfferId"
+                name="sourceJobOfferId"
+                type="text"
+                required
+                placeholder="UUID of an app.job_offers row with status=accepted"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+                value={sourceJobOfferId}
+                onChange={(e) => setSourceJobOfferId(e.currentTarget.value)}
+              />
               <p className="text-xs text-neutral-500">Find this on the candidate&apos;s application detail page under Recruitment once their offer is accepted.</p>
             </div>
           ) : null}
@@ -185,7 +209,16 @@ export function OnboardingCaseListPanel({
               <label htmlFor="employeeMasterRecordId" className="text-xs font-medium text-neutral-600">
                 Employee ID (master record)
               </label>
-              <input id="employeeMasterRecordId" name="employeeMasterRecordId" type="text" required placeholder="UUID from the Employees directory" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+              <input
+                id="employeeMasterRecordId"
+                name="employeeMasterRecordId"
+                type="text"
+                required
+                placeholder="UUID from the Employees directory"
+                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+                value={employeeMasterRecordId}
+                onChange={(e) => setEmployeeMasterRecordId(e.currentTarget.value)}
+              />
             </div>
           ) : null}
 
@@ -244,13 +277,61 @@ export function OnboardingCaseListPanel({
             </p>
           ) : null}
 
-          <div className="col-span-full">
+          <div className="col-span-full flex flex-wrap gap-2">
             <Button type="submit" loading={pending} loadingLabel="Starting…">
               Start case
             </Button>
           </div>
         </form>
+
+        <form action={previewFormAction} className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="caseType" value={caseType} />
+          <input type="hidden" name="sourceType" value={sourceType} />
+          <input type="hidden" name="sourceJobOfferId" value={sourceJobOfferId} />
+          <input type="hidden" name="employeeMasterRecordId" value={employeeMasterRecordId} />
+          <Button type="submit" variant="secondary" loading={previewPending} loadingLabel="Computing…">
+            Preview before starting
+          </Button>
+          <p className="text-xs text-neutral-500">Shows what this would resolve to (reused employee, checklist template, offer status) without creating anything.</p>
+        </form>
+
+        {previewState.error ? (
+          <p role="alert" className="text-sm text-danger">
+            {previewState.error}
+          </p>
+        ) : null}
+        {previewState.preview ? <CasePreviewCard preview={previewState.preview} /> : null}
       </section>
+    </div>
+  );
+}
+
+function CasePreviewCard({ preview }: { preview: NonNullable<OnboardingPreviewActionState["preview"]> }) {
+  return (
+    <div role="status" className="flex flex-col gap-2 rounded-md border border-info/30 bg-info/5 p-3 text-sm">
+      <p className="font-medium text-neutral-900">Preview</p>
+      <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        <div>
+          <dt className="text-xs text-neutral-500">Would reuse an existing employee</dt>
+          <dd>{preview.wouldReuseExistingEmployee ? "Yes" : "No -- a new employee record would be created"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-neutral-500">Checklist template that would apply</dt>
+          <dd>{preview.resolvedTemplateVersionId ? `${preview.resolvedTemplateTaskCount} task(s)` : "None published for this case type -- starting will fail"}</dd>
+        </div>
+        {preview.offerStatus ? (
+          <div>
+            <dt className="text-xs text-neutral-500">Offer status</dt>
+            <dd>{preview.offerStatus}</dd>
+          </div>
+        ) : null}
+        {preview.candidateFullName ? (
+          <div>
+            <dt className="text-xs text-neutral-500">Candidate</dt>
+            <dd>{preview.candidateFullName}</dd>
+          </div>
+        ) : null}
+      </dl>
     </div>
   );
 }

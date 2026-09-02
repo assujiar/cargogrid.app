@@ -453,3 +453,28 @@ export const ActivateDueEmployeePositionAssignmentsInputSchema = z.object({
   actorLabel: z.string(),
 });
 export type ActivateDueEmployeePositionAssignmentsInput = z.input<typeof ActivateDueEmployeePositionAssignmentsInputSchema>;
+
+// --- Bulk/multi-employee reorganization (ISS-2026-066 item 1) ---
+
+/** One employee/position pair within a bulk reorganization batch -- app.propose_bulk_employee_position_assignment's own p_items element shape. */
+export const BulkEmployeePositionAssignmentItemSchema = z.object({
+  masterRecordId: z.string().uuid(),
+  expectedVersion: z.number().int().positive(),
+  positionId: z.string().uuid(),
+  gradeId: z.string().uuid().nullable(),
+  managerEmployeeId: z.string().uuid().nullable(),
+  assignmentType: AssignmentTypeSchema,
+});
+export type BulkEmployeePositionAssignmentItem = z.input<typeof BulkEmployeePositionAssignmentItemSchema>;
+
+export const ProposeBulkEmployeePositionAssignmentInputSchema = z.object({
+  tenantId: z.string().uuid(),
+  items: z.array(BulkEmployeePositionAssignmentItemSchema).min(1).max(200),
+  changeReason: ChangeReasonSchema,
+  reasonNote: z.string().nullable(),
+  effectiveStartDate: z.string().min(1),
+  effectiveEndDate: z.string().nullable(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string(),
+});
+export type ProposeBulkEmployeePositionAssignmentInput = z.input<typeof ProposeBulkEmployeePositionAssignmentInputSchema>;

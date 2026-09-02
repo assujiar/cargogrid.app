@@ -59,9 +59,14 @@ export default async function PositionCataloguePage({ params, searchParams }: { 
           <h1 className="text-xl font-semibold text-neutral-900">Positions &amp; grades</h1>
           <p className="text-xs text-neutral-500">HR-governed structural catalogue, referencing the canonical company/branch/department/business_unit/team organization tree. Organization write itself stays Platform-governed and unchanged.</p>
         </div>
-        <a href={`/${tenantSlug}/hris/organization`} className="text-sm text-primary underline">
-          View organization tree
-        </a>
+        <div className="flex gap-3 text-sm">
+          <a href={`/${tenantSlug}/hris/positions/bulk-reassign`} className="text-primary underline">
+            Bulk reorganization
+          </a>
+          <a href={`/${tenantSlug}/hris/organization`} className="text-primary underline">
+            View organization tree
+          </a>
+        </div>
       </div>
 
       <PositionCataloguePanel

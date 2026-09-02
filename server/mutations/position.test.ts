@@ -11,6 +11,7 @@ import {
   decideEmployeePositionAssignment,
   cancelEmployeePositionAssignment,
   activateDueEmployeePositionAssignments,
+  proposeBulkEmployeePositionAssignment,
   PositionMutationError,
   type PositionMutationRpcClient,
 } from "./position.ts";
@@ -177,6 +178,67 @@ describe("employee <-> position/grade/manager assignment workflow", () => {
     await assert.rejects(
       () => activateDueEmployeePositionAssignments(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, actorLabel: "approver" }),
       (error: unknown) => error instanceof PositionMutationError && error.code === "invalid_response",
+    );
+  });
+});
+
+describe("bulk/multi-employee reorganization (ISS-2026-066 item 1)", () => {
+  test("proposeBulkEmployeePositionAssignment maps items to snake_case and returns every created row", async () => {
+    const { client, calls } = fakeRpcClient({ data: [ASSIGNMENT_ROW, { ...ASSIGNMENT_ROW, id: ID_2 }], error: null });
+    const result = await proposeBulkEmployeePositionAssignment(client, {
+      tenantId: TENANT_ID,
+      items: [
+        { masterRecordId: ID_2, expectedVersion: 1, positionId: ID_1, gradeId: null, managerEmployeeId: null, assignmentType: "primary" },
+        { masterRecordId: ID_1, expectedVersion: 2, positionId: ID_1, gradeId: ID_2, managerEmployeeId: ID_2, assignmentType: "primary" },
+      ],
+      changeReason: "reorganization",
+      reasonNote: "Q3 department move",
+      effectiveStartDate: "2026-10-01",
+      effectiveEndDate: null,
+      actorAuthUserId: ACTOR_ID,
+      actorLabel: "hr admin",
+    });
+    assert.equal(calls[0]?.fn, "propose_bulk_employee_position_assignment");
+    assert.equal(calls[0]?.args.p_change_reason, "reorganization");
+    assert.deepEqual(calls[0]?.args.p_items, [
+      { master_record_id: ID_2, expected_version: 1, position_id: ID_1, grade_id: null, manager_employee_id: null, assignment_type: "primary" },
+      { master_record_id: ID_1, expected_version: 2, position_id: ID_1, grade_id: ID_2, manager_employee_id: ID_2, assignment_type: "primary" },
+    ]);
+    assert.equal(result.length, 2);
+  });
+
+  test("rejects an empty item list at the schema layer before any RPC call", async () => {
+    const { client, calls } = fakeRpcClient({ data: [], error: null });
+    await assert.rejects(() =>
+      proposeBulkEmployeePositionAssignment(client, {
+        tenantId: TENANT_ID,
+        items: [],
+        changeReason: "reorganization",
+        reasonNote: null,
+        effectiveStartDate: "2026-10-01",
+        effectiveEndDate: null,
+        actorAuthUserId: ACTOR_ID,
+        actorLabel: "hr admin",
+      }),
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  test("classifies duplicate_employee/too_many_items/invalid_items error prefixes from the RPC", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "duplicate_employee: employee appears more than once in this batch" } });
+    await assert.rejects(
+      () =>
+        proposeBulkEmployeePositionAssignment(client, {
+          tenantId: TENANT_ID,
+          items: [{ masterRecordId: ID_2, expectedVersion: 1, positionId: ID_1, gradeId: null, managerEmployeeId: null, assignmentType: "primary" }],
+          changeReason: "reorganization",
+          reasonNote: null,
+          effectiveStartDate: "2026-10-01",
+          effectiveEndDate: null,
+          actorAuthUserId: ACTOR_ID,
+          actorLabel: "hr admin",
+        }),
+      (error: unknown) => error instanceof PositionMutationError && error.code === "duplicate_employee",
     );
   });
 });
