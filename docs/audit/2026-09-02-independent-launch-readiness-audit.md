@@ -124,6 +124,14 @@ and `mergeMasterRecords` — the only deduplication path in the system — has n
 joins `role_versions … and rv.status = 'published'`; `app.publish_role_version` never touches
 `role_assignments`. The evaluator's own comment concedes it.
 
+**A3b · No approval routing can be published, so approval-gated flows fail on a new tenant.** Eight
+functions raise when the approval definition they require is absent — `_request_procurement_entity_
+approval`, `request_approval`, `request_customer_credit_profile`, `submit_job_offer_for_approval`,
+`submit_leave_request`, `submit_onboarding_case_for_finalize_approval`,
+`submit_payroll_run_for_finalization`, `submit_quotation`. `publishApprovalDefinition` has **no caller
+anywhere**, so no definition can be created in the product. The approval engine is real, tested and
+unreachable.
+
 **A4 · Nothing can be imported.** Twelve import schemas exist and work in the database, including
 opening balances for finance, inventory and leave. `createImportExportJob`, `stageImportRows`,
 `validateStagingRow` and `commitImportJob` all have zero UI callers, and no page matches "import".
@@ -247,6 +255,9 @@ shipment event can be recorded on a fresh install.
 
 **E3 · Stock has no unit of measure; places are free text.** `app.inventory_balances` has no `uom`
 column. There is no location, port or address master; origins, destinations and stops are strings.
+Warehouse revenue has nowhere to go either: `app.warehouse_billing_handoffs` carries **no foreign key
+to an invoice**, so "handoff" is a terminal status flag and storage, handling and value-added charges
+can never be billed.
 
 **E4 · Whole cost and document domains do not exist.** Zero tables for: fixed assets and depreciation,
 vehicle maintenance, fuel, tyres, budget and cost centre, container and depot, demurrage and detention,
