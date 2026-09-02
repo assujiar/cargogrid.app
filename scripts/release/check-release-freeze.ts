@@ -3451,7 +3451,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // service_role, public convention. ISS-2026-070 items 3/4: wires
   // app.preview_onboarding_case_start/app.export_onboarding_cases (zero prior callers) into
   // the onboarding case-list UI; items 1, 2's remaining half, and 5 stay open, disclosed.
-  migrationSetSha256: "b9eeee0431f072f74ba4fd491dae102ba92a0c952772f17d26bb34d2b190bfc3",
+  // NINETY-SEVENTH PASS (2026-09-02, ISS-2026-129 item 2 + ISS-2026-132 item 3 +
+  // ISS-2026-134 item 1): 479 files (+4). ISS-2026-129 fully RESOLVED: a new
+  // app.loyalty_benefit_issuance_rules (tenant-configured recurring issuance) plus
+  // app.run_loyalty_benefit_issuance_rule_sweep registered on the existing scheduler.
+  // ISS-2026-132 fully RESOLVED: an AFTER INSERT trigger on app.loyalty_redemption_events
+  // wires the real PLT-127 app.queue_notification to every redemption decision, with genuine
+  // retry-count/dead-letter columns mirroring app.jobs's own DLQ shape, plus staff
+  // retry/requeue/list RPCs. ISS-2026-134 item 1 closed: a new
+  // app.execute_loyalty_liability_reconciliation_run_all_currencies rolls up the existing
+  // per-currency function using ISS-2026-197's app.resolve_operations_fx_conversion,
+  // disclosing (never fabricating) any missing rate; item 4's engagement-metrics half is the
+  // only remaining open item. ISS-2026-122 items 1/3 re-verified and correctly stay open
+  // (item 1 a genuine non-gap; item 3's theoretically-loggable branch found logically
+  // unreachable for this caller -- a draft fix against it was built, found dead, and
+  // reverted before committing).
+  migrationSetSha256: "4d31bb05a7c787ac40e42b06513659f22ec8ceb4c31992c8d6ac2b295a88558e",
+  // History: b9eeee0431f072f74ba4fd491dae102ba92a0c952772f17d26bb34d2b190bfc3
+  // (475 files, ISS-2026-066's bulk reorg wizard + ISS-2026-070's preview/export wiring).
   // History: 1997d977bc354df83a3bd28823edab5620e5182166a3354e0c59e06d86f43e05
   // (473 files, ISS-2026-146 batch 2's Commercial+Operations tenant_id-disclosure fixes).
   // History: d76771837af955a8b43d8cbfbda04d06c38a34cbaaa3ef87e8f6e22ae2918f2b
@@ -4143,7 +4160,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // extended (hris-organization-position-linkage.sql: bulk-reassignment authority/rollback
   // regression; hris-onboarding-offboarding.sql: preview/export wiring plus a new
   // case_type='transfer' fixture scenario).
-  dbTestSetSha256: "7bf961dbacd384d5168d455ca8f75d97145f493256cdc2cd1c4e07cb747bbe77",
+  // NINETY-SEVENTH PASS (2026-09-02, ISS-2026-129/132/134): 247 files, unchanged in count --
+  // 3 extended (customer-loyalty-benefits.sql: issuance-rule sweep; customer-loyalty-
+  // redemption.sql: notification/retry/DLQ; customer-loyalty-liability-reconciliation.sql:
+  // cross-currency rollup), plus task-scheduler.sql/background-job.sql catalogue-count
+  // assertions updated for the new scheduler task and job type.
+  dbTestSetSha256: "865ecccb290a594792b9e198fc8d8d07b21d4be9394a83a6ae17b0f11a1d0dcd",
+  // History: 7bf961dbacd384d5168d455ca8f75d97145f493256cdc2cd1c4e07cb747bbe77
+  // (247 files, ISS-2026-066/070's bulk-reassignment/preview-export regression).
   // History: fb9ddf8c14a3c7aecc6e5cc614c3e4d692c543daf46004ee239de632387730cf
   // (247 files, ISS-2026-146 batch 2's tenant-id-error-message-redaction-batch2.sql).
   // History: a774f7d11ac575c28b9e1e9f5c9bc311aaf42ae94ca3cde222b4d2ae90a0b1ae
