@@ -346,11 +346,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant 2's admin (00000000-...-039205) holds no membership in tenant 1, so app.assign_device_to_vehicle
+    -- now collapses that zero-membership case into its own generic
+    -- device_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.assign_device_to_vehicle(v_device_id, v_vehicle_id, 'should fail', '00000000-0000-0000-0000-000000039205', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Assign in tenant 1';
+    raise exception 'assertion failed: expected device_not_found -- tenant 2''s admin holds no membership at all in tenant 1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'device_not_found%' then raise; end if;
   end;
 end $$;
 

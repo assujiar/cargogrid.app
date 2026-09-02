@@ -459,14 +459,20 @@ begin
   select id into v_leg_id from app.shipment_legs where idempotency_key = 'idem-mile-leg1';
 
   begin
+    -- ISS-2026-146: tenant 2's admin (00000000-...-039407) holds no membership in tenant 1, so app.upsert_shipment_leg_tracking_policy
+    -- now collapses that zero-membership case into its own generic
+    -- leg_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.upsert_shipment_leg_tracking_policy(
       v_leg_id, true, array['driver_mobile'], 'driver_mobile', array['driver_mobile'], null, null, null, 'leg_dispatch', 'leg_complete', null, false, null,
       '00000000-0000-0000-0000-000000039407', 'tenant2-admin'
     );
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Edit in tenant 1';
+    raise exception 'assertion failed: expected leg_not_found -- tenant 2''s admin holds no membership at all in tenant 1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'leg_not_found%' then raise; end if;
   end;
 
   begin

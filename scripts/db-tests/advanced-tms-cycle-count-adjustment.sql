@@ -1476,19 +1476,31 @@ declare
   v_scope_item_id uuid := (select s.id from app.cycle_count_scope_items s join app.item_masters m on m.id = s.item_master_id where m.code = 'SKU-CC-A2' and s.tenant_id = v_tenant1);
 begin
   begin
+    -- ISS-2026-146: tenant2's rep (cyclecnt2) holds no membership in cyclecnt1, so app.get_cycle_count_plan
+    -- now collapses that zero-membership case into its own generic
+    -- plan_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_cycle_count_plan(v_plan_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 plan';
+    raise exception 'assertion failed: expected plan_not_found for a tenant2 actor reading a tenant1 plan';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'plan_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (cyclecnt2) holds no membership in cyclecnt1, so app.get_cycle_count_scope_item
+    -- now collapses that zero-membership case into its own generic
+    -- scope_item_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_cycle_count_scope_item(v_scope_item_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 scope item';
+    raise exception 'assertion failed: expected scope_item_not_found for a tenant2 actor reading a tenant1 scope item';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'scope_item_not_found%' then raise; end if;
   end;
 
   begin

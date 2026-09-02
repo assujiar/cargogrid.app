@@ -1155,11 +1155,17 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsput2) holds no membership in wmsput1, so app.get_wms_putaway_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_wms_putaway_task(v_task_l1.id, '00000000-0000-0000-0000-000000120107');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep has no membership in tenant1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   select count(*) into v_count from app.list_wms_putaway_tasks(v_tenant2, '00000000-0000-0000-0000-000000120107', null, null, null, null, 50);
@@ -1193,11 +1199,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsput2) holds no membership in wmsput1, so app.claim_wms_putaway_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.claim_wms_putaway_task(v_task_l1.id, 999999, '00000000-0000-0000-0000-000000120107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the claim short-circuit on tenant1''s already-claimed task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not reach the claim short-circuit on tenant1''s already-claimed task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin
@@ -1209,19 +1221,31 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsput2) holds no membership in wmsput1, so app.mark_wms_putaway_task_exception
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.mark_wms_putaway_task_exception(v_task_l8a.id, 'malicious-probe-reason', 999999, '00000000-0000-0000-0000-000000120107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the exception short-circuit on tenant1''s task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not reach the exception short-circuit on tenant1''s task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsput2) holds no membership in wmsput1, so app.cancel_wms_putaway_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.cancel_wms_putaway_task(v_task_l9_cancelled.id, 'malicious-probe-reason', 999999, '00000000-0000-0000-0000-000000120107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the cancel short-circuit on tenant1''s already-cancelled task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not reach the cancel short-circuit on tenant1''s already-cancelled task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 end $$;
 

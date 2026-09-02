@@ -634,11 +634,17 @@ begin
   -- holds zero membership in tenant1 and must be rejected, never handed tenant1's
   -- real prior hold resolution.
   begin
+    -- ISS-2026-146: tenant2's rep (wmsrecv2) holds no membership in wmsrecv1, so app.resolve_wms_receipt_hold
+    -- now collapses that zero-membership case into its own generic
+    -- line_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.resolve_wms_receipt_hold(v_line5.id, 'confirm_damaged', 'malicious-probe-reason', 'exploit-key-3', '00000000-0000-0000-0000-000000110107', 'rep2-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1 and must not reach the idempotent-replay short-circuit on an already-resolved tenant1 hold';
+    raise exception 'assertion failed: expected line_not_found -- tenant2''s rep has no membership in tenant1 and must not reach the idempotent-replay short-circuit on an already-resolved tenant1 hold';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'line_not_found%' then raise; end if;
   end;
 end $$;
 
@@ -872,11 +878,17 @@ begin
   -- holds zero membership in tenant1 and must be rejected, never handed tenant1's
   -- already-completed session row, even with an implausible expected_version.
   begin
+    -- ISS-2026-146: tenant2's rep (wmsrecv2) holds no membership in wmsrecv1, so app.complete_wms_receipt_session
+    -- now collapses that zero-membership case into its own generic
+    -- session_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.complete_wms_receipt_session(v_session.id, -1, '00000000-0000-0000-0000-000000110107', 'rep2-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1 and must not reach the idempotent-replay short-circuit on an already-completed tenant1 session';
+    raise exception 'assertion failed: expected session_not_found -- tenant2''s rep has no membership in tenant1 and must not reach the idempotent-replay short-circuit on an already-completed tenant1 session';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'session_not_found%' then raise; end if;
   end;
 
   -- Reconciliation: L1(100) + L2(30) + L3(50) + L4(15) + L13(12) + L14(5) directly
@@ -995,11 +1007,17 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsrecv2) holds no membership in wmsrecv1, so app.get_wms_receipt_session
+    -- now collapses that zero-membership case into its own generic
+    -- session_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_wms_receipt_session(v_session_id, '00000000-0000-0000-0000-000000110107');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1';
+    raise exception 'assertion failed: expected session_not_found -- tenant2''s rep has no membership in tenant1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'session_not_found%' then raise; end if;
   end;
 
   select count(*) into v_count from app.list_wms_receipt_sessions(v_tenant2, '00000000-0000-0000-0000-000000110107', null, null, null, 50);

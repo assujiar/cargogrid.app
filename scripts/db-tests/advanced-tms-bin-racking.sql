@@ -347,11 +347,17 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: acmerack2's rep2 (00000000-...-071105) holds no membership in acmerack, so app.list_warehouse_locations
+    -- now collapses that zero-membership case into its own generic
+    -- warehouse_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.list_warehouse_locations(v_wh_a_id, '00000000-0000-0000-0000-000000071105', null, null);
-    raise exception 'assertion failed: expected insufficient_authority -- acmerack2''s rep2 has no membership in acmerack';
+    raise exception 'assertion failed: expected warehouse_not_found -- acmerack2''s rep2 has no membership in acmerack';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'warehouse_not_found%' then raise; end if;
   end;
 end $$;
 
@@ -390,11 +396,17 @@ declare
   v_wh_a_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-A');
 begin
   begin
+    -- ISS-2026-146: acmerack2's rep2 (00000000-...-071105) holds no membership in acmerack, so app.create_warehouse_location
+    -- now collapses that zero-membership case into its own generic
+    -- warehouse_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.create_warehouse_location(v_wh_a_id, null, null, 'HIJACK', 'Hijack', 'rack', 1, null, null, null, null, null, false, false, '00000000-0000-0000-0000-000000071105', 'rep2');
-    raise exception 'assertion failed: expected insufficient_authority -- acmerack2''s rep2 has no membership in acmerack';
+    raise exception 'assertion failed: expected warehouse_not_found -- acmerack2''s rep2 has no membership in acmerack';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'warehouse_not_found%' then raise; end if;
   end;
 end $$;
 

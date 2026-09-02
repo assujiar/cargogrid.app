@@ -1359,43 +1359,73 @@ declare
   v_exception1_id uuid := (select id from app.operational_exceptions where tenant_id = v_tenant1 and type = 'damage');
 begin
   begin
+    -- ISS-2026-146: tenant2's rep (claiminc2) holds no membership in claiminc1, so app.get_claim_case
+    -- now collapses that zero-membership case into its own generic
+    -- claim_case_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_claim_case(v_case1_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 claim case';
+    raise exception 'assertion failed: expected claim_case_not_found for a tenant2 actor reading a tenant1 claim case';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'claim_case_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (claiminc2) holds no membership in claiminc1, so app.open_claim_case
+    -- now collapses that zero-membership case into its own generic
+    -- operational_exception_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.open_claim_case(v_exception1_id, 'internal', null, null, null, v_tenant2_rep, 'rep2');
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor opening a claim case against a tenant1 exception';
+    raise exception 'assertion failed: expected operational_exception_not_found for a tenant2 actor opening a claim case against a tenant1 exception';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'operational_exception_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (claiminc2) holds no membership in claiminc1, so app.add_claim_item
+    -- now collapses that zero-membership case into its own generic
+    -- claim_case_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.add_claim_item(v_case1_id, 'cargo_general', null, null, null, 1, 'PCS', null, null, 'cross-tenant attempt', v_tenant2_rep, 'rep2');
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor adding an item to a tenant1 claim case';
+    raise exception 'assertion failed: expected claim_case_not_found for a tenant2 actor adding an item to a tenant1 claim case';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'claim_case_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (claiminc2) holds no membership in claiminc1, so app.get_claim_settlement_readiness
+    -- now collapses that zero-membership case into its own generic
+    -- claim_case_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_claim_settlement_readiness(v_case1_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 claim case''s settlement readiness';
+    raise exception 'assertion failed: expected claim_case_not_found for a tenant2 actor reading a tenant1 claim case''s settlement readiness';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'claim_case_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (claiminc2) holds no membership in claiminc1, so app.list_claim_settlement_readiness_handoffs
+    -- now collapses that zero-membership case into its own generic
+    -- claim_case_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.list_claim_settlement_readiness_handoffs(v_case1_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor listing a tenant1 claim case''s settlement readiness handoffs';
+    raise exception 'assertion failed: expected claim_case_not_found for a tenant2 actor listing a tenant1 claim case''s settlement readiness handoffs';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'claim_case_not_found%' then raise; end if;
   end;
 
   set local role authenticated;

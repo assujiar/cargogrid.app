@@ -410,11 +410,17 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: tenant2's admin (acmemilestone2282) holds no membership in acmemilestone228, so app.get_shipment_leg_eta_projection
+    -- now collapses that zero-membership case into its own generic
+    -- leg_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_shipment_leg_eta_projection(v_leg1_id, v_tenant2_admin);
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s admin holds no grant at all in tenant1';
+    raise exception 'assertion failed: expected leg_not_found -- tenant2''s admin holds no grant at all in tenant1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'leg_not_found%' then raise; end if;
   end;
 end $$;
 

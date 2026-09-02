@@ -973,11 +973,17 @@ declare
   v_contract_id uuid := (select id from app.customer_contracts where tenant_id = v_tenant1 and status = 'published');
 begin
   begin
+    -- ISS-2026-146: tenant2's rep (whbill2) holds no membership in whbill1, so app.get_warehouse_billing_event
+    -- now collapses that zero-membership case into its own generic
+    -- warehouse_billing_event_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_warehouse_billing_event(v_event_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 billing event';
+    raise exception 'assertion failed: expected warehouse_billing_event_not_found for a tenant2 actor reading a tenant1 billing event';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'warehouse_billing_event_not_found%' then raise; end if;
   end;
 
   begin
@@ -989,11 +995,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (whbill2) holds no membership in whbill1, so app.list_warehouse_billing_rate_components
+    -- now collapses that zero-membership case into its own generic
+    -- contract_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.list_warehouse_billing_rate_components(v_contract_id, v_tenant2_rep, null, 50);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor listing tenant1''s own rate components';
+    raise exception 'assertion failed: expected contract_not_found for a tenant2 actor listing tenant1''s own rate components';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'contract_not_found%' then raise; end if;
   end;
 
   set local role authenticated;

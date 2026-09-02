@@ -646,11 +646,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsout2) holds no membership in wmsout1, so app.cancel_wms_outbound_order
+    -- now collapses that zero-membership case into its own generic
+    -- outbound_order_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.cancel_wms_outbound_order(v_cancelled_order.id, null, v_cancelled_order.record_version, '00000000-0000-0000-0000-000000170107', 'rep2');
-    raise exception 'assertion failed: expected insufficient_authority on the identical already-cancelled no-op replay attempted by tenant2''s own rep';
+    raise exception 'assertion failed: expected outbound_order_not_found on the identical already-cancelled no-op replay attempted by tenant2''s own rep';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_not_found%' then raise; end if;
   end;
 end $$;
 
@@ -689,11 +695,17 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsout2) holds no membership in wmsout1, so app.get_wms_outbound_order
+    -- now collapses that zero-membership case into its own generic
+    -- outbound_order_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_wms_outbound_order(v_order_id, '00000000-0000-0000-0000-000000170107');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1';
+    raise exception 'assertion failed: expected outbound_order_not_found -- tenant2''s rep has no membership in tenant1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_not_found%' then raise; end if;
   end;
 
   select count(*) into v_count from app.list_wms_outbound_orders(v_tenant2, '00000000-0000-0000-0000-000000170107', null, null, null, 50);
