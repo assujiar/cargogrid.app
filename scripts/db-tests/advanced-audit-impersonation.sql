@@ -236,15 +236,31 @@ declare
   v_admin1 uuid := '00000000-0000-0000-0000-000029000001';
   v_admin2 uuid := '00000000-0000-0000-0000-000029000003';
   v_request app.audit_export_requests;
+  v_msg text;
 begin
   v_request := app.request_audit_export(v_tenant1, '{}'::jsonb, v_admin1, 'admin1');
   perform app.record_audit_export_outcome(v_request.id, 'ready', 0, '[]'::jsonb, null, v_admin1, 'admin1');
 
+  -- ISS-2026-146: admin2 is invited into tenant2 (iaeaud2) only and holds no
+  -- app.principal_memberships / app.tenant_user_identities row in tenant1 at all, so it is
+  -- the zero-membership foreign caller this issue is about. app.get_audit_export now folds
+  -- the tenant-membership check into its own row-miss branch, so admin2 gets exactly the
+  -- generic audit_export_request_not_found a nonexistent request id already produced, and
+  -- no longer learns tenant1's real UUID from the insufficient_authority text. The refusal
+  -- itself is unchanged -- a genuine tenant1 member who merely lacks SEC authority still
+  -- gets insufficient_authority (proved for this module by the viewer1 assertions above,
+  -- and per-function in scripts/db-tests/tenant-id-error-message-redaction-misc.sql).
   begin
     perform app.get_audit_export(v_request.id, v_admin2);
-    raise exception 'assertion failed: expected insufficient_authority for admin2 reading tenant1''s own export, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
-    null;
+    raise exception 'assertion failed: expected audit_export_request_not_found for admin2, who has zero membership in tenant1, the call unexpectedly succeeded';
+  exception when no_data_found then
+    get stacked diagnostics v_msg = message_text;
+    if v_msg !~ 'audit_export_request_not_found' then
+      raise exception 'assertion failed: expected audit_export_request_not_found, got %', v_msg;
+    end if;
+    if v_msg like ('%' || v_tenant1::text || '%') then
+      raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant1''s real tenant_id: %', v_msg;
+    end if;
   end;
 
   update app.audit_export_requests set expires_at = now() - interval '1 minute' where id = v_request.id;

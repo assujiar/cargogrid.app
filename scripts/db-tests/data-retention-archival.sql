@@ -398,6 +398,7 @@ declare
   v_admin2 uuid := '00000000-0000-0000-0000-000034000004';
   v_target_record uuid := '00000000-0000-0000-0000-000034009004';
   v_request_id uuid;
+  v_msg text;
 begin
   begin
     perform app.set_retention_policy(v_tenant1, 'operational', 999, v_admin2, 'admin2');
@@ -435,11 +436,24 @@ begin
   end;
 
   select id into v_request_id from app.retention_archive_requests where tenant_id = v_tenant1 limit 1;
+  -- ISS-2026-146: admin2 is a tenant_admin of tenant2 with RET:Configure/View/Approve
+  -- THERE, and holds no membership at all in tenant1. app.get_retention_archive_request now
+  -- folds the tenant-membership check into its own row-miss branch, so this foreign caller
+  -- gets exactly the generic retention_archive_request_not_found a nonexistent request id
+  -- already produced instead of an insufficient_authority message carrying tenant1's real
+  -- tenant_id. rep1 -- a genuine tenant1 member with no RET grant -- is unaffected and still
+  -- gets insufficient_authority, asserted in the block immediately below.
   begin
     perform app.get_retention_archive_request(v_request_id, v_admin2);
-    raise exception 'assertion failed: expected insufficient_authority for admin2 reading tenant1''s own archive request, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
-    null;
+    raise exception 'assertion failed: expected retention_archive_request_not_found for admin2, who holds zero membership in tenant1';
+  exception when no_data_found then
+    get stacked diagnostics v_msg = message_text;
+    if v_msg !~ 'retention_archive_request_not_found' then
+      raise exception 'assertion failed: expected retention_archive_request_not_found, got %', v_msg;
+    end if;
+    if v_msg like ('%' || v_tenant1::text || '%') then
+      raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant1''s real tenant_id: %', v_msg;
+    end if;
   end;
 
   begin

@@ -511,24 +511,45 @@ declare
   v_tenant2 uuid;
   v_job1 app.job_orders;
   v_count integer;
+  v_msg text;
 begin
   v_tenant2 := (select id from app.tenants where slug = 'acmeprofitb');
   select jo.* into v_job1 from app.job_orders jo join app.shipment_orders so on so.job_order_id = jo.id where so.idempotency_key = 'ocean-a1';
 
+  -- ISS-2026-146: Finance Manager B is invited into tenant B only and holds no membership at
+  -- all in tenant A, so both calls below are made by the zero-membership foreign caller this
+  -- issue is about. Both functions now fold the tenant-membership check into their own
+  -- row-miss branch and answer with the identical generic job_order_not_found an unknown job
+  -- id already produced, so tenant A's real tenant_id is no longer readable out of the
+  -- insufficient_authority text. Neither refusal itself changed: a genuine tenant A member
+  -- lacking FIN:Edit / FIN:View margin still reaches the insufficient_authority raise below
+  -- the guard, which this file already asserts for tenant A's own viewer.
   begin
     perform app.calculate_finance_job_profitability(v_job1.id, 'intruder attempt', '00000000-0000-0000-0000-000000037006', 'financemanagerb');
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Manager B holds no FIN grant for tenant A';
+    raise exception 'assertion failed: expected job_order_not_found -- Finance Manager B holds zero membership in tenant A';
   exception
-    when insufficient_privilege then
-      null;
+    when no_data_found then
+      get stacked diagnostics v_msg = message_text;
+      if v_msg !~ 'job_order_not_found' then
+        raise exception 'assertion failed: expected job_order_not_found, got %', v_msg;
+      end if;
+      if v_msg like ('%' || v_job1.tenant_id::text || '%') then
+        raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant A''s real tenant_id: %', v_msg;
+      end if;
   end;
 
   begin
     perform app.get_finance_job_profitability(v_job1.id, '00000000-0000-0000-0000-000000037006');
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Manager B holds no FIN grant for tenant A';
+    raise exception 'assertion failed: expected job_order_not_found -- Finance Manager B holds zero membership in tenant A';
   exception
-    when insufficient_privilege then
-      null;
+    when no_data_found then
+      get stacked diagnostics v_msg = message_text;
+      if v_msg !~ 'job_order_not_found' then
+        raise exception 'assertion failed: expected job_order_not_found, got %', v_msg;
+      end if;
+      if v_msg like ('%' || v_job1.tenant_id::text || '%') then
+        raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant A''s real tenant_id: %', v_msg;
+      end if;
   end;
 
   select count(*) into v_count from app.get_finance_profitability_summary(v_tenant2, 'customer', '00000000-0000-0000-0000-000000037006');

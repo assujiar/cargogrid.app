@@ -423,17 +423,34 @@ do $$
 declare
   v_tenant_a uuid;
   v_published_v uuid;
+  v_msg text;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmefinconfa');
   select v.id into v_published_v from app.config_versions v join app.config_objects o on o.id = v.config_object_id
     where o.tenant_id = v_tenant_a and o.config_type_code = 'finance_rounding' and v.status = 'published';
 
+  -- ISS-2026-146: Finance Admin B is invited into tenant B only and holds no membership
+  -- whatsoever in tenant A, so it is the zero-membership foreign caller this issue is about.
+  -- app.rollback_finance_config_version now gates on tenant membership immediately after
+  -- resolving the version's own config_object, reusing the identical
+  -- config_version_not_found / no_data_found the row-miss branch one statement above already
+  -- raises -- so a foreign caller can no longer read tenant A's real tenant_id out of the
+  -- insufficient_authority text. The refusal is unchanged for a genuine tenant A member
+  -- lacking FIN:Approve, who still reaches the insufficient_authority raise below it.
+  -- app.create_finance_config_draft (asserted next) takes p_tenant_id from the caller, so
+  -- nothing is disclosed there and its assertion is deliberately left as-is.
   begin
     perform app.rollback_finance_config_version(v_published_v, '00000000-0000-0000-0000-000000024205', 'tenant B trying to touch tenant A''s config', 'financeadminb');
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Admin B has no support-grant authority over tenant A';
+    raise exception 'assertion failed: expected config_version_not_found -- Finance Admin B has zero membership in tenant A';
   exception
-    when insufficient_privilege then
-      null;
+    when no_data_found then
+      get stacked diagnostics v_msg = message_text;
+      if v_msg !~ 'config_version_not_found' then
+        raise exception 'assertion failed: expected config_version_not_found, got %', v_msg;
+      end if;
+      if v_msg like ('%' || v_tenant_a::text || '%') then
+        raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant A''s real tenant_id: %', v_msg;
+      end if;
   end;
 
   begin
