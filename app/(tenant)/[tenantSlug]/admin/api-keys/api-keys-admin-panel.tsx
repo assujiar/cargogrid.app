@@ -6,9 +6,11 @@
  * uses (e.g. `admin/loyalty/loyalty-admin-panel.tsx`).
  */
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { ConfirmationDialog } from "../../../../../components/ui/dialog.tsx";
+import { Tooltip, TooltipProvider } from "../../../../../components/ui/tooltip.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
 import { NumberInput } from "../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
@@ -97,6 +99,46 @@ export function CreateApiKeyForm({ tenantSlug }: { tenantSlug: string }) {
   );
 }
 
+/**
+ * `ISS-2026-246` (overlays lane): the first real (non-showcase) consumer of
+ * `components/ui/tooltip.tsx`.
+ *
+ * "Overlap (min)" is the sharpest genuinely non-obvious control on this console, and its
+ * default is the dangerous one. `app.rotate_api_key`'s own body: `status = case when
+ * p_overlap_minutes = 0 then 'revoked' ...` -- so submitting the pre-filled `0` revokes the
+ * current key the instant the new one is minted, and every integration still presenting the
+ * old key starts failing immediately. Nothing on the screen said so.
+ *
+ * Why the richer primitive rather than a native `title=`: the trigger is a real focusable
+ * `<button>`, so this help reaches keyboard users, which a native `title` tooltip never does
+ * (it is pointer-hover-only in every major browser). Radix also gives Escape-to-dismiss and
+ * hoverable content, i.e. WCAG 2.2 SC 1.4.13. The text is supplementary -- the visible label
+ * and the field's own min/max still stand on their own -- never the only place a required
+ * instruction lives.
+ *
+ * `TooltipProvider` is wrapped here rather than left implicit: `@radix-ui/react-tooltip@1.2.13`
+ * builds its provider context with no default value, so a bare `Tooltip.Root` throws
+ * "`Tooltip` must be used within `TooltipProvider`". The primitive's own header comment
+ * asserted the opposite (an implicit provider with a default delay) -- that claim was wrong at
+ * the pinned version and would have crashed this very adoption, so it was corrected in
+ * `components/ui/tooltip.tsx` rather than quietly worked around here.
+ */
+function RotationOverlapHelp() {
+  return (
+    <TooltipProvider>
+      <Tooltip content="Minutes the current key keeps working after rotation, so you can deploy the new key first. 0 revokes the current key immediately -- any integration still using it fails at once. Max 10080 (7 days).">
+        <button
+          type="button"
+          aria-label="What rotation overlap means"
+          className="inline-flex min-h-11 items-center px-1 text-xs font-semibold text-text-secondary underline decoration-dotted"
+        >
+          ?
+        </button>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function RotateApiKeyForm({ tenantSlug, keyId }: { tenantSlug: string; keyId: string }) {
   const [state, formAction, pending] = useActionState(rotateApiKeyAction.bind(null, tenantSlug, keyId), INITIAL_STATE);
   return (
@@ -105,6 +147,7 @@ function RotateApiKeyForm({ tenantSlug, keyId }: { tenantSlug: string; keyId: st
         <label htmlFor={`rotate-overlap-${keyId}`} className="text-xs text-text-secondary">
           Overlap (min)
         </label>
+        <RotationOverlapHelp />
         <NumberInput
           id={`rotate-overlap-${keyId}`}
           name="overlapMinutes"
@@ -125,29 +168,80 @@ function RotateApiKeyForm({ tenantSlug, keyId }: { tenantSlug: string; keyId: st
   );
 }
 
+/**
+ * `ISS-2026-246` (overlays lane): the first real (non-showcase) consumer of
+ * `components/ui/dialog.tsx`'s `ConfirmationDialog`.
+ *
+ * Revocation is terminal. `app.revoke_api_key` sets `status = 'revoked'` and no un-revoke RPC
+ * exists anywhere; the list below only offers actions while `status === "active"`, so once this
+ * fires the row is inert forever and every caller presenting that key starts failing at once.
+ * This one control is reached from three real lists on this console -- tenant API keys, Vendor
+ * API keys, and n8n connectors -- so a single confirmation step covers all three.
+ *
+ * The `<form>`, its `reason` input, its `useActionState` binding and its error surface are all
+ * untouched. The visible button became `type="button"` and opens the dialog; the dialog's
+ * confirm calls `requestSubmit()` on that same form, so the typed reason still reaches the
+ * server action in `FormData` exactly as before -- the dialog is a gate in front of the
+ * existing submit, never a replacement for it.
+ *
+ * `onSubmit` closes the one hole a `type="button"` swap leaves open: this form still has a
+ * single text field, and HTML implicit submission means pressing Enter in it submits the form
+ * with no submitter at all -- which would have walked straight past the new confirmation.
+ * Every submission path now routes through the dialog, and `confirmedRef` is what tells the
+ * dialog's own `requestSubmit()` apart from a raw Enter press.
+ */
 function RevokeApiKeyForm({ tenantSlug, keyId }: { tenantSlug: string; keyId: string }) {
   const [state, formAction, pending] = useActionState(revokeApiKeyAction.bind(null, tenantSlug, keyId), INITIAL_STATE);
+  const formRef = useRef<HTMLFormElement>(null);
+  const confirmedRef = useRef(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
-    <form action={formAction} className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <label htmlFor={`revoke-reason-${keyId}`} className="sr-only">
-          Revocation reason
-        </label>
-        <Input
-          id={`revoke-reason-${keyId}`}
-          name="reason"
-          type="text"
-          placeholder="Reason (optional)"
-          className="w-32 text-xs"
-          invalid={Boolean(state.error)}
-          aria-describedby={state.error ? `revoke-${keyId}-error` : undefined}
-        />
-        <Button type="submit" variant="destructive" loading={pending} loadingLabel="Revoking…">
-          Revoke
-        </Button>
-      </div>
-      <ErrorBanner id={`revoke-${keyId}-error`} error={state.error} />
-    </form>
+    <>
+      <form
+        ref={formRef}
+        action={formAction}
+        className="flex flex-col gap-1"
+        onSubmit={(event) => {
+          if (!confirmedRef.current) {
+            event.preventDefault();
+            setConfirmOpen(true);
+            return;
+          }
+          confirmedRef.current = false;
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <label htmlFor={`revoke-reason-${keyId}`} className="sr-only">
+            Revocation reason
+          </label>
+          <Input
+            id={`revoke-reason-${keyId}`}
+            name="reason"
+            type="text"
+            placeholder="Reason (optional)"
+            className="w-32 text-xs"
+            invalid={Boolean(state.error)}
+            aria-describedby={state.error ? `revoke-${keyId}-error` : undefined}
+          />
+          <Button type="button" variant="destructive" loading={pending} loadingLabel="Revoking…" onClick={() => setConfirmOpen(true)}>
+            Revoke
+          </Button>
+        </div>
+        <ErrorBanner id={`revoke-${keyId}-error`} error={state.error} />
+      </form>
+      <ConfirmationDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Revoke this key?"
+        description="Every integration still calling CargoGrid with this key stops working immediately. Revocation is permanent -- a revoked key can never be reactivated, only replaced by a new one."
+        confirmLabel="Revoke key"
+        onConfirm={() => {
+          confirmedRef.current = true;
+          setConfirmOpen(false);
+          formRef.current?.requestSubmit();
+        }}
+      />
+    </>
   );
 }
 
@@ -506,6 +600,7 @@ function RotateN8nConnectorForm({ tenantSlug, connectorId }: { tenantSlug: strin
         <label htmlFor={`n8n-rotate-overlap-${connectorId}`} className="text-xs text-text-secondary">
           Overlap (min)
         </label>
+        <RotationOverlapHelp />
         <NumberInput
           id={`n8n-rotate-overlap-${connectorId}`}
           name="overlapMinutes"
