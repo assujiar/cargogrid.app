@@ -1119,45 +1119,70 @@ declare
   v_l1_task app.wms_pick_tasks := (select t from app.wms_pick_tasks t where t.tenant_id = v_tenant1 and t.idempotency_key = 'idem-pack-pick-l1-gen');
 begin
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 190209 (tenant2's rep, zero membership in wmspack1).
+    -- app.start_wms_packing_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic outbound_order_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.start_wms_packing_task(v_order_id, 'idem-packtask-attacker', '00000000-0000-0000-0000-000000190209', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not start a packing task against tenant1''s real order';
+    raise exception 'assertion failed: expected outbound_order_not_found (ISS-2026-146) -- tenant2''s rep must not start a packing task against tenant1''s real order';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_not_found%' then raise; end if;
   end;
 
   -- bug class (a): reusing tenant1's REAL already-used idempotency key must still fail
   -- closed with insufficient_authority, never silently hand tenant1's real record back.
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 190209 (tenant2's rep, zero membership in wmspack1).
+    -- app.start_wms_packing_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic outbound_order_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.start_wms_packing_task(v_order_id, 'idem-packtask-main', '00000000-0000-0000-0000-000000190209', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- must never reach the idempotent-replay short-circuit for a tenant2 attacker';
+    raise exception 'assertion failed: expected outbound_order_not_found (ISS-2026-146) -- must never reach the idempotent-replay short-circuit for a tenant2 attacker';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 190209 (tenant2's rep, zero membership in wmspack1).
+    -- app.create_wms_package now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic packing_task_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.create_wms_package(v_packing_task_id, null, 'carton', 'idem-pkg-p1', '00000000-0000-0000-0000-000000190209', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority on create_wms_package replay-key reuse';
+    raise exception 'assertion failed: expected packing_task_not_found (ISS-2026-146) on create_wms_package replay-key reuse';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'packing_task_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 190209 (tenant2's rep, zero membership in wmspack1).
+    -- app.add_wms_package_line now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic package_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.add_wms_package_line(v_p1.id, v_l1_task.id, 1, v_l1_task.item_master_id, null, null, 'idem-pkgline-p1', 999999, '00000000-0000-0000-0000-000000190209', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority on add_wms_package_line replay-key reuse';
+    raise exception 'assertion failed: expected package_not_found (ISS-2026-146) on add_wms_package_line replay-key reuse';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'package_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 190209 (tenant2's rep, zero membership in wmspack1).
+    -- app.confirm_wms_package now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic package_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.confirm_wms_package(v_p1.id, 'idem-pkg-p1-confirm', 999999, '00000000-0000-0000-0000-000000190209', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority on confirm_wms_package replay-key reuse';
+    raise exception 'assertion failed: expected package_not_found (ISS-2026-146) on confirm_wms_package replay-key reuse';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'package_not_found%' then raise; end if;
   end;
 
   begin

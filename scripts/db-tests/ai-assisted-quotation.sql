@@ -269,10 +269,15 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: the probing actor is v_admin2 023000005 (tenant2's admin, zero membership in iaeaiq).
+    -- app.get_ai_quotation_suggestion now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic ai_quotation_suggestion_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.get_ai_quotation_suggestion(v_suggestion_id, v_admin2);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor with zero tenant1 grants';
+    raise exception 'assertion failed: expected ai_quotation_suggestion_not_found (ISS-2026-146) for a tenant2 actor with zero tenant1 grants';
   exception when others then
-    if sqlerrm not like 'insufficient_authority%' then raise; end if;
+    if sqlerrm not like 'ai_quotation_suggestion_not_found%' then raise; end if;
   end;
 
   raise notice 'PASS: get/list are COM:View-gated and surface real governed-request evidence; a genuine cross-tenant actor is denied';

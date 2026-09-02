@@ -1700,11 +1700,16 @@ begin
   select * into v_line1 from app.wms_outbound_order_lines where id = v_task_l1.outbound_order_line_id;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 180107 (tenant2's rep, zero membership in wmspick1).
+    -- app.generate_wms_pick_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic outbound_order_line_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.generate_wms_pick_task(v_line1.id, 1, null, null, null, null, null, 'idem-gen-attacker', '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not generate a pick task against tenant1''s real line';
+    raise exception 'assertion failed: expected outbound_order_line_not_found (ISS-2026-146) -- tenant2''s rep must not generate a pick task against tenant1''s real line';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_line_not_found%' then raise; end if;
   end;
 
   begin
@@ -1739,11 +1744,16 @@ begin
   select * into v_task_l16 from app.wms_pick_tasks where tenant_id = v_tenant1 and idempotency_key = 'idem-gen-l16-exception';
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 180107 (tenant2's rep, zero membership in wmspick1).
+    -- app.generate_wms_pick_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic outbound_order_line_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.generate_wms_pick_task(v_task_l1.outbound_order_line_id, 100, null, null, null, null, null, 'idem-gen-l1', '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the idempotent-replay short-circuit on tenant1''s real line';
+    raise exception 'assertion failed: expected outbound_order_line_not_found (ISS-2026-146) -- tenant2''s rep must not reach the idempotent-replay short-circuit on tenant1''s real line';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_line_not_found%' then raise; end if;
   end;
 
   begin
@@ -1755,11 +1765,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 180107 (tenant2's rep, zero membership in wmspick1).
+    -- app.confirm_wms_pick_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic task_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.confirm_wms_pick_task(v_task_l1.id, 1, v_task_l1.source_location_id, v_task_l1.item_master_id, null, null, v_task_l1.actual_destination_location_id, 'attacker-key', 999999, '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the confirm short-circuit on tenant1''s already-confirmed task';
+    raise exception 'assertion failed: expected task_not_found (ISS-2026-146) -- tenant2''s rep must not reach the confirm short-circuit on tenant1''s already-confirmed task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin
@@ -1779,11 +1794,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 180107 (tenant2's rep, zero membership in wmspick1).
+    -- app.approve_wms_pick_substitution now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic task_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.approve_wms_pick_substitution(v_task_l1.id, v_task_l1.item_master_id, null, null, null, 'malicious-probe-reason', 'attacker-sub-key', 999999, '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the substitution short-circuit on tenant1''s task';
+    raise exception 'assertion failed: expected task_not_found (ISS-2026-146) -- tenant2''s rep must not reach the substitution short-circuit on tenant1''s task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 end $$;
 

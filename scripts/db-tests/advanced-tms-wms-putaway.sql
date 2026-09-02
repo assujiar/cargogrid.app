@@ -1185,11 +1185,16 @@ begin
   -- the caller -- an attacker supplying tenant1's real receipt_line_id and idempotency
   -- key must still be rejected on authority before ever reaching it.
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 120107 (tenant2's rep, zero membership in wmsput1).
+    -- app.generate_wms_putaway_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic receipt_line_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.generate_wms_putaway_task(v_task_l1.receipt_line_id, 100, null, 'idem-gen-l1', '00000000-0000-0000-0000-000000120107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the idempotent-replay short-circuit on tenant1''s real receipt line';
+    raise exception 'assertion failed: expected receipt_line_not_found (ISS-2026-146) -- tenant2''s rep must not reach the idempotent-replay short-circuit on tenant1''s real receipt line';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'receipt_line_not_found%' then raise; end if;
   end;
 
   begin
@@ -1201,11 +1206,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 120107 (tenant2's rep, zero membership in wmsput1).
+    -- app.confirm_wms_putaway_task now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic task_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.confirm_wms_putaway_task(v_task_l1.id, 1, v_task_l1.actual_location_id, null, null, 'attacker-key', 999999, '00000000-0000-0000-0000-000000120107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the confirm short-circuit on tenant1''s already-confirmed task';
+    raise exception 'assertion failed: expected task_not_found (ISS-2026-146) -- tenant2''s rep must not reach the confirm short-circuit on tenant1''s already-confirmed task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin

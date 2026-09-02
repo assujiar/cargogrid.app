@@ -743,10 +743,15 @@ begin
 
   v_rejected := false;
   begin
+    -- ISS-2026-146: the probing actor is v_foreign_actor (tenant acmegeofencetwo's own OPS admin, zero membership in this record's tenant).
+    -- app.get_shipment_leg_geofence_state now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic shipment_leg_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.get_shipment_leg_geofence_state(v_leg_id, v_foreign_actor);
   exception
     when others then
-      if sqlerrm like 'insufficient_authority%' then
+      if sqlerrm like 'shipment_leg_not_found%' then
         v_rejected := true;
       else
         raise;

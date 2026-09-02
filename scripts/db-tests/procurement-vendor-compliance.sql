@@ -601,11 +601,16 @@ begin
 
   -- insufficient_authority: cross-tenant actor.
   begin
+    -- ISS-2026-146: the probing actor is v_t2_staff 091202 (pcmp2's staff, zero membership in pcmp1).
+    -- app.access_vendor_compliance_document_evidence now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic vendor_compliance_document_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.access_vendor_compliance_document_evidence(v_doc.id, 'metadata_view', v_t2_staff, 'staff2', null);
-    raise exception 'assertion failed: expected insufficient_authority for a pcmp2 actor accessing a pcmp1 document''s evidence';
+    raise exception 'assertion failed: expected vendor_compliance_document_not_found (ISS-2026-146) for a pcmp2 actor accessing a pcmp1 document''s evidence';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_compliance_document_not_found%' then raise; end if;
   end;
 
   -- invalid_access_type.

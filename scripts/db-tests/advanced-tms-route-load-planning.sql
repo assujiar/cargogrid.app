@@ -610,11 +610,16 @@ begin
   select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-plan-feasible';
 
   begin
+    -- ISS-2026-146: the probing actor is tenant2-admin 039307 (acmeplan2's tenant_admin, zero membership in acmeplan).
+    -- app.prepare_route_planning_scenario now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic shipment_order_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.prepare_route_planning_scenario(v_shipment_id, 'idem-scenario-tenant2', 800, 10, '00000000-0000-0000-0000-000000039307', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Create in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found (ISS-2026-146) -- tenant 2''s admin holds no OPS:Create in tenant 1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'shipment_order_not_found%' then raise; end if;
   end;
 end $$;
 

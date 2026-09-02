@@ -468,19 +468,29 @@ begin
   select * into v_shipment from app.shipment_orders where id = v_shipment_id;
 
   begin
+    -- ISS-2026-146: the probing actor is tenant2-admin 039106 (acmeleg2's tenant_admin, zero membership in acmeleg).
+    -- app.add_shipment_leg now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic shipment_order_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.add_shipment_leg(v_shipment_id, 'idem-leg-tenant2', 99, 'land', null, null, null, '00000000-0000-0000-0000-000000039106', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Create in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found (ISS-2026-146) -- tenant 2''s admin holds no OPS:Create in tenant 1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'shipment_order_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is tenant2-admin 039106 (acmeleg2's tenant_admin, zero membership in acmeleg).
+    -- app.confirm_shipment_leg_network now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic shipment_order_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.confirm_shipment_leg_network(v_shipment_id, v_shipment.record_version, '00000000-0000-0000-0000-000000039106', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Edit in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found (ISS-2026-146) -- tenant 2''s admin holds no OPS:Edit in tenant 1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'shipment_order_not_found%' then raise; end if;
   end;
 end $$;
 

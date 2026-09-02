@@ -255,10 +255,15 @@ begin
 
   v_rejected := false;
   begin
+    -- ISS-2026-146: the probing actor is v_tenant2_admin (tenant2's own OPS:Edit admin, zero membership in tenant1).
+    -- app.reenable_third_party_provider_connection now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic connection_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.reenable_third_party_provider_connection(v_connection_id, v_tenant2_admin, 'admin');
   exception
     when others then
-      if sqlerrm like 'insufficient_authority%' then v_rejected := true; else raise; end if;
+      if sqlerrm like 'connection_not_found%' then v_rejected := true; else raise; end if;
   end;
   if not v_rejected then
     raise exception 'assertion failed: expected a foreign tenant''s own OPS:Edit admin to be rejected reenabling this tenant''s own connection';
@@ -266,10 +271,15 @@ begin
 
   v_rejected := false;
   begin
+    -- ISS-2026-146: the probing actor is v_tenant2_admin (tenant2's own OPS:Edit admin, zero membership in tenant1).
+    -- app.disable_third_party_provider_connection now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic connection_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.disable_third_party_provider_connection(v_connection_id, 'cross-tenant probe', v_tenant2_admin, 'admin');
   exception
     when others then
-      if sqlerrm like 'insufficient_authority%' then v_rejected := true; else raise; end if;
+      if sqlerrm like 'connection_not_found%' then v_rejected := true; else raise; end if;
   end;
   if not v_rejected then
     raise exception 'assertion failed: expected a foreign tenant''s own OPS:Edit admin to be rejected disabling this tenant''s own connection';
