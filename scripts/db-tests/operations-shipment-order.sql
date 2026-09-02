@@ -435,7 +435,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: app.get_job_shipment_allocation_balance/app.create_shipment_order_from_job fail closed for an identity with no membership in the Job Order''s own tenant'
+\echo '>> cross-tenant isolation: app.get_job_shipment_allocation_balance/app.create_shipment_order_from_job fail closed for an identity with no membership in the Job Order''s own tenant -- ISS-2026-146 fix: app.create_shipment_order_from_job (a bare-id lookup) now raises a generic job_order_not_found for this zero-membership caller, never a tenant_id-disclosing insufficient_authority; app.get_job_shipment_allocation_balance (not part of this fix) is unaffected'
 do $$
 declare
   v_tenant2 uuid;
@@ -462,14 +462,19 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (granted tenant_admin only in tenant2 above) -- before the fix this raised
+    -- insufficient_authority with tenant1's real tenant_id embedded in the message;
+    -- now it raises the identical generic job_order_not_found a nonexistent job
+    -- order id would.
     perform app.create_shipment_order_from_job(
       v_job_order_id, 'idem-shp-cross-tenant', null, null, 'ocean_freight', 'sea', 'Jakarta', 'Surabaya',
       null, null, null, null, null, null, null, null, null, '00000000-0000-0000-0000-000000009974', 'tenant2-admin'
     );
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Create in tenant 1';
+    raise exception 'assertion failed: expected job_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.create_shipment_order_from_job, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'job_order_not_found%' then
         raise;
       end if;
   end;

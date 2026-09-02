@@ -187,10 +187,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: 8204 has ZERO app.principal_memberships row in tenant1 at all (it
+    -- was invited only into tenant2, line 49 above) -- the exact "caller with no
+    -- relationship to the record's real tenant" class this fix closes. Before the fix
+    -- this raised insufficient_authority with tenant1's real tenant_id embedded in the
+    -- message; now it raises the identical generic contact_not_found a nonexistent
+    -- contact id would.
     perform app.link_contact_to_record(v_contact.id, 'lead', v_lead.id, 'billing', false, '00000000-0000-0000-0000-000000008204', 'tester');
-    raise exception 'assertion failed: expected insufficient_privilege for an actor with no access to the contact/lead';
+    raise exception 'assertion failed: expected contact_not_found for 8204 (zero relationship to tenant1), the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null; -- expected
   end;
 end;

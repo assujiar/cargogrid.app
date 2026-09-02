@@ -164,10 +164,16 @@ begin
   select id into v_handoff_id from app.job_order_handoffs where tenant_id = v_tenant1;
 
   begin
+    -- ISS-2026-146: 9999 has no app.principal_memberships row anywhere on the
+    -- platform -- the exact "caller with no relationship to the record's real
+    -- tenant" class this fix closes. Before the fix this raised insufficient_
+    -- authority with tenant1's real tenant_id embedded in the message; now it
+    -- raises the identical generic handoff_not_found a nonexistent handoff id
+    -- would.
     perform app.prepare_job_order(v_handoff_id, '00000000-0000-0000-0000-000000009999', 'nobody');
-    raise exception 'assertion failed: expected insufficient_privilege for an identity with no active tenant membership';
+    raise exception 'assertion failed: expected handoff_not_found for an identity with no active tenant membership, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null; -- expected
   end;
 
@@ -351,9 +357,20 @@ $$;
 \echo '>> record-scope: a sibling-team outsider (different org unit, no ownership stake) cannot access the job order via app.confirm_job_order/app.override_job_order_field despite holding full OPS/COM permissions'
 do $$
 declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeops');
   v_job_order app.job_orders;
 begin
-  select * into v_job_order from app.job_orders limit 1;
+  -- ISS-2026-146: scoped to this file's own tenant, not a bare "limit 1" over the
+  -- whole shared cumulative test database -- an unscoped pick could land on some
+  -- OTHER test file's own job order, which used to still (coincidentally) raise the
+  -- SAME insufficient_privilege errcode this test asserts (a genuine same-tenant
+  -- record-scope denial and a genuine cross-tenant zero-membership denial were
+  -- errcode-indistinguishable before this fix). After this fix they raise DIFFERENT
+  -- errcodes (insufficient_privilege vs. the new generic not-found), so an unscoped
+  -- pick would non-deterministically break this assertion depending on which other
+  -- test files happened to run first -- exactly the latent fragility this fix's own
+  -- classifier work surfaced, not a defect this fix introduced.
+  select * into v_job_order from app.job_orders where tenant_id = v_tenant1 limit 1;
 
   begin
     perform app.override_job_order_field(v_job_order.id, v_job_order.record_version, 'customer_snapshot', 'contactPhone', '"0800"'::jsonb, 'outsider attempt', '00000000-0000-0000-0000-000000009962', 'outsider');

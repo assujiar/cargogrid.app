@@ -364,7 +364,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: app.set_shipment_mode_profile/app.change_shipment_mode fail closed for an identity with no membership in the Shipment Order''s own tenant'
+\echo '>> cross-tenant isolation: app.set_shipment_mode_profile/app.change_shipment_mode fail closed for an identity with no membership in the Shipment Order''s own tenant -- ISS-2026-146 fix: both raise a generic shipment_order_not_found for this zero-membership caller, never a tenant_id-disclosing insufficient_authority'
 do $$
 declare
   v_tenant2 uuid;
@@ -381,25 +381,30 @@ begin
   select * into v_shipment from app.shipment_orders where idempotency_key = 'idem-mode-land';
 
   begin
+    -- ISS-2026-146: admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (granted tenant_admin only in tenant2 above) -- both functions below are bare-id
+    -- lookups, so before the fix each raised insufficient_authority with tenant1's
+    -- real tenant_id embedded in the message; now each raises the identical generic
+    -- shipment_order_not_found a nonexistent shipment id would.
     perform app.set_shipment_mode_profile(
       v_shipment.id, 'TRK-XX', 'VENDOR-XX', 'Jl. XX', 'Jl. YY',
       null, null, null, null, null, null, null, null, null, null, null,
       '00000000-0000-0000-0000-000000009994', 'tenant2-admin'
     );
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Edit in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.set_shipment_mode_profile, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;
 
   begin
     perform app.change_shipment_mode(v_shipment.id, 'air', v_shipment.record_version, '00000000-0000-0000-0000-000000009994', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Edit in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.change_shipment_mode, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;
