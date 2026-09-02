@@ -2,6 +2,9 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { recordCustomerDecisionAction, type CustomerDecisionFormState } from "./actions.ts";
 
 const INITIAL_STATE: CustomerDecisionFormState = { error: null, success: false };
@@ -20,43 +23,30 @@ export function DecisionForm({ rawToken }: { rawToken: string }) {
     );
   }
 
+  // ISS-2026-242: the action returns one error for the whole decision, not per-field ones.
+  const describedBy = state.error ? "decision-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="decidedByName" className="text-sm font-medium text-neutral-700">
-          Your name
-        </label>
-        <input id="decidedByName" name="decidedByName" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="decidedByName" label="Your name">
+        <Input id="decidedByName" name="decidedByName" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="decidedByTitle" className="text-sm font-medium text-neutral-700">
-          Title (optional)
-        </label>
-        <input id="decidedByTitle" name="decidedByTitle" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="decidedByTitle" label="Title (optional)">
+        <Input id="decidedByTitle" name="decidedByTitle" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="decidedByEmail" className="text-sm font-medium text-neutral-700">
-          Email (optional)
-        </label>
-        <input id="decidedByEmail" name="decidedByEmail" type="email" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="decidedByEmail" label="Email (optional)">
+        <Input id="decidedByEmail" name="decidedByEmail" type="email" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
       {decision === "rejected" ? (
-        <div className="flex flex-col gap-1">
-          <label htmlFor="reason" className="text-sm font-medium text-neutral-700">
-            Reason (required)
-          </label>
-          <input id="reason" name="reason" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
+        <FormField id="reason" label="Reason (required)">
+          <Input id="reason" name="reason" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       ) : null}
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="decision-error">{state.error}</ValidationMessage> : null}
 
       <div className="flex gap-2">
         <Button type="submit" name="decision" value="accepted" loading={pending && decision === "accepted"} loadingLabel="Accepting…" onClick={() => setDecision("accepted")}>

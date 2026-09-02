@@ -9,6 +9,12 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { LoyaltyAccount } from "../../../../../server/contracts/customer-portal-loyalty-program/customer-portal-loyalty-program.ts";
 import type { LoyaltyPointBalance, LoyaltyPointLot, LoyaltyPointAdjustmentRequest, LoyaltyPointAdjustmentStatus } from "../../../../../server/contracts/customer-portal-loyalty-points/customer-portal-loyalty-points.ts";
@@ -25,14 +31,11 @@ const INITIAL_STATE: LoyaltyPointsAdminFormState = { error: null, notice: null }
 
 const ADJUSTMENT_STATUS_TONE: Record<LoyaltyPointAdjustmentStatus, StatusTone> = { pending_approval: "warning", approved: "success", rejected: "neutral" };
 
-function FormFeedback({ state }: { state: LoyaltyPointsAdminFormState }) {
+/** ISS-2026-242: `errorId` is what this form's controls point their `aria-describedby` at. */
+function FormFeedback({ state, errorId }: { state: LoyaltyPointsAdminFormState; errorId?: string }) {
   return (
     <>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       {state.notice ? <p className="text-sm text-success">{state.notice}</p> : null}
     </>
   );
@@ -40,18 +43,17 @@ function FormFeedback({ state }: { state: LoyaltyPointsAdminFormState }) {
 
 export function PostPointsEarnedForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(postLoyaltyPointsEarnedAction.bind(null, tenantSlug), INITIAL_STATE);
+  const describedBy = state.error ? "pts-earn-error" : undefined;
   return (
     <form action={formAction} className="flex flex-1 flex-col gap-2 rounded-md border border-neutral-100 p-3" noValidate>
       <h3 className="text-xs font-semibold text-text-primary">Sync points from earning event</h3>
-      <label htmlFor="pts-earn-event" className="text-xs font-medium text-text-secondary">
-        Earning event ID
-      </label>
-      <input id="pts-earn-event" name="earningEventId" type="text" required placeholder="uuid" className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
-      <label htmlFor="pts-earn-expiry" className="text-xs font-medium text-text-secondary">
-        Expiry window (days, 1-3650)
-      </label>
-      <input id="pts-earn-expiry" name="expiryDays" type="number" step="1" min="1" max="3650" defaultValue={365} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <FormFeedback state={state} />
+      <FormField id="pts-earn-event" label="Earning event ID">
+        <Input id="pts-earn-event" name="earningEventId" type="text" required placeholder="uuid" className="font-mono text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="pts-earn-expiry" label="Expiry window (days, 1-3650)">
+        <NumberInput id="pts-earn-expiry" name="expiryDays" step="1" min="1" max="3650" defaultValue={365} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormFeedback state={state} errorId="pts-earn-error" />
       <Button type="submit" loading={pending} loadingLabel="Posting…" className="w-fit">
         Post earn entry
       </Button>
@@ -64,11 +66,19 @@ export function ReversePointsEarnedForm({ tenantSlug }: { tenantSlug: string }) 
   return (
     <form action={formAction} className="flex flex-1 flex-col gap-2 rounded-md border border-neutral-100 p-3" noValidate>
       <h3 className="text-xs font-semibold text-text-primary">Reverse points for a reversed earning event</h3>
-      <label htmlFor="pts-reversal-event" className="text-xs font-medium text-text-secondary">
-        Reversal earning event ID
-      </label>
-      <input id="pts-reversal-event" name="reversalEarningEventId" type="text" required placeholder="uuid" className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
-      <FormFeedback state={state} />
+      <FormField id="pts-reversal-event" label="Reversal earning event ID">
+        <Input
+          id="pts-reversal-event"
+          name="reversalEarningEventId"
+          type="text"
+          required
+          placeholder="uuid"
+          className="font-mono text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "pts-reversal-error" : undefined}
+        />
+      </FormField>
+      <FormFeedback state={state} errorId="pts-reversal-error" />
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Posting…" className="w-fit">
         Post reversal entry
       </Button>
@@ -90,28 +100,27 @@ export function ExpireLotsForm({ tenantSlug }: { tenantSlug: string }) {
 
 export function RequestAdjustmentForm({ tenantSlug, accounts }: { tenantSlug: string; accounts: readonly LoyaltyAccount[] }) {
   const [state, formAction, pending] = useActionState(requestLoyaltyPointAdjustmentAction.bind(null, tenantSlug), INITIAL_STATE);
+  // ISS-2026-242: one action error covers all three fields, so each points at the shared message.
+  const describedBy = state.error ? "pts-adj-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
-      <label htmlFor="pts-adj-account" className="text-xs font-medium text-text-secondary">
-        Loyalty account
-      </label>
-      <select id="pts-adj-account" name="loyaltyAccountId" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="">Select an account…</option>
-        {accounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {account.customerAccountId}
-          </option>
-        ))}
-      </select>
-      <label htmlFor="pts-adj-amount" className="text-xs font-medium text-text-secondary">
-        Adjustment amount (points; negative to deduct)
-      </label>
-      <input id="pts-adj-amount" name="adjustmentAmount" type="number" step="1" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="pts-adj-reason" className="text-xs font-medium text-text-secondary">
-        Reason (required, visible to staff only)
-      </label>
-      <textarea id="pts-adj-reason" name="reason" rows={2} required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <FormFeedback state={state} />
+      <FormField id="pts-adj-account" label="Loyalty account">
+        <Select id="pts-adj-account" name="loyaltyAccountId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="">Select an account…</option>
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.customerAccountId}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="pts-adj-amount" label="Adjustment amount (points; negative to deduct)">
+        <NumberInput id="pts-adj-amount" name="adjustmentAmount" step="1" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="pts-adj-reason" label="Reason (required, visible to staff only)">
+        <Textarea id="pts-adj-reason" name="reason" rows={2} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormFeedback state={state} errorId="pts-adj-error" />
       <Button type="submit" loading={pending} loadingLabel="Submitting…" className="w-fit">
         Submit request
       </Button>
@@ -140,22 +149,34 @@ export function AdjustmentRequestRow({ tenantSlug, request }: { tenantSlug: stri
       {request.status === "pending_approval" ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <form action={approveAction} className="flex flex-1 items-end gap-2" noValidate>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor={`pts-adj-notes-approve-${request.id}`} className="text-xs font-medium text-text-secondary">
-                Decision notes (required)
-              </label>
-              <input id={`pts-adj-notes-approve-${request.id}`} name="decisionNotes" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+            <div className="flex-1">
+              <FormField id={`pts-adj-notes-approve-${request.id}`} label="Decision notes (required)">
+                <Input
+                  id={`pts-adj-notes-approve-${request.id}`}
+                  name="decisionNotes"
+                  required
+                  className="text-xs"
+                  invalid={Boolean(approveState.error)}
+                  aria-describedby={approveState.error ? `pts-adj-approve-${request.id}-error` : undefined}
+                />
+              </FormField>
             </div>
             <Button type="submit" loading={approvePending} loadingLabel="Approving…" className="w-fit">
               Approve
             </Button>
           </form>
           <form action={rejectAction} className="flex flex-1 items-end gap-2" noValidate>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor={`pts-adj-notes-reject-${request.id}`} className="text-xs font-medium text-text-secondary">
-                Decision notes (required)
-              </label>
-              <input id={`pts-adj-notes-reject-${request.id}`} name="decisionNotes" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+            <div className="flex-1">
+              <FormField id={`pts-adj-notes-reject-${request.id}`} label="Decision notes (required)">
+                <Input
+                  id={`pts-adj-notes-reject-${request.id}`}
+                  name="decisionNotes"
+                  required
+                  className="text-xs"
+                  invalid={Boolean(rejectState.error)}
+                  aria-describedby={rejectState.error ? `pts-adj-reject-${request.id}-error` : undefined}
+                />
+              </FormField>
             </div>
             <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…" className="w-fit">
               Reject
@@ -167,8 +188,8 @@ export function AdjustmentRequestRow({ tenantSlug, request }: { tenantSlug: stri
           {request.status} by {request.decidedBy ?? request.decidedByAuthUserId} -- {request.decisionNotes}
         </p>
       )}
-      <FormFeedback state={request.status === "pending_approval" ? approveState : INITIAL_STATE} />
-      {request.status === "pending_approval" ? <FormFeedback state={rejectState} /> : null}
+      <FormFeedback state={request.status === "pending_approval" ? approveState : INITIAL_STATE} errorId={`pts-adj-approve-${request.id}-error`} />
+      {request.status === "pending_approval" ? <FormFeedback state={rejectState} errorId={`pts-adj-reject-${request.id}-error`} /> : null}
     </div>
   );
 }

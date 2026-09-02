@@ -9,6 +9,12 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type {
@@ -38,29 +44,26 @@ const PROGRAM_STATUS_TONE: Record<LoyaltyProgramStatus, StatusTone> = { draft: "
 const RULE_VERSION_STATUS_TONE = { draft: "neutral", published: "success", superseded: "neutral" } as const;
 const ACCOUNT_STATUS_TONE: Record<LoyaltyAccountStatus, StatusTone> = { active: "success", suspended: "warning", closed: "neutral" };
 
-function ErrorBanner({ error }: { error: string | null }) {
+/** ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby` points at. */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 export function CreateProgramForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(createLoyaltyProgramAction.bind(null, tenantSlug), INITIAL_STATE);
+  // ISS-2026-242: the create RPC returns one error for the whole program, never per-field ones.
+  const describedBy = state.error ? "lp-create-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Create a loyalty program</h2>
-      <label htmlFor="lp-name" className="text-xs font-medium text-text-secondary">
-        Program name
-      </label>
-      <input id="lp-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="lp-description" className="text-xs font-medium text-text-secondary">
-        Description (optional)
-      </label>
-      <textarea id="lp-description" name="description" rows={2} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <ErrorBanner error={state.error} />
+      <FormField id="lp-name" label="Program name">
+        <Input id="lp-name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="lp-description" label="Description (optional)">
+        <Textarea id="lp-description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <ErrorBanner id="lp-create-error" error={state.error} />
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create program
       </Button>
@@ -119,32 +122,30 @@ export function ProgramStatusForm({ tenantSlug, program }: { tenantSlug: string;
 
 export function CreateRuleVersionForm({ tenantSlug, programId, disabled }: { tenantSlug: string; programId: string; disabled: boolean }) {
   const [state, formAction, pending] = useActionState(createLoyaltyProgramRuleVersionAction.bind(null, tenantSlug, programId), INITIAL_STATE);
+  // ISS-2026-242: the create RPC returns one error for the whole rule version, never per-field ones.
+  const describedBy = state.error ? "rv-create-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-text-primary">Start a new draft rule version</h3>
       {disabled ? <p className="text-xs text-text-secondary">This program already has an open draft -- edit or publish it below before starting another.</p> : null}
-      <label htmlFor="rv-basis" className="text-xs font-medium text-text-secondary">
-        Earning basis
-      </label>
-      <select id="rv-basis" name="earningBasis" defaultValue="per_paid_invoice_amount" disabled={disabled} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="per_paid_invoice_amount">Per paid invoice amount (implemented)</option>
-      </select>
-      <label htmlFor="rv-reward" className="text-xs font-medium text-text-secondary">
-        Reward type
-      </label>
-      <select id="rv-reward" name="rewardType" defaultValue="points" disabled={disabled} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="points">Points</option>
-        <option value="cashback">Cashback</option>
-      </select>
-      <label htmlFor="rv-rate" className="text-xs font-medium text-text-secondary">
-        Rate (e.g. 0.1 = 10% of the paid amount)
-      </label>
-      <input id="rv-rate" name="rate" type="number" step="0.0001" min="0.0001" required disabled={disabled} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="rv-min" className="text-xs font-medium text-text-secondary">
-        Minimum invoice amount to be eligible (optional)
-      </label>
-      <input id="rv-min" name="minInvoiceAmount" type="number" step="0.01" min="0" disabled={disabled} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <ErrorBanner error={state.error} />
+      <FormField id="rv-basis" label="Earning basis">
+        <Select id="rv-basis" name="earningBasis" defaultValue="per_paid_invoice_amount" disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="per_paid_invoice_amount">Per paid invoice amount (implemented)</option>
+        </Select>
+      </FormField>
+      <FormField id="rv-reward" label="Reward type">
+        <Select id="rv-reward" name="rewardType" defaultValue="points" disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="points">Points</option>
+          <option value="cashback">Cashback</option>
+        </Select>
+      </FormField>
+      <FormField id="rv-rate" label="Rate (e.g. 0.1 = 10% of the paid amount)">
+        <NumberInput id="rv-rate" name="rate" step="0.0001" min="0.0001" required disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="rv-min" label="Minimum invoice amount to be eligible (optional)">
+        <NumberInput id="rv-min" name="minInvoiceAmount" step="0.01" min="0" disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <ErrorBanner id="rv-create-error" error={state.error} />
       <Button type="submit" loading={pending} loadingLabel="Creating…" disabled={disabled} className="w-fit">
         Create draft
       </Button>
@@ -155,42 +156,40 @@ export function CreateRuleVersionForm({ tenantSlug, programId, disabled }: { ten
 export function EditRuleVersionDraftForm({ tenantSlug, programId, version }: { tenantSlug: string; programId: string; version: LoyaltyProgramRuleVersion }) {
   const [state, formAction, pending] = useActionState(updateLoyaltyProgramRuleVersionDraftAction.bind(null, tenantSlug, programId, version.id, version.recordVersion), INITIAL_STATE);
   const [publishState, publishAction, publishPending] = useActionState(publishLoyaltyProgramRuleVersionAction.bind(null, tenantSlug, programId, version.id, version.recordVersion), INITIAL_STATE);
+  // ISS-2026-242: the update RPC returns one error for the whole draft, never per-field ones.
+  const describedBy = state.error ? `rv-edit-${version.id}-error` : undefined;
   return (
     <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 p-4">
       <div className="flex items-center gap-2">
         <StatusBadge tone="neutral" label={`Draft v${version.versionNumber}`} />
       </div>
       <form action={formAction} className="flex flex-col gap-2" noValidate>
-        <label htmlFor={`rv-edit-basis-${version.id}`} className="text-xs font-medium text-text-secondary">
-          Earning basis
-        </label>
-        <select id={`rv-edit-basis-${version.id}`} name="earningBasis" defaultValue={version.earningBasis} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-          <option value="per_paid_invoice_amount">Per paid invoice amount (implemented)</option>
-        </select>
-        <label htmlFor={`rv-edit-reward-${version.id}`} className="text-xs font-medium text-text-secondary">
-          Reward type
-        </label>
-        <select id={`rv-edit-reward-${version.id}`} name="rewardType" defaultValue={version.rewardType} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-          <option value="points">Points</option>
-          <option value="cashback">Cashback</option>
-        </select>
-        <label htmlFor={`rv-edit-rate-${version.id}`} className="text-xs font-medium text-text-secondary">
-          Rate
-        </label>
-        <input id={`rv-edit-rate-${version.id}`} name="rate" type="number" step="0.0001" min="0.0001" defaultValue={version.rate} required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <label htmlFor={`rv-edit-min-${version.id}`} className="text-xs font-medium text-text-secondary">
-          Minimum invoice amount (optional)
-        </label>
-        <input
-          id={`rv-edit-min-${version.id}`}
-          name="minInvoiceAmount"
-          type="number"
-          step="0.01"
-          min="0"
-          defaultValue={typeof version.eligibilityConfig.min_invoice_amount === "number" ? version.eligibilityConfig.min_invoice_amount : ""}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-        <ErrorBanner error={state.error} />
+        <FormField id={`rv-edit-basis-${version.id}`} label="Earning basis">
+          <Select id={`rv-edit-basis-${version.id}`} name="earningBasis" defaultValue={version.earningBasis} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+            <option value="per_paid_invoice_amount">Per paid invoice amount (implemented)</option>
+          </Select>
+        </FormField>
+        <FormField id={`rv-edit-reward-${version.id}`} label="Reward type">
+          <Select id={`rv-edit-reward-${version.id}`} name="rewardType" defaultValue={version.rewardType} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+            <option value="points">Points</option>
+            <option value="cashback">Cashback</option>
+          </Select>
+        </FormField>
+        <FormField id={`rv-edit-rate-${version.id}`} label="Rate">
+          <NumberInput id={`rv-edit-rate-${version.id}`} name="rate" step="0.0001" min="0.0001" defaultValue={version.rate} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`rv-edit-min-${version.id}`} label="Minimum invoice amount (optional)">
+          <NumberInput
+            id={`rv-edit-min-${version.id}`}
+            name="minInvoiceAmount"
+            step="0.01"
+            min="0"
+            defaultValue={typeof version.eligibilityConfig.min_invoice_amount === "number" ? version.eligibilityConfig.min_invoice_amount : ""}
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+        <ErrorBanner id={`rv-edit-${version.id}-error`} error={state.error} />
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
           Save draft
         </Button>
@@ -249,12 +248,19 @@ export function EnrollAccountForm({ tenantSlug, programId }: { tenantSlug: strin
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-text-primary">Enroll a customer account</h3>
-      <label htmlFor="ea-account" className="text-xs font-medium text-text-secondary">
-        Customer account ID
-      </label>
-      <input id="ea-account" name="customerAccountId" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
+      <FormField id="ea-account" label="Customer account ID">
+        <Input
+          id="ea-account"
+          name="customerAccountId"
+          type="text"
+          required
+          className="font-mono text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "ea-error" : undefined}
+        />
+      </FormField>
       <p className="text-xs text-text-secondary">An account may hold at most one active loyalty enrollment at a time, across every program.</p>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id="ea-error" error={state.error} />
       <Button type="submit" loading={pending} loadingLabel="Enrolling…" className="w-fit">
         Enroll
       </Button>
@@ -296,15 +302,41 @@ function AccountRow({ tenantSlug, programId, account }: { tenantSlug: string; pr
       </div>
       <div className="flex flex-wrap gap-3">
         <form action={formAction} className="flex items-end gap-2" noValidate>
-          {nextStatus === "suspended" ? <input name="reason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" /> : null}
-          <ErrorBanner error={state.error} />
+          {nextStatus === "suspended" ? (
+            <>
+              <label htmlFor={`acct-suspend-reason-${account.id}`} className="sr-only">
+                Suspension reason
+              </label>
+              <Input
+                id={`acct-suspend-reason-${account.id}`}
+                name="reason"
+                placeholder="Reason (required)"
+                required
+                className="text-xs"
+                invalid={Boolean(state.error)}
+                aria-describedby={state.error ? `acct-suspend-${account.id}-error` : undefined}
+              />
+            </>
+          ) : null}
+          <ErrorBanner id={`acct-suspend-${account.id}-error`} error={state.error} />
           <Button type="submit" variant={nextStatus === "suspended" ? "destructive" : "secondary"} loading={pending} loadingLabel="Updating…" className="w-fit">
             {nextStatus === "suspended" ? "Suspend" : "Reactivate"}
           </Button>
         </form>
         <form action={closeAction} className="flex items-end gap-2" noValidate>
-          <input name="reason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <ErrorBanner error={closeState.error} />
+          <label htmlFor={`acct-close-reason-${account.id}`} className="sr-only">
+            Closure reason
+          </label>
+          <Input
+            id={`acct-close-reason-${account.id}`}
+            name="reason"
+            placeholder="Reason (required)"
+            required
+            className="text-xs"
+            invalid={Boolean(closeState.error)}
+            aria-describedby={closeState.error ? `acct-close-${account.id}-error` : undefined}
+          />
+          <ErrorBanner id={`acct-close-${account.id}-error`} error={closeState.error} />
           <Button type="submit" variant="destructive" loading={closePending} loadingLabel="Closing…" className="w-fit">
             Close
           </Button>
@@ -322,11 +354,10 @@ export function EvaluateEarningForm({ tenantSlug, programId }: { tenantSlug: str
       <p className="text-xs text-text-secondary">
         On-demand only in this checkpoint -- no automatic job triggers this yet (a real, complete, idempotent RPC; the trigger mechanism is a disclosed follow-up, see ISS-2026-126). Calling this twice for the same AR open item is a safe no-op.
       </p>
-      <label htmlFor="ee-ar" className="text-xs font-medium text-text-secondary">
-        AR open item ID (the paid invoice)
-      </label>
-      <input id="ee-ar" name="arOpenItemId" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
-      <ErrorBanner error={state.error} />
+      <FormField id="ee-ar" label="AR open item ID (the paid invoice)">
+        <Input id="ee-ar" name="arOpenItemId" type="text" required className="font-mono text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "ee-error" : undefined} />
+      </FormField>
+      <ErrorBanner id="ee-error" error={state.error} />
       <Button type="submit" loading={pending} loadingLabel="Evaluating…" className="w-fit">
         Evaluate earning
       </Button>
@@ -375,8 +406,19 @@ function EarningEventRow({ tenantSlug, programId, event }: { tenantSlug: string;
       <td className="p-2">
         {!isReversal ? (
           <form action={formAction} className="flex items-center gap-2" noValidate>
-            <input name="reason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-            <ErrorBanner error={state.error} />
+            <label htmlFor={`earn-reverse-reason-${event.id}`} className="sr-only">
+              Reversal reason
+            </label>
+            <Input
+              id={`earn-reverse-reason-${event.id}`}
+              name="reason"
+              placeholder="Reason (required)"
+              required
+              className="text-xs"
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? `earn-reverse-${event.id}-error` : undefined}
+            />
+            <ErrorBanner id={`earn-reverse-${event.id}-error`} error={state.error} />
             <Button type="submit" variant="destructive" loading={pending} loadingLabel="Reversing…" className="w-fit">
               Reverse
             </Button>
