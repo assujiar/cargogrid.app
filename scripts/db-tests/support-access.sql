@@ -109,6 +109,7 @@ do $$
 declare
   v_tenant_id uuid;
   v_grant_id uuid;
+  v_msg text;
 begin
   v_tenant_id := (select id from app.tenants where slug = 'acmesup');
   v_grant_id := (select id from app.support_access_grants where tenant_id = v_tenant_id and case_id = 'CASE-100');
@@ -121,12 +122,30 @@ begin
       null; -- expected (insufficient_authority)
   end;
 
+  -- ISS-2026-146: ...0703 is the support agent, and this file's own setup states it is "a
+  -- member of neither tenant" -- exactly the zero-membership caller this issue is about. Its
+  -- pending grant confers nothing yet (app.has_active_support_grant requires a live open
+  -- session, ISS-2026-187, asserted below), so app.approve_support_access now folds the
+  -- membership check into its own row-miss branch and denies with the generic
+  -- grant_not_found an unknown grant id already produced, rather than an
+  -- insufficient_authority message carrying this tenant's real tenant_id. The self-approval
+  -- control itself is NOT bypassed and NOT weakened: it is unchanged in the body, it still
+  -- fires for a grantee who genuinely is a member of the tenant (a tenant_admin who named
+  -- itself grantee), and the denial here is strictly earlier and stricter than before. The
+  -- assertion below it -- that neither failed attempt moved the grant off pending_approval
+  -- -- is the invariant this block exists to protect and is unchanged.
   begin
     perform app.approve_support_access(v_grant_id, '00000000-0000-0000-0000-000000000703', 'self');
-    raise exception 'assertion failed: expected the grantee to be denied self-approval';
+    raise exception 'assertion failed: expected the grantee, a member of neither tenant, to be denied';
   exception
-    when insufficient_privilege then
-      null; -- expected (self_approval_forbidden)
+    when no_data_found then
+      get stacked diagnostics v_msg = message_text;
+      if v_msg !~ 'grant_not_found' then
+        raise exception 'assertion failed: expected grant_not_found, got %', v_msg;
+      end if;
+      if v_msg like ('%' || v_tenant_id::text || '%') then
+        raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses the grant''s real tenant_id: %', v_msg;
+      end if;
   end;
 
   if (select status from app.support_access_grants where id = v_grant_id) <> 'pending_approval' then

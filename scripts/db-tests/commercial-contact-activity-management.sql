@@ -208,6 +208,7 @@ declare
   v_lead app.leads;
   v_contact app.contacts;
   v_activity app.activities;
+  v_msg text;
 begin
   select * into v_lead from app.leads where email = 'jane@contosocontact.test';
   select * into v_contact from app.contacts where full_name = 'Budi Santoso';
@@ -228,12 +229,26 @@ begin
     raise exception 'assertion failed: expected status=scheduled with due_at set, got status=% due_at=%', v_activity.status, v_activity.due_at;
   end if;
 
+  -- ISS-2026-146: 00000000-...-008204 is other-tenant-rep@betacontact.test, invited into
+  -- tenant2 only and holding no membership whatsoever in the lead's own tenant1. It is the
+  -- zero-membership foreign caller this issue is about, so app.log_activity now answers with
+  -- the generic related_record_not_found that app.resolve_commercial_record_ref itself
+  -- already raises for a genuinely nonexistent related_id, instead of an
+  -- insufficient_authority message carrying tenant1's real tenant_id. A same-tenant actor
+  -- who merely lacks COM:Create or record access is unaffected and still gets
+  -- insufficient_privilege -- asserted by the sibling-team outsider case below.
   begin
     perform app.log_activity('lead', v_lead.id, null, 'call', 'Denied', null, 'completed', null, now(), null, null, null, '00000000-0000-0000-0000-000000008204', 'tester');
-    raise exception 'assertion failed: expected insufficient_privilege for an actor with no access to this lead';
+    raise exception 'assertion failed: expected related_record_not_found for an other-tenant actor with zero membership in this lead''s tenant';
   exception
-    when insufficient_privilege then
-      null; -- expected
+    when no_data_found then
+      get stacked diagnostics v_msg = message_text;
+      if v_msg !~ 'related_record_not_found' then
+        raise exception 'assertion failed: expected related_record_not_found, got %', v_msg;
+      end if;
+      if v_msg like ('%' || v_lead.tenant_id::text || '%') then
+        raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses the lead''s real tenant_id: %', v_msg;
+      end if;
   end;
 end;
 $$;

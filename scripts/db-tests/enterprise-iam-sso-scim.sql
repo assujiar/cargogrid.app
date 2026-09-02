@@ -540,12 +540,27 @@ declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaeiam');
   v_admin2 uuid := '00000000-0000-0000-0000-000030000005';
   v_claim_id uuid := (select id from app.iam_domain_claims where tenant_id = v_tenant1 and email_domain = 'iaeiam-corp.test' and status = 'active');
+  v_msg text;
 begin
+  -- ISS-2026-146: admin2 is a tenant_admin of iaeiam2 holding IAM:Configure/View THERE and
+  -- no membership at all in iaeiam. app.disable_enterprise_sso_domain_claim now folds the
+  -- tenant-membership check into its own row-miss branch, so this foreign caller gets the
+  -- identical generic iam_domain_claim_not_disableable (errcode no_data_found) that an
+  -- unknown or already-disabled claim id already produced -- completing exactly the
+  -- "not_found folding at the RPC layer" this section's own heading names, and no longer
+  -- handing tenant1's real tenant_id back in an insufficient_authority message. A genuine
+  -- iaeiam member without IAM:Configure is unaffected and still gets insufficient_authority.
   begin
     perform app.disable_enterprise_sso_domain_claim(v_claim_id, 'hostile attempt', v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 acting on tenant1''s own claim, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
-    null;
+    raise exception 'assertion failed: expected iam_domain_claim_not_disableable for admin2, who holds zero membership in tenant1';
+  exception when no_data_found then
+    get stacked diagnostics v_msg = message_text;
+    if v_msg !~ 'iam_domain_claim_not_disableable' then
+      raise exception 'assertion failed: expected iam_domain_claim_not_disableable, got %', v_msg;
+    end if;
+    if v_msg like ('%' || v_tenant1::text || '%') then
+      raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant1''s real tenant_id: %', v_msg;
+    end if;
   end;
 end;
 $$;

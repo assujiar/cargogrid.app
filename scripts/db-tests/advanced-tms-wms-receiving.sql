@@ -442,12 +442,22 @@ begin
   -- already-committed line row, even though it supplies a wildly wrong
   -- idempotency_key/expected_version (exactly the shape a same-record-id probe
   -- would use).
+  -- ISS-2026-146: the refusal itself is unchanged, but its TEXT is. This actor
+  -- (tenant2's rep) has zero membership in tenant1, so app.commit_wms_receipt_line now
+  -- folds the membership check into its own row-miss branch and answers with the generic
+  -- line_not_found a nonexistent line id already produced -- instead of an
+  -- insufficient_authority message carrying tenant1's real tenant_id. The
+  -- short-circuit-before-authorization property this regression exists to protect is
+  -- untouched and still asserted: the call is still refused before any replay.
   begin
     perform app.commit_wms_receipt_line(v_line1.id, 'attacker-key', 999999, '00000000-0000-0000-0000-000000110107', 'rep2-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1 and must not reach the idempotent-replay short-circuit on an already-committed tenant1 line';
+    raise exception 'assertion failed: expected line_not_found -- tenant2''s rep has no membership in tenant1 and must not reach the idempotent-replay short-circuit on an already-committed tenant1 line';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'line_not_found%' then raise; end if;
+      if sqlerrm like ('%' || v_tenant1::text || '%') then
+        raise exception 'assertion failed: ISS-2026-146 regression -- the denial still discloses tenant1''s real tenant_id: %', sqlerrm;
+      end if;
   end;
 end $$;
 
