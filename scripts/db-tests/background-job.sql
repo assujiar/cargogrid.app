@@ -751,3 +751,182 @@ begin
 
   raise notice 'PASS: ISS-2026-053 -- enqueue_job compares job_type AND payload, normalizes null to empty, and keeps dispatch hints out of the tuple';
 end $$;
+
+\echo '>> ISS-2026-015: app.run_due_jobs is the worker loop that was missing -- it claims ONLY the job types the database can genuinely execute, runs each one as the identity that enqueued it, completes what succeeds, records what fails without aborting the batch, and leaves external-handoff types untouched for the process that can actually perform them'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmejob');
+  v_supreme uuid := '00000000-0000-0000-0000-000000004005';
+  v_ok app.jobs;
+  v_bad app.jobs;
+  v_external app.jobs;
+  v_row record;
+  v_completed integer := 0;
+  v_failed integer := 0;
+  v_types text[];
+  v_src text;
+  v_type text;
+begin
+  -- ---------------------------------------------------------------------
+  -- Structural: the dispatchable list and the dispatch CASE cannot drift.
+  -- A type on the list with no branch would be claimed and then raise at run time; a branch with
+  -- no list entry would simply never fire. Both are silent, so both are asserted here.
+  -- ---------------------------------------------------------------------
+  v_types := app.dispatchable_job_types();
+  if array_length(v_types, 1) is null or array_length(v_types, 1) = 0 then
+    raise exception 'assertion failed: expected a non-empty dispatchable job type list';
+  end if;
+  select p.prosrc into v_src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'app' and p.proname = '_execute_job_once';
+  foreach v_type in array v_types loop
+    if v_src not like '%''' || v_type || '''%' then
+      raise exception 'assertion failed: % is dispatchable but app._execute_job_once has no branch for it', v_type;
+    end if;
+  end loop;
+
+  -- Every dispatchable type must also be a REGISTERED job type, or enqueue would reject it.
+  foreach v_type in array v_types loop
+    if not (v_type = any (app.all_job_types())) then
+      raise exception 'assertion failed: dispatchable type % is not a registered job type', v_type;
+    end if;
+  end loop;
+
+  -- ---------------------------------------------------------------------
+  -- The honest boundary: an external-handoff type is NOT claimed.
+  -- This is the property that keeps a job from being marked completed when its work never
+  -- happened -- the one outcome strictly worse than never running at all.
+  -- ---------------------------------------------------------------------
+  if 'webhook_retry' = any (v_types) then
+    raise exception 'assertion failed: webhook_retry needs a network call and must never be in the in-database dispatchable set';
+  end if;
+  if 'notification_batch' = any (v_types) then
+    raise exception 'assertion failed: notification_batch needs a real send and must never be in the in-database dispatchable set';
+  end if;
+
+  select * into v_external from app.enqueue_job(
+    v_tenant_id, 'webhook_retry', jsonb_build_object('probe', 'iss015'), 0,
+    'iss015-external-handoff', 3, v_supreme, 'tester');
+
+  -- ---------------------------------------------------------------------
+  -- One job that succeeds and one that fails, enqueued together so the batch-isolation property
+  -- is exercised rather than asserted.
+  -- ---------------------------------------------------------------------
+  select * into v_ok from app.enqueue_job(
+    v_tenant_id, 'kb_article_expiry', '{}'::jsonb, 10,
+    'iss015-ok', 3, v_supreme, 'tester');
+
+  -- No leave_type_id: the dispatcher refuses it rather than calling the executor with a null.
+  select * into v_bad from app.enqueue_job(
+    v_tenant_id, 'leave_accrual', '{}'::jsonb, 5,
+    'iss015-bad-payload', 3, v_supreme, 'tester');
+
+  for v_row in select * from app.run_due_jobs('iss015-worker', 25, 300) loop
+    if v_row.outcome = 'completed' then v_completed := v_completed + 1; end if;
+    if v_row.outcome = 'failed' then v_failed := v_failed + 1; end if;
+  end loop;
+
+  if v_completed < 1 then
+    raise exception 'assertion failed: expected the kb_article_expiry job to be executed and completed, got % completed', v_completed;
+  end if;
+  if v_failed < 1 then
+    raise exception 'assertion failed: expected the malformed leave_accrual job to be recorded as failed, got % failed', v_failed;
+  end if;
+
+  -- The good job really is terminal, and the worker really did hold the lease to complete it.
+  select * into v_ok from app.jobs where job_id = v_ok.job_id;
+  if v_ok.status <> 'completed' or v_ok.completed_at is null then
+    raise exception 'assertion failed: expected the dispatchable job completed, got status %', v_ok.status;
+  end if;
+  if v_ok.locked_by is not null then
+    raise exception 'assertion failed: expected the lease released on completion';
+  end if;
+
+  -- The bad job went back to pending with an attempt spent, a real error recorded, and a backoff
+  -- set -- app.record_job_failure owning that decision, not the worker second-guessing it.
+  select * into v_bad from app.jobs where job_id = v_bad.job_id;
+  if v_bad.status <> 'pending' then
+    raise exception 'assertion failed: expected the failed job back to pending for retry (max_attempts 3), got %', v_bad.status;
+  end if;
+  if v_bad.attempts <> 1 then
+    raise exception 'assertion failed: expected exactly one attempt spent, got %', v_bad.attempts;
+  end if;
+  if v_bad.error is null or v_bad.error not like '%job_payload_incomplete%' then
+    raise exception 'assertion failed: expected the real dispatcher error recorded, got %', v_bad.error;
+  end if;
+  if v_bad.next_attempt_at is null or v_bad.next_attempt_at <= now() then
+    raise exception 'assertion failed: expected a future backoff on the failed job, got %', v_bad.next_attempt_at;
+  end if;
+
+  -- The external-handoff job was never touched: still pending, never claimed, zero attempts.
+  select * into v_external from app.jobs where job_id = v_external.job_id;
+  if v_external.status <> 'pending' or v_external.attempts <> 0 or v_external.locked_by is not null then
+    raise exception 'assertion failed: expected the webhook_retry job left untouched for its own worker, got status % attempts % locked_by %',
+      v_external.status, v_external.attempts, v_external.locked_by;
+  end if;
+
+  raise notice 'PASS: ISS-2026-015 -- run_due_jobs executed a dispatchable job, isolated a failing one into a real backoff, and left an external-handoff job for the process that can perform it';
+end $$;
+
+\echo '>> ISS-2026-015: app.run_due_jobs input guards and batch ceiling'
+do $$
+declare
+  v_tenant_id uuid := (select id from app.tenants where slug = 'acmejob');
+  v_supreme uuid := '00000000-0000-0000-0000-000000004005';
+  v_count integer;
+  i integer;
+begin
+  begin
+    perform app.run_due_jobs('   ', 10, 300);
+    raise exception 'assertion failed: expected a blank worker id to be refused';
+  exception when check_violation then
+    if sqlerrm not like 'job_worker_id_required%' then raise; end if;
+  end;
+
+  -- Three claimable jobs, a limit of two: the worker must stop at the ceiling rather than
+  -- draining the queue in one call and starving whatever else shares the process.
+  for i in 1..3 loop
+    perform app.enqueue_job(v_tenant_id, 'kb_article_expiry', '{}'::jsonb, 0,
+      'iss015-limit-' || i::text, 3, v_supreme, 'tester');
+  end loop;
+
+  select count(*) into v_count from app.run_due_jobs('iss015-limit-worker', 2, 300);
+  if v_count <> 2 then
+    raise exception 'assertion failed: expected the batch ceiling to hold at 2, got %', v_count;
+  end if;
+
+  -- The third is still there for the next tick.
+  select count(*) into v_count from app.run_due_jobs('iss015-limit-worker', 10, 300);
+  if v_count < 1 then
+    raise exception 'assertion failed: expected the remaining job to be picked up on the next call, got %', v_count;
+  end if;
+
+  -- A quiet tick is not an error.
+  select count(*) into v_count from app.run_due_jobs('iss015-limit-worker', 10, 300);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected an empty result once the queue is drained, got %', v_count;
+  end if;
+
+  raise notice 'PASS: ISS-2026-015 -- worker id required, batch ceiling honoured, drained queue returns empty rather than raising';
+end $$;
+
+\echo '>> ISS-2026-015: schema-privilege defense in depth -- the job worker is service_role-only; no browser session can drive the queue'
+do $$
+begin
+  if has_function_privilege('authenticated', 'app.run_due_jobs(text, integer, integer)', 'EXECUTE') then
+    raise exception 'assertion failed: authenticated must not be able to drive the job queue';
+  end if;
+  if has_function_privilege('anon', 'app.run_due_jobs(text, integer, integer)', 'EXECUTE') then
+    raise exception 'assertion failed: anon must not be able to drive the job queue';
+  end if;
+  if has_function_privilege('authenticated', 'public.run_due_jobs(text, integer, integer)', 'EXECUTE') then
+    raise exception 'assertion failed: the public wrapper must be service_role-only too';
+  end if;
+  if not has_function_privilege('service_role', 'app.run_due_jobs(text, integer, integer)', 'EXECUTE') then
+    raise exception 'assertion failed: service_role must be able to run the worker';
+  end if;
+  if has_function_privilege('anon', 'app._execute_job_once(app.jobs)', 'EXECUTE') then
+    raise exception 'assertion failed: the internal dispatcher must never be reachable by anon';
+  end if;
+
+  raise notice 'PASS: ISS-2026-015 -- run_due_jobs and _execute_job_once are service_role-only on both app and public';
+end $$;

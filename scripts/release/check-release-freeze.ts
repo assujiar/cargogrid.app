@@ -3496,7 +3496,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // cargogrid.net and every subdomain, while KEEPING the old domain reserved through the cutover
   // (un-reserving a hostname users may still visit would let a tenant claim it). The tenant
   // custom-domain capability itself is untouched and stays fully working.
-  migrationSetSha256: "58f6ffb411bb3213be951b6f081f0d6cf0be83bcf27e46d93455bfd0a04bc032",
+  // HUNDRED-AND-SECOND PASS (2026-09-03, ISS-2026-015 / ISS-2026-070 item 2): 498 files (+1). The
+  // background job worker's missing middle: app._execute_job_once performs the work a claimed job
+  // names and app.run_due_jobs drives claim -> execute -> complete-or-record-failure, mirroring
+  // app._run_scheduled_task_once/app.run_due_scheduled_tasks. app.dispatchable_job_types() names
+  // ONLY the 9 job types with a real in-database executor; the other 24 are external handoffs and
+  // stay pending rather than being claimed and dead-lettered -- a job marked completed whose work
+  // never happened is strictly worse than one that never ran.
+  migrationSetSha256: "4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99",
+  // History: 58f6ffb411bb3213be951b6f081f0d6cf0be83bcf27e46d93455bfd0a04bc032
+  // (497 files, ISS-2026-311's cargogrid.net reserved-hostname guard).
   // History: 4d064ccc938fcbf43cddcee5165b43b08f89a556ab4b70dc3eb3c9dea62907ff
   // (496 files, ISS-2026-146 batch 3's 15 tenant-id disclosure migrations).
   // History: d0f1474e7bb323bd215d81f70e8f33734aa897b2fd6c606ad96abc587c711fb0
@@ -4227,7 +4236,15 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // app.cargogrid.net and a current-domain subdomain are all reserved; the PREVIOUS domain's apex
   // and subdomains still are; an ordinary external hostname still is not; and a tenant claiming
   // the standard console hostname as its custom domain is refused).
-  dbTestSetSha256: "9ca8a134673c439931ef4d376b42c04e7a98fb83cefdac3e8175fd9fcd03ffbc",
+  // HUNDRED-AND-SECOND PASS (2026-09-03, ISS-2026-015): 250 files, unchanged in count -- one
+  // extended (background-job.sql: the dispatchable list and the dispatch CASE cannot drift; a real
+  // job is claimed/executed/completed with its lease released; a malformed one is recorded as
+  // failed with one attempt spent and a future backoff while the good job in the same batch still
+  // completes; an enqueued external-handoff job comes through untouched with zero attempts; the
+  // batch ceiling holds; a drained queue returns empty; and the worker is service_role-only).
+  dbTestSetSha256: "f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480",
+  // History: 9ca8a134673c439931ef4d376b42c04e7a98fb83cefdac3e8175fd9fcd03ffbc
+  // (250 files, ISS-2026-311's reserved-hostname assertions).
   // History: a5878f102a570613a93841c439ebf859a3b37c760ff8cc34aec678f73c0399c6
   // (250 files, ISS-2026-146 batch 3's redaction regressions).
   // History: 51695bdf21337090c1e3d3314b7aa4d78ce3f39fd574963319d981655691b391

@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 3 — 1 Medium, 2 Low |
+| `OPEN` | 2 — 1 Medium, 1 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 18 — formally ruled, not pending work (8 added 2026-09-03 by owner override, see ADR-0027 Part B) |
-| `RESOLVED` | 256 |
+| `RESOLVED` | 257 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -122,7 +122,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-064` | Low | `RESOLVED` | Employee Master (HRT-274): client-side document upload and browser/accessibility E2E were disclosed, not built (manager-team UI route resolved earlier, 2026-08-27) |
 | `ISS-2026-066` | Low | `RESOLVED` | Organization and Position Linkage (HRT-275): no bulk/multi-employee reorganization wizard, no live scheduler for future-dated assignment activation, no staged-import crosswalk, no browser/accessibility E2E -- all four items closed (scheduler 2026-08-31; crosswalk import, bulk wizard and E2E 2026-09-02) |
 | `ISS-2026-067` | Low | `RESOLVED` | Recruitment, Job Portal and ATS (HRT-276): no UI caller yet for duplicate-review, exports, assessment/interview cancel-shaped actions, and no standalone candidate directory -- all six items closed 2026-09-01 |
-| `ISS-2026-070` | Low | `OPEN` | Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/tra |
+| `ISS-2026-070` | Low | `RESOLVED` | Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/tra |
 | `ISS-2026-075` | Low | `RESOLVED` | Overtime and Timesheet (HRT-281): `app.export_timesheet_entries` has no TS/UI wrapper — but this matches an identical, pre-existing, repo-wide pattern |
 | `ISS-2026-083` | Low | `RESOLVED` | Training and Talent (HRT-284): "provider/certificate files are private and malware-scanned" (§16) was only ever built for the certificate half — `trai |
 | `ISS-2026-084` | Low | `RESOLVED` | Employee and Manager Self-Service (HRT-285): the MSS team roster (50) and per-category approval queue (20) are genuinely bounded, single-page composit |
@@ -956,7 +956,7 @@ ALL PASSED`; `pnpm typecheck`, `pnpm lint` (0 errors), 5763 unit tests green. Ap
 seven config types and the resolver's `authenticated`-denied grant verified against the hosted
 project. Freeze migration + db-test digests amended (sixty-ninth pass).
 
-### ISS-2026-070 — Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/transfer scenario coverage (OPEN, Low)
+### ISS-2026-070 — Onboarding and Offboarding (HRT-277): notification engine not wired, no live job worker/overdue scheduler, and no UI caller yet for preview/export/transfer scenario coverage (RESOLVED 2026-09-03, was Low)
 
 Discovered `2026-08-09` during `CG-S12-HRT-005` (Prompt 277, Onboarding and Offboarding), by this checkpoint's own Tier B taxonomy self-check (class C-23) before closing, mirroring `ISS-2026-064`/`066`/`067`'s own disclosure discipline. The full domain/service layer for every item below is real, tested, and live — what is disclosed here is integration/automation/UI depth beyond it, not a broken or fabricated code path:
 
@@ -1009,6 +1009,91 @@ The automatic task scheduler now exists, and it is configurable rather than hard
 *Item 5, the Playwright half.* `e2e/hris-onboarding-guard.spec.ts` covers all five live onboarding `page.tsx` routes (case list, case detail, my-tasks, template list, template draft version), enumerated against the real tree rather than estimated, 10 tests. Direct source read confirmed all five share ONE fail-safe shape — a bare `notFound()`, none under the `admin/layout.tsx` redirect — so every assertion mirrors `e2e/phase9-admin-guard.spec.ts`'s "404-guarded" group and none its "Redirect-guarded" one. The case-detail heading is data-derived (`{employeeFullName} — {caseType}`), so its first static section heading is asserted instead, taken verbatim from the panel source: an `exact: true` locator for a string the page never renders would pass whatever the guard did and prove nothing. Live-run against a real `next build && next start` production server in this sandbox: **10/10 passed**. Recorded honestly because it took three attempts: the committed `playwright.config.ts` allows its `webServer` 180 s to run `next build && next start`, which this 4-CPU box could not meet while other work held the CPUs. The shared timeout was deliberately NOT raised to suit one machine — the run was done against a manually started server via a scratchpad-only config override that changes who starts the server and nothing about the specs or their assertions.
 
 **What remains `OPEN`, and why — the entry is now down to two residuals, both structural.** Item 2's remaining half: nothing polls `app.background_jobs` for the `checklist_version_publish` fan-out job. That is `ISS-2026-015`'s repository-wide gap (no live job worker exists for any domain) and cannot be closed by an onboarding change; every notification this migration queues is `in_app`, whose delivery is the row's own existence, so none of them depends on it. Item 5's remaining half: no axe-core scan runs against any onboarding route, for the identical reason `ISS-2026-140`/`ISS-2026-153` record — no live Supabase auth backend exists in this sandbox, so no route behind `resolveCommercialAccessForRequest` can be reached by a real authenticated Playwright session, and a bare `notFound()` renders framework markup this repository does not own. **Entry status stays `OPEN`**, Low severity, unchanged — but the owner narrows to those two: the job-worker enablement task `ISS-2026-015` names, and the e2e-environment-enablement task `ISS-2026-140` names.
+
+**`RESOLVED` — `2026-09-03`. The job worker exists and runs.**
+(`supabase/migrations/20260903170000_create_background_job_worker_dispatch_iss2026015.sql`,
+`server/mutations/job-runner.ts`, `scripts/jobs/supervisor.ts`.)
+
+*What was actually missing, which was smaller and more specific than every prior disclosure said.*
+The job **framework** was already complete and well built: `app.claim_next_job` locks with
+`for update skip locked`, honours priority, respects `next_attempt_at` backoff, and counts a
+lease-expiry re-claim as an attempt so a crash-looping job cannot occupy a worker forever;
+`app.record_job_failure` applies exponential backoff and dead-letters at `max_attempts`;
+`app.complete_job` refuses a worker that does not hold the lease. **Five real, tested workers
+already existed** in `scripts/jobs/` for the external-handoff types. None of that needed building,
+and none of it was the gap. Each of those five says the gap out loud in its own header: *"NOT a
+production scheduler — no live cron/daemon/scheduler exists anywhere in this repository for ANY
+app.jobs job type."* Every piece existed and **nothing ran them.**
+
+*Two things were built.* First, the dispatcher: `app._execute_job_once` performs the work a
+claimed job names, and `app.run_due_jobs` drives claim → execute → complete-or-record-failure,
+mirroring `app._run_scheduled_task_once`/`app.run_due_scheduled_tasks` rather than inventing a
+second shape. A failing job is isolated in its own `BEGIN/EXCEPTION` so it cannot abort the batch,
+and `app.record_job_failure` keeps ownership of the retry/backoff/dead-letter decision — the
+worker never second-guesses it. Second, `scripts/jobs/supervisor.ts`: one long-lived process that
+on each tick fires due scheduled tasks, runs the in-database jobs, and runs each of the five
+external workers, with per-lane error isolation so an unreachable webhook endpoint cannot stop
+payroll or loyalty sweeps from firing.
+
+*The honest boundary, and it is the most important decision here.* Of 33 registered job types,
+only **9** have a real in-database executor. `webhook_retry`, `notification_batch`,
+`integration_sync`, `print_label`, `report_generation` and the rest are **external handoffs** —
+this repository is explicit about that split by design (`app.get_webhook_delivery_dispatch_info`
+hands an outside process what it needs; `app.record_webhook_delivery_attempt` records what came
+back). So `app.dispatchable_job_types()` names only the 9, and the worker claims only those.
+Everything else stays `pending` and unclaimed — visibly outstanding — rather than being claimed
+and dead-lettered for a failure that is not the job's fault. **A job marked `completed` whose work
+never happened is strictly worse than a job that never ran**, because it destroys the evidence that
+it is still owed. The regression asserts this directly: an enqueued `webhook_retry` job comes
+through the worker untouched, zero attempts, never locked.
+
+*Authority is unchanged and re-checked every run.* A job executes as its own
+`requested_by_auth_user_id` — the real person whose action enqueued it — exactly as a scheduled
+task runs as the identity that authorized it. Nothing runs as "the system", nothing is minted. If
+that person's rights have since been revoked the executor raises, the job fails, backs off and
+eventually dead-letters with the authority error recorded, which is the designed outcome rather
+than a bug. If the supervisor itself were compromised it could cause work to run *sooner*, never
+work nobody was entitled to.
+
+*Two real defects caught by gates rather than by me, recorded rather than quietly fixed.*
+`scripts/db-tests/public-api-wrapper-regression.sql` rejected the first attempt because
+`public.dispatchable_job_types`'s grant set did not exactly match its `app.*` counterpart's
+(Postgres grants EXECUTE to PUBLIC by default and I had not revoked it), and rejected the second
+because the wrapper was `security definer` while its counterpart is `invoker` — an RLS-bypass
+class check doing precisely its job on a function that reads nothing and needed no elevated
+privilege at all.
+
+*Regression.* `scripts/db-tests/background-job.sql`: the dispatchable list and the dispatch `CASE`
+cannot drift (every listed type must have a branch, and must be a registered job type); a real
+`kb_article_expiry` job is claimed, executed and completed with its lease released; a malformed
+`leave_accrual` job is recorded as failed with one attempt spent, the real error text stored and a
+future backoff set, while the good job in the same batch still completes; the batch ceiling holds;
+a drained queue returns empty rather than raising; and `run_due_jobs`/`_execute_job_once` are
+service_role-only on both `app` and `public`. Plus 12 unit tests on the supervisor, including the
+two properties that matter most: a lane that throws is reported and **the remaining lanes still
+run**, and a tick that throws outright does not end the loop. Full `pnpm run db:test`: **ALL
+PASSED**.
+
+*A citation defect found while closing this, disclosed rather than absorbed.* This entry and
+several others cite **`ISS-2026-015`** as the home of the repository-wide "no live job worker"
+gap. **There is no `ISS-2026-015` record in this file** — `grep` finds the identifier only inside
+other entries' prose. The gap was real and is the one closed here; the tracking entry it was
+attributed to never existed. Nothing is created retroactively to paper over that; it is recorded
+so a future reader chasing that identifier does not conclude the file is corrupt.
+
+*What still is not done, and it is not code.* Nothing points a timer at the supervisor.
+`scripts/jobs/supervisor.ts` is a runnable process with `--once` for cron-style use and a
+graceful-shutdown loop for daemon use, but choosing a process manager, a container restart policy
+or a timer remains an operator decision — the same boundary `ISS-2026-066` already records for the
+scheduler half, unchanged. The difference is that there is now a single thing to point at instead
+of six scripts and a checklist.
+
+*Item 5's remaining axe-core half* is unchanged and is not claimed here. It shares the exact
+structural blocker `ISS-2026-140`/`ISS-2026-153` name (no live auth backend Playwright can sign
+into), and both of those were placed under `ACCEPTED_RISK (OWNER_OVERRIDE)` on this same date by
+the project owner. This entry carries no pending work of its own.
+
+**Status `RESOLVED`**, was Low.
 
 ### ISS-2026-071 — Onboarding and Offboarding (HRT-277): Finance/Operations/IT task-owner completion authority is uniformly `HRS:Edit`-gated, not task-owner-identity-gated (RESOLVED, was Medium)
 
