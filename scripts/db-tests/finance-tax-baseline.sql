@@ -319,10 +319,14 @@ begin
   select * into v_rule from app.finance_tax_rule_versions where tenant_id = v_tenant_a and status = 'approved';
 
   begin
+    -- ISS-2026-146: financemanagerb has zero app.principal_memberships row in tenant A
+    -- at all, so app.discard_finance_tax_rule_draft's tenant-membership pre-check now
+    -- refuses with the same generic not-found a nonexistent rule id would, rather than
+    -- disclosing tenant A's real tenant_id via insufficient_authority.
     perform app.discard_finance_tax_rule_draft(v_rule.id, v_rule.record_version, 'intruder attempt', '00000000-0000-0000-0000-000000025505', 'financemanagerb');
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Manager B holds no FIN grant for tenant A (authority is checked before status, never leaking tenant A''s own record state to an unauthorized cross-tenant actor)';
+    raise exception 'assertion failed: expected finance_tax_rule_not_found for a caller with zero relationship to tenant A, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 

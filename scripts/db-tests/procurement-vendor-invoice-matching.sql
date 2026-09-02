@@ -942,7 +942,7 @@ begin
   end if;
 end $$;
 
-\echo '>> cross-tenant isolation: vim2''s staff, holding zero membership in vim1, is denied on write RPCs with insufficient_authority and gets vendor_bill_match_case_not_found (never a real row disclosure) on read RPCs; raw RLS denies a direct select'
+\echo '>> cross-tenant isolation: vim2''s staff, holding zero membership in vim1, gets vendor_bill_match_case_not_found (never a real row disclosure) on both write and read RPCs -- ISS-2026-146 folded the tenant-membership pre-check into every bare-id lookup, including accept_vendor_bill_match_within_tolerance, so a caller with no relationship to the tenant no longer reaches insufficient_authority at all; raw RLS denies a direct select'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'vim1');
@@ -954,11 +954,15 @@ begin
   select id into v_case_id from app.vendor_bill_match_cases where bill_id = v_bill1_id and is_current;
 
   begin
+    -- ISS-2026-146: v_t2_staff has zero app.principal_memberships row in vim1 at all,
+    -- so app.accept_vendor_bill_match_within_tolerance's tenant-membership pre-check
+    -- now refuses with the same generic not-found a nonexistent case id would, rather
+    -- than disclosing vim1's real tenant_id via insufficient_authority.
     perform app.accept_vendor_bill_match_within_tolerance(v_case_id, 1, v_t2_staff, 'attacker');
-    raise exception 'assertion failed: expected insufficient_authority for a vim2 actor acting on a vim1 match case';
+    raise exception 'assertion failed: expected vendor_bill_match_case_not_found for a vim2 actor acting on a vim1 match case, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_bill_match_case_not_found%' then raise; end if;
   end;
 
   begin

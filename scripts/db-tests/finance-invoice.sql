@@ -372,10 +372,14 @@ begin
   select * into v_invoice from app.finance_invoices where tenant_id = v_tenant_a and status = 'issued';
 
   begin
+    -- ISS-2026-146: financemanagerb has zero app.principal_memberships row in tenant A
+    -- at all, so app.discard_finance_invoice_draft's tenant-membership pre-check now
+    -- refuses with the same generic not-found a nonexistent invoice id would, rather
+    -- than disclosing tenant A's real tenant_id via insufficient_authority.
     perform app.discard_finance_invoice_draft(v_invoice.id, v_invoice.record_version, 'intruder attempt', '00000000-0000-0000-0000-000000027506', 'financemanagerb');
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Manager B holds no FIN grant for tenant A';
+    raise exception 'assertion failed: expected finance_invoice_not_found for a caller with zero relationship to tenant A, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 

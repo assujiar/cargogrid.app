@@ -453,10 +453,14 @@ begin
   select * into v_bill from app.finance_vendor_bills where tenant_id = v_tenant_a and status = 'posted';
 
   begin
+    -- ISS-2026-146: financemanagerb has zero app.principal_memberships row in tenant A
+    -- at all, so app.discard_finance_vendor_bill_draft's tenant-membership pre-check
+    -- now refuses with the same generic not-found a nonexistent bill id would, rather
+    -- than disclosing tenant A's real tenant_id via insufficient_authority.
     perform app.discard_finance_vendor_bill_draft(v_bill.id, v_bill.record_version, 'intruder attempt', '00000000-0000-0000-0000-000000030506', 'financemanagerb');
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Manager B holds no FIN grant for tenant A';
+    raise exception 'assertion failed: expected finance_vendor_bill_not_found for a caller with zero relationship to tenant A, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 

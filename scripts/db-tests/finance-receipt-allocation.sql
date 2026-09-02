@@ -426,14 +426,18 @@ begin
   select id into v_item_500 from app.finance_ar_open_items where tenant_id = v_tenant_a and original_amount = 500000;
 
   begin
+    -- ISS-2026-146: financemanagerb has zero app.principal_memberships row in tenant A
+    -- at all, so app.allocate_finance_receipt's tenant-membership pre-check now refuses
+    -- with the same generic not-found a nonexistent receipt id would, rather than
+    -- disclosing tenant A's real tenant_id via insufficient_authority.
     perform app.allocate_finance_receipt(
       v_receipt_id, 'intruder-alloc',
       jsonb_build_array(jsonb_build_object('arOpenItemId', v_item_500, 'amount', 100000)),
       '00000000-0000-0000-0000-000000028505', 'financemanagerb'
     );
-    raise exception 'assertion failed: expected insufficient_authority -- Finance Manager B holds no FIN grant for tenant A';
+    raise exception 'assertion failed: expected finance_receipt_not_found for a caller with zero relationship to tenant A, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 

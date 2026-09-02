@@ -404,9 +404,13 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: admin2 has zero app.principal_memberships row in tenant1 at all,
+    -- so app.set_scaling_recommendation_status's tenant-membership pre-check now
+    -- refuses with the same generic not-found a nonexistent recommendation id would,
+    -- rather than disclosing tenant1's real tenant_id via insufficient_authority.
     perform app.set_scaling_recommendation_status(v_recommendation_id, 'acknowledged', null, v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 changing tenant1''s own recommendation status, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected scaling_recommendation_not_found for admin2 changing tenant1''s own recommendation status, the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 

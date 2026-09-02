@@ -365,12 +365,18 @@ begin
   select * into v_rate from app.finance_exchange_rates where tenant_id = v_tenant_a and source_currency = 'USD' and target_currency = 'IDR' and status = 'approved';
 
   begin
+    -- ISS-2026-146: financemanagerb has zero app.principal_memberships row in tenant A
+    -- at all, so app.discard_finance_exchange_rate_draft's tenant-membership pre-check
+    -- now refuses with the same generic not-found a nonexistent rate id would, before
+    -- ever reaching the (approved, not draft) status check below it -- still proves
+    -- Finance Manager B cannot mutate tenant A's rate, now without disclosing tenant
+    -- A's real tenant_id to a caller with no relationship to it.
     perform app.discard_finance_exchange_rate_draft(v_rate.id, v_rate.record_version, 'intruder attempt', '00000000-0000-0000-0000-000000024505', 'financemanagerb');
-    raise exception 'assertion failed: expected finance_exchange_rate_not_draft (the rate is approved) rather than a cross-tenant leak -- still proves Finance Manager B cannot mutate it as a draft';
+    raise exception 'assertion failed: expected finance_exchange_rate_not_found for a caller with zero relationship to tenant A, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm !~ 'finance_exchange_rate_not_draft' then
-        raise exception 'assertion failed: expected finance_exchange_rate_not_draft, got %', sqlerrm;
+      if sqlerrm !~ 'finance_exchange_rate_not_found' then
+        raise exception 'assertion failed: expected finance_exchange_rate_not_found, got %', sqlerrm;
       end if;
   end;
 
