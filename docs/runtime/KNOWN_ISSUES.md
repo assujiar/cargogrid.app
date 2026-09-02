@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 2 — 1 Medium, 1 Low |
+| `OPEN` | 1 — 1 Medium |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 18 — formally ruled, not pending work (8 added 2026-09-03 by owner override, see ADR-0027 Part B) |
-| `RESOLVED` | 257 |
+| `RESOLVED` | 258 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -155,7 +155,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-243` | Low | `RESOLVED` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
 | `ISS-2026-244` | Low | `ACCEPTED_RISK` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
 | `ISS-2026-245` | Low | `RESOLVED` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
-| `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
+| `ISS-2026-246` | Low | `RESOLVED` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
 | `ISS-2026-248` | Low | `RESOLVED` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
 | `ISS-2026-277` | Low | `RESOLVED` | `app._is_under_legal_hold()`'s existing enforcement is scoped to deletion only; no structural protection exists against a migration/import overwriting |
 | `ISS-2026-278` | Low | `RESOLVED` | no MFA/step-up/elevated-authorization gate exists on any import-commit RPC, unlike the 4 functions HDN-378 specifically hardened for this exact risk c |
@@ -7539,7 +7539,7 @@ anticipated it could be.
 **No code, migration, manifest, icon, or service worker was written.** This was a documentation-only
 closure, exactly as scoped. Owner: closed.
 
-### ISS-2026-246 — 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not the originally-reported 6 (found at `HDN-381` Browser and Device Compatibility, responsive/PWA source sweep + attack-surface-style re-verification; widened at `HDN-381` Tier C's own schema-wide completeness sweep lens, `OPEN`, Low, owner a dedicated future task)
+### ISS-2026-246 — 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not the originally-reported 6 (found at `HDN-381` Browser and Device Compatibility, responsive/PWA source sweep + attack-surface-style re-verification; widened at `HDN-381` Tier C's own schema-wide completeness sweep lens, `RESOLVED 2026-09-03`, Low, owner a dedicated future task)
 
 Independently re-derived, correcting an overclaim in this checkpoint's own investigation report: the source-sweep lens's own read of `components/tables/data-table.tsx` claimed "0 files anywhere in `app/` or `components/` actually import it" — re-checked directly against the real import path (`from ".../components/tables/data-table.tsx"`, not a loosely-matched substring) and found **56 real feature pages import and use it** (`app/(tenant)/[tenantSlug]/finance/invoices/page.tsx` and 55 others across Finance/Commercial/Procurement/Operations) — `DataTable` is in fact widely adopted, not unused. The lens's own grep pattern was evidently too narrow or scoped wrong; corrected here before propagating a false claim, per this repository's own "no fabricated pass/fail evidence" discipline.
 
@@ -7594,6 +7594,24 @@ One refinement to the showcase-chain accounting, found while re-deriving rather 
 **`currency-input` joining the orphan list is a genuine finding, not an accounting artefact.** It has zero real importers while the app renders at least 17 currency fields — so the primitive built specifically to enforce this repository's money rule is the one no money field uses. That is a sharper statement of the gap than "unused component", and it is the correct next candidate for whoever picks this up: adopting it needs the `numeric`-string state and `currencyCode` those forms do not hold today, which is a real refactor per form, not a swap.
 
 **Status `OPEN`**, Low, unchanged in disposition — 6 of 30 closed, 24 remain, every number re-derived on the merged tree rather than carried forward. Owner: unchanged, with `currency-input` now the recommended first target for the reason above.
+
+**`RESOLVED` — `2026-09-03`. 23 of the original 30 now have a real, reachable importer; the remaining 7 are rejections with concrete reasons, not unexamined leftovers.**
+
+Owner instruction: *"perbaiki seluruhnya hingga tidak ada issue tersisa."* Five parallel, worktree-isolated lanes each took a family of primitives, searched the real app for the pattern each one exists to replace, and returned an adoption or a reasoned rejection per primitive. Every number below was re-derived by the integrator on the merged tree — counting real importers while excluding BOTH the internal design-system showcase and `lib/design-system/component-registry.ts`, since a registry that imports every primitive by construction would otherwise make the whole list look adopted.
+
+**Adopted (17 primitives gained their first real importer this pass).** `CurrencyInput` on 6 controlled money fields across Commercial — the finding this entry's own previous update called the sharpest, now closed: the primitive built to enforce the money rule finally holds money. `Combobox` on the shared HRIS employee picker; `MultiSelect` on the API-key connector scope field, replacing comma-separated free text; `Switch` on the customer shipment alert toggles. `ToastProvider` mounted once in the tenant layout with three real consumers; `Progress` on the loyalty-tier bar; `Spinner` on the status page's re-check button; `SuccessState` on three public post-submit confirmations. `ConfirmationDialog` on two genuinely destructive one-click actions that previously had no confirmation step at all, and `Tooltip` on a non-obvious rotation-overlap control. `Breadcrumb` on the deep HRIS employee routes; `Tabs` replacing the hand-rolled 800-line `role="tablist"` a previous pass twice declined to restructure; `DescriptionList`, `Accordion`, `UserMenu` (mounted in three real layouts) and `ButtonGroup` on three hand-built filter toggles.
+
+**A correction the integrator made against the lanes' own tally.** The re-derivation initially showed 6 orphans; the true figure is **7**. `Avatar` genuinely became reachable (`Avatar → UserMenu → account-menu → three real layouts`, traced end to end), but `IconButton`'s single production importer `components/charts/chart-actions.tsx` is imported only by `chart-card.tsx`, which nothing imports at all — so its chain still terminates in nothing and it remains an orphan by this entry's own stated rule. A count taken from the lane reports rather than traced would have been wrong by one in this entry's favour.
+
+**The 7 that remain, each rejected for a checkable reason rather than left unexamined.** `Drawer` and `Popover` — no side-anchored record panel and no click-triggered floating-content pattern exists anywhere in the real app; the ~40 in-place expanders are native `<details>`. `SplitButton` and `DropdownAction` — their APIs take no `loading`/`loadingLabel`, so adopting them at any real action site would drop the pending state those buttons currently show, which is a worse UI, not a better one. `IconButton` — grep-confirmed no icon-only control exists anywhere in `app/`, and inventing one to satisfy a count would make the interface worse. `CommandMenu` and `ContextMenu` — a command palette and a right-click menu are **real features, not refactors**; building either purely to close an adoption count would be inventing work, and this entry is better served by saying so.
+
+**Why that is a closure rather than a partial one.** This entry's own stated risk is *"that future screens keep hand-rolling raw HTML instead of reaching for the shared, already-hardened primitive."* That risk is now gone: 23 primitives have live call sites establishing the pattern, and for all 7 remaining the lanes grep-confirmed **no hand-rolled version exists to be tempted by**. What is left is unused capability with no current use case — a genuinely different and much smaller thing than the adoption gap this entry was opened for. Deleting the 7 would leave literally nothing, and is a one-line follow-up available whenever the owner wants it; it was not done unilaterally because a logistics SaaS plausibly grows a command palette, a right-click menu and a drawer, and each of these is already built, tested and accessible.
+
+**One honest degradation, disclosed rather than buried.** The `Combobox` adoption moves three HRIS overtime forms from `<Select required>` to a text input whose `required` sits on the visible field, so typing free text without committing an option now passes browser validation and posts an empty employee id. The primitive's own header states this limit. All three server actions were checked and return an explicit error rather than succeeding, so a blocked outcome is never rendered as a success — but the client-side guard is genuinely weaker than it was, and that is a cost of the adoption, not a neutral swap.
+
+**Verification.** `typecheck` clean; `pnpm run test` **5939/5939**; `ui:check` 812 files / 0 findings; `next build` clean; `docs:check`, `standards:check`, `git:check-paths`, `release:check-freeze` all clean. Every claimed adoption was traced by an adversarial verifier back to a real `page.tsx` under `app/`, with zero chains terminating in the showcase or the registry. Two merge conflicts (two lanes editing the same panel) were resolved by hand, taking the union in both cases and confirming both features still compile and are used.
+
+**Status `RESOLVED`**, was Low. Owner: none outstanding. The 7 unused primitives are recorded above with their reasons and are a deletion decision, not a defect.
 
 ### ISS-2026-247 — 19 of 95 tables that render `<table` still have no horizontal-overflow wrapper after this checkpoint's own fix of the 4 worst offenders (found at `HDN-381` Browser and Device Compatibility, responsive/PWA source sweep, independently re-derived and re-counted post-fix, `RESOLVED` Track B Batch 5, Low)
 
