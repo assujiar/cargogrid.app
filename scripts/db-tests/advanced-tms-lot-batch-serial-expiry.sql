@@ -479,11 +479,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2b-attacker 160107 (tenant2's rep, zero membership in lbs1).
+    -- app.register_serial_identity now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic item_master_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.register_serial_identity(v_serial_id, 'SN-DEFAULT-HOLD', null, null, null, 'receipt', null, 'idem-sn-default-hold', '00000000-0000-0000-0000-000000160107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach app.register_serial_identity''s own idempotent replay short-circuit on tenant1''s real serial';
+    raise exception 'assertion failed: expected item_master_not_found (ISS-2026-146) -- tenant2''s rep must not reach app.register_serial_identity''s own idempotent replay short-circuit on tenant1''s real serial';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'item_master_not_found%' then raise; end if;
   end;
 end $$;
 

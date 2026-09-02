@@ -946,19 +946,29 @@ begin
     -- Reuses a REAL, already-consumed tenant1 idempotency key -- must still be rejected
     -- on authority grounds, never silently short-circuited into tenant1's real data
     -- (bug class a regression).
+    -- ISS-2026-146: the probing actor is v_tenant2_rep 200209 (tenant2's rep, zero membership in tenant1).
+    -- app.create_wms_outbound_shipment now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic outbound_order_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.create_wms_outbound_shipment(v_order_a_id, 'idem-ship-a', v_tenant2_rep, 'rep2b');
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor against a tenant1 order';
+    raise exception 'assertion failed: expected outbound_order_not_found (ISS-2026-146) for a tenant2 actor against a tenant1 order';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'outbound_order_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is v_tenant2_rep 200209 (tenant2's rep, zero membership in tenant1).
+    -- app.add_package_to_shipment now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic shipment_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.add_package_to_shipment(v_ship_a_id, v_pkg_a1_id, 'idem-ship-a-add', v_tenant2_rep, 'rep2b');
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor';
+    raise exception 'assertion failed: expected shipment_not_found (ISS-2026-146) for a tenant2 actor';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'shipment_not_found%' then raise; end if;
   end;
 
   begin

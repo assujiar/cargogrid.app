@@ -987,11 +987,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is v_tenant2_rep 210009 (tenant2's rep, zero membership in whbill1).
+    -- app.calculate_warehouse_billing_event now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic warehouse_billing_event_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.calculate_warehouse_billing_event(v_event_id, 1, null, v_tenant2_rep, 'rep2');
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor calculating a tenant1 billing event';
+    raise exception 'assertion failed: expected warehouse_billing_event_not_found (ISS-2026-146) for a tenant2 actor calculating a tenant1 billing event';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'warehouse_billing_event_not_found%' then raise; end if;
   end;
 
   begin

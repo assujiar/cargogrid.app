@@ -507,11 +507,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: the probing actor is rep2 070107 (acmewms2's rep, zero membership in acmewms).
+    -- app.update_warehouse now folds a caller with zero
+    -- membership in the probed record's own tenant into the SAME generic warehouse_not_found
+    -- a nonexistent id already produced, instead of an insufficient_authority message
+    -- carrying that tenant's real tenant_id. The refusal itself is unchanged.
     perform app.update_warehouse(v_wh1, 'Hijacked name', null, 'Asia/Jakarta', null, '{}'::text[], 1, '00000000-0000-0000-0000-000000070107', 'rep2');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep2 has no membership in acmewms (tenant1)';
+    raise exception 'assertion failed: expected warehouse_not_found (ISS-2026-146) -- tenant2''s rep2 has no membership in acmewms (tenant1)';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'warehouse_not_found%' then raise; end if;
   end;
 end $$;
 
