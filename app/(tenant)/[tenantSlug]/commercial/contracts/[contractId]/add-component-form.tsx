@@ -64,12 +64,12 @@ export function AddComponentForm({ tenantSlug, contractId }: { tenantSlug: strin
         </div>
         <div className="w-36">
           <FormField id="add-component-base-amount" label={<span className="sr-only">Base amount</span>}>
-            <NumberInput id="add-component-base-amount" min={0} placeholder="Base amount" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+            <Input type="number" inputMode="decimal" id="add-component-base-amount" min={0} placeholder="Base amount" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
           </FormField>
         </div>
         <div className="w-36">
           <FormField id="add-component-minimum-amount" label={<span className="sr-only">Minimum amount</span>}>
-            <NumberInput id="add-component-minimum-amount" min={0} placeholder="Minimum (optional)" value={minimumAmount} onChange={(e) => setMinimumAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+            <Input type="number" inputMode="decimal" id="add-component-minimum-amount" min={0} placeholder="Minimum (optional)" value={minimumAmount} onChange={(e) => setMinimumAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
           </FormField>
         </div>
         <div className="w-28">

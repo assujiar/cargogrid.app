@@ -3479,7 +3479,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // `stable` app.get_loyalty_engagement_metrics becomes genuinely schedulable instead of
   // computing a result and discarding it every fire, registered as catalogue task 23 with
   // app._run_scheduled_task_once reproduced from its live 22-branch definition plus one branch.
-  migrationSetSha256: "d0f1474e7bb323bd215d81f70e8f33734aa897b2fd6c606ad96abc587c711fb0",
+  // HUNDREDTH PASS (2026-09-03, ISS-2026-146 batch 3): 496 files (+15). Fifteen new corrective
+  // migrations from four parallel lanes closing the ENTIRE remaining ISS-2026-146 at-risk surface
+  // -- 435 SECURITY DEFINER functions across Procurement (4 files, 96 fns), Advanced TMS/WMS (3,
+  // 122), the cross-cutting harden_* set (4, 115) and Ticketing/Platform/Finance/Commercial (4,
+  // 102). Each folds app.has_active_tenant_membership into the SAME not-found branch the row-miss
+  // case already raises, so a zero-membership foreign caller gets the generic no_data_found a
+  // nonexistent id would, while a same-tenant member lacking role authority still reaches
+  // insufficient_authority. Every body is otherwise verbatim its live predecessor. Classifier
+  // re-derived centrally after the merge: RISK_UNSCOPED_LOOKUP 468 sites / 436 functions -> 0 / 0.
+  migrationSetSha256: "4d064ccc938fcbf43cddcee5165b43b08f89a556ab4b70dc3eb3c9dea62907ff",
+  // History: d0f1474e7bb323bd215d81f70e8f33734aa897b2fd6c606ad96abc587c711fb0
+  // (481 files, ISS-2026-134 item 4's loyalty engagement-metrics snapshot).
   // History: ab38d1bb191f83ca6e65c3c69a1d176bd89d2efaee4d8a1e4553eb9b02ba1272
   // (480 files, ISS-2026-070 item 1's three remaining PLT-127 notification wiring points).
   // History: 4d31bb05a7c787ac40e42b06513659f22ec8ceb4c31992c8d6ac2b295a88558e
@@ -4194,7 +4205,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // metrics RPC refuses are refused here and persist nothing; task-scheduler.sql: the catalogue
   // count, the list-every-available-task assertion and the every-task-reaches-a-dispatch-branch
   // loop all move from 22 to 23, the loop also supplying the new task's required window_days).
-  dbTestSetSha256: "51695bdf21337090c1e3d3314b7aa4d78ce3f39fd574963319d981655691b391",
+  // HUNDREDTH PASS (2026-09-03, ISS-2026-146 batch 3): 250 files (+3). Three new two-actor
+  // redaction regressions (tenant-id-error-message-redaction-batch3.sql, -tms-wms.sql, -misc.sql),
+  // each proving a zero-membership foreign caller now gets a generic not-found indistinguishable
+  // from a nonexistent id WHILE a same-tenant member lacking role authority still gets
+  // insufficient_authority -- the distinction the whole fix turns on. Plus 34 pre-existing
+  // db-tests updated where a fixture's cross-tenant actor legitimately now sees the new shape;
+  // every one updates its assertion, none deletes or weakens it.
+  dbTestSetSha256: "a5878f102a570613a93841c439ebf859a3b37c760ff8cc34aec678f73c0399c6",
+  // History: 51695bdf21337090c1e3d3314b7aa4d78ce3f39fd574963319d981655691b391
+  // (247 files, ISS-2026-134 item 4's snapshot regressions).
   // History: f039b0b7f3026dbafb24371dc1d23328d3c13fa06bd666441514d994a2cd5fe9
   // (247 files, ISS-2026-070 item 1's notification-wiring regressions).
   // History: 865ecccb290a594792b9e198fc8d8d07b21d4be9394a83a6ae17b0f11a1d0dcd

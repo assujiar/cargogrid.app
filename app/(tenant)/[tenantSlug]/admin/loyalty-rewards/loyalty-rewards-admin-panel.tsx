@@ -137,7 +137,7 @@ export function CreateLoyaltyRewardForm({ tenantSlug, programId, publishedTiers 
           <NumberInput id="lr-total-stock" name="totalStock" step="1" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
         </FormField>
         <FormField id="lr-internal-cost" label="Internal cost (never shown to customers)">
-          <NumberInput id="lr-internal-cost" name="internalCost" step="0.01" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          <Input type="number" inputMode="decimal" id="lr-internal-cost" name="internalCost" step="0.01" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
         </FormField>
         <FormField id="lr-vendor-ref" label="Vendor reference (never shown to customers)">
           <Input id="lr-vendor-ref" name="vendorRef" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />

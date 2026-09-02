@@ -10,7 +10,6 @@ import {
 } from "../actions.ts";
 import { OPPORTUNITY_STAGES, type OpportunityStage, type OpportunityRequirements } from "../../../../../../server/contracts/opportunity/opportunity.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { DateInput } from "../../../../../../components/forms/date-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
@@ -108,7 +107,7 @@ export function OpportunityActionsPanel({
           <div className="flex gap-2">
             <div className="w-32">
               <FormField id="opportunity-value-amount" label={<span className="sr-only">Amount</span>}>
-                <NumberInput id="opportunity-value-amount" min={0} placeholder="Amount" value={valueAmount} onChange={(e) => setValueAmount(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
+                <Input type="number" inputMode="decimal" id="opportunity-value-amount" min={0} placeholder="Amount" value={valueAmount} onChange={(e) => setValueAmount(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
               </FormField>
             </div>
             <div className="w-32">

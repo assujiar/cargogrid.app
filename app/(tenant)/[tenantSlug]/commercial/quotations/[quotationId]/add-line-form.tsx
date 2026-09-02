@@ -89,7 +89,7 @@ export function AddLineForm({
         </div>
         <div className="w-36">
           <FormField id="add-line-unit-price" label={<span className="sr-only">Unit price</span>}>
-            <NumberInput id="add-line-unit-price" min={0} placeholder="Unit price" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+            <Input type="number" inputMode="decimal" id="add-line-unit-price" min={0} placeholder="Unit price" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
           </FormField>
         </div>
         <div className="w-28">

@@ -66,7 +66,7 @@ export function CalculateMarginForm({
           <div className="flex gap-2">
             <div className="w-40">
               <FormField id="margin-sell-amount" label={<span className="sr-only">Sell amount</span>}>
-                <NumberInput id="margin-sell-amount" min={0} placeholder="Sell amount" value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} aria-describedby={describedBy} />
+                <Input type="number" inputMode="decimal" id="margin-sell-amount" min={0} placeholder="Sell amount" value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} aria-describedby={describedBy} />
               </FormField>
             </div>
             <div className="w-32">

@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { createCreditOverrideAction } from "./credit-actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
@@ -26,7 +25,7 @@ export function OverrideForm({ tenantSlug, accountId, profileId }: { tenantSlug:
       <div className="flex gap-2">
         <div className="w-40">
           <FormField id="override-amount" label={<span className="sr-only">Override amount</span>}>
-            <NumberInput id="override-amount" min={0} placeholder="Override amount" value={amount} onChange={(e) => setAmount(e.target.value)} invalid={Boolean(error)} aria-describedby={describedBy} />
+            <Input type="number" inputMode="decimal" id="override-amount" min={0} placeholder="Override amount" value={amount} onChange={(e) => setAmount(e.target.value)} invalid={Boolean(error)} aria-describedby={describedBy} />
           </FormField>
         </div>
         <FormField id="override-expires-at" label={<span className="sr-only">Expires at</span>}>

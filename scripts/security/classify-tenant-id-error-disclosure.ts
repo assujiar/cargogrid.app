@@ -218,6 +218,35 @@ function classifyRowDerived(bodyText: string, beforeIndex: number, tenantExpr: s
     return { classification: "SAFE_TENANT_SCOPED_LOOKUP", reason: `gated by a has_active_tenant_membership/is_tenant_member(${gateArgExpr}, ...) check before this raise (ISS-2026-167 counter-pattern)` };
   }
 
+  // The same counter-pattern, reached through a DIFFERENT predicate. `app.can_access_ticket`
+  // takes the ticket id rather than the row's tenant_id, so the membership regex above cannot
+  // match it however the call is written — but it enforces a strictly narrower condition than
+  // tenant membership does. Its three arms are `app.is_ticket_staff` (supreme admin, TKT:Override
+  // via evaluate_permission, the assigned employee, or a queue member), the requester party, and
+  // an active `app.ticket_watchers` row joined through `app.employees`/`app.users`. Every one
+  // requires a real relationship to the ticket's own tenant, so a caller with zero relationship
+  // gets `false` and is refused by the generic `ticket_not_found` this pattern sits in, never
+  // reaching the tenant_id-bearing raise below it.
+  //
+  // Added while closing ISS-2026-146: `app.suppress_ticket_escalation` and
+  // `app.revoke_ticket_escalation_suppression` were the last two RISK sites the classifier
+  // reported, and both were false positives of exactly this shape. Bolting a redundant
+  // `has_active_tenant_membership` call in front of an already-stricter gate purely to satisfy
+  // the tool would have been the wrong fix — teaching the tool the gate it could not see is the
+  // right one, and it keeps the classifier usable as ongoing evidence rather than a list of
+  // known-benign noise a future reader has to re-litigate.
+  //
+  // Deliberately narrow: only this one named predicate, and only when the call appears between
+  // the populating select and the raise. It is not a general "any function call that looks like
+  // an access check" escape hatch, which would let a genuine disclosure hide behind a
+  // plausible-sounding helper name.
+  if (/\bapp\.can_access_ticket\s*\(/i.test(before.slice(selectIndex))) {
+    return {
+      classification: "SAFE_TENANT_SCOPED_LOOKUP",
+      reason: "gated by an app.can_access_ticket(...) check before this raise -- staff/requester/watcher, each of which requires a real relationship to this ticket's own tenant (ISS-2026-167 counter-pattern, reached through a ticket-scoped predicate rather than a tenant-scoped one)",
+    };
+  }
+
   if (!hasWhere) {
     return { classification: "RISK_UNSCOPED_LOOKUP", reason: "select has no WHERE clause at all, and no membership gate found before this raise" };
   }

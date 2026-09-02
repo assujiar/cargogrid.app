@@ -143,7 +143,7 @@ export function CreateRuleVersionForm({ tenantSlug, programId, disabled }: { ten
         <NumberInput id="rv-rate" name="rate" step="0.0001" min="0.0001" required disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
       <FormField id="rv-min" label="Minimum invoice amount to be eligible (optional)">
-        <NumberInput id="rv-min" name="minInvoiceAmount" step="0.01" min="0" disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <Input type="number" inputMode="decimal" id="rv-min" name="minInvoiceAmount" step="0.01" min="0" disabled={disabled} invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
       <ErrorBanner id="rv-create-error" error={state.error} />
       <Button type="submit" loading={pending} loadingLabel="Creating…" disabled={disabled} className="w-fit">

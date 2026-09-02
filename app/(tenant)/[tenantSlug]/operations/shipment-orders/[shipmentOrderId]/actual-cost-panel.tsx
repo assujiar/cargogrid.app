@@ -213,10 +213,10 @@ function AddComponentForm({
         <NumberInput id="component-rate" name="rate" required min={0} step="any" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
       <FormField id="component-minimum-charge" label="Minimum">
-        <NumberInput id="component-minimum-charge" name="minimumCharge" min={0} step="any" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <Input type="number" inputMode="decimal" id="component-minimum-charge" name="minimumCharge" min={0} step="any" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
       <FormField id="component-surcharge" label="Surcharge">
-        <NumberInput id="component-surcharge" name="surcharge" min={0} step="any" defaultValue={0} className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <Input type="number" inputMode="decimal" id="component-surcharge" name="surcharge" min={0} step="any" defaultValue={0} className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
         Add component

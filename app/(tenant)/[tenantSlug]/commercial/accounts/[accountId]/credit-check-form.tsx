@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { checkCustomerCreditAction, type CheckCreditFormState } from "./credit-actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
@@ -34,7 +33,7 @@ export function CreditCheckForm({ tenantSlug, accountId }: { tenantSlug: string;
         </div>
         <div className="w-48">
           <FormField id="credit-check-amount" label={<span className="sr-only">Transaction amount</span>}>
-            <NumberInput id="credit-check-amount" name="requestedAmount" min={0} placeholder="Transaction amount" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            <Input type="number" inputMode="decimal" id="credit-check-amount" name="requestedAmount" min={0} placeholder="Transaction amount" invalid={Boolean(state.error)} aria-describedby={describedBy} />
           </FormField>
         </div>
       </div>

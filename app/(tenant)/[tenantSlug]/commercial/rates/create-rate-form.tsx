@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { RateFormState } from "./actions.ts";
 import { Input } from "../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 
@@ -42,7 +41,7 @@ export function CreateRateVersionForm({ action }: { action: (prevState: RateForm
           <Input id="currency" name="currency" type="text" placeholder="IDR" maxLength={3} required invalid={invalid} aria-describedby={describedBy} />
         </FormField>
         <FormField id="baseAmount" label="Base amount">
-          <NumberInput id="baseAmount" name="baseAmount" min={0} required invalid={invalid} aria-describedby={describedBy} />
+          <Input type="number" inputMode="decimal" id="baseAmount" name="baseAmount" min={0} required invalid={invalid} aria-describedby={describedBy} />
         </FormField>
       </div>
 

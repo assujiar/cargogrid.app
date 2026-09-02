@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
 import { NumberInput } from "../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
@@ -38,7 +39,7 @@ export function CreateApprovalRuleForm({ action }: { action: (prevState: Quotati
 
       <FormField id="minValueAmount" label="Minimum value (at or above this, approval is required)">
         <div className="w-48">
-          <NumberInput id="minValueAmount" name="minValueAmount" min={0} step="0.01" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          <Input type="number" inputMode="decimal" id="minValueAmount" name="minValueAmount" min={0} step="0.01" invalid={Boolean(state.error)} aria-describedby={describedBy} />
         </div>
       </FormField>
 

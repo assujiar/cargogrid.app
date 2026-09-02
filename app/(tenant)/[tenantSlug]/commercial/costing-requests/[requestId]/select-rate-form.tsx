@@ -5,7 +5,6 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { selectVendorRateAction } from "./actions.ts";
 import type { RateVersion } from "../../../../../../server/contracts/rate/rate.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { RadioGroup } from "../../../../../../components/forms/radio.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
@@ -73,7 +72,7 @@ export function SelectRateForm({ tenantSlug, requestId, candidateRates }: { tena
           </div>
           <div className="w-40">
             <FormField id="select-rate-adhoc-amount" label={<span className="sr-only">Amount</span>}>
-              <NumberInput id="select-rate-adhoc-amount" min={0} placeholder="Amount" value={adhocAmount} onChange={(e) => setAdhocAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+              <Input type="number" inputMode="decimal" id="select-rate-adhoc-amount" min={0} placeholder="Amount" value={adhocAmount} onChange={(e) => setAdhocAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
             </FormField>
           </div>
         </div>
