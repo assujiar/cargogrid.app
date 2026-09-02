@@ -79,7 +79,7 @@ export function BulkReassignPanel({
           managerEmployeeId: rowFor(e.masterRecordId).managerEmployeeId || null,
           assignmentType: rowFor(e.masterRecordId).assignmentType,
         })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rowFor reads `rows`, already a dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- SUPPRESS(owner=hris, reason=rowFor already reads the listed rows dependency, expires=NONE, adr=NONE)
     [selectedEmployees, rows],
   );
   const missingPositionCount = selectedEmployees.length - readyItems.length;
