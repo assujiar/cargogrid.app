@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { ButtonGroup } from "../../../../../components/ui/button-group.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
@@ -55,20 +56,29 @@ export function ComplianceMatrixPanel({
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex gap-1 rounded-md border border-neutral-300 p-1 text-sm">
-            <button type="button" onClick={() => applyFilter("", false)} className={`rounded px-3 py-1 ${!statusFilter && !holdOnly ? "bg-primary text-neutral-50" : ""}`}>
+          {/* ISS-2026-246: this was four raw `<button>`s inside a hand-rolled pill wrapper --
+              exactly the "segmented set of mutually exclusive actions" `ButtonGroup`
+              (`components/ui/button-group.tsx`) exists for, re-implemented locally. Adopting the
+              primitive gives the set an accessible group name it never had (`role="group"` +
+              `aria-label`), replaces the ad-hoc `bg-primary` selected styling with the shared
+              `Button` primary/secondary variants, and lifts each control from ~28px to the
+              `Button` 44px touch-target floor. Every `onClick` and its exact `applyFilter`
+              arguments are unchanged; `aria-pressed` is added because selection was previously
+              conveyed by colour alone. */}
+          <ButtonGroup label="Compliance view">
+            <Button type="button" variant={!statusFilter && !holdOnly ? "primary" : "secondary"} aria-pressed={!statusFilter && !holdOnly} onClick={() => applyFilter("", false)}>
               All
-            </button>
-            <button type="button" onClick={() => applyFilter("", true)} className={`rounded px-3 py-1 ${holdOnly ? "bg-primary text-neutral-50" : ""}`}>
+            </Button>
+            <Button type="button" variant={holdOnly ? "primary" : "secondary"} aria-pressed={holdOnly} onClick={() => applyFilter("", true)}>
               Eligibility holds
-            </button>
-            <button type="button" onClick={() => applyFilter("expiring_soon", false)} className={`rounded px-3 py-1 ${statusFilter === "expiring_soon" ? "bg-primary text-neutral-50" : ""}`}>
+            </Button>
+            <Button type="button" variant={statusFilter === "expiring_soon" ? "primary" : "secondary"} aria-pressed={statusFilter === "expiring_soon"} onClick={() => applyFilter("expiring_soon", false)}>
               Expiring soon
-            </button>
-            <button type="button" onClick={() => applyFilter("expired", false)} className={`rounded px-3 py-1 ${statusFilter === "expired" ? "bg-primary text-neutral-50" : ""}`}>
+            </Button>
+            <Button type="button" variant={statusFilter === "expired" ? "primary" : "secondary"} aria-pressed={statusFilter === "expired"} onClick={() => applyFilter("expired", false)}>
               Expired
-            </button>
-          </div>
+            </Button>
+          </ButtonGroup>
           <FormField id="compliance-status" label="Status">
             <Select id="compliance-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, holdOnly)}>
               <option value="">All statuses</option>

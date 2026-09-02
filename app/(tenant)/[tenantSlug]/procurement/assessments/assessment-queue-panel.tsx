@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { ButtonGroup } from "../../../../../components/ui/button-group.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
@@ -63,14 +64,18 @@ export function AssessmentQueuePanel({
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex gap-1 rounded-md border border-neutral-300 p-1 text-sm">
-            <button type="button" onClick={() => applyFilter(statusFilter ?? "", true)} className={`rounded px-3 py-1 ${assignedToMe ? "bg-primary text-neutral-50" : ""}`}>
+          {/* ISS-2026-246: same hand-rolled segmented control as `compliance-matrix-panel.tsx`
+              carried, now the shared `ButtonGroup` primitive. Both `onClick` handlers keep their
+              exact `applyFilter` arguments; the set gains an accessible group name, the shared
+              `Button` variants, `aria-pressed`, and the 44px touch-target floor. */}
+          <ButtonGroup label="Assessment queue view">
+            <Button type="button" variant={assignedToMe ? "primary" : "secondary"} aria-pressed={assignedToMe} onClick={() => applyFilter(statusFilter ?? "", true)}>
               Assigned to me
-            </button>
-            <button type="button" onClick={() => applyFilter(statusFilter ?? "", false)} className={`rounded px-3 py-1 ${!assignedToMe ? "bg-primary text-neutral-50" : ""}`}>
+            </Button>
+            <Button type="button" variant={!assignedToMe ? "primary" : "secondary"} aria-pressed={!assignedToMe} onClick={() => applyFilter(statusFilter ?? "", false)}>
               All
-            </button>
-          </div>
+            </Button>
+          </ButtonGroup>
           <div className="flex flex-col gap-1">
             <label htmlFor="assessment-status" className="text-xs font-medium text-neutral-600">
               Status

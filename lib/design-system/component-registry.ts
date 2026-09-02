@@ -124,7 +124,12 @@ export const COMPONENT_REGISTRY: readonly ComponentEntry[] = [
     purpose: "A segmented set of mutually exclusive or related actions, joined into one visual control.",
     sourceFile: "components/ui/button-group.tsx",
     importSnippet: 'import { ButtonGroup } from "@/components/ui/button-group.tsx";',
-    consumers: ["components/ui/split-button.tsx"],
+    consumers: [
+      "components/ui/split-button.tsx",
+      "app/(tenant)/[tenantSlug]/procurement/compliance/compliance-matrix-panel.tsx",
+      "app/(tenant)/[tenantSlug]/procurement/assessments/assessment-queue-panel.tsx",
+      "app/(tenant)/[tenantSlug]/tickets/tickets-list-panel.tsx",
+    ],
     a11y: 'role="group" with a required label.',
     productionReady: true,
     citation: CHECKPOINT_4_CITATION,
