@@ -5,6 +5,17 @@
  * multiple-choice with chip display. Built on the same filtered-list pattern as
  * `Combobox`, minus single-value commit-and-close (selecting an option here removes it
  * from the remaining list and adds a chip instead).
+ *
+ * `ISS-2026-246` (first real consumer, the n8n connector scope picker): three additions,
+ * all made so that migrating a multi-value field OFF a comma-separated `Input` drops
+ * nothing it had.
+ *   - `invalid` and `aria-describedby`, matching `Input`/`Select`/`Combobox` -- the
+ *     `ISS-2026-242` wiring that points every control at its own error message, which
+ *     this primitive could not express. `required` is surfaced as `aria-required` on the
+ *     search box rather than as the native attribute: the search box is not the value
+ *     holder (the hidden inputs are), so a native `required` there would fire on typed
+ *     text rather than on a chosen value.
+ *   - `min-h-11`, HDN-381's 44px touch-target floor, which `Input` already carries.
  */
 
 import { useId, useMemo, useState } from "react";
@@ -23,9 +34,12 @@ export interface MultiSelectProps {
   readonly values: readonly string[];
   readonly onChange: (values: readonly string[]) => void;
   readonly disabled?: boolean;
+  readonly invalid?: boolean;
+  readonly required?: boolean;
+  readonly "aria-describedby"?: string;
 }
 
-export function MultiSelect({ id, name, label, options, values, onChange, disabled }: MultiSelectProps) {
+export function MultiSelect({ id, name, label, options, values, onChange, disabled, invalid, required, ...rest }: MultiSelectProps) {
   const generatedId = useId();
   const baseId = id ?? generatedId;
   const [query, setQuery] = useState("");
@@ -78,7 +92,10 @@ export function MultiSelect({ id, name, label, options, values, onChange, disabl
           setOpen(true);
         }}
         onBlur={() => setOpen(false)}
-        className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-text-primary disabled:cursor-not-allowed disabled:bg-neutral-100"
+        aria-invalid={invalid || undefined}
+        aria-required={required || undefined}
+        className={`w-full min-h-11 rounded-md border px-3 py-2 text-sm text-text-primary ${invalid ? "border-danger" : "border-neutral-300"} disabled:cursor-not-allowed disabled:bg-neutral-100`}
+        {...rest}
       />
       {name ? values.map((value) => <input key={value} type="hidden" name={name} value={value} />) : null}
       {open && available.length > 0 ? (

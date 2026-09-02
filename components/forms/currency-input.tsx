@@ -7,6 +7,17 @@
  * end, never binary float). A controlled component: the caller owns the string state
  * (e.g. from a form field), this component only sanitizes keystrokes to a valid
  * up-to-2-decimal numeric string and renders the paired currency code.
+ *
+ * `ISS-2026-246` (first real consumers, Commercial money fields): two additions, both
+ * made so that migrating a money field OFF `Input type="number"` drops nothing it had.
+ *   - `placeholder`, a plain passthrough to the `<input>`. Every money field this
+ *     replaces sits in a dense row whose visible field name IS its placeholder (the
+ *     `FormField` label there is `sr-only`), so without it the swap would erase the
+ *     only visible "which amount is this?" cue.
+ *   - `min-h-11`, HDN-381's 44px touch-target floor. `Input`/`Select`/`Checkbox` were
+ *     given that floor when HDN-381 swept the tree; this primitive was skipped because
+ *     it had no consumer to measure. Adopting it without the floor would have shrunk a
+ *     live control from 44px to ~36px.
  */
 
 import { forwardRef, type ChangeEvent } from "react";
@@ -19,6 +30,7 @@ export interface CurrencyInputProps {
   readonly value: string;
   readonly onValueChange: (value: string) => void;
   readonly currencyCode: string;
+  readonly placeholder?: string;
   readonly invalid?: boolean;
   readonly disabled?: boolean;
   readonly required?: boolean;
@@ -26,7 +38,7 @@ export interface CurrencyInputProps {
 }
 
 export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(function CurrencyInput(
-  { id, name, value, onValueChange, currencyCode, invalid = false, disabled = false, required = false, ...rest },
+  { id, name, value, onValueChange, currencyCode, placeholder, invalid = false, disabled = false, required = false, ...rest },
   ref,
 ) {
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
@@ -38,7 +50,7 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(fu
 
   return (
     <div
-      className={`flex items-stretch overflow-hidden rounded-md border ${invalid ? "border-danger" : "border-neutral-300"} ${
+      className={`flex min-h-11 items-stretch overflow-hidden rounded-md border ${invalid ? "border-danger" : "border-neutral-300"} ${
         disabled ? "bg-neutral-100" : "bg-surface"
       }`}
     >
@@ -51,10 +63,11 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(fu
         inputMode="decimal"
         value={value}
         onChange={handleChange}
+        placeholder={placeholder}
         disabled={disabled}
         required={required}
         aria-invalid={invalid || undefined}
-        className="w-full border-0 bg-transparent px-2 py-2 text-sm text-text-primary focus-visible:outline-none disabled:cursor-not-allowed disabled:text-neutral-400"
+        className="w-full border-0 bg-transparent px-2 py-2 text-sm text-text-primary placeholder:text-neutral-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-neutral-400"
         {...rest}
       />
     </div>

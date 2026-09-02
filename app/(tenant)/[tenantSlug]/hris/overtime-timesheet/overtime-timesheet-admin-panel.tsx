@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useId } from "react";
+import { useActionState, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Combobox } from "../../../../../components/forms/combobox.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
 import { Textarea } from "../../../../../components/forms/textarea.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
@@ -136,22 +137,57 @@ function DecideTimesheetEntryForm({
  * Nothing here re-checks that, and nothing here hides a control to simulate a permission: a
  * viewer who submits gets the RPC's own refusal, rendered as an error, which is the truthful
  * outcome rather than a guess made in the browser.
+ *
+ * `ISS-2026-246`: this picker is over the tenant's active employee directory (the page
+ * reads it capped at 200), not a small static enum -- `select.tsx`'s own header sends
+ * exactly that case to `Combobox` ("this component is for a small, known, static option
+ * list only"). Scrolling 200 names in a native dropdown is the thing typeahead exists
+ * for, and the list is already fetched and RLS-scoped, which is the mode `combobox.tsx`'s
+ * header documents (it never fetches on its own).
+ *
+ * Nothing the `<Select>` put in the DOM is dropped: `name="employeeId"` (a hidden input
+ * inside `Combobox`, so the three Server Actions still read the same field), `required`,
+ * the "Choose an employee…" prompt (now the placeholder), and the `FormField` label.
+ * `resetKey` reproduces the one behaviour a controlled component would otherwise lose --
+ * React 19 resets uncontrolled fields after a successful form action, which is how the
+ * old `<Select defaultValue="">` cleared itself; remounting on `reset` clears both the
+ * committed value and the typed query text together, so the two can never disagree.
  */
 function EmployeePicker({ employees, required = true }: { employees: readonly EmployeeOption[]; required?: boolean }) {
   const reactId = useId();
+  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const [resetKey, setResetKey] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const options = useMemo(
+    () => employees.map((e) => ({ value: e.masterRecordId, label: `${e.fullName} (${e.employeeNumber})` })),
+    [employees],
+  );
+
+  useEffect(() => {
+    const form = containerRef.current?.closest("form");
+    if (!form) return;
+    function handleReset() {
+      setEmployeeId(null);
+      setResetKey((key) => key + 1);
+    }
+    form.addEventListener("reset", handleReset);
+    return () => form.removeEventListener("reset", handleReset);
+  }, []);
+
   return (
-    <div className="flex-1">
+    <div className="flex-1" ref={containerRef}>
       <FormField id={reactId} label="Employee">
-        <Select id={reactId} name="employeeId" required={required} defaultValue="">
-          <option value="" disabled>
-            Choose an employee…
-          </option>
-          {employees.map((e) => (
-            <option key={e.masterRecordId} value={e.masterRecordId}>
-              {e.fullName} ({e.employeeNumber})
-            </option>
-          ))}
-        </Select>
+        <Combobox
+          key={resetKey}
+          id={reactId}
+          name="employeeId"
+          label="Employee"
+          options={options}
+          value={employeeId}
+          onChange={setEmployeeId}
+          placeholder="Choose an employee…"
+          required={required}
+        />
       </FormField>
     </div>
   );

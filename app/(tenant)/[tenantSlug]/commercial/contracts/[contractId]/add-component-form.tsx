@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { addPriceComponentAction } from "./actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { CurrencyInput } from "../../../../../../components/forms/currency-input.tsx";
 import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
@@ -64,12 +65,13 @@ export function AddComponentForm({ tenantSlug, contractId }: { tenantSlug: strin
         </div>
         <div className="w-36">
           <FormField id="add-component-base-amount" label={<span className="sr-only">Base amount</span>}>
-            <Input type="number" inputMode="decimal" id="add-component-base-amount" min={0} placeholder="Base amount" value={baseAmount} onChange={(e) => setBaseAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+            {/* ISS-2026-246: a money field, so `CurrencyInput` (numeric-shaped string + the currency this form already holds), never `Input type="number"`/`NumberInput` -- AGENTS.md's money rule. The sibling "Discount %" below stays a NumberInput: a percentage is not money. */}
+            <CurrencyInput id="add-component-base-amount" currencyCode={currency} placeholder="Base amount" value={baseAmount} onValueChange={setBaseAmount} invalid={invalid} aria-describedby={describedBy} />
           </FormField>
         </div>
         <div className="w-36">
           <FormField id="add-component-minimum-amount" label={<span className="sr-only">Minimum amount</span>}>
-            <Input type="number" inputMode="decimal" id="add-component-minimum-amount" min={0} placeholder="Minimum (optional)" value={minimumAmount} onChange={(e) => setMinimumAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+            <CurrencyInput id="add-component-minimum-amount" currencyCode={currency} placeholder="Minimum (optional)" value={minimumAmount} onValueChange={setMinimumAmount} invalid={invalid} aria-describedby={describedBy} />
           </FormField>
         </div>
         <div className="w-28">

@@ -5,6 +5,7 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { selectVendorRateAction } from "./actions.ts";
 import type { RateVersion } from "../../../../../../server/contracts/rate/rate.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { CurrencyInput } from "../../../../../../components/forms/currency-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { RadioGroup } from "../../../../../../components/forms/radio.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
@@ -72,7 +73,8 @@ export function SelectRateForm({ tenantSlug, requestId, candidateRates }: { tena
           </div>
           <div className="w-40">
             <FormField id="select-rate-adhoc-amount" label={<span className="sr-only">Amount</span>}>
-              <Input type="number" inputMode="decimal" id="select-rate-adhoc-amount" min={0} placeholder="Amount" value={adhocAmount} onChange={(e) => setAdhocAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+              {/* ISS-2026-246: an ad-hoc quoted price is money, so `CurrencyInput` bound to the currency this form already holds beside it -- never `Input type="number"` (AGENTS.md's money rule). */}
+              <CurrencyInput id="select-rate-adhoc-amount" currencyCode={adhocCurrency} placeholder="Amount" value={adhocAmount} onValueChange={setAdhocAmount} invalid={invalid} aria-describedby={describedBy} />
             </FormField>
           </div>
         </div>

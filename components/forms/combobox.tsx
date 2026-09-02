@@ -9,6 +9,17 @@
  * list -- for a large/unbounded reference set, the caller is responsible for
  * server-side search (`09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §11), this component never
  * fetches on its own.
+ *
+ * `ISS-2026-246` (first real consumer, the HRIS employee picker): two additions, both
+ * made so that migrating a picker OFF `Select` drops nothing it had.
+ *   - `required` and `aria-describedby`, plain passthroughs to the visible input. Every
+ *     `Select` this replaces carries them (`aria-describedby` is `ISS-2026-242`'s own
+ *     "every control points at its error message" wiring), and this primitive could not
+ *     express either. NOTE the honest limit of `required` here: it guards the empty
+ *     field, which is exactly what the `Select`'s `required` guarded; text typed without
+ *     picking an option still leaves the committed value null and is caught server-side.
+ *   - `min-h-11`, HDN-381's 44px touch-target floor, which `Select` already carries and
+ *     this primitive was skipped for because it had no consumer to measure.
  */
 
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -28,9 +39,11 @@ export interface ComboboxProps {
   readonly placeholder?: string;
   readonly disabled?: boolean;
   readonly invalid?: boolean;
+  readonly required?: boolean;
+  readonly "aria-describedby"?: string;
 }
 
-export function Combobox({ id, name, label, options, value, onChange, placeholder, disabled, invalid }: ComboboxProps) {
+export function Combobox({ id, name, label, options, value, onChange, placeholder, disabled, invalid, required, ...rest }: ComboboxProps) {
   const generatedId = useId();
   const baseId = id ?? generatedId;
   const listboxId = `${baseId}-listbox`;
@@ -83,6 +96,7 @@ export function Combobox({ id, name, label, options, value, onChange, placeholde
         aria-label={label}
         aria-invalid={invalid || undefined}
         autoComplete="off"
+        required={required}
         disabled={disabled}
         placeholder={placeholder}
         value={query}
@@ -97,7 +111,8 @@ export function Combobox({ id, name, label, options, value, onChange, placeholde
         }}
         onKeyDown={handleKeyDown}
         onBlur={() => setOpen(false)}
-        className={`w-full rounded-md border px-3 py-2 text-sm text-text-primary ${invalid ? "border-danger" : "border-neutral-300"} disabled:cursor-not-allowed disabled:bg-neutral-100`}
+        className={`w-full min-h-11 rounded-md border px-3 py-2 text-sm text-text-primary ${invalid ? "border-danger" : "border-neutral-300"} disabled:cursor-not-allowed disabled:bg-neutral-100`}
+        {...rest}
       />
       {name ? <input type="hidden" name={name} value={value ?? ""} /> : null}
       {open && filtered.length > 0 ? (
