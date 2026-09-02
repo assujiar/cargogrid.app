@@ -9,7 +9,7 @@
  */
 
 import { Toast as RadixToast } from "radix-ui";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type ToastTone = "info" | "success" | "warning" | "danger";
 
@@ -20,7 +20,7 @@ const TONE_CLASSES: Record<ToastTone, string> = {
   danger: "border-danger/30 bg-surface",
 };
 
-interface ToastOptions {
+export interface ToastOptions {
   readonly title: string;
   readonly description?: string;
   readonly tone?: ToastTone;
@@ -94,4 +94,44 @@ export function useToast(): ToastContextValue {
     throw new Error("useToast must be used within a ToastProvider");
   }
   return context;
+}
+
+/**
+ * `ISS-2026-246`: the shape every `useActionState` caller in this repository needs to raise a
+ * toast, extracted once rather than copied into each of them.
+ *
+ * WHY THE `pending` EDGE AND NOT THE STATE VALUE
+ *
+ * The obvious trigger -- "fire whenever the success message is non-null" -- is wrong twice over.
+ * It re-fires on any unrelated re-render while the message is still set, and it silently drops
+ * the second of two identical submissions whenever the action returns a shared constant rather
+ * than a fresh object (`hris/my/profile/actions.ts` returns one module-level `OK` constant on
+ * every success, so two successful submissions are `Object.is`-equal and an identity check sees
+ * no change).
+ *
+ * The `pending` true -> false transition has neither problem: it happens exactly once per
+ * completed submission regardless of what the action returns, and never on first render
+ * (`wasPendingRef` starts `false`). It is the same edge-detection
+ * `components/forms/use-unsaved-change-guard.ts` already uses to re-take its saved baseline.
+ *
+ * Pass `null` for `options` when the settled state is not a success -- an errored submission
+ * still crosses the edge, and its own `ValidationMessage` stays the place that reports it.
+ */
+export function useToastOnSettled(pending: boolean, options: ToastOptions | null): void {
+  const { toast } = useToast();
+  const optionsRef = useRef(options);
+  const wasPendingRef = useRef(false);
+
+  // Declared before the edge effect so it has already stored this commit's options by the time
+  // the edge fires -- effects in one component run in declaration order.
+  useEffect(() => {
+    optionsRef.current = options;
+  });
+
+  useEffect(() => {
+    if (wasPendingRef.current && !pending && optionsRef.current) {
+      toast(optionsRef.current);
+    }
+    wasPendingRef.current = pending;
+  }, [pending, toast]);
 }

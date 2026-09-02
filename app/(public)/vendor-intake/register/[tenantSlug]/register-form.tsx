@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { SuccessState } from "../../../../../components/ui/success-state.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
 import { NumberInput } from "../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
@@ -20,12 +21,10 @@ export function VendorSelfRegistrationForm({ tenantId }: { tenantId: string }) {
   // resubmission reusing the same key, per app.submit_vendor_profile_self_registration).
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
+  // ISS-2026-246: same whole-section confirmation as the tokened intake form above, and the same
+  // reason -- `SuccessState` is this exact shape, and only `submitStatus === "ok"` reaches it.
   if (state.result?.submitStatus === "ok") {
-    return (
-      <div role="status" className="rounded-md border border-success/30 bg-success/10 p-4 text-sm text-neutral-900">
-        Thank you -- your vendor registration has been submitted and is now awaiting review.
-      </div>
-    );
+    return <SuccessState title="Thank you -- your vendor registration has been submitted" description="It is now awaiting review." />;
   }
 
   // ISS-2026-242: one server-action error covers the whole submission, so every field is wired to

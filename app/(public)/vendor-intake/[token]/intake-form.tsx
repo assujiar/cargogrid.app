@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../components/ui/button.tsx";
+import { SuccessState } from "../../../../components/ui/success-state.tsx";
 import { Input } from "../../../../components/forms/input.tsx";
 import { NumberInput } from "../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../components/forms/form-field.tsx";
@@ -15,12 +16,11 @@ export function VendorIntakeForm({ rawToken }: { rawToken: string }) {
   const boundAction = redeemVendorIntakeTokenAction.bind(null, rawToken);
   const [state, formAction, pending] = useActionState(boundAction, INITIAL_STATE);
 
+  // ISS-2026-246: the same whole-section post-submit confirmation `SuccessState` owns, already
+  // hand-written down to its `role="status"` and `border-success/30 bg-success/10` tokens. Only
+  // `submitStatus === "ok"` reaches it; every other result stays on the form.
   if (state.result?.submitStatus === "ok") {
-    return (
-      <div role="status" className="rounded-md border border-success/30 bg-success/10 p-4 text-sm text-neutral-900">
-        Thank you -- your vendor registration has been submitted and is now awaiting review.
-      </div>
-    );
+    return <SuccessState title="Thank you -- your vendor registration has been submitted" description="It is now awaiting review." />;
   }
 
   // ISS-2026-242: one server-action error covers the whole submission, so every field is wired to

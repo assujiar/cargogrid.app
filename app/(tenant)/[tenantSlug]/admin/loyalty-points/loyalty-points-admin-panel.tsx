@@ -16,6 +16,7 @@ import { NumberInput } from "../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
+import { useToastOnSettled } from "../../../../../components/ui/toast.tsx";
 import type { LoyaltyAccount } from "../../../../../server/contracts/customer-portal-loyalty-program/customer-portal-loyalty-program.ts";
 import type { LoyaltyPointBalance, LoyaltyPointLot, LoyaltyPointAdjustmentRequest, LoyaltyPointAdjustmentStatus } from "../../../../../server/contracts/customer-portal-loyalty-points/customer-portal-loyalty-points.ts";
 import {
@@ -31,14 +32,23 @@ const INITIAL_STATE: LoyaltyPointsAdminFormState = { error: null, notice: null }
 
 const ADJUSTMENT_STATUS_TONE: Record<LoyaltyPointAdjustmentStatus, StatusTone> = { pending_approval: "warning", approved: "success", rejected: "neutral" };
 
-/** ISS-2026-242: `errorId` is what this form's controls point their `aria-describedby` at. */
-function FormFeedback({ state, errorId }: { state: LoyaltyPointsAdminFormState; errorId?: string }) {
-  return (
-    <>
-      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
-      {state.notice ? <p className="text-sm text-success">{state.notice}</p> : null}
-    </>
-  );
+/**
+ * ISS-2026-242: `errorId` is what this form's controls point their `aria-describedby` at.
+ *
+ * ISS-2026-246: `state.notice` used to render as a bare `<p className="text-sm text-success">`
+ * -- a colour-coded line with no live-region semantics, so a screen-reader user was never told
+ * the ledger posting had succeeded at all. Every one of this panel's five notices is a short,
+ * self-contained outcome sentence with nothing to copy out of it and no follow-up instruction
+ * ("Posted a 500-point earn entry.", "Expired 3 lot(s).", "Adjustment approved and posted to the
+ * ledger."), which is exactly the transient confirmation `Toast` exists for. Errors deliberately
+ * stay inline: `ValidationMessage` is what the controls' `aria-describedby` points at, and a
+ * message that auto-dismisses after four seconds is the wrong home for something the user has to
+ * act on.
+ */
+function FormFeedback({ state, pending, errorId }: { state: LoyaltyPointsAdminFormState; pending: boolean; errorId?: string }) {
+  useToastOnSettled(pending, state.notice ? { title: state.notice, tone: "success" } : null);
+
+  return state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null;
 }
 
 export function PostPointsEarnedForm({ tenantSlug }: { tenantSlug: string }) {
@@ -53,7 +63,7 @@ export function PostPointsEarnedForm({ tenantSlug }: { tenantSlug: string }) {
       <FormField id="pts-earn-expiry" label="Expiry window (days, 1-3650)">
         <NumberInput id="pts-earn-expiry" name="expiryDays" step="1" min="1" max="3650" defaultValue={365} invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
-      <FormFeedback state={state} errorId="pts-earn-error" />
+      <FormFeedback state={state} pending={pending} errorId="pts-earn-error" />
       <Button type="submit" loading={pending} loadingLabel="Posting…" className="w-fit">
         Post earn entry
       </Button>
@@ -78,7 +88,7 @@ export function ReversePointsEarnedForm({ tenantSlug }: { tenantSlug: string }) 
           aria-describedby={state.error ? "pts-reversal-error" : undefined}
         />
       </FormField>
-      <FormFeedback state={state} errorId="pts-reversal-error" />
+      <FormFeedback state={state} pending={pending} errorId="pts-reversal-error" />
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Posting…" className="w-fit">
         Post reversal entry
       </Button>
@@ -90,7 +100,7 @@ export function ExpireLotsForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(expireLoyaltyPointLotsAction.bind(null, tenantSlug), INITIAL_STATE);
   return (
     <form action={formAction} noValidate>
-      <FormFeedback state={state} />
+      <FormFeedback state={state} pending={pending} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Scanning…" className="mt-2 w-fit">
         Run expiry scan
       </Button>
@@ -120,7 +130,7 @@ export function RequestAdjustmentForm({ tenantSlug, accounts }: { tenantSlug: st
       <FormField id="pts-adj-reason" label="Reason (required, visible to staff only)">
         <Textarea id="pts-adj-reason" name="reason" rows={2} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
-      <FormFeedback state={state} errorId="pts-adj-error" />
+      <FormFeedback state={state} pending={pending} errorId="pts-adj-error" />
       <Button type="submit" loading={pending} loadingLabel="Submitting…" className="w-fit">
         Submit request
       </Button>
@@ -188,8 +198,8 @@ export function AdjustmentRequestRow({ tenantSlug, request }: { tenantSlug: stri
           {request.status} by {request.decidedBy ?? request.decidedByAuthUserId} -- {request.decisionNotes}
         </p>
       )}
-      <FormFeedback state={request.status === "pending_approval" ? approveState : INITIAL_STATE} errorId={`pts-adj-approve-${request.id}-error`} />
-      {request.status === "pending_approval" ? <FormFeedback state={rejectState} errorId={`pts-adj-reject-${request.id}-error`} /> : null}
+      <FormFeedback state={request.status === "pending_approval" ? approveState : INITIAL_STATE} pending={request.status === "pending_approval" ? approvePending : false} errorId={`pts-adj-approve-${request.id}-error`} />
+      {request.status === "pending_approval" ? <FormFeedback state={rejectState} pending={rejectPending} errorId={`pts-adj-reject-${request.id}-error`} /> : null}
     </div>
   );
 }

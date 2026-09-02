@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Spinner } from "../../../components/ui/spinner.tsx";
 import { interpretServiceStatus, readProbeResponse, type ProbeOutcome, type ServiceStatus } from "../../../lib/status/service-status.ts";
 
 const REFRESH_MS = 30_000;
@@ -105,10 +106,21 @@ export function StatusPanel() {
                 </h2>
               </div>
               <p className="mt-3 text-sm text-neutral-700">{status.detail}</p>
-              <p className="mt-4 text-xs text-neutral-500">
-                Status: {styles.label}
-                {checkedAt ? ` · last checked ${checkedAt.toLocaleTimeString()}` : null}
-                {checking ? " · checking…" : null}
+              {/* ISS-2026-246: `checking` is set only by the "Check again" button, never by the
+                  30s background refresh -- so this is an inline action's own busy state, which is
+                  the one case `components/ui/spinner.tsx`'s own header reserves a spinner for
+                  (a page or section load stays `Skeleton`). It replaces a bare " · checking…"
+                  string: an eight-second probe timeout with nothing moving on screen reads as a
+                  dead button. The wording moves into `Spinner`'s own `sr-only` label, still inside
+                  this block's `aria-live="polite" aria-atomic="true"` wrapper, so a screen-reader
+                  user is told the same thing; a sighted user trades the static words for motion,
+                  and `motion-reduce` viewers get the static ring `Spinner` already falls back to. */}
+              <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                <span>
+                  Status: {styles.label}
+                  {checkedAt ? ` · last checked ${checkedAt.toLocaleTimeString()}` : null}
+                </span>
+                {checking ? <Spinner label="Checking again…" /> : null}
               </p>
             </>
           )}
