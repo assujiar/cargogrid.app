@@ -1,9 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
 import { isVendorContractCostMasked, type VendorContract, type VendorContractEvent, type VendorContractStatus } from "../../../../../../server/contracts/vendor-contract/vendor-contract.ts";
@@ -32,20 +34,19 @@ function ActionForm({
   variant = "primary",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -168,18 +169,19 @@ export function VendorContractDetailPanel({
 
         {canUpdate ? (
           <ActionForm action={updateAction} submitLabel="Save draft terms" loadingLabel="Saving…" variant="secondary">
-            <label htmlFor="update-effectiveStart" className="text-xs font-medium text-neutral-700">
-              Effective start (required)
-            </label>
-            <Input id="update-effectiveStart" name="effectiveStart" type="date" defaultValue={contract.effectiveStart} required />
-            <label htmlFor="update-effectiveEnd" className="text-xs font-medium text-neutral-700">
-              Effective end
-            </label>
-            <Input id="update-effectiveEnd" name="effectiveEnd" type="date" defaultValue={contract.effectiveEnd ?? undefined} />
-            <label htmlFor="update-paymentTermDays" className="text-xs font-medium text-neutral-700">
-              Payment term days {masked ? "(masked -- leave blank to keep the current value)" : ""}
-            </label>
-            <Input id="update-paymentTermDays" name="paymentTermDays" type="number" min={0} defaultValue={masked ? undefined : (contract.paymentTermDays ?? undefined)} />
+            {(describedBy) => (
+              <>
+                <FormField id="update-effectiveStart" label="Effective start (required)">
+                  <Input id="update-effectiveStart" name="effectiveStart" type="date" defaultValue={contract.effectiveStart} required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="update-effectiveEnd" label="Effective end">
+                  <Input id="update-effectiveEnd" name="effectiveEnd" type="date" defaultValue={contract.effectiveEnd ?? undefined} aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="update-paymentTermDays" label={`Payment term days ${masked ? "(masked -- leave blank to keep the current value)" : ""}`}>
+                  <Input id="update-paymentTermDays" name="paymentTermDays" type="number" min={0} defaultValue={masked ? undefined : (contract.paymentTermDays ?? undefined)} aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
@@ -187,10 +189,11 @@ export function VendorContractDetailPanel({
 
         {canSign ? (
           <ActionForm action={signAction} submitLabel="Record signature" loadingLabel="Recording…">
-            <label htmlFor="signedBy" className="text-xs font-medium text-neutral-700">
-              Signatory name (required)
-            </label>
-            <Input id="signedBy" name="signedBy" type="text" required />
+            {(describedBy) => (
+              <FormField id="signedBy" label="Signatory name (required)">
+                <Input id="signedBy" name="signedBy" type="text" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
 
@@ -198,40 +201,44 @@ export function VendorContractDetailPanel({
 
         {canAmend ? (
           <ActionForm action={amendAction} submitLabel="Amend (creates a new version)" loadingLabel="Amending…" variant="secondary">
-            <label htmlFor="amend-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="amend-reason" name="reason" type="text" required />
-            <label htmlFor="amend-effectiveEnd" className="text-xs font-medium text-neutral-700">
-              New effective end
-            </label>
-            <Input id="amend-effectiveEnd" name="effectiveEnd" type="date" />
-            <label htmlFor="amend-paymentTermDays" className="text-xs font-medium text-neutral-700">
-              New payment term days
-            </label>
-            <Input id="amend-paymentTermDays" name="paymentTermDays" type="number" min={0} />
+            {(describedBy) => (
+              <>
+                <FormField id="amend-reason" label="Reason (required)">
+                  <Input id="amend-reason" name="reason" type="text" required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="amend-effectiveEnd" label="New effective end">
+                  <Input id="amend-effectiveEnd" name="effectiveEnd" type="date" aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="amend-paymentTermDays" label="New payment term days">
+                  <Input id="amend-paymentTermDays" name="paymentTermDays" type="number" min={0} aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
         {canRenew ? (
           <ActionForm action={renewAction} submitLabel="Renew (creates a new version, no coverage gap)" loadingLabel="Renewing…" variant="secondary">
-            <label htmlFor="renew-newEffectiveStart" className="text-xs font-medium text-neutral-700">
-              New effective start (required)
-            </label>
-            <Input id="renew-newEffectiveStart" name="newEffectiveStart" type="date" required />
-            <label htmlFor="renew-newEffectiveEnd" className="text-xs font-medium text-neutral-700">
-              New effective end
-            </label>
-            <Input id="renew-newEffectiveEnd" name="newEffectiveEnd" type="date" />
+            {(describedBy) => (
+              <>
+                <FormField id="renew-newEffectiveStart" label="New effective start (required)">
+                  <Input id="renew-newEffectiveStart" name="newEffectiveStart" type="date" required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="renew-newEffectiveEnd" label="New effective end">
+                  <Input id="renew-newEffectiveEnd" name="newEffectiveEnd" type="date" aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
         {canSuspend ? (
           <ActionForm action={suspendAction} submitLabel="Suspend" loadingLabel="Suspending…" variant="destructive">
-            <label htmlFor="suspend-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="suspend-reason" name="reason" type="text" required />
+            {(describedBy) => (
+              <FormField id="suspend-reason" label="Reason (required)">
+                <Input id="suspend-reason" name="reason" type="text" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
 
@@ -239,23 +246,26 @@ export function VendorContractDetailPanel({
 
         {canTerminate ? (
           <ActionForm action={terminateAction} submitLabel="Terminate" loadingLabel="Terminating…" variant="destructive">
-            <label htmlFor="terminate-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="terminate-reason" name="reason" type="text" required />
-            <label htmlFor="terminate-evidenceRef" className="text-xs font-medium text-neutral-700">
-              Evidence reference (required)
-            </label>
-            <Input id="terminate-evidenceRef" name="evidenceRef" type="text" required />
+            {(describedBy) => (
+              <>
+                <FormField id="terminate-reason" label="Reason (required)">
+                  <Input id="terminate-reason" name="reason" type="text" required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="terminate-evidenceRef" label="Evidence reference (required)">
+                  <Input id="terminate-evidenceRef" name="evidenceRef" type="text" required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
         {canCancel ? (
           <ActionForm action={cancelAction} submitLabel="Cancel" loadingLabel="Cancelling…" variant="destructive">
-            <label htmlFor="cancel-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="cancel-reason" name="reason" type="text" required />
+            {(describedBy) => (
+              <FormField id="cancel-reason" label="Reason (required)">
+                <Input id="cancel-reason" name="reason" type="text" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
 

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { PURCHASE_ORDER_STATUSES, type PurchaseOrder, type PurchaseOrderStatus } from "../../../../../server/contracts/purchase-order/purchase-order.ts";
@@ -37,6 +40,8 @@ export function PurchaseOrderQueuePanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [draftState, draftFormAction, draftPending] = useActionState(draftAction, INITIAL_STATE);
+  const draftErrorId = "po-draft-error";
+  const draftDescribedBy = draftState.error ? draftErrorId : undefined;
 
   function applyStatusFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -49,60 +54,38 @@ export function PurchaseOrderQueuePanel({
     <div className="flex flex-col gap-4">
       <form action={draftFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="comparisonId" className="text-xs font-medium text-neutral-700">
-              Approved vendor comparison id (required)
-            </label>
-            <Input id="comparisonId" name="comparisonId" type="text" required />
+          <div className="sm:col-span-2">
+            <FormField id="comparisonId" label="Approved vendor comparison id (required)">
+              <Input id="comparisonId" name="comparisonId" type="text" required invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="taxCode" className="text-xs font-medium text-neutral-700">
-              Tax code (optional)
-            </label>
-            <Input id="taxCode" name="taxCode" type="text" />
+          <FormField id="taxCode" label="Tax code (optional)">
+            <Input id="taxCode" name="taxCode" type="text" invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+          </FormField>
+          <FormField id="paymentTermDays" label="Payment term days (defaults to vendor)">
+            <Input id="paymentTermDays" name="paymentTermDays" type="number" min={0} invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+          </FormField>
+          <FormField id="expectedDeliveryDate" label="Expected delivery date">
+            <Input id="expectedDeliveryDate" name="expectedDeliveryDate" type="date" invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+          </FormField>
+          <FormField id="servicePeriodStart" label="Service period start">
+            <Input id="servicePeriodStart" name="servicePeriodStart" type="date" invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+          </FormField>
+          <FormField id="servicePeriodEnd" label="Service period end">
+            <Input id="servicePeriodEnd" name="servicePeriodEnd" type="date" invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField id="commercialTerms" label="Commercial terms">
+              <Input id="commercialTerms" name="commercialTerms" type="text" invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="paymentTermDays" className="text-xs font-medium text-neutral-700">
-              Payment term days (defaults to vendor)
-            </label>
-            <Input id="paymentTermDays" name="paymentTermDays" type="number" min={0} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="expectedDeliveryDate" className="text-xs font-medium text-neutral-700">
-              Expected delivery date
-            </label>
-            <Input id="expectedDeliveryDate" name="expectedDeliveryDate" type="date" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="servicePeriodStart" className="text-xs font-medium text-neutral-700">
-              Service period start
-            </label>
-            <Input id="servicePeriodStart" name="servicePeriodStart" type="date" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="servicePeriodEnd" className="text-xs font-medium text-neutral-700">
-              Service period end
-            </label>
-            <Input id="servicePeriodEnd" name="servicePeriodEnd" type="date" />
-          </div>
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="commercialTerms" className="text-xs font-medium text-neutral-700">
-              Commercial terms
-            </label>
-            <Input id="commercialTerms" name="commercialTerms" type="text" />
-          </div>
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="notes" className="text-xs font-medium text-neutral-700">
-              Notes
-            </label>
-            <Input id="notes" name="notes" type="text" />
+          <div className="sm:col-span-2">
+            <FormField id="notes" label="Notes">
+              <Input id="notes" name="notes" type="text" invalid={Boolean(draftState.error)} aria-describedby={draftDescribedBy} />
+            </FormField>
           </div>
         </div>
-        {draftState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {draftState.error}
-          </p>
-        ) : null}
+        {draftState.error ? <ValidationMessage id={draftErrorId}>{draftState.error}</ValidationMessage> : null}
         <Button type="submit" loading={draftPending} loadingLabel="Drafting…" className="w-fit">
           Draft purchase order
         </Button>
@@ -112,14 +95,14 @@ export function PurchaseOrderQueuePanel({
         <label htmlFor="po-status" className="text-xs font-medium text-neutral-600">
           Status
         </label>
-        <select id="po-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
+        <Select id="po-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
           <option value="">All (excludes superseded)</option>
           {PURCHASE_ORDER_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {purchaseOrders.length === 0 ? (

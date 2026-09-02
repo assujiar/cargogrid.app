@@ -4,6 +4,8 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { ComplianceActionState } from "./actions.ts";
@@ -70,14 +72,14 @@ export function ComplianceMatrixPanel({
             <label htmlFor="compliance-status" className="text-xs font-medium text-neutral-600">
               Status
             </label>
-            <select id="compliance-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value, holdOnly)}>
+            <Select id="compliance-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, holdOnly)}>
               <option value="">All statuses</option>
               {VENDOR_COMPLIANCE_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <form action={formAction} className="ml-auto flex flex-col gap-1">
             <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recalculating…">
@@ -85,11 +87,7 @@ export function ComplianceMatrixPanel({
             </Button>
           </form>
         </div>
-        {state.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
         {rows.length === 0 ? (
           <EmptyState title="No compliance rows match this view" description="Adjust your filters, or publish a requirement so vendors have something to submit against." />

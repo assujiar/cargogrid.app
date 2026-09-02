@@ -1,8 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
 import type { VendorComplianceActionState } from "../actions.ts";
@@ -38,21 +42,20 @@ function ActionForm({
   className = "flex flex-col gap-2",
 }: {
   action: BoundFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className={className}>
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -109,11 +112,7 @@ export function VendorCompliancePanel({
           </form>
         </div>
       </header>
-      {recalcState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {recalcState.error}
-        </p>
-      ) : null}
+      {recalcState.error ? <ValidationMessage>{recalcState.error}</ValidationMessage> : null}
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Requirement eligibility</h2>
@@ -181,15 +180,29 @@ export function VendorCompliancePanel({
                   {doc.verificationStatus === "pending" ? (
                     <div className="flex flex-wrap gap-2">
                       <ActionForm action={decideDocumentActionFor(doc.id, doc.recordVersion)} submitLabel="Verify" loadingLabel="Verifying…" className="flex items-center gap-2">
-                        <input type="hidden" name="decision" value="verified" />
+                        {() => <input type="hidden" name="decision" value="verified" />}
                       </ActionForm>
                       <ActionForm action={decideDocumentActionFor(doc.id, doc.recordVersion)} submitLabel="Reject" loadingLabel="Rejecting…" variant="destructive" className="flex items-center gap-2">
-                        <input type="hidden" name="decision" value="rejected" />
-                        <input name="rejectionReason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                        {(describedBy) => (
+                          <>
+                            <input type="hidden" name="decision" value="rejected" />
+                            <label htmlFor={`reject-doc-reason-${doc.id}`} className="sr-only">
+                              Reason
+                            </label>
+                            <Input id={`reject-doc-reason-${doc.id}`} name="rejectionReason" placeholder="Reason (required)" required className="text-xs" aria-describedby={describedBy} />
+                          </>
+                        )}
                       </ActionForm>
                       <ActionForm action={decideDocumentActionFor(doc.id, doc.recordVersion)} submitLabel="Request revision" loadingLabel="Requesting…" variant="secondary" className="flex items-center gap-2">
-                        <input type="hidden" name="decision" value="revision_requested" />
-                        <input name="rejectionReason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                        {(describedBy) => (
+                          <>
+                            <input type="hidden" name="decision" value="revision_requested" />
+                            <label htmlFor={`revise-doc-reason-${doc.id}`} className="sr-only">
+                              Reason
+                            </label>
+                            <Input id={`revise-doc-reason-${doc.id}`} name="rejectionReason" placeholder="Reason (required)" required className="text-xs" aria-describedby={describedBy} />
+                          </>
+                        )}
                       </ActionForm>
                     </div>
                   ) : null}
@@ -197,10 +210,23 @@ export function VendorCompliancePanel({
                   <details className="text-xs">
                     <summary className="cursor-pointer text-primary">Renew (upload a newer version)</summary>
                     <ActionForm action={renewDocumentActionFor(doc.id)} submitLabel="Submit renewal" loadingLabel="Uploading…" variant="secondary" className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-                      <input type="hidden" name="documentTypeCode" value={requirement?.documentTypeCode ?? ""} />
-                      <input name="evidenceFile" type="file" required className="text-xs sm:col-span-2" />
-                      <input name="issueDate" type="date" placeholder="Issue date" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-                      <input name="expiryDate" type="date" placeholder="Expiry date" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                      {(describedBy) => (
+                        <>
+                          <input type="hidden" name="documentTypeCode" value={requirement?.documentTypeCode ?? ""} />
+                          <label htmlFor={`renew-doc-file-${doc.id}`} className="sr-only">
+                            Evidence file
+                          </label>
+                          <input id={`renew-doc-file-${doc.id}`} name="evidenceFile" type="file" required className="text-xs sm:col-span-2" aria-describedby={describedBy} />
+                          <label htmlFor={`renew-doc-issue-${doc.id}`} className="sr-only">
+                            Issue date
+                          </label>
+                          <Input id={`renew-doc-issue-${doc.id}`} name="issueDate" type="date" placeholder="Issue date" className="text-xs" aria-describedby={describedBy} />
+                          <label htmlFor={`renew-doc-expiry-${doc.id}`} className="sr-only">
+                            Expiry date
+                          </label>
+                          <Input id={`renew-doc-expiry-${doc.id}`} name="expiryDate" type="date" placeholder="Expiry date" className="text-xs" aria-describedby={describedBy} />
+                        </>
+                      )}
                     </ActionForm>
                   </details>
                 </li>
@@ -212,21 +238,37 @@ export function VendorCompliancePanel({
         <div className="rounded-md border border-neutral-100 p-3">
           <h3 className="mb-2 text-xs font-semibold text-neutral-900">Submit a new document</h3>
           <ActionForm action={submitDocumentAction} submitLabel="Submit" loadingLabel="Uploading…" className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-            <select name="requirementVersionId" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-2" defaultValue="">
-              <option value="" disabled>
-                Select a requirement
-              </option>
-              {publishedRequirements
-                .filter((r) => !documentsByRequirement.has(r.id))
-                .map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.documentTypeCode})
+            {(describedBy) => (
+              <>
+                <label htmlFor="submit-doc-requirement" className="sr-only">
+                  Requirement
+                </label>
+                <Select id="submit-doc-requirement" name="requirementVersionId" required className="sm:col-span-2" defaultValue="" aria-describedby={describedBy}>
+                  <option value="" disabled>
+                    Select a requirement
                   </option>
-                ))}
-            </select>
-            <input name="evidenceFile" type="file" required className="text-sm sm:col-span-2" />
-            <input name="issueDate" type="date" placeholder="Issue date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            <input name="expiryDate" type="date" placeholder="Expiry date (leave blank if the requirement does not track expiry)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                  {publishedRequirements
+                    .filter((r) => !documentsByRequirement.has(r.id))
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.documentTypeCode})
+                      </option>
+                    ))}
+                </Select>
+                <label htmlFor="submit-doc-file" className="sr-only">
+                  Evidence file
+                </label>
+                <input id="submit-doc-file" name="evidenceFile" type="file" required className="text-sm sm:col-span-2" aria-describedby={describedBy} />
+                <label htmlFor="submit-doc-issue" className="sr-only">
+                  Issue date
+                </label>
+                <Input id="submit-doc-issue" name="issueDate" type="date" placeholder="Issue date" aria-describedby={describedBy} />
+                <label htmlFor="submit-doc-expiry" className="sr-only">
+                  Expiry date
+                </label>
+                <Input id="submit-doc-expiry" name="expiryDate" type="date" placeholder="Expiry date (leave blank if the requirement does not track expiry)" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         </div>
       </section>
@@ -256,17 +298,31 @@ export function VendorCompliancePanel({
                 {w.status === "pending" ? (
                   <div className="flex flex-wrap gap-2">
                     <ActionForm action={decideWaiverActionFor(w.id, w.recordVersion)} submitLabel="Approve" loadingLabel="Approving…" className="flex items-center gap-2">
-                      <input type="hidden" name="decision" value="approved" />
+                      {() => <input type="hidden" name="decision" value="approved" />}
                     </ActionForm>
                     <ActionForm action={decideWaiverActionFor(w.id, w.recordVersion)} submitLabel="Reject" loadingLabel="Rejecting…" variant="destructive" className="flex items-center gap-2">
-                      <input type="hidden" name="decision" value="rejected" />
-                      <input name="decisionReason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                      {(describedBy) => (
+                        <>
+                          <input type="hidden" name="decision" value="rejected" />
+                          <label htmlFor={`reject-waiver-reason-${w.id}`} className="sr-only">
+                            Reason
+                          </label>
+                          <Input id={`reject-waiver-reason-${w.id}`} name="decisionReason" placeholder="Reason (required)" required className="text-xs" aria-describedby={describedBy} />
+                        </>
+                      )}
                     </ActionForm>
                   </div>
                 ) : null}
                 {w.status === "approved" ? (
                   <ActionForm action={revokeWaiverActionFor(w.id, w.recordVersion)} submitLabel="Revoke" loadingLabel="Revoking…" variant="destructive" className="flex items-center gap-2">
-                    <input name="reason" placeholder="Revocation reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+                    {(describedBy) => (
+                      <>
+                        <label htmlFor={`revoke-waiver-reason-${w.id}`} className="sr-only">
+                          Revocation reason
+                        </label>
+                        <Input id={`revoke-waiver-reason-${w.id}`} name="reason" placeholder="Revocation reason (required)" required className="text-xs" aria-describedby={describedBy} />
+                      </>
+                    )}
                   </ActionForm>
                 ) : null}
               </li>
@@ -277,19 +333,35 @@ export function VendorCompliancePanel({
         <div className="rounded-md border border-neutral-100 p-3">
           <h3 className="mb-2 text-xs font-semibold text-neutral-900">Request a waiver</h3>
           <ActionForm action={requestWaiverAction} submitLabel="Request" loadingLabel="Requesting…" className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-            <select name="requirementVersionId" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-2" defaultValue="">
-              <option value="" disabled>
-                Select a requirement
-              </option>
-              {publishedRequirements.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            <input name="validFrom" type="date" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            <input name="validUntil" type="date" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            <input name="reason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-4" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="request-waiver-requirement" className="sr-only">
+                  Requirement
+                </label>
+                <Select id="request-waiver-requirement" name="requirementVersionId" required className="sm:col-span-2" defaultValue="" aria-describedby={describedBy}>
+                  <option value="" disabled>
+                    Select a requirement
+                  </option>
+                  {publishedRequirements.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </Select>
+                <label htmlFor="request-waiver-valid-from" className="sr-only">
+                  Valid from
+                </label>
+                <Input id="request-waiver-valid-from" name="validFrom" type="date" required aria-describedby={describedBy} />
+                <label htmlFor="request-waiver-valid-until" className="sr-only">
+                  Valid until
+                </label>
+                <Input id="request-waiver-valid-until" name="validUntil" type="date" required aria-describedby={describedBy} />
+                <label htmlFor="request-waiver-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="request-waiver-reason" name="reason" placeholder="Reason (required)" required className="sm:col-span-4" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         </div>
       </section>

@@ -1,9 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type {
   TrainingCompetencyRow,
   TrainingCourseRow,
@@ -35,8 +40,8 @@ const CANDIDATE_STATUS_TONE: Record<string, StatusTone> = { proposed: "warning",
 
 type BoundAction = (prevState: TrainingTalentAdminActionState, formData: FormData) => Promise<TrainingTalentAdminActionState>;
 
-function ErrorLine({ error }: { error: string | null }) {
-  return error ? <p role="alert" className="text-xs text-danger">{error}</p> : null;
+function ErrorLine({ error, id }: { error: string | null; id?: string }) {
+  return error ? <ValidationMessage id={id}>{error}</ValidationMessage> : null;
 }
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -51,13 +56,15 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-function InlineForm({ action, children, submitLabel, pendingLabel }: { action: BoundAction; children: React.ReactNode; submitLabel: string; pendingLabel?: string }) {
+function InlineForm({ action, children, submitLabel, pendingLabel }: { action: BoundAction; children: (describedBy: string | undefined, invalid: boolean) => React.ReactNode; submitLabel: string; pendingLabel?: string }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
+      {children(state.error ? errorId : undefined, Boolean(state.error))}
       <Button type="submit" variant="primary" loading={pending} loadingLabel={pendingLabel ?? "Working…"}>{submitLabel}</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -72,11 +79,19 @@ function CompetencySection({ competencies, createAction, publishAction }: {
   return (
     <Section title="Competencies" description="The skill/competency reference taxonomy a course can teach.">
       <InlineForm action={createAction} submitLabel="Create competency">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="text-xs text-neutral-500">Code<input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. safety_basics" /></label>
-          <label className="text-xs text-neutral-500">Name<input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">Category<input name="category" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-        </div>
+        {(describedBy, invalid) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <FormField id="competency-code" label="Code">
+              <Input id="competency-code" name="code" required placeholder="e.g. safety_basics" invalid={invalid} aria-describedby={describedBy} />
+            </FormField>
+            <FormField id="competency-name" label="Name">
+              <Input id="competency-name" name="name" required invalid={invalid} aria-describedby={describedBy} />
+            </FormField>
+            <FormField id="competency-category" label="Category">
+              <Input id="competency-category" name="category" invalid={invalid} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+        )}
       </InlineForm>
       {competencies.length === 0 ? (
         <EmptyState title="No competencies yet" description="Create the first one above." />
@@ -101,10 +116,11 @@ function CompetencySection({ competencies, createAction, publishAction }: {
 
 function PublishButton({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction}>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Publishing…">Publish</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={`${reactId}-error`} />
     </form>
   );
 }
@@ -122,30 +138,45 @@ function CourseSection({ courses, courseVersionsByCourseId, createAction, publis
   return (
     <Section title="Courses" description="A course's curriculum content (assessment/certificate rules, mandatory flag) is versioned -- exactly one published version at a time.">
       <InlineForm action={createAction} submitLabel="Create course + draft version">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="text-xs text-neutral-500">Code<input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. safety_101" /></label>
-          <label className="text-xs text-neutral-500">Name<input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">Category<input name="category" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-xs text-neutral-500">
-            Delivery mode
-            <select name="deliveryMode" defaultValue="in_person" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-              <option value="in_person">In person</option><option value="virtual">Virtual</option><option value="e_learning">E-learning</option><option value="blended">Blended</option>
-            </select>
-          </label>
-          <label className="text-xs text-neutral-500">Description<input name="description" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-        </div>
-        <div className="flex flex-wrap gap-4 text-xs text-neutral-600">
-          <label className="flex items-center gap-1"><input type="checkbox" name="isMandatory" /> Mandatory compliance training</label>
-          <label className="flex items-center gap-1"><input type="checkbox" name="requiresEnrollmentApproval" /> Requires enrollment approval</label>
-          <label className="flex items-center gap-1"><input type="checkbox" name="requiresAssessment" /> Requires assessment</label>
-          <label className="flex items-center gap-1"><input type="checkbox" name="issuesCertificate" /> Issues a certificate</label>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-xs text-neutral-500">Passing score (if assessed)<input name="passingScore" type="number" defaultValue={70} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">Certificate validity (months)<input name="certificateValidityMonths" type="number" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-        </div>
+        {(describedBy, invalid) => (
+          <>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <FormField id="course-code" label="Code">
+                <Input id="course-code" name="code" required placeholder="e.g. safety_101" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="course-name" label="Name">
+                <Input id="course-name" name="name" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="course-category" label="Category">
+                <Input id="course-category" name="category" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <FormField id="course-deliveryMode" label="Delivery mode">
+                <Select id="course-deliveryMode" name="deliveryMode" defaultValue="in_person" invalid={invalid} aria-describedby={describedBy}>
+                  <option value="in_person">In person</option><option value="virtual">Virtual</option><option value="e_learning">E-learning</option><option value="blended">Blended</option>
+                </Select>
+              </FormField>
+              <FormField id="course-description" label="Description">
+                <Input id="course-description" name="description" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-neutral-600">
+              <Checkbox name="isMandatory" label="Mandatory compliance training" />
+              <Checkbox name="requiresEnrollmentApproval" label="Requires enrollment approval" />
+              <Checkbox name="requiresAssessment" label="Requires assessment" />
+              <Checkbox name="issuesCertificate" label="Issues a certificate" />
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <FormField id="course-passingScore" label="Passing score (if assessed)">
+                <Input id="course-passingScore" name="passingScore" type="number" defaultValue={70} invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="course-certificateValidityMonths" label="Certificate validity (months)">
+                <Input id="course-certificateValidityMonths" name="certificateValidityMonths" type="number" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </div>
+          </>
+        )}
       </InlineForm>
       {courses.length === 0 ? (
         <EmptyState title="No courses yet" description="Create the first one above." />
@@ -170,13 +201,27 @@ function CourseSection({ courses, courseVersionsByCourseId, createAction, publis
                 <details className="text-xs text-neutral-500">
                   <summary className="cursor-pointer">Link a competency this course teaches (by competency id)</summary>
                   <InlineForm action={addCompetencyAction(course.id)} submitLabel="Link competency">
-                    <input name="competencyId" required placeholder="competency id" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+                    {(describedBy, invalid) => (
+                      <>
+                        <label className="sr-only" htmlFor={`course-${course.id}-competencyId`}>
+                          Competency id
+                        </label>
+                        <Input id={`course-${course.id}-competencyId`} name="competencyId" required placeholder="competency id" invalid={invalid} aria-describedby={describedBy} />
+                      </>
+                    )}
                   </InlineForm>
                 </details>
                 <details className="text-xs text-neutral-500">
                   <summary className="cursor-pointer">Add prerequisite (by course id)</summary>
                   <InlineForm action={addPrerequisiteAction(course.id)} submitLabel="Add prerequisite">
-                    <input name="prerequisiteCourseId" required placeholder="prerequisite course id" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+                    {(describedBy, invalid) => (
+                      <>
+                        <label className="sr-only" htmlFor={`course-${course.id}-prerequisiteCourseId`}>
+                          Prerequisite course id
+                        </label>
+                        <Input id={`course-${course.id}-prerequisiteCourseId`} name="prerequisiteCourseId" required placeholder="prerequisite course id" invalid={invalid} aria-describedby={describedBy} />
+                      </>
+                    )}
                   </InlineForm>
                 </details>
               </li>
@@ -206,15 +251,18 @@ function ProviderSessionSection({ providers, sessions, courses, courseVersionsBy
   return (
     <Section title="Providers and sessions" description="Capacity and waitlist are enforced server-side under a session-row lock -- never trust a client-computed remaining count.">
       <InlineForm action={createProviderAction} submitLabel="Create provider">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-xs text-neutral-500">Name<input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">
-            Type
-            <select name="providerType" defaultValue="internal" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-              <option value="internal">Internal</option><option value="external">External</option>
-            </select>
-          </label>
-        </div>
+        {(describedBy, invalid) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <FormField id="provider-name" label="Name">
+              <Input id="provider-name" name="name" required invalid={invalid} aria-describedby={describedBy} />
+            </FormField>
+            <FormField id="provider-type" label="Type">
+              <Select id="provider-type" name="providerType" defaultValue="internal" invalid={invalid} aria-describedby={describedBy}>
+                <option value="internal">Internal</option><option value="external">External</option>
+              </Select>
+            </FormField>
+          </div>
+        )}
       </InlineForm>
 
       {/*
@@ -233,7 +281,14 @@ function ProviderSessionSection({ providers, sessions, courses, courseVersionsBy
               <details className="text-xs">
                 <summary className="cursor-pointer">{p.evidenceFileId ? "Replace accreditation" : "Attach accreditation"}</summary>
                 <InlineForm action={attachProviderEvidenceAction(p.id, p.recordVersion)} submitLabel="Attach">
-                  <input name="evidenceFileId" required placeholder="evidence file id (malware-scanned, PLT-128)" className="rounded border border-neutral-300 p-2 text-sm" />
+                  {(describedBy, invalid) => (
+                    <>
+                      <label className="sr-only" htmlFor={`provider-${p.id}-evidenceFileId`}>
+                        Evidence file id
+                      </label>
+                      <Input id={`provider-${p.id}-evidenceFileId`} name="evidenceFileId" required placeholder="evidence file id (malware-scanned, PLT-128)" invalid={invalid} aria-describedby={describedBy} />
+                    </>
+                  )}
                 </InlineForm>
               </details>
             </li>
@@ -242,30 +297,40 @@ function ProviderSessionSection({ providers, sessions, courses, courseVersionsBy
       ) : null}
 
       <InlineForm action={createSessionAction} submitLabel="Schedule session">
-        <label className="text-xs text-neutral-500">
-          Published course version
-          <select name="courseVersionId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-            <option value="">Select…</option>
-            {publishedVersions.map(({ course, version }) => (
-              <option key={version.id} value={version.id}>{course.code} v{version.versionNumber}</option>
-            ))}
-          </select>
-        </label>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="text-xs text-neutral-500">
-            Provider
-            <select name="providerId" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-              <option value="">None</option>
-              {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </label>
-          <label className="text-xs text-neutral-500">Session code<input name="sessionCode" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <label className="text-xs text-neutral-500">Start<input name="startAt" type="datetime-local" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">End<input name="endAt" type="datetime-local" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">Capacity<input name="capacity" type="number" min={1} required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-        </div>
+        {(describedBy, invalid) => (
+          <>
+            <FormField id="session-courseVersionId" label="Published course version">
+              <Select id="session-courseVersionId" name="courseVersionId" required invalid={invalid} aria-describedby={describedBy}>
+                <option value="">Select…</option>
+                {publishedVersions.map(({ course, version }) => (
+                  <option key={version.id} value={version.id}>{course.code} v{version.versionNumber}</option>
+                ))}
+              </Select>
+            </FormField>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <FormField id="session-providerId" label="Provider">
+                <Select id="session-providerId" name="providerId" invalid={invalid} aria-describedby={describedBy}>
+                  <option value="">None</option>
+                  {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </Select>
+              </FormField>
+              <FormField id="session-sessionCode" label="Session code">
+                <Input id="session-sessionCode" name="sessionCode" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <FormField id="session-startAt" label="Start">
+                <Input id="session-startAt" name="startAt" type="datetime-local" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="session-endAt" label="End">
+                <Input id="session-endAt" name="endAt" type="datetime-local" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="session-capacity" label="Capacity">
+                <Input id="session-capacity" name="capacity" type="number" min={1} required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </div>
+          </>
+        )}
       </InlineForm>
 
       {sessions.length === 0 ? (
@@ -283,14 +348,28 @@ function ProviderSessionSection({ providers, sessions, courses, courseVersionsBy
                   <details className="text-xs text-neutral-500">
                     <summary className="cursor-pointer">Assign employee</summary>
                     <InlineForm action={enrollEmployeeAction(s.id)} submitLabel="Assign">
-                      <input name="employeeId" required placeholder="employee id" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+                      {(describedBy, invalid) => (
+                        <>
+                          <label className="sr-only" htmlFor={`session-${s.id}-employeeId`}>
+                            Employee id
+                          </label>
+                          <Input id={`session-${s.id}-employeeId`} name="employeeId" required placeholder="employee id" invalid={invalid} aria-describedby={describedBy} />
+                        </>
+                      )}
                     </InlineForm>
                   </details>
                   <BareActionButton action={bulkAssignAction(s.id)} label="Bulk-assign all (mandatory sessions only)" />
                   <details className="text-xs text-neutral-500">
                     <summary className="cursor-pointer">Cancel session</summary>
                     <InlineForm action={cancelSessionAction(s.id, s.recordVersion)} submitLabel="Cancel session">
-                      <input name="reason" required placeholder="reason" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
+                      {(describedBy, invalid) => (
+                        <>
+                          <label className="sr-only" htmlFor={`session-${s.id}-cancel-reason`}>
+                            Reason
+                          </label>
+                          <Input id={`session-${s.id}-cancel-reason`} name="reason" required placeholder="reason" invalid={invalid} aria-describedby={describedBy} />
+                        </>
+                      )}
                     </InlineForm>
                   </details>
                 </div>
@@ -305,10 +384,11 @@ function ProviderSessionSection({ providers, sessions, courses, courseVersionsBy
 
 function BareActionButton({ action, label }: { action: BoundAction; label: string }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction}>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Working…">{label}</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={`${reactId}-error`} />
     </form>
   );
 }
@@ -356,63 +436,114 @@ function EnrollmentQueueSection({ pendingEnrollments, decideAction, recordAttend
 
 function ApproveButton({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction}>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Approving…">Approve</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={`${reactId}-error`} />
     </form>
   );
 }
 
 function DecideRejectForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex items-center gap-2">
-      <input name="decisionReason" required placeholder="reject reason" className="rounded border border-neutral-300 p-2 text-sm" />
+      <label className="sr-only" htmlFor={reactId}>
+        Reject reason
+      </label>
+      <Input id={reactId} name="decisionReason" required placeholder="reject reason" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Rejecting…">Reject</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function AttendanceForm({ recordAttendanceAction }: { recordAttendanceAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(recordAttendanceAction, INITIAL_STATE);
+  const reactId = useId();
+  const enrollmentIdId = `${reactId}-enrollmentId`;
+  const hoursId = `${reactId}-hoursAttended`;
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2 text-xs">
-      <input name="enrollmentId" required placeholder="enrollment id" className="rounded border border-neutral-300 p-2 text-sm" />
-      <label className="flex items-center gap-1"><input type="checkbox" name="attended" defaultChecked /> attended</label>
-      <input name="hoursAttended" placeholder="hours" className="w-20 rounded border border-neutral-300 p-2 text-sm" />
+      <label className="sr-only" htmlFor={enrollmentIdId}>
+        Enrollment id
+      </label>
+      <Input id={enrollmentIdId} name="enrollmentId" required placeholder="enrollment id" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <Checkbox name="attended" defaultChecked label="attended" />
+      <label className="sr-only" htmlFor={hoursId}>
+        Hours attended
+      </label>
+      <Input id={hoursId} name="hoursAttended" placeholder="hours" className="w-20" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…">Record attendance</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function CompletionForm({ recordCompletionAction }: { recordCompletionAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(recordCompletionAction, INITIAL_STATE);
+  const reactId = useId();
+  const enrollmentIdId = `${reactId}-enrollmentId`;
+  const versionId = `${reactId}-expectedVersion`;
+  const statusId = `${reactId}-completionStatus`;
+  const notesId = `${reactId}-notes`;
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2 text-xs">
-      <input name="enrollmentId" required placeholder="enrollment id" className="rounded border border-neutral-300 p-2 text-sm" />
-      <input name="expectedVersion" type="number" required placeholder="version" className="w-20 rounded border border-neutral-300 p-2 text-sm" />
-      <select name="completionStatus" className="rounded border border-neutral-300 p-2 text-sm">
+      <label className="sr-only" htmlFor={enrollmentIdId}>
+        Enrollment id
+      </label>
+      <Input id={enrollmentIdId} name="enrollmentId" required placeholder="enrollment id" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label className="sr-only" htmlFor={versionId}>
+        Expected version
+      </label>
+      <Input id={versionId} name="expectedVersion" type="number" required placeholder="version" className="w-20" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label className="sr-only" htmlFor={statusId}>
+        Completion status
+      </label>
+      <Select id={statusId} name="completionStatus" invalid={Boolean(state.error)} aria-describedby={describedBy}>
         <option value="completed">Completed</option><option value="failed">Failed</option><option value="no_show">No-show</option>
-      </select>
-      <input name="notes" placeholder="notes" className="rounded border border-neutral-300 p-2 text-sm" />
+      </Select>
+      <label className="sr-only" htmlFor={notesId}>
+        Notes
+      </label>
+      <Input id={notesId} name="notes" placeholder="notes" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…">Record completion</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function AssessmentForm({ recordAssessmentAction }: { recordAssessmentAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(recordAssessmentAction, INITIAL_STATE);
+  const reactId = useId();
+  const enrollmentIdId = `${reactId}-enrollmentId`;
+  const scoreId = `${reactId}-score`;
+  const maxScoreId = `${reactId}-maxScore`;
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2 text-xs">
-      <input name="enrollmentId" required placeholder="enrollment id" className="rounded border border-neutral-300 p-2 text-sm" />
-      <input name="score" type="number" required placeholder="score" className="w-20 rounded border border-neutral-300 p-2 text-sm" />
-      <input name="maxScore" type="number" defaultValue={100} placeholder="max score" className="w-24 rounded border border-neutral-300 p-2 text-sm" />
+      <label className="sr-only" htmlFor={enrollmentIdId}>
+        Enrollment id
+      </label>
+      <Input id={enrollmentIdId} name="enrollmentId" required placeholder="enrollment id" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label className="sr-only" htmlFor={scoreId}>
+        Score
+      </label>
+      <Input id={scoreId} name="score" type="number" required placeholder="score" className="w-20" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label className="sr-only" htmlFor={maxScoreId}>
+        Max score
+      </label>
+      <Input id={maxScoreId} name="maxScore" type="number" defaultValue={100} placeholder="max score" className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…">Record assessment</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -433,18 +564,52 @@ function CertificateSection({ certificates, issueAction, importAction, attachEvi
     <Section title="Certificates" description="Certificate and provider evidence files are both private and malware-scanned before attach (PLT-128) -- provider accreditation lives in the Providers section above (ISS-2026-083). Expiry/reminder are real durable jobs (PLT-131/132).">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <InlineForm action={issueAction} submitLabel="Issue certificate">
-          <input name="employeeId" required placeholder="employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="courseVersionId" required placeholder="course version id" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="certificateNumber" placeholder="certificate number" className="rounded border border-neutral-300 p-2 text-sm" />
-          <label className="text-xs text-neutral-500">Issued<input name="issuedAt" type="date" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">Expires<input name="expiryDate" type="date" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
+          {(describedBy, invalid) => (
+            <>
+              <label className="sr-only" htmlFor="issue-cert-employeeId">
+                Employee id
+              </label>
+              <Input id="issue-cert-employeeId" name="employeeId" required placeholder="employee id" invalid={invalid} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="issue-cert-courseVersionId">
+                Course version id
+              </label>
+              <Input id="issue-cert-courseVersionId" name="courseVersionId" required placeholder="course version id" invalid={invalid} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="issue-cert-certificateNumber">
+                Certificate number
+              </label>
+              <Input id="issue-cert-certificateNumber" name="certificateNumber" placeholder="certificate number" invalid={invalid} aria-describedby={describedBy} />
+              <FormField id="issue-cert-issuedAt" label="Issued">
+                <Input id="issue-cert-issuedAt" name="issuedAt" type="date" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="issue-cert-expiryDate" label="Expires">
+                <Input id="issue-cert-expiryDate" name="expiryDate" type="date" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </InlineForm>
         <InlineForm action={importAction} submitLabel="Import historical certificate">
-          <input name="employeeId" required placeholder="employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="externalCourseName" required placeholder="external course name" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="certificateNumber" placeholder="certificate number" className="rounded border border-neutral-300 p-2 text-sm" />
-          <label className="text-xs text-neutral-500">Issued<input name="issuedAt" type="date" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
-          <label className="text-xs text-neutral-500">Expires<input name="expiryDate" type="date" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" /></label>
+          {(describedBy, invalid) => (
+            <>
+              <label className="sr-only" htmlFor="import-cert-employeeId">
+                Employee id
+              </label>
+              <Input id="import-cert-employeeId" name="employeeId" required placeholder="employee id" invalid={invalid} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="import-cert-externalCourseName">
+                External course name
+              </label>
+              <Input id="import-cert-externalCourseName" name="externalCourseName" required placeholder="external course name" invalid={invalid} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="import-cert-certificateNumber">
+                Certificate number
+              </label>
+              <Input id="import-cert-certificateNumber" name="certificateNumber" placeholder="certificate number" invalid={invalid} aria-describedby={describedBy} />
+              <FormField id="import-cert-issuedAt" label="Issued">
+                <Input id="import-cert-issuedAt" name="issuedAt" type="date" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="import-cert-expiryDate" label="Expires">
+                <Input id="import-cert-expiryDate" name="expiryDate" type="date" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </InlineForm>
       </div>
 
@@ -461,7 +626,14 @@ function CertificateSection({ certificates, issueAction, importAction, attachEvi
                   <details className="text-xs">
                     <summary className="cursor-pointer">{c.evidenceFileId ? "Replace evidence" : "Attach evidence"}</summary>
                     <InlineForm action={attachEvidenceAction(c.id, c.recordVersion)} submitLabel="Attach">
-                      <input name="evidenceFileId" required placeholder="evidence file id (malware-scanned, PLT-128)" className="rounded border border-neutral-300 p-2 text-sm" />
+                      {(describedBy, invalid) => (
+                        <>
+                          <label className="sr-only" htmlFor={`cert-${c.id}-evidenceFileId`}>
+                            Evidence file id
+                          </label>
+                          <Input id={`cert-${c.id}-evidenceFileId`} name="evidenceFileId" required placeholder="evidence file id (malware-scanned, PLT-128)" invalid={invalid} aria-describedby={describedBy} />
+                        </>
+                      )}
                     </InlineForm>
                   </details>
                 ) : null}
@@ -470,7 +642,14 @@ function CertificateSection({ certificates, issueAction, importAction, attachEvi
                   <details className="text-xs">
                     <summary className="cursor-pointer">Revoke</summary>
                     <InlineForm action={revokeAction(c.id, c.recordVersion)} submitLabel="Revoke">
-                      <input name="reason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+                      {(describedBy, invalid) => (
+                        <>
+                          <label className="sr-only" htmlFor={`cert-${c.id}-revoke-reason`}>
+                            Reason
+                          </label>
+                          <Input id={`cert-${c.id}-revoke-reason`} name="reason" required placeholder="reason" invalid={invalid} aria-describedby={describedBy} />
+                        </>
+                      )}
                     </InlineForm>
                   </details>
                 ) : null}
@@ -482,11 +661,28 @@ function CertificateSection({ certificates, issueAction, importAction, attachEvi
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 border-t border-neutral-200 pt-3">
         <InlineForm action={runExpiryBatchAction} submitLabel="Run expiry batch">
-          <input name="periodLabel" required placeholder="period label, e.g. 2026-08" className="rounded border border-neutral-300 p-2 text-sm" />
+          {(describedBy, invalid) => (
+            <>
+              <label className="sr-only" htmlFor="expiry-batch-periodLabel">
+                Period label
+              </label>
+              <Input id="expiry-batch-periodLabel" name="periodLabel" required placeholder="period label, e.g. 2026-08" invalid={invalid} aria-describedby={describedBy} />
+            </>
+          )}
         </InlineForm>
         <InlineForm action={runReminderBatchAction} submitLabel="Run expiry reminder batch">
-          <input name="periodLabel" required placeholder="period label, e.g. 2026-08" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="lookaheadDays" type="number" defaultValue={30} placeholder="lookahead days" className="rounded border border-neutral-300 p-2 text-sm" />
+          {(describedBy, invalid) => (
+            <>
+              <label className="sr-only" htmlFor="reminder-batch-periodLabel">
+                Period label
+              </label>
+              <Input id="reminder-batch-periodLabel" name="periodLabel" required placeholder="period label, e.g. 2026-08" invalid={invalid} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="reminder-batch-lookaheadDays">
+                Lookahead days
+              </label>
+              <Input id="reminder-batch-lookaheadDays" name="lookaheadDays" type="number" defaultValue={30} placeholder="lookahead days" invalid={invalid} aria-describedby={describedBy} />
+            </>
+          )}
         </InlineForm>
       </div>
     </Section>
@@ -503,9 +699,22 @@ function DevelopmentPlanSection({ developmentPlans, createAction, addPlanActionA
   return (
     <Section title="Development plans" description="Authored by HR or the employee's own direct manager; may link to a specific HRT-283 performance outcome.">
       <InlineForm action={createAction} submitLabel="Create plan">
-        <input name="employeeId" required placeholder="employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-        <input name="title" required placeholder="title" className="rounded border border-neutral-300 p-2 text-sm" />
-        <input name="cycleLabel" placeholder="cycle label" className="rounded border border-neutral-300 p-2 text-sm" />
+        {(describedBy, invalid) => (
+          <>
+            <label className="sr-only" htmlFor="dev-plan-employeeId">
+              Employee id
+            </label>
+            <Input id="dev-plan-employeeId" name="employeeId" required placeholder="employee id" invalid={invalid} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="dev-plan-title">
+              Title
+            </label>
+            <Input id="dev-plan-title" name="title" required placeholder="title" invalid={invalid} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="dev-plan-cycleLabel">
+              Cycle label
+            </label>
+            <Input id="dev-plan-cycleLabel" name="cycleLabel" placeholder="cycle label" invalid={invalid} aria-describedby={describedBy} />
+          </>
+        )}
       </InlineForm>
       {developmentPlans.length === 0 ? (
         <EmptyState title="No development plans yet" description="Create the first one above." />
@@ -521,12 +730,25 @@ function DevelopmentPlanSection({ developmentPlans, createAction, addPlanActionA
                 <details className="text-xs text-neutral-500">
                   <summary className="cursor-pointer">Add action</summary>
                   <InlineForm action={addPlanActionAction(p.id)} submitLabel="Add action">
-                    <select name="actionType" className="rounded border border-neutral-300 p-2 text-sm">
-                      <option value="training">Training</option><option value="coaching">Coaching</option>
-                      <option value="stretch_assignment">Stretch assignment</option><option value="certification">Certification</option><option value="other">Other</option>
-                    </select>
-                    <input name="description" required placeholder="description" className="rounded border border-neutral-300 p-2 text-sm" />
-                    <input name="targetDate" type="date" className="rounded border border-neutral-300 p-2 text-sm" />
+                    {(describedBy, invalid) => (
+                      <>
+                        <label className="sr-only" htmlFor={`dev-plan-${p.id}-actionType`}>
+                          Action type
+                        </label>
+                        <Select id={`dev-plan-${p.id}-actionType`} name="actionType" invalid={invalid} aria-describedby={describedBy}>
+                          <option value="training">Training</option><option value="coaching">Coaching</option>
+                          <option value="stretch_assignment">Stretch assignment</option><option value="certification">Certification</option><option value="other">Other</option>
+                        </Select>
+                        <label className="sr-only" htmlFor={`dev-plan-${p.id}-description`}>
+                          Description
+                        </label>
+                        <Input id={`dev-plan-${p.id}-description`} name="description" required placeholder="description" invalid={invalid} aria-describedby={describedBy} />
+                        <label className="sr-only" htmlFor={`dev-plan-${p.id}-targetDate`}>
+                          Target date
+                        </label>
+                        <Input id={`dev-plan-${p.id}-targetDate`} name="targetDate" type="date" invalid={invalid} aria-describedby={describedBy} />
+                      </>
+                    )}
                   </InlineForm>
                 </details>
               ) : null}
@@ -570,10 +792,18 @@ function TalentSection({
       description="HRS:Override only, plus the specific assigned reviewer for that one case ('restricted talent reviewers see assigned cases'). A viewer with neither sees empty sections below, not a redirect."
     >
       <InlineForm action={createCycleAction} submitLabel="Create talent review cycle">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input name="name" required placeholder="cycle name" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="periodLabel" required placeholder="period label" className="rounded border border-neutral-300 p-2 text-sm" />
-        </div>
+        {(describedBy, invalid) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="sr-only" htmlFor="talent-cycle-name">
+              Cycle name
+            </label>
+            <Input id="talent-cycle-name" name="name" required placeholder="cycle name" invalid={invalid} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="talent-cycle-periodLabel">
+              Period label
+            </label>
+            <Input id="talent-cycle-periodLabel" name="periodLabel" required placeholder="period label" invalid={invalid} aria-describedby={describedBy} />
+          </div>
+        )}
       </InlineForm>
 
       {cycles.length === 0 ? (
@@ -595,8 +825,18 @@ function TalentSection({
                 <details className="text-xs text-neutral-500">
                   <summary className="cursor-pointer">Assign reviewer</summary>
                   <InlineForm action={assignReviewerAction(c.id)} submitLabel="Assign">
-                    <input name="subjectEmployeeId" required placeholder="subject employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-                    <input name="reviewerEmployeeId" required placeholder="reviewer employee id" className="rounded border border-neutral-300 p-2 text-sm" />
+                    {(describedBy, invalid) => (
+                      <>
+                        <label className="sr-only" htmlFor={`talent-cycle-${c.id}-subjectEmployeeId`}>
+                          Subject employee id
+                        </label>
+                        <Input id={`talent-cycle-${c.id}-subjectEmployeeId`} name="subjectEmployeeId" required placeholder="subject employee id" invalid={invalid} aria-describedby={describedBy} />
+                        <label className="sr-only" htmlFor={`talent-cycle-${c.id}-reviewerEmployeeId`}>
+                          Reviewer employee id
+                        </label>
+                        <Input id={`talent-cycle-${c.id}-reviewerEmployeeId`} name="reviewerEmployeeId" required placeholder="reviewer employee id" invalid={invalid} aria-describedby={describedBy} />
+                      </>
+                    )}
                   </InlineForm>
                 </details>
                 <ul className="flex flex-col gap-1 text-xs text-neutral-600">
@@ -610,8 +850,18 @@ function TalentSection({
                         <details>
                           <summary className="cursor-pointer">Reassign</summary>
                           <InlineForm action={reassignReviewerAction(a.id)} submitLabel="Reassign">
-                            <input name="newReviewerEmployeeId" required placeholder="new reviewer employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-                            <input name="reason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+                            {(describedBy, invalid) => (
+                              <>
+                                <label className="sr-only" htmlFor={`talent-assignment-${a.id}-newReviewerEmployeeId`}>
+                                  New reviewer employee id
+                                </label>
+                                <Input id={`talent-assignment-${a.id}-newReviewerEmployeeId`} name="newReviewerEmployeeId" required placeholder="new reviewer employee id" invalid={invalid} aria-describedby={describedBy} />
+                                <label className="sr-only" htmlFor={`talent-assignment-${a.id}-reason`}>
+                                  Reason
+                                </label>
+                                <Input id={`talent-assignment-${a.id}-reason`} name="reason" required placeholder="reason" invalid={invalid} aria-describedby={describedBy} />
+                              </>
+                            )}
                           </InlineForm>
                         </details>
                       ) : null}
@@ -625,12 +875,20 @@ function TalentSection({
       )}
 
       <InlineForm action={createPoolAction} submitLabel="Create talent pool">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input name="name" required placeholder="pool name" className="rounded border border-neutral-300 p-2 text-sm" />
-          <select name="poolType" className="rounded border border-neutral-300 p-2 text-sm">
-            <option value="high_potential">High potential</option><option value="successor">Successor</option><option value="critical_role">Critical role</option>
-          </select>
-        </div>
+        {(describedBy, invalid) => (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="sr-only" htmlFor="talent-pool-name">
+              Pool name
+            </label>
+            <Input id="talent-pool-name" name="name" required placeholder="pool name" invalid={invalid} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor="talent-pool-poolType">
+              Pool type
+            </label>
+            <Select id="talent-pool-poolType" name="poolType" invalid={invalid} aria-describedby={describedBy}>
+              <option value="high_potential">High potential</option><option value="successor">Successor</option><option value="critical_role">Critical role</option>
+            </Select>
+          </div>
+        )}
       </InlineForm>
 
       {talentPools.length === 0 ? (
@@ -649,8 +907,18 @@ function TalentSection({
                 <details className="text-xs text-neutral-500">
                   <summary className="cursor-pointer">Add member</summary>
                   <InlineForm action={addPoolMemberAction(p.id)} submitLabel="Add member">
-                    <input name="employeeId" required placeholder="employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-                    <input name="addedReason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+                    {(describedBy, invalid) => (
+                      <>
+                        <label className="sr-only" htmlFor={`talent-pool-${p.id}-employeeId`}>
+                          Employee id
+                        </label>
+                        <Input id={`talent-pool-${p.id}-employeeId`} name="employeeId" required placeholder="employee id" invalid={invalid} aria-describedby={describedBy} />
+                        <label className="sr-only" htmlFor={`talent-pool-${p.id}-addedReason`}>
+                          Reason
+                        </label>
+                        <Input id={`talent-pool-${p.id}-addedReason`} name="addedReason" required placeholder="reason" invalid={invalid} aria-describedby={describedBy} />
+                      </>
+                    )}
                   </InlineForm>
                 </details>
                 <ul className="flex flex-col gap-1 text-xs text-neutral-600">
@@ -660,7 +928,14 @@ function TalentSection({
                       <details>
                         <summary className="cursor-pointer">Remove</summary>
                         <InlineForm action={removePoolMemberAction(m.id, m.recordVersion)} submitLabel="Remove">
-                          <input name="removedReason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+                          {(describedBy, invalid) => (
+                            <>
+                              <label className="sr-only" htmlFor={`talent-pool-member-${m.id}-removedReason`}>
+                                Reason
+                              </label>
+                              <Input id={`talent-pool-member-${m.id}-removedReason`} name="removedReason" required placeholder="reason" invalid={invalid} aria-describedby={describedBy} />
+                            </>
+                          )}
                         </InlineForm>
                       </details>
                     </li>
@@ -690,15 +965,31 @@ function TalentSection({
       )}
 
       <InlineForm action={proposeCandidateAction} submitLabel="Propose succession candidate">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <input name="positionId" required placeholder="position id" className="rounded border border-neutral-300 p-2 text-sm" />
-          <input name="candidateEmployeeId" required placeholder="candidate employee id" className="rounded border border-neutral-300 p-2 text-sm" />
-        </div>
-        <select name="readiness" className="rounded border border-neutral-300 p-2 text-sm">
-          <option value="ready_now">Ready now</option><option value="ready_1_2_years">Ready in 1-2 years</option>
-          <option value="ready_3_plus_years">Ready in 3+ years</option><option value="development_needed">Development needed</option>
-        </select>
-        <input name="decisionReason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+        {(describedBy, invalid) => (
+          <>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className="sr-only" htmlFor="succession-positionId">
+                Position id
+              </label>
+              <Input id="succession-positionId" name="positionId" required placeholder="position id" invalid={invalid} aria-describedby={describedBy} />
+              <label className="sr-only" htmlFor="succession-candidateEmployeeId">
+                Candidate employee id
+              </label>
+              <Input id="succession-candidateEmployeeId" name="candidateEmployeeId" required placeholder="candidate employee id" invalid={invalid} aria-describedby={describedBy} />
+            </div>
+            <label className="sr-only" htmlFor="succession-readiness">
+              Readiness
+            </label>
+            <Select id="succession-readiness" name="readiness" invalid={invalid} aria-describedby={describedBy}>
+              <option value="ready_now">Ready now</option><option value="ready_1_2_years">Ready in 1-2 years</option>
+              <option value="ready_3_plus_years">Ready in 3+ years</option><option value="development_needed">Development needed</option>
+            </Select>
+            <label className="sr-only" htmlFor="succession-decisionReason">
+              Reason
+            </label>
+            <Input id="succession-decisionReason" name="decisionReason" required placeholder="reason" invalid={invalid} aria-describedby={describedBy} />
+          </>
+        )}
       </InlineForm>
 
       {successionCandidates.length === 0 ? (
@@ -727,21 +1018,27 @@ function TalentSection({
 
 function TransitionCycleButton({ action, label }: { action: BoundAction; label: string }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction}>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Working…">{label}</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={`${reactId}-error`} />
     </form>
   );
 }
 
 function DecideCandidateForm({ action, label, variant }: { action: BoundAction; label: string; variant: "primary" | "destructive" }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex items-center gap-2">
-      <input name="decisionReason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+      <label className="sr-only" htmlFor={reactId}>
+        Reason
+      </label>
+      <Input id={reactId} name="decisionReason" required placeholder="reason" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
       <Button type="submit" variant={variant} loading={pending} loadingLabel="Deciding…">{label}</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }

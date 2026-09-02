@@ -2,6 +2,11 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { OvertimePolicyRow } from "../../../../../../server/contracts/overtime-timesheet/overtime-timesheet.ts";
@@ -14,75 +19,71 @@ const STATUS_TONE: Record<string, StatusTone> = { draft: "neutral", published: "
 
 function CreatePolicyForm({ createOvertimePolicyAction }: { createOvertimePolicyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createOvertimePolicyAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-policy-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Policy name
-        <input name="name" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. Jakarta Warehouse Overtime" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Org unit id (optional -- blank = tenant-wide)
-        <input name="orgUnitId" className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="org_unit UUID" />
-      </label>
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4" noValidate>
+      <FormField id="overtime-policy-name" label="Policy name">
+        <Input id="overtime-policy-name" name="name" required placeholder="e.g. Jakarta Warehouse Overtime" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="overtime-policy-org-unit" label="Org unit id (optional -- blank = tenant-wide)">
+        <Input id="overtime-policy-org-unit" name="orgUnitId" placeholder="org_unit UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">
         Create policy
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="create-policy-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function CreateVersionForm({ policyId, createAndPublishVersionAction }: { policyId: string; createAndPublishVersionAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createAndPublishVersionAction, INITIAL_STATE);
+  const describedBy = state.error ? `create-version-${policyId}-error` : undefined;
 
   return (
-    <form action={formAction} className="mt-2 grid grid-cols-1 gap-2 rounded-md bg-neutral-50 p-3 sm:grid-cols-2">
-      <label className="text-xs text-neutral-500">
-        Effective from
-        <input type="date" name="effectiveFrom" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Rounding increment (minutes)
-        <input type="number" name="roundingIncrementMinutes" min="1" max="60" defaultValue="15" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Rounding mode
-        <select name="roundingMode" defaultValue="nearest" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+    <form action={formAction} className="mt-2 grid grid-cols-1 gap-2 rounded-md bg-neutral-50 p-3 sm:grid-cols-2" noValidate>
+      <FormField id={`version-effective-from-${policyId}`} label="Effective from">
+        <Input id={`version-effective-from-${policyId}`} type="date" name="effectiveFrom" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`version-rounding-increment-${policyId}`} label="Rounding increment (minutes)">
+        <Input id={`version-rounding-increment-${policyId}`} type="number" name="roundingIncrementMinutes" min="1" max="60" defaultValue="15" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`version-rounding-mode-${policyId}`} label="Rounding mode">
+        <Select id={`version-rounding-mode-${policyId}`} name="roundingMode" defaultValue="nearest" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="nearest">Nearest</option>
           <option value="up">Up</option>
           <option value="down">Down</option>
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Minimum overtime threshold (minutes)
-        <input type="number" name="minOvertimeMinutes" min="0" defaultValue="30" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Daily overtime cap (minutes, blank = no cap)
-        <input type="number" name="dailyOvertimeCapMinutes" min="1" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. 180" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Weekly overtime cap (minutes, blank = no cap)
-        <input type="number" name="weeklyOvertimeCapMinutes" min="1" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. 600" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Standard workday baseline (minutes)
-        <input type="number" name="standardWorkdayMinutes" min="1" max="1440" defaultValue="480" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Default break deduction (minutes)
-        <input type="number" name="defaultBreakDeductionMinutes" min="0" defaultValue="0" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="inline-flex items-center gap-1 text-xs text-neutral-500 sm:col-span-2">
-        <input type="checkbox" name="requiresPreApproval" defaultChecked /> Requires pre-approval for planned overtime
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`version-min-overtime-${policyId}`} label="Minimum overtime threshold (minutes)">
+        <Input id={`version-min-overtime-${policyId}`} type="number" name="minOvertimeMinutes" min="0" defaultValue="30" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`version-daily-cap-${policyId}`} label="Daily overtime cap (minutes, blank = no cap)">
+        <Input id={`version-daily-cap-${policyId}`} type="number" name="dailyOvertimeCapMinutes" min="1" placeholder="e.g. 180" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`version-weekly-cap-${policyId}`} label="Weekly overtime cap (minutes, blank = no cap)">
+        <Input id={`version-weekly-cap-${policyId}`} type="number" name="weeklyOvertimeCapMinutes" min="1" placeholder="e.g. 600" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`version-standard-workday-${policyId}`} label="Standard workday baseline (minutes)">
+        <Input id={`version-standard-workday-${policyId}`} type="number" name="standardWorkdayMinutes" min="1" max="1440" defaultValue="480" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`version-break-deduction-${policyId}`} label="Default break deduction (minutes)">
+        <Input id={`version-break-deduction-${policyId}`} type="number" name="defaultBreakDeductionMinutes" min="0" defaultValue="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <div className="sm:col-span-2">
+        <Checkbox id={`version-pre-approval-${policyId}`} name="requiresPreApproval" defaultChecked label="Requires pre-approval for planned overtime" aria-describedby={describedBy} />
+      </div>
       <input type="hidden" name="policyId" value={policyId} />
       <div className="sm:col-span-2">
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating and publishing…">
           Create and publish version
         </Button>
       </div>
-      {state.error ? <p role="alert" className="text-xs text-danger sm:col-span-2">{state.error}</p> : null}
+      {state.error ? (
+        <div className="sm:col-span-2">
+          <ValidationMessage id={`create-version-${policyId}-error`}>{state.error}</ValidationMessage>
+        </div>
+      ) : null}
     </form>
   );
 }

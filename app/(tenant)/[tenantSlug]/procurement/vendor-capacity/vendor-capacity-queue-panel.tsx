@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { VENDOR_CAPACITY_OFFER_STATUSES, type VendorCapacityOffer, type VendorCapacityOfferStatus } from "../../../../../server/contracts/vendor-capacity/vendor-capacity.ts";
@@ -37,6 +40,8 @@ export function VendorCapacityQueuePanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [createState, createFormAction, createPending] = useActionState(createAction, INITIAL_STATE);
+  const createErrorId = "vcap-create-error";
+  const createDescribedBy = createState.error ? createErrorId : undefined;
 
   function applyStatusFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -49,55 +54,35 @@ export function VendorCapacityQueuePanel({
     <div className="flex flex-col gap-4">
       <form action={createFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="vendorMasterId" className="text-xs font-medium text-neutral-700">
-              Vendor (required, active only)
-            </label>
-            <select id="vendorMasterId" name="vendorMasterId" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
-              <option value="">Select a vendor…</option>
-              {activeVendors.map((v) => (
-                <option key={v.masterRecordId} value={v.masterRecordId}>
-                  {v.legalName} ({v.vendorCode})
-                </option>
-              ))}
-            </select>
+          <div className="sm:col-span-2">
+            <FormField id="vendorMasterId" label="Vendor (required, active only)">
+              <Select id="vendorMasterId" name="vendorMasterId" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
+                <option value="">Select a vendor…</option>
+                {activeVendors.map((v) => (
+                  <option key={v.masterRecordId} value={v.masterRecordId}>
+                    {v.legalName} ({v.vendorCode})
+                  </option>
+                ))}
+              </Select>
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="serviceType" className="text-xs font-medium text-neutral-700">
-              Service type (required)
-            </label>
-            <Input id="serviceType" name="serviceType" type="text" required placeholder="ocean_freight" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="quantity" className="text-xs font-medium text-neutral-700">
-              Quantity (required)
-            </label>
-            <Input id="quantity" name="quantity" type="number" min={0.001} step="any" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="uom" className="text-xs font-medium text-neutral-700">
-              UOM (required)
-            </label>
-            <Input id="uom" name="uom" type="text" required placeholder="teu" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="windowStart" className="text-xs font-medium text-neutral-700">
-              Window start (required)
-            </label>
-            <Input id="windowStart" name="windowStart" type="date" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="windowEnd" className="text-xs font-medium text-neutral-700">
-              Window end (required)
-            </label>
-            <Input id="windowEnd" name="windowEnd" type="date" required />
-          </div>
+          <FormField id="serviceType" label="Service type (required)">
+            <Input id="serviceType" name="serviceType" type="text" required placeholder="ocean_freight" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="quantity" label="Quantity (required)">
+            <Input id="quantity" name="quantity" type="number" min={0.001} step="any" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="uom" label="UOM (required)">
+            <Input id="uom" name="uom" type="text" required placeholder="teu" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="windowStart" label="Window start (required)">
+            <Input id="windowStart" name="windowStart" type="date" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="windowEnd" label="Window end (required)">
+            <Input id="windowEnd" name="windowEnd" type="date" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
         </div>
-        {createState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {createState.error}
-          </p>
-        ) : null}
+        {createState.error ? <ValidationMessage id={createErrorId}>{createState.error}</ValidationMessage> : null}
         <Button type="submit" loading={createPending} loadingLabel="Creating…" className="w-fit">
           Create draft offer
         </Button>
@@ -107,14 +92,14 @@ export function VendorCapacityQueuePanel({
         <label htmlFor="vcap-status" className="text-xs font-medium text-neutral-600">
           Status
         </label>
-        <select id="vcap-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
+        <Select id="vcap-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
           <option value="">All</option>
           {VENDOR_CAPACITY_OFFER_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {offers.length === 0 ? (

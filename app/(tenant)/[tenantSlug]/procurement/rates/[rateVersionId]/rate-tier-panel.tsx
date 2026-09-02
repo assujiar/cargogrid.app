@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { VendorRateTier } from "../../../../../../server/contracts/procurement-rate/procurement-rate.ts";
 import type { RateVersionApprovalStatus } from "../../../../../../server/contracts/rate/rate.ts";
@@ -33,6 +35,10 @@ export function RateTierPanel({
   const [addState, addFormAction, addPending] = useActionState(addTierAction, TIER_INITIAL_STATE);
   const [removeState, removeFormAction] = useActionState(removeTierAction, TIER_INITIAL_STATE);
   const [calcState, calcFormAction, calcPending] = useActionState(calculateAction, CALC_INITIAL_STATE);
+  const addErrorId = "rate-tier-add-error";
+  const addDescribedBy = addState.error ? addErrorId : undefined;
+  const calcErrorId = "rate-tier-calc-error";
+  const calcDescribedBy = calcState.error ? calcErrorId : undefined;
 
   const editable = rateStatus === "pending_approval";
 
@@ -88,46 +94,35 @@ export function RateTierPanel({
             </table>
           </div>
         )}
-        {removeState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {removeState.error}
-          </p>
-        ) : null}
+        {removeState.error ? <ValidationMessage>{removeState.error}</ValidationMessage> : null}
 
         {editable ? (
           <form action={addFormAction} className="grid grid-cols-3 gap-3 border-t border-neutral-200 pt-3" noValidate>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="tierOrder" className="text-sm font-medium text-neutral-700">Tier order</label>
-              <Input id="tierOrder" name="tierOrder" type="number" min={1} required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="weightMin" className="text-sm font-medium text-neutral-700">Weight min</label>
-              <Input id="weightMin" name="weightMin" type="number" min={0} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="weightMax" className="text-sm font-medium text-neutral-700">Weight max (blank = unbounded)</label>
-              <Input id="weightMax" name="weightMax" type="number" min={0} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="volumeMin" className="text-sm font-medium text-neutral-700">Volume min</label>
-              <Input id="volumeMin" name="volumeMin" type="number" min={0} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="volumeMax" className="text-sm font-medium text-neutral-700">Volume max (blank = unbounded)</label>
-              <Input id="volumeMax" name="volumeMax" type="number" min={0} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="amount" className="text-sm font-medium text-neutral-700">Amount</label>
-              <Input id="amount" name="amount" type="number" min={0} required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="minimumCharge" className="text-sm font-medium text-neutral-700">Minimum charge (optional)</label>
-              <Input id="minimumCharge" name="minimumCharge" type="number" min={0} />
-            </div>
+            <FormField id="tierOrder" label="Tier order">
+              <Input id="tierOrder" name="tierOrder" type="number" min={1} required invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
+            <FormField id="weightMin" label="Weight min">
+              <Input id="weightMin" name="weightMin" type="number" min={0} invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
+            <FormField id="weightMax" label="Weight max (blank = unbounded)">
+              <Input id="weightMax" name="weightMax" type="number" min={0} invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
+            <FormField id="volumeMin" label="Volume min">
+              <Input id="volumeMin" name="volumeMin" type="number" min={0} invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
+            <FormField id="volumeMax" label="Volume max (blank = unbounded)">
+              <Input id="volumeMax" name="volumeMax" type="number" min={0} invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
+            <FormField id="amount" label="Amount">
+              <Input id="amount" name="amount" type="number" min={0} required invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
+            <FormField id="minimumCharge" label="Minimum charge (optional)">
+              <Input id="minimumCharge" name="minimumCharge" type="number" min={0} invalid={Boolean(addState.error)} aria-describedby={addDescribedBy} />
+            </FormField>
             {addState.error ? (
-              <p role="alert" className="col-span-3 text-sm text-danger">
-                {addState.error}
-              </p>
+              <div className="col-span-3">
+                <ValidationMessage id={addErrorId}>{addState.error}</ValidationMessage>
+              </div>
             ) : null}
             <Button type="submit" loading={addPending} loadingLabel="Adding…" className="col-span-3">
               Add tier
@@ -142,22 +137,19 @@ export function RateTierPanel({
         <h2 className="text-sm font-semibold text-neutral-900">Calculate preview</h2>
         <p className="text-xs text-neutral-500">Read-only, no side effect (RPD-040). Requires PRC:View cost.</p>
         <form action={calcFormAction} className="grid grid-cols-3 gap-3" noValidate>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="weight" className="text-sm font-medium text-neutral-700">Weight</label>
-            <Input id="weight" name="weight" type="number" min={0} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="volume" className="text-sm font-medium text-neutral-700">Volume</label>
-            <Input id="volume" name="volume" type="number" min={0} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="quantity" className="text-sm font-medium text-neutral-700">Quantity</label>
-            <Input id="quantity" name="quantity" type="number" min={0} />
-          </div>
+          <FormField id="weight" label="Weight">
+            <Input id="weight" name="weight" type="number" min={0} invalid={Boolean(calcState.error)} aria-describedby={calcDescribedBy} />
+          </FormField>
+          <FormField id="volume" label="Volume">
+            <Input id="volume" name="volume" type="number" min={0} invalid={Boolean(calcState.error)} aria-describedby={calcDescribedBy} />
+          </FormField>
+          <FormField id="quantity" label="Quantity">
+            <Input id="quantity" name="quantity" type="number" min={0} invalid={Boolean(calcState.error)} aria-describedby={calcDescribedBy} />
+          </FormField>
           {calcState.error ? (
-            <p role="alert" className="col-span-3 text-sm text-danger">
-              {calcState.error}
-            </p>
+            <div className="col-span-3">
+              <ValidationMessage id={calcErrorId}>{calcState.error}</ValidationMessage>
+            </div>
           ) : null}
           {calcState.result ? (
             <p className="col-span-3 text-sm text-neutral-900">

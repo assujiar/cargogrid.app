@@ -6,6 +6,9 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import { Timeline, type ActivityItemData } from "../../../../../../components/ui/timeline.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { OnboardingCaseActionState } from "./actions.ts";
 import type { CaseDetail, CaseTask, ApprovalTimelineRow, CaseStatus, TaskStatus, ApprovalDecision } from "../../../../../../server/contracts/onboarding/onboarding.ts";
 
@@ -93,23 +96,16 @@ export function CaseDetailPanel({
         </div>
         {canCancel ? (
           <form action={cancelFormAction} className="flex items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="cancel-reason" className="text-xs font-medium text-neutral-600">
-                Cancel reason
-              </label>
-              <input id="cancel-reason" name="reason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
+            <FormField id="cancel-reason" label="Cancel reason">
+              <Input id="cancel-reason" name="reason" type="text" required invalid={Boolean(cancelState.error)} aria-describedby={cancelState.error ? "cancel-case-error" : undefined} />
+            </FormField>
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">
               Cancel case
             </Button>
           </form>
         ) : null}
       </div>
-      {cancelState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {cancelState.error}
-        </p>
-      ) : null}
+      {cancelState.error ? <ValidationMessage id="cancel-case-error">{cancelState.error}</ValidationMessage> : null}
 
       {caseDetail.status === "cancelled" && caseDetail.cancelReason ? (
         <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">Cancelled: {caseDetail.cancelReason}</div>
@@ -124,21 +120,14 @@ export function CaseDetailPanel({
         <section className="flex flex-col gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
           <p className="text-sm text-neutral-700">This employee is terminated. Rehire (section 22 &quot;rehire linked to historical employee&quot;) requires HRS:Override.</p>
           <form action={rehireFormAction} className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="rehire-reason" className="text-xs font-medium text-neutral-600">
-                Rehire reason
-              </label>
-              <input id="rehire-reason" name="reason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
+            <FormField id="rehire-reason" label="Rehire reason">
+              <Input id="rehire-reason" name="reason" type="text" required invalid={Boolean(rehireState.error)} aria-describedby={rehireState.error ? "rehire-error" : undefined} />
+            </FormField>
             <Button type="submit" loading={rehirePending} loadingLabel="Rehiring…">
               Rehire employee
             </Button>
           </form>
-          {rehireState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {rehireState.error}
-            </p>
-          ) : null}
+          {rehireState.error ? <ValidationMessage id="rehire-error">{rehireState.error}</ValidationMessage> : null}
         </section>
       ) : null}
 
@@ -178,18 +167,11 @@ export function CaseDetailPanel({
           <form action={submitFormAction} className="flex flex-col gap-2 border-t border-neutral-100 pt-3">
             {mandatoryIncomplete > 0 ? <p className="text-xs text-warning">{mandatoryIncomplete} mandatory task(s) still incomplete -- submission will be rejected until they are completed or waived.</p> : null}
             {caseDetail.caseType === "offboarding" ? (
-              <div className="flex flex-col gap-1">
-                <label htmlFor="exitReason" className="text-xs font-medium text-neutral-600">
-                  Exit reason (required for offboarding)
-                </label>
-                <input id="exitReason" name="exitReason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-              </div>
+              <FormField id="exitReason" label="Exit reason (required for offboarding)">
+                <Input id="exitReason" name="exitReason" type="text" required invalid={Boolean(submitState.error)} aria-describedby={submitState.error ? "submit-finalize-error" : undefined} />
+              </FormField>
             ) : null}
-            {submitState.error ? (
-              <p role="alert" className="text-sm text-danger">
-                {submitState.error}
-              </p>
-            ) : null}
+            {submitState.error ? <ValidationMessage id="submit-finalize-error">{submitState.error}</ValidationMessage> : null}
             <div>
               <Button type="submit" loading={submitPending} loadingLabel="Submitting…">
                 Submit for finalize approval
@@ -226,22 +208,25 @@ function DecisionForm({ requestStepId, decideAction }: { requestStepId: string; 
           </Button>
         </form>
         <form action={rejectFormAction} className="flex items-end gap-2">
-          <input name="reason" type="text" placeholder="rejection reason" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          <label className="sr-only" htmlFor={`finalize-reject-reason-${requestStepId}`}>
+            Rejection reason
+          </label>
+          <Input
+            id={`finalize-reject-reason-${requestStepId}`}
+            name="reason"
+            type="text"
+            placeholder="rejection reason"
+            required
+            invalid={Boolean(rejectState.error)}
+            aria-describedby={rejectState.error ? `finalize-reject-error-${requestStepId}` : undefined}
+          />
           <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">
             Reject
           </Button>
         </form>
       </div>
-      {approveState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {approveState.error}
-        </p>
-      ) : null}
-      {rejectState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {rejectState.error}
-        </p>
-      ) : null}
+      {approveState.error ? <ValidationMessage id={`finalize-approve-error-${requestStepId}`}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={`finalize-reject-error-${requestStepId}`}>{rejectState.error}</ValidationMessage> : null}
     </div>
   );
 }
@@ -309,122 +294,125 @@ function TaskRow({
       {!isTerminal && !isBlocked ? (
         <div className="mt-2 flex flex-col gap-2">
           <form action={assignFormAction} className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`task-owner-${task.id}`} className="text-xs text-neutral-500">
-                Assign owner (auth user id)
-              </label>
-              <input id={`task-owner-${task.id}`} name="ownerAuthUserId" type="text" defaultValue={task.ownerAuthUserId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-            </div>
+            <FormField id={`task-owner-${task.id}`} label="Assign owner (auth user id)">
+              <Input
+                id={`task-owner-${task.id}`}
+                name="ownerAuthUserId"
+                type="text"
+                defaultValue={task.ownerAuthUserId ?? ""}
+                invalid={Boolean(assignState.error)}
+                aria-describedby={assignState.error ? `task-assign-error-${task.id}` : undefined}
+              />
+            </FormField>
             <Button type="submit" variant="secondary" loading={assignPending} loadingLabel="Assigning…">
               Assign
             </Button>
           </form>
-          {assignState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {assignState.error}
-            </p>
-          ) : null}
+          {assignState.error ? <ValidationMessage id={`task-assign-error-${task.id}`}>{assignState.error}</ValidationMessage> : null}
 
           {task.taskType === "access_provisioning" ? (
             <form action={provisionFormAction} className="flex flex-wrap items-end gap-2 rounded-md bg-neutral-50 p-2">
-              <div className="flex flex-col gap-1">
-                <label htmlFor={`task-target-user-${task.id}`} className="text-xs text-neutral-500">
-                  Target auth user id (resolved identity, optional)
-                </label>
-                <input id={`task-target-user-${task.id}`} name="targetAuthUserId" type="text" placeholder="leave blank to only record the request" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor={`task-role-versions-${task.id}`} className="text-xs text-neutral-500">
-                  Role version ids (comma-separated, optional)
-                </label>
-                <input id={`task-role-versions-${task.id}`} name="roleVersionIds" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-              </div>
+              <FormField id={`task-target-user-${task.id}`} label="Target auth user id (resolved identity, optional)">
+                <Input
+                  id={`task-target-user-${task.id}`}
+                  name="targetAuthUserId"
+                  type="text"
+                  placeholder="leave blank to only record the request"
+                  invalid={Boolean(provisionState.error)}
+                  aria-describedby={provisionState.error ? `task-provision-error-${task.id}` : undefined}
+                />
+              </FormField>
+              <FormField id={`task-role-versions-${task.id}`} label="Role version ids (comma-separated, optional)">
+                <Input
+                  id={`task-role-versions-${task.id}`}
+                  name="roleVersionIds"
+                  type="text"
+                  invalid={Boolean(provisionState.error)}
+                  aria-describedby={provisionState.error ? `task-provision-error-${task.id}` : undefined}
+                />
+              </FormField>
               <Button type="submit" loading={provisionPending} loadingLabel="Requesting…">
                 Request provisioning
               </Button>
             </form>
           ) : task.taskType === "access_revocation" ? (
             <form action={revokeFormAction} className="flex flex-wrap items-end gap-2 rounded-md bg-neutral-50 p-2">
-              <div className="flex flex-col gap-1">
-                <label htmlFor={`task-revoke-reason-${task.id}`} className="text-xs text-neutral-500">
-                  Reason (required)
-                </label>
-                <input id={`task-revoke-reason-${task.id}`} name="reason" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-              </div>
+              <FormField id={`task-revoke-reason-${task.id}`} label="Reason (required)">
+                <Input
+                  id={`task-revoke-reason-${task.id}`}
+                  name="reason"
+                  type="text"
+                  required
+                  invalid={Boolean(revokeState.error)}
+                  aria-describedby={revokeState.error ? `task-revoke-error-${task.id}` : undefined}
+                />
+              </FormField>
               <Button type="submit" variant="destructive" loading={revokePending} loadingLabel="Revoking…">
                 Request revocation
               </Button>
             </form>
           ) : (
             <form action={completeFormAction} className="flex flex-wrap items-end gap-2">
-              <div className="flex flex-col gap-1">
-                <label htmlFor={`task-evidence-note-${task.id}`} className="text-xs text-neutral-500">
-                  Evidence note{task.taskType === "handoff" ? " (a note or a file is required)" : ""}
-                </label>
-                <input id={`task-evidence-note-${task.id}`} name="evidenceNote" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor={`task-evidence-file-${task.id}`} className="text-xs text-neutral-500">
-                  Evidence file id (optional)
-                </label>
-                <input id={`task-evidence-file-${task.id}`} name="evidenceFileId" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-              </div>
+              <FormField id={`task-evidence-note-${task.id}`} label={`Evidence note${task.taskType === "handoff" ? " (a note or a file is required)" : ""}`}>
+                <Input
+                  id={`task-evidence-note-${task.id}`}
+                  name="evidenceNote"
+                  type="text"
+                  invalid={Boolean(completeState.error)}
+                  aria-describedby={completeState.error ? `task-complete-error-${task.id}` : undefined}
+                />
+              </FormField>
+              <FormField id={`task-evidence-file-${task.id}`} label="Evidence file id (optional)">
+                <Input
+                  id={`task-evidence-file-${task.id}`}
+                  name="evidenceFileId"
+                  type="text"
+                  invalid={Boolean(completeState.error)}
+                  aria-describedby={completeState.error ? `task-complete-error-${task.id}` : undefined}
+                />
+              </FormField>
               <Button type="submit" loading={completePending} loadingLabel="Completing…">
                 Complete
               </Button>
             </form>
           )}
-          {provisionState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {provisionState.error}
-            </p>
-          ) : null}
-          {revokeState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {revokeState.error}
-            </p>
-          ) : null}
-          {completeState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {completeState.error}
-            </p>
-          ) : null}
+          {provisionState.error ? <ValidationMessage id={`task-provision-error-${task.id}`}>{provisionState.error}</ValidationMessage> : null}
+          {revokeState.error ? <ValidationMessage id={`task-revoke-error-${task.id}`}>{revokeState.error}</ValidationMessage> : null}
+          {completeState.error ? <ValidationMessage id={`task-complete-error-${task.id}`}>{completeState.error}</ValidationMessage> : null}
 
           <form action={waiveFormAction} className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor={`task-waive-reason-${task.id}`} className="text-xs text-neutral-500">
-                Waive reason
-              </label>
-              <input id={`task-waive-reason-${task.id}`} name="waiveReason" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-            </div>
+            <FormField id={`task-waive-reason-${task.id}`} label="Waive reason">
+              <Input
+                id={`task-waive-reason-${task.id}`}
+                name="waiveReason"
+                type="text"
+                invalid={Boolean(waiveState.error)}
+                aria-describedby={waiveState.error ? `task-waive-error-${task.id}` : undefined}
+              />
+            </FormField>
             <Button type="submit" variant="secondary" loading={waivePending} loadingLabel="Waiving…">
               Waive (requires Override)
             </Button>
           </form>
-          {waiveState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {waiveState.error}
-            </p>
-          ) : null}
+          {waiveState.error ? <ValidationMessage id={`task-waive-error-${task.id}`}>{waiveState.error}</ValidationMessage> : null}
         </div>
       ) : isBlocked ? (
         <p className="mt-2 text-xs text-warning">Blocked -- waiting on the task(s) listed above.</p>
       ) : (
         <form action={reopenFormAction} className="mt-2 flex flex-wrap items-end gap-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`task-reopen-reason-${task.id}`} className="text-xs text-neutral-500">
-              Reopen reason
-            </label>
-            <input id={`task-reopen-reason-${task.id}`} name="reason" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          </div>
+          <FormField id={`task-reopen-reason-${task.id}`} label="Reopen reason">
+            <Input
+              id={`task-reopen-reason-${task.id}`}
+              name="reason"
+              type="text"
+              invalid={Boolean(reopenState.error)}
+              aria-describedby={reopenState.error ? `task-reopen-error-${task.id}` : undefined}
+            />
+          </FormField>
           <Button type="submit" variant="secondary" loading={reopenPending} loadingLabel="Reopening…">
             Reopen
           </Button>
-          {reopenState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {reopenState.error}
-            </p>
-          ) : null}
+          {reopenState.error ? <ValidationMessage id={`task-reopen-error-${task.id}`}>{reopenState.error}</ValidationMessage> : null}
         </form>
       )}
     </div>

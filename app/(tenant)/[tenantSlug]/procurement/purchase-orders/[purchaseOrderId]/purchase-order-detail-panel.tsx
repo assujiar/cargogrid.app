@@ -1,8 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
 import type { PurchaseOrder, PurchaseOrderLine, PurchaseOrderEvent, PurchaseOrderStatus } from "../../../../../../server/contracts/purchase-order/purchase-order.ts";
@@ -31,21 +34,20 @@ function ActionForm({
   className = "flex flex-col gap-2",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className={className}>
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -168,62 +170,62 @@ export function PurchaseOrderDetailPanel({
 
         {canAcknowledge ? (
           <ActionForm action={acknowledgeAction} submitLabel="Record vendor acknowledgement" loadingLabel="Recording…">
-            <label htmlFor="acknowledgementNote" className="text-xs font-medium text-neutral-700">
-              Acknowledgement note (required)
-            </label>
-            <Input id="acknowledgementNote" name="acknowledgementNote" type="text" required />
+            {(describedBy) => (
+              <FormField id="acknowledgementNote" label="Acknowledgement note (required)">
+                <Input id="acknowledgementNote" name="acknowledgementNote" type="text" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
 
         {canRecordFulfillment ? (
           <ActionForm action={recordFulfillmentAction} submitLabel="Record fulfillment status" loadingLabel="Recording…">
-            <label htmlFor="fulfillmentStatus" className="text-xs font-medium text-neutral-700">
-              New fulfillment status
-            </label>
-            <select id="fulfillmentStatus" name="fulfillmentStatus" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" defaultValue="partial">
-              <option value="partial">partial</option>
-              <option value="fulfilled">fulfilled</option>
-            </select>
-            <label htmlFor="fulfillmentReference" className="text-xs font-medium text-neutral-700">
-              Fulfillment reference (canonical shipment/service evidence, required)
-            </label>
-            <Input id="fulfillmentReference" name="fulfillmentReference" type="text" required />
+            {(describedBy) => (
+              <>
+                <FormField id="fulfillmentStatus" label="New fulfillment status">
+                  <Select id="fulfillmentStatus" name="fulfillmentStatus" defaultValue="partial" aria-describedby={describedBy}>
+                    <option value="partial">partial</option>
+                    <option value="fulfilled">fulfilled</option>
+                  </Select>
+                </FormField>
+                <FormField id="fulfillmentReference" label="Fulfillment reference (canonical shipment/service evidence, required)">
+                  <Input id="fulfillmentReference" name="fulfillmentReference" type="text" required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
         {canAmend ? (
           <ActionForm action={amendAction} submitLabel="Amend (creates a new version)" loadingLabel="Amending…" variant="secondary">
-            <label htmlFor="amend-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="amend-reason" name="reason" type="text" required />
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label htmlFor="amend-paymentTermDays" className="text-xs font-medium text-neutral-700">
-                  New payment term days
-                </label>
-                <Input id="amend-paymentTermDays" name="paymentTermDays" type="number" min={0} />
-              </div>
-              <div>
-                <label htmlFor="amend-expectedDeliveryDate" className="text-xs font-medium text-neutral-700">
-                  New expected delivery date
-                </label>
-                <Input id="amend-expectedDeliveryDate" name="expectedDeliveryDate" type="date" />
-              </div>
-            </div>
-            <label htmlFor="amend-commercialTerms" className="text-xs font-medium text-neutral-700">
-              New commercial terms
-            </label>
-            <Input id="amend-commercialTerms" name="commercialTerms" type="text" />
+            {(describedBy) => (
+              <>
+                <FormField id="amend-reason" label="Reason (required)">
+                  <Input id="amend-reason" name="reason" type="text" required aria-describedby={describedBy} />
+                </FormField>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField id="amend-paymentTermDays" label="New payment term days">
+                    <Input id="amend-paymentTermDays" name="paymentTermDays" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="amend-expectedDeliveryDate" label="New expected delivery date">
+                    <Input id="amend-expectedDeliveryDate" name="expectedDeliveryDate" type="date" aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+                <FormField id="amend-commercialTerms" label="New commercial terms">
+                  <Input id="amend-commercialTerms" name="commercialTerms" type="text" aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
         {canCancel ? (
           <ActionForm action={cancelAction} submitLabel="Cancel" loadingLabel="Cancelling…" variant="destructive">
-            <label htmlFor="cancel-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="cancel-reason" name="reason" type="text" required />
+            {(describedBy) => (
+              <FormField id="cancel-reason" label="Reason (required)">
+                <Input id="cancel-reason" name="reason" type="text" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
 

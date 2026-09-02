@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { SessionListRow, AttendanceExceptionRow, CorrectionRequestRow } from "../../../../../server/contracts/attendance/attendance.ts";
@@ -15,35 +20,36 @@ const EXCEPTION_SEVERITY_TONE: Record<string, StatusTone> = { low: "neutral", me
 
 function ManualEntryForm({ recordManualEntryAction }: { recordManualEntryAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(recordManualEntryAction, INITIAL_STATE);
+  const describedBy = state.error ? "manual-entry-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-neutral-900">Manual attendance entry</h2>
       <p className="text-xs text-neutral-500">For a missed punch or offline event -- never subject to geofence checks (an HR-authenticated action, decision 4).</p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Employee (master record id)
-          <input name="employeeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="employee UUID" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Event
-          <select name="eventType" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id="manual-entry-employee-id" label="Employee (master record id)">
+          <Input id="manual-entry-employee-id" name="employeeId" required placeholder="employee UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="manual-entry-event-type" label="Event">
+          <Select id="manual-entry-event-type" name="eventType" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="clock_in">Clock in</option>
             <option value="clock_out">Clock out</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500 sm:col-span-2">
-          Event time
-          <input type="datetime-local" name="eventAt" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500 sm:col-span-2">
-          Reason
-          <textarea name="reason" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={2} />
-        </label>
+          </Select>
+        </FormField>
+        <div className="sm:col-span-2">
+          <FormField id="manual-entry-event-at" label="Event time">
+            <Input id="manual-entry-event-at" type="datetime-local" name="eventAt" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+        <div className="sm:col-span-2">
+          <FormField id="manual-entry-reason" label="Reason">
+            <Textarea id="manual-entry-reason" name="reason" required minLength={1} rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
       </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…">
         Record entry
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="manual-entry-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -75,14 +81,17 @@ function ExceptionRow({
           </Button>
         </form>
         <form action={waiveFormAction} className="flex flex-1 items-center gap-2">
-          <input name="waiveReason" required placeholder="Waive reason (required, HRS:Override)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-2 text-xs" />
+          <label htmlFor={`waive-reason-${exception.id}`} className="sr-only">
+            Waive reason
+          </label>
+          <Input id={`waive-reason-${exception.id}`} name="waiveReason" required placeholder="Waive reason (required, HRS:Override)" className="min-w-[12rem] flex-1 text-xs" invalid={Boolean(waiveState.error)} aria-describedby={waiveState.error ? `waive-${exception.id}-error` : undefined} />
           <Button type="submit" variant="destructive" loading={waivePending} loadingLabel="Waiving…">
             Waive
           </Button>
         </form>
       </div>
-      {ackState.error ? <p role="alert" className="text-xs text-danger">{ackState.error}</p> : null}
-      {waiveState.error ? <p role="alert" className="text-xs text-danger">{waiveState.error}</p> : null}
+      {ackState.error ? <ValidationMessage>{ackState.error}</ValidationMessage> : null}
+      {waiveState.error ? <ValidationMessage id={`waive-${exception.id}-error`}>{waiveState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -99,60 +108,64 @@ function CorrectionRow({ correction, decideCorrectionAction }: { correction: Cor
       </span>
       <div className="flex flex-wrap gap-2">
         <form action={approveFormAction} className="flex flex-1 items-center gap-2">
-          <input name="decidedReason" required placeholder="Decision reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-2 text-xs" />
+          <label htmlFor={`approve-corr-reason-${correction.id}`} className="sr-only">
+            Decision reason
+          </label>
+          <Input id={`approve-corr-reason-${correction.id}`} name="decidedReason" required placeholder="Decision reason (required)" className="min-w-[12rem] flex-1 text-xs" invalid={Boolean(approveState.error)} aria-describedby={approveState.error ? `approve-corr-${correction.id}-error` : undefined} />
           <Button type="submit" variant="primary" loading={approvePending} loadingLabel="Approving…">
             Approve
           </Button>
         </form>
         <form action={rejectFormAction} className="flex flex-1 items-center gap-2">
-          <input name="decidedReason" required placeholder="Decision reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-2 text-xs" />
+          <label htmlFor={`reject-corr-reason-${correction.id}`} className="sr-only">
+            Decision reason
+          </label>
+          <Input id={`reject-corr-reason-${correction.id}`} name="decidedReason" required placeholder="Decision reason (required)" className="min-w-[12rem] flex-1 text-xs" invalid={Boolean(rejectState.error)} aria-describedby={rejectState.error ? `reject-corr-${correction.id}-error` : undefined} />
           <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">
             Reject
           </Button>
         </form>
       </div>
-      {approveState.error ? <p role="alert" className="text-xs text-danger">{approveState.error}</p> : null}
-      {rejectState.error ? <p role="alert" className="text-xs text-danger">{rejectState.error}</p> : null}
+      {approveState.error ? <ValidationMessage id={`approve-corr-${correction.id}-error`}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={`reject-corr-${correction.id}-error`}>{rejectState.error}</ValidationMessage> : null}
     </li>
   );
 }
 
 function PayrollApprovalForm({ approvePayrollInputAction }: { approvePayrollInputAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(approvePayrollInputAction, INITIAL_STATE);
+  const describedBy = state.error ? "payroll-approval-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        From
-        <input type="date" name="fromDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        To
-        <input type="date" name="toDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4" noValidate>
+      <FormField id="payroll-approval-from" label="From">
+        <Input id="payroll-approval-from" type="date" name="fromDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="payroll-approval-to" label="To">
+        <Input id="payroll-approval-to" type="date" name="toDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Approving…">
         Approve attendance for payroll input
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="payroll-approval-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function RecalculateExceptionsForm({ recalculateExceptionsAction }: { recalculateExceptionsAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(recalculateExceptionsAction, INITIAL_STATE);
+  const describedBy = state.error ? "recalc-exceptions-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        From
-        <input type="date" name="fromDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        To (at most 92 days)
-        <input type="date" name="toDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+    <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4" noValidate>
+      <FormField id="recalc-from" label="From">
+        <Input id="recalc-from" type="date" name="fromDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="recalc-to" label="To (at most 92 days)">
+        <Input id="recalc-to" type="date" name="toDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recalculating…">
         Recalculate exceptions for range
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="recalc-exceptions-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }

@@ -2,6 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { PayslipRow, PayrollReimbursementRow, PayrollLoanRow } from "../../../../../../server/contracts/payroll/payroll.ts";
@@ -15,8 +19,8 @@ const LOAN_STATUS_TONE: Record<string, StatusTone> = { active: "info", completed
 
 type BoundAction = (prevState: MyPayrollActionState, formData: FormData) => Promise<MyPayrollActionState>;
 
-function ErrorLine({ error }: { error: string | null }) {
-  return error ? <p role="alert" className="text-xs text-danger">{error}</p> : null;
+function ErrorLine({ error, id }: { error: string | null; id?: string }) {
+  return error ? <ValidationMessage id={id}>{error}</ValidationMessage> : null;
 }
 
 function PayslipCard({ row }: { row: PayslipRow }) {
@@ -47,29 +51,26 @@ function PayslipCard({ row }: { row: PayslipRow }) {
 
 function CreateReimbursementForm({ createMyReimbursementRequestAction }: { createMyReimbursementRequestAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createMyReimbursementRequestAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-reimbursement-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-neutral-900">Submit a reimbursement request</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-xs text-neutral-500">
-          Category
-          <input name="category" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. travel" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Amount (IDR)
-          <input type="number" name="amount" min={0} step="0.01" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Expense date
-          <input type="date" name="expenseDate" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id="reimbursement-category" label="Category">
+          <Input id="reimbursement-category" name="category" required placeholder="e.g. travel" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="reimbursement-amount" label="Amount (IDR)">
+          <Input id="reimbursement-amount" type="number" name="amount" min={0} step="0.01" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="reimbursement-expense-date" label="Expense date">
+          <Input id="reimbursement-expense-date" type="date" name="expenseDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <label className="text-xs text-neutral-500">
-        Description
-        <textarea name="description" required minLength={1} rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id="reimbursement-description" label="Description">
+        <Textarea id="reimbursement-description" name="description" required minLength={1} rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…">Submit request</Button>
-      <ErrorLine error={state.error} />
+      {state.error ? <ValidationMessage id="create-reimbursement-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -95,12 +96,15 @@ function ReimbursementRowItem({ row, submitMyReimbursementRequestAction, cancelM
         ) : null}
         {(row.status === "draft" || row.status === "pending_approval") ? (
           <form action={cancelAction} className="flex items-center gap-1">
-            <input type="text" name="reason" placeholder="reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+            <label htmlFor={`reimb-cancel-reason-${row.id}`} className="sr-only">
+              Reason
+            </label>
+            <Input id={`reimb-cancel-reason-${row.id}`} type="text" name="reason" placeholder="reason" required className="text-xs" invalid={Boolean(cancelState.error)} aria-describedby={cancelState.error ? `reimb-cancel-${row.id}-error` : undefined} />
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">Cancel</Button>
           </form>
         ) : null}
       </div>
-      <ErrorLine error={submitState.error ?? cancelState.error} />
+      <ErrorLine error={submitState.error ?? cancelState.error} id={`reimb-cancel-${row.id}-error`} />
     </li>
   );
 }

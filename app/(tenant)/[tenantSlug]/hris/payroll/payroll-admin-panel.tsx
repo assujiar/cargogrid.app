@@ -1,9 +1,14 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type {
   PayrollPeriodRow,
   PayrollComponentRow,
@@ -26,58 +31,57 @@ const RUN_STATUS_TONE: Record<string, StatusTone> = {
 
 type BoundAction = (prevState: PayrollAdminActionState, formData: FormData) => Promise<PayrollAdminActionState>;
 
-function ErrorLine({ error }: { error: string | null }) {
-  return error ? <p role="alert" className="text-xs text-danger">{error}</p> : null;
+function ErrorLine({ error, id }: { error: string | null; id?: string }) {
+  return error ? <ValidationMessage id={id}>{error}</ValidationMessage> : null;
 }
 
 function CreatePeriodForm({ createPayrollPeriodAction }: { createPayrollPeriodAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createPayrollPeriodAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Create payroll period</h3>
-      <label className="text-xs text-neutral-500">
-        Code
-        <input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. 2026-08" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Type
-        <select name="periodType" defaultValue="monthly" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id={`${reactId}-code`} label="Code">
+        <Input id={`${reactId}-code`} name="code" required placeholder="e.g. 2026-08" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-periodType`} label="Type">
+        <Select id={`${reactId}-periodType`} name="periodType" defaultValue="monthly" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="monthly">Monthly</option>
           <option value="semi_monthly">Semi-monthly</option>
           <option value="biweekly">Biweekly</option>
           <option value="weekly">Weekly</option>
-        </select>
-      </label>
+        </Select>
+      </FormField>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-xs text-neutral-500">
-          Period start
-          <input type="date" name="periodStart" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Period end
-          <input type="date" name="periodEnd" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Pay date
-          <input type="date" name="payDate" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-periodStart`} label="Period start">
+          <Input type="date" id={`${reactId}-periodStart`} name="periodStart" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-periodEnd`} label="Period end">
+          <Input type="date" id={`${reactId}-periodEnd`} name="periodEnd" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-payDate`} label="Pay date">
+          <Input type="date" id={`${reactId}-payDate`} name="payDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">Create period</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function ReopenPeriodInputsForm({ row, reopenPayrollPeriodInputsAction }: { row: PayrollPeriodRow; reopenPayrollPeriodInputsAction: (periodId: string, expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(reopenPayrollPeriodInputsAction(row.id, row.recordVersion), INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      <label className="text-xs text-neutral-500">
-        Reason (required)
-        <input name="reason" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. correcting a frozen-input data error" />
-      </label>
+      <FormField id={reactId} label="Reason (required)">
+        <Input id={reactId} name="reason" required placeholder="e.g. correcting a frozen-input data error" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Reopening…">Reopen inputs</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -115,82 +119,78 @@ function PeriodRowItem({
 
 function CreateComponentForm({ createPayrollComponentAction }: { createPayrollComponentAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createPayrollComponentAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Create pay component</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Code
-          <input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. base_salary" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Name
-          <input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-code`} label="Code">
+          <Input id={`${reactId}-code`} name="code" required placeholder="e.g. base_salary" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-name`} label="Name">
+          <Input id={`${reactId}-name`} name="name" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Type
-          <select name="componentType" defaultValue="earning" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id={`${reactId}-componentType`} label="Type">
+          <Select id={`${reactId}-componentType`} name="componentType" defaultValue="earning" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="earning">Earning</option>
             <option value="deduction">Deduction</option>
             <option value="benefit_employer_cost">Benefit (employer cost)</option>
             <option value="tax">Tax</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500">
-          GL mapping category
-          <input name="glMappingCategory" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. salary_expense" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={`${reactId}-glMappingCategory`} label="GL mapping category">
+          <Input id={`${reactId}-glMappingCategory`} name="glMappingCategory" required placeholder="e.g. salary_expense" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Calculation method (optional first version)
-          <select name="calculationMethod" defaultValue="fixed_amount" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id={`${reactId}-calculationMethod`} label="Calculation method (optional first version)">
+          <Select id={`${reactId}-calculationMethod`} name="calculationMethod" defaultValue="fixed_amount" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="fixed_amount">Fixed amount</option>
             <option value="hourly_rate">Hourly rate</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500">
-          Amount (IDR)
-          <input type="number" name="fixedAmount" min={0} step="0.01" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={`${reactId}-fixedAmount`} label="Amount (IDR)">
+          <Input type="number" id={`${reactId}-fixedAmount`} name="fixedAmount" min={0} step="0.01" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">Create component</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function AssignComponentForm({ components, assignPayrollComponentAction }: { components: PayrollComponentRow[]; assignPayrollComponentAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(assignPayrollComponentAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Assign a component to an employee</h3>
-      <label className="text-xs text-neutral-500">
-        Employee ID
-        <input name="employeeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="employee master_record_id" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Component
-        <select name="componentId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id={`${reactId}-employeeId`} label="Employee ID">
+        <Input id={`${reactId}-employeeId`} name="employeeId" required placeholder="employee master_record_id" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-componentId`} label="Component">
+        <Select id={`${reactId}-componentId`} name="componentId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
           {components.map((c) => (
             <option key={c.id} value={c.id}>{c.code} ({c.componentType}{c.isStatutory ? ", statutory — inactive pending SME evidence" : ""})</option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </FormField>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Effective from
-          <input type="date" name="effectiveFrom" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Manual amount (only for manual_per_run components)
-          <input type="number" name="manualAmount" min={0} step="0.01" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-effectiveFrom`} label="Effective from">
+          <Input type="date" id={`${reactId}-effectiveFrom`} name="effectiveFrom" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-manualAmount`} label="Manual amount (only for manual_per_run components)">
+          <Input type="number" id={`${reactId}-manualAmount`} name="manualAmount" min={0} step="0.01" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Assigning…">Assign</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -201,58 +201,74 @@ function IssueLoanForm({ issuePayrollLoanAction }: { issuePayrollLoanAction: Bou
   const [isOpeningBalance, setIsOpeningBalance] = useState(false);
   const termCountNumber = Number(termCount);
   const remainingMax = termCount && termCountNumber > 0 ? termCountNumber : undefined;
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
 
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Issue an employee loan/advance</h3>
-      <label className="text-xs text-neutral-500">
-        Employee ID
-        <input name="employeeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={`${reactId}-employeeId`} label="Employee ID">
+        <Input id={`${reactId}-employeeId`} name="employeeId" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-xs text-neutral-500">
-          Principal (IDR)
-          <input type="number" name="principalAmount" min={0} step="0.01" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Installment (IDR)
-          <input type="number" name="installmentAmount" min={0} step="0.01" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Term (installments)
-          <input
-            type="number" name="termCount" min={1} max={360} required value={termCount}
+        <FormField id={`${reactId}-principalAmount`} label="Principal (IDR)">
+          <Input type="number" id={`${reactId}-principalAmount`} name="principalAmount" min={0} step="0.01" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-installmentAmount`} label="Installment (IDR)">
+          <Input type="number" id={`${reactId}-installmentAmount`} name="installmentAmount" min={0} step="0.01" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-termCount`} label="Term (installments)">
+          <Input
+            type="number"
+            id={`${reactId}-termCount`}
+            name="termCount"
+            min={1}
+            max={360}
+            required
+            value={termCount}
             onChange={(e) => setTermCount(e.target.value)}
-            className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
           />
-        </label>
+        </FormField>
       </div>
-      <label className="inline-flex items-center gap-1 text-xs text-neutral-500">
-        <input
-          type="checkbox" name="isOpeningBalance" checked={isOpeningBalance}
-          onChange={(e) => setIsOpeningBalance(e.target.checked)}
-        /> This is an opening balance
-      </label>
+      <Checkbox
+        name="isOpeningBalance"
+        checked={isOpeningBalance}
+        onChange={(e) => setIsOpeningBalance(e.target.checked)}
+        label="This is an opening balance"
+      />
       <p className="text-xs text-neutral-400">
         Check this for a loan carried over from before this system was used, where some installments were already
         paid elsewhere. Leave unchecked for an ordinary new loan issued from today.
       </p>
       {isOpeningBalance ? (
-        <label className="text-xs text-neutral-500">
-          Remaining installments
-          <input
-            type="number" name="openingRemainingInstallments" min={0} max={remainingMax} required
-            className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm"
+        <FormField
+          id={`${reactId}-openingRemainingInstallments`}
+          label="Remaining installments"
+          helpText={
+            <>
+              How many of the {termCount || "term"} installments above are still unpaid (0 if this loan is already
+              fully paid off, up to the full term count if none of it was paid before cutover). Cannot exceed the
+              term count.
+            </>
+          }
+        >
+          <Input
+            type="number"
+            id={`${reactId}-openingRemainingInstallments`}
+            name="openingRemainingInstallments"
+            min={0}
+            max={remainingMax}
+            required
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
           />
-          <span className="mt-1 block text-xs text-neutral-400">
-            How many of the {termCount || "term"} installments above are still unpaid (0 if this loan is already
-            fully paid off, up to the full term count if none of it was paid before cutover). Cannot exceed the
-            term count.
-          </span>
-        </label>
+        </FormField>
       ) : null}
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Issuing…">Issue loan</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -273,15 +289,20 @@ function CreateRunForm({ periods, createPayrollRunAction }: { periods: PayrollPe
 
 function CreateRunFormRow({ period, createPayrollRunAction }: { period: PayrollPeriodRow; createPayrollRunAction: (periodId: string) => BoundAction }) {
   const [state, formAction, pending] = useActionState(createPayrollRunAction(period.id), INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex items-center gap-2 text-sm">
       <span className="flex-1">{period.code}</span>
-      <select name="runType" defaultValue="regular" className="rounded border border-neutral-300 p-1 text-xs">
+      <label className="sr-only" htmlFor={reactId}>
+        Run type
+      </label>
+      <Select id={reactId} name="runType" defaultValue="regular" className="p-1 text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined}>
         <option value="regular">Regular</option>
         <option value="off_cycle">Off-cycle</option>
-      </select>
+      </Select>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">Create run</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -306,6 +327,11 @@ function RunRowItem({
   const [cancelState, cancelAction, cancelPending] = useActionState(cancelPayrollRunAction(row.id, row.recordVersion), INITIAL_STATE);
   const [requestCancelState, requestCancelAction, requestCancelPending] = useActionState(requestPayrollRunCalculationCancellationAction(row.id), INITIAL_STATE);
   const [handoffState, handoffAction, handoffPending] = useActionState(generateFinancePayrollHandoffAction(row.id), INITIAL_STATE);
+  const reactId = useId();
+  const finalizeReasonId = `${reactId}-finalize-reason`;
+  const rejectReasonId = `${reactId}-reject-reason`;
+  const cancelReasonId = `${reactId}-cancel-reason`;
+  const rowErrorId = `${reactId}-error`;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -329,11 +355,17 @@ function RunRowItem({
         {row.status === "pending_approval" && myStepId ? (
           <>
             <form action={finalizeAction} className="flex items-center gap-1">
-              <input type="text" name="reason" placeholder="reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+              <label className="sr-only" htmlFor={finalizeReasonId}>
+                Reason
+              </label>
+              <Input id={finalizeReasonId} type="text" name="reason" placeholder="reason" required className="text-xs" invalid={Boolean(finalizeState.error)} aria-describedby={finalizeState.error ? rowErrorId : undefined} />
               <Button type="submit" variant="primary" loading={finalizePending} loadingLabel="Finalizing…">Approve &amp; finalize</Button>
             </form>
             <form action={rejectAction} className="flex items-center gap-1">
-              <input type="text" name="reason" placeholder="reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+              <label className="sr-only" htmlFor={rejectReasonId}>
+                Reason
+              </label>
+              <Input id={rejectReasonId} type="text" name="reason" placeholder="reason" required className="text-xs" invalid={Boolean(rejectState.error)} aria-describedby={rejectState.error ? rowErrorId : undefined} />
               <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">Reject</Button>
             </form>
           </>
@@ -341,7 +373,10 @@ function RunRowItem({
         {row.status === "pending_approval" && !myStepId ? <span className="text-xs text-neutral-500">Awaiting a distinct eligible approver — you are not eligible to decide this step.</span> : null}
         {(row.status === "draft" || row.status === "calculated" || row.status === "exception") ? (
           <form action={cancelAction} className="flex items-center gap-1">
-            <input type="text" name="reason" placeholder="reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+            <label className="sr-only" htmlFor={cancelReasonId}>
+              Reason
+            </label>
+            <Input id={cancelReasonId} type="text" name="reason" placeholder="reason" required className="text-xs" invalid={Boolean(cancelState.error)} aria-describedby={cancelState.error ? rowErrorId : undefined} />
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">Cancel run</Button>
           </form>
         ) : null}
@@ -356,7 +391,7 @@ function RunRowItem({
           </form>
         ) : null}
       </div>
-      <ErrorLine error={calcState.error ?? submitState.error ?? finalizeState.error ?? rejectState.error ?? cancelState.error ?? requestCancelState.error ?? handoffState.error} />
+      <ErrorLine error={calcState.error ?? submitState.error ?? finalizeState.error ?? rejectState.error ?? cancelState.error ?? requestCancelState.error ?? handoffState.error} id={rowErrorId} />
     </li>
   );
 }
@@ -368,6 +403,10 @@ function ExceptionRowItem({ row, resolvePayrollExceptionAction, waivePayrollExce
 }) {
   const [resolveState, resolveAction, resolvePending] = useActionState(resolvePayrollExceptionAction(row.id), INITIAL_STATE);
   const [waiveState, waiveAction, waivePending] = useActionState(waivePayrollExceptionAction(row.id), INITIAL_STATE);
+  const reactId = useId();
+  const resolveNoteId = `${reactId}-resolve-note`;
+  const waiveNoteId = `${reactId}-waive-note`;
+  const rowErrorId = `${reactId}-error`;
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
       <div className="flex items-center justify-between">
@@ -375,14 +414,20 @@ function ExceptionRowItem({ row, resolvePayrollExceptionAction, waivePayrollExce
         <StatusBadge tone={row.severity === "high" ? "danger" : row.severity === "medium" ? "warning" : "neutral"} label={row.severity} />
       </div>
       <form action={resolveAction} className="flex items-center gap-1">
-        <input type="text" name="resolutionNote" placeholder="resolution note" required className="flex-1 rounded border border-neutral-300 p-1 text-xs" />
+        <label className="sr-only" htmlFor={resolveNoteId}>
+          Resolution note
+        </label>
+        <Input id={resolveNoteId} type="text" name="resolutionNote" placeholder="resolution note" required className="flex-1 text-xs" invalid={Boolean(resolveState.error)} aria-describedby={resolveState.error ? rowErrorId : undefined} />
         <Button type="submit" variant="secondary" loading={resolvePending} loadingLabel="Resolving…">Resolve</Button>
       </form>
       <form action={waiveAction} className="flex items-center gap-1">
-        <input type="text" name="resolutionNote" placeholder="waive reason" required className="flex-1 rounded border border-neutral-300 p-1 text-xs" />
+        <label className="sr-only" htmlFor={waiveNoteId}>
+          Waive reason
+        </label>
+        <Input id={waiveNoteId} type="text" name="resolutionNote" placeholder="waive reason" required className="flex-1 text-xs" invalid={Boolean(waiveState.error)} aria-describedby={waiveState.error ? rowErrorId : undefined} />
         <Button type="submit" variant="destructive" loading={waivePending} loadingLabel="Waiving…">Waive (HRS:Override)</Button>
       </form>
-      <ErrorLine error={resolveState.error ?? waiveState.error} />
+      <ErrorLine error={resolveState.error ?? waiveState.error} id={rowErrorId} />
     </li>
   );
 }
@@ -390,20 +435,30 @@ function ExceptionRowItem({ row, resolvePayrollExceptionAction, waivePayrollExce
 function ReimbursementRowItem({ row, decidePayrollReimbursementAction }: { row: PayrollReimbursementRow; decidePayrollReimbursementAction: (requestId: string, expectedVersion: number, decision: "approve" | "reject") => BoundAction }) {
   const [approveState, approveAction, approvePending] = useActionState(decidePayrollReimbursementAction(row.id, row.recordVersion, "approve"), INITIAL_STATE);
   const [rejectState, rejectAction, rejectPending] = useActionState(decidePayrollReimbursementAction(row.id, row.recordVersion, "reject"), INITIAL_STATE);
+  const reactId = useId();
+  const approveReasonId = `${reactId}-approve-reason`;
+  const rejectReasonId = `${reactId}-reject-reason`;
+  const rowErrorId = `${reactId}-error`;
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
       <div>{row.category} — {row.amount} {row.currency} — {row.description}</div>
       <div className="flex flex-wrap gap-2">
         <form action={approveAction} className="flex items-center gap-1">
-          <input type="text" name="decidedReason" placeholder="reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+          <label className="sr-only" htmlFor={approveReasonId}>
+            Reason
+          </label>
+          <Input id={approveReasonId} type="text" name="decidedReason" placeholder="reason" required className="text-xs" invalid={Boolean(approveState.error)} aria-describedby={approveState.error ? rowErrorId : undefined} />
           <Button type="submit" variant="primary" loading={approvePending} loadingLabel="Approving…">Approve</Button>
         </form>
         <form action={rejectAction} className="flex items-center gap-1">
-          <input type="text" name="decidedReason" placeholder="reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+          <label className="sr-only" htmlFor={rejectReasonId}>
+            Reason
+          </label>
+          <Input id={rejectReasonId} type="text" name="decidedReason" placeholder="reason" required className="text-xs" invalid={Boolean(rejectState.error)} aria-describedby={rejectState.error ? rowErrorId : undefined} />
           <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">Reject</Button>
         </form>
       </div>
-      <ErrorLine error={approveState.error ?? rejectState.error} />
+      <ErrorLine error={approveState.error ?? rejectState.error} id={rowErrorId} />
     </li>
   );
 }

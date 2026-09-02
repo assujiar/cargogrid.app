@@ -3,6 +3,9 @@
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
 import type { ApprovalRequestHistoryEntry } from "../../../../../../server/contracts/approval/approval.ts";
@@ -126,24 +129,18 @@ export function ProcurementApprovalDecisionPanel({
         <section className="rounded-md border border-neutral-200 p-4">
           <h2 className="text-sm font-semibold text-neutral-900">Your decision</h2>
           <form action={decideFormAction} className="mt-2 flex flex-col gap-2" noValidate>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="reason" className="text-xs font-medium text-neutral-700">
-                Reason (required to reject)
-              </label>
-              <Input id="reason" name="reason" type="text" />
-            </div>
+            <FormField id="reason" label="Reason (required to reject)" error={decideState.error ?? undefined}>
+              <Input id="reason" name="reason" type="text" invalid={Boolean(decideState.error)} aria-describedby={decideState.error ? "reason-error" : undefined} />
+            </FormField>
             <input type="hidden" name="reauthConfirmedAt" value={reauthConfirmedAt} />
-            <label className="flex items-center gap-2 text-xs text-neutral-600">
-              <input
-                type="checkbox"
-                checked={reauthConfirmed}
-                onChange={(e) => {
-                  setReauthConfirmed(e.target.checked);
-                  setReauthConfirmedAt(e.target.checked ? new Date().toISOString() : "");
-                }}
-              />
-              I have recently re-authenticated (required for this decision)
-            </label>
+            <Checkbox
+              checked={reauthConfirmed}
+              onChange={(e) => {
+                setReauthConfirmed(e.target.checked);
+                setReauthConfirmedAt(e.target.checked ? new Date().toISOString() : "");
+              }}
+              label="I have recently re-authenticated (required for this decision)"
+            />
             <div className="flex gap-2">
               <Button type="submit" name="decision" value="approved" disabled={decidePending || !reauthConfirmed}>
                 {decidePending ? "Recording…" : "Approve"}
@@ -153,11 +150,6 @@ export function ProcurementApprovalDecisionPanel({
               </Button>
             </div>
           </form>
-          {decideState.error ? (
-            <p role="alert" className="mt-1 text-xs text-danger">
-              {decideState.error}
-            </p>
-          ) : null}
         </section>
       ) : (
         <p className="text-xs text-neutral-500">

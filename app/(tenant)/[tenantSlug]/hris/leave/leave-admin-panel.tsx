@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { LeaveRequestListRow } from "../../../../../server/contracts/leave/leave.ts";
@@ -29,57 +34,79 @@ function InboxItemRow({ item, decideAction }: { item: LeaveApprovalInboxItem; de
         Leave request <span className="font-mono text-xs">{item.leaveRequestId}</span> — step {item.stepOrder}
       </span>
       <form action={approveFormAction} className="flex flex-wrap items-center gap-2">
-        <input name="reason" required placeholder="Decision reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-2 text-xs" />
-        <label className="flex items-center gap-1 text-xs text-neutral-500">
-          <input type="checkbox" name="overrideCoverage" /> Override coverage-below-minimum block (HRS:Override)
+        <label htmlFor={`approve-reason-${item.stepId}`} className="sr-only">
+          Decision reason
         </label>
+        <Input
+          id={`approve-reason-${item.stepId}`}
+          name="reason"
+          required
+          placeholder="Decision reason (required)"
+          className="min-w-[10rem] flex-1 text-xs"
+          invalid={Boolean(approveState.error)}
+          aria-describedby={approveState.error ? `approve-${item.stepId}-error` : undefined}
+        />
+        <Checkbox name="overrideCoverage" label="Override coverage-below-minimum block (HRS:Override)" />
         <Button type="submit" variant="primary" loading={approvePending} loadingLabel="Approving…">
           Approve
         </Button>
       </form>
       <form action={rejectFormAction} className="flex items-center gap-2">
-        <input name="reason" required placeholder="Rejection reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-2 text-xs" />
+        <label htmlFor={`reject-reason-${item.stepId}`} className="sr-only">
+          Rejection reason
+        </label>
+        <Input
+          id={`reject-reason-${item.stepId}`}
+          name="reason"
+          required
+          placeholder="Rejection reason (required)"
+          className="min-w-[10rem] flex-1 text-xs"
+          invalid={Boolean(rejectState.error)}
+          aria-describedby={rejectState.error ? `reject-${item.stepId}-error` : undefined}
+        />
         <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">
           Reject
         </Button>
       </form>
-      {approveState.error ? <p role="alert" className="text-xs text-danger">{approveState.error}</p> : null}
-      {rejectState.error ? <p role="alert" className="text-xs text-danger">{rejectState.error}</p> : null}
+      {approveState.error ? <ValidationMessage id={`approve-${item.stepId}-error`}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={`reject-${item.stepId}-error`}>{rejectState.error}</ValidationMessage> : null}
     </li>
   );
 }
 
 function AdjustBalanceForm({ adjustLeaveBalanceAction }: { adjustLeaveBalanceAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(adjustLeaveBalanceAction, INITIAL_STATE);
+  const describedBy = state.error ? "adjust-balance-error" : undefined;
   return (
-    <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
+    <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2" noValidate>
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">Manual balance adjustment (HRS:Override)</h2>
-      <label className="text-xs text-neutral-500">
-        Employee (master record id)
-        <input name="employeeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="employee UUID" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Leave type id
-        <input name="leaveTypeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="leave type UUID" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Units (positive to credit, negative to debit)
-        <input type="number" step="any" name="units" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Effective date
-        <input type="date" name="effectiveDate" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Reason
-        <textarea name="reason" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={2} />
-      </label>
+      <FormField id="adjust-employee-id" label="Employee (master record id)">
+        <Input id="adjust-employee-id" name="employeeId" required placeholder="employee UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="adjust-leave-type-id" label="Leave type id">
+        <Input id="adjust-leave-type-id" name="leaveTypeId" required placeholder="leave type UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="adjust-units" label="Units (positive to credit, negative to debit)">
+        <Input id="adjust-units" type="number" step="any" name="units" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="adjust-effective-date" label="Effective date">
+        <Input id="adjust-effective-date" type="date" name="effectiveDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="adjust-reason" label="Reason">
+          <Textarea id="adjust-reason" name="reason" required minLength={1} rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <div className="sm:col-span-2">
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adjusting…">
           Post adjustment
         </Button>
       </div>
-      {state.error ? <p role="alert" className="text-xs text-danger sm:col-span-2">{state.error}</p> : null}
+      {state.error ? (
+        <div className="sm:col-span-2">
+          <ValidationMessage id="adjust-balance-error">{state.error}</ValidationMessage>
+        </div>
+      ) : null}
     </form>
   );
 }
@@ -93,39 +120,40 @@ function SyncLifecycleForm({ syncLeaveLifecycleAction }: { syncLeaveLifecycleAct
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Syncing…">
         Sync now
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function CancelConflictingScheduleForm({ cancelConflictingScheduleAction }: { cancelConflictingScheduleAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(cancelConflictingScheduleAction, INITIAL_STATE);
+  const describedBy = state.error ? "cancel-conflicting-schedule-error" : undefined;
   return (
-    <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
+    <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2" noValidate>
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">Override a scheduled shift for approved leave (HRS:Override)</h2>
       <p className="text-xs text-neutral-500 sm:col-span-2">An approved leave never silently cancels an already-published shift -- use this to do so explicitly, per shift-day.</p>
-      <label className="text-xs text-neutral-500">
-        Leave request id
-        <input name="leaveRequestId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="leave request UUID" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Work date
-        <input type="date" name="workDate" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Schedule assignment&apos;s current version
-        <input type="number" name="expectedVersion" required min="1" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason (optional)
-        <input name="reason" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id="ccs-leave-request-id" label="Leave request id">
+        <Input id="ccs-leave-request-id" name="leaveRequestId" required placeholder="leave request UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="ccs-work-date" label="Work date">
+        <Input id="ccs-work-date" type="date" name="workDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="ccs-expected-version" label="Schedule assignment's current version">
+        <Input id="ccs-expected-version" type="number" name="expectedVersion" required min="1" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="ccs-reason" label="Reason (optional)">
+        <Input id="ccs-reason" name="reason" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div className="sm:col-span-2">
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…">
           Cancel conflicting shift
         </Button>
       </div>
-      {state.error ? <p role="alert" className="text-xs text-danger sm:col-span-2">{state.error}</p> : null}
+      {state.error ? (
+        <div className="sm:col-span-2">
+          <ValidationMessage id="cancel-conflicting-schedule-error">{state.error}</ValidationMessage>
+        </div>
+      ) : null}
     </form>
   );
 }

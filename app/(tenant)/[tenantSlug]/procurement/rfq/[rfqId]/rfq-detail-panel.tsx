@@ -1,8 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type {
@@ -48,21 +52,20 @@ function ActionForm({
   className = "flex flex-col gap-2",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className={className}>
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -77,11 +80,7 @@ function NoArgActionButton({ action, label, loadingLabel, variant = "secondary" 
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"}>
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -199,36 +198,27 @@ export function RfqDetailPanel({
           <details className="text-xs">
             <summary className="cursor-pointer text-primary">Revise (governed exception -- creates a new version)</summary>
             <ActionForm action={reviseAction} submitLabel="Revise RFQ" loadingLabel="Revising…" variant="secondary" className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseCargoWeightMax" className="text-xs font-medium text-neutral-700">
-                  New cargo weight max
-                </label>
-                <Input id="reviseCargoWeightMax" name="cargoWeightMax" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseCargoVolumeMax" className="text-xs font-medium text-neutral-700">
-                  New cargo volume max
-                </label>
-                <Input id="reviseCargoVolumeMax" name="cargoVolumeMax" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseDestinationLane" className="text-xs font-medium text-neutral-700">
-                  New destination lane
-                </label>
-                <Input id="reviseDestinationLane" name="destinationLane" type="text" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseCurrency" className="text-xs font-medium text-neutral-700">
-                  New currency
-                </label>
-                <Input id="reviseCurrency" name="currency" type="text" maxLength={3} />
-              </div>
-              <div className="flex flex-col gap-1 sm:col-span-4">
-                <label htmlFor="reviseReason" className="text-xs font-medium text-neutral-700">
-                  Reason (required)
-                </label>
-                <Input id="reviseReason" name="reason" type="text" required />
-              </div>
+              {(describedBy) => (
+                <>
+                  <FormField id="reviseCargoWeightMax" label="New cargo weight max">
+                    <Input id="reviseCargoWeightMax" name="cargoWeightMax" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reviseCargoVolumeMax" label="New cargo volume max">
+                    <Input id="reviseCargoVolumeMax" name="cargoVolumeMax" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reviseDestinationLane" label="New destination lane">
+                    <Input id="reviseDestinationLane" name="destinationLane" type="text" aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reviseCurrency" label="New currency">
+                    <Input id="reviseCurrency" name="currency" type="text" maxLength={3} aria-describedby={describedBy} />
+                  </FormField>
+                  <div className="sm:col-span-4">
+                    <FormField id="reviseReason" label="Reason (required)">
+                      <Input id="reviseReason" name="reason" type="text" required aria-describedby={describedBy} />
+                    </FormField>
+                  </div>
+                </>
+              )}
             </ActionForm>
           </details>
         ) : null}
@@ -237,28 +227,33 @@ export function RfqDetailPanel({
       <section className="flex flex-wrap gap-3 rounded-md border border-neutral-200 p-4">
         {isDraft ? (
           <ActionForm action={issueAction} submitLabel="Issue RFQ" loadingLabel="Issuing…" variant="primary" className="flex items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="responseDeadlineAt" className="text-xs font-medium text-neutral-700">
-                Response deadline (required)
-              </label>
-              <Input id="responseDeadlineAt" name="responseDeadlineAt" type="datetime-local" required />
-            </div>
+            {(describedBy) => (
+              <FormField id="responseDeadlineAt" label="Response deadline (required)">
+                <Input id="responseDeadlineAt" name="responseDeadlineAt" type="datetime-local" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
         {isIssued ? (
           <ActionForm action={extendDeadlineAction} submitLabel="Extend deadline" loadingLabel="Extending…" variant="secondary" className="flex items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="newDeadlineAt" className="text-xs font-medium text-neutral-700">
-                New deadline (widen only)
-              </label>
-              <Input id="newDeadlineAt" name="newDeadlineAt" type="datetime-local" required />
-            </div>
+            {(describedBy) => (
+              <FormField id="newDeadlineAt" label="New deadline (widen only)">
+                <Input id="newDeadlineAt" name="newDeadlineAt" type="datetime-local" required aria-describedby={describedBy} />
+              </FormField>
+            )}
           </ActionForm>
         ) : null}
         {isIssued ? <NoArgActionButton action={closeAction} label="Close for comparison" loadingLabel="Closing…" variant="primary" /> : null}
         {isDraft || isIssued ? (
           <ActionForm action={cancelAction} submitLabel="Cancel" loadingLabel="Cancelling…" variant="destructive" className="flex items-center gap-2">
-            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-64" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="cancel-rfq-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="cancel-rfq-reason" name="reason" type="text" placeholder="Reason (required)" required className="w-64" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         ) : null}
       </section>
@@ -271,18 +266,20 @@ export function RfqDetailPanel({
           <details className="text-xs">
             <summary className="cursor-pointer text-primary">Invite an additional eligible vendor (governed exception)</summary>
             <ActionForm action={inviteAdditionalAction} submitLabel="Invite" loadingLabel="Inviting…" variant="secondary" className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="flex flex-1 flex-col gap-1">
-                <label htmlFor="sourcingCandidateId" className="text-xs font-medium text-neutral-700">
-                  Sourcing candidate id (must be eligible)
-                </label>
-                <Input id="sourcingCandidateId" name="sourcingCandidateId" type="text" required />
-              </div>
-              <div className="flex flex-1 flex-col gap-1">
-                <label htmlFor="inviteReason" className="text-xs font-medium text-neutral-700">
-                  Reason (required)
-                </label>
-                <Input id="inviteReason" name="reason" type="text" required />
-              </div>
+              {(describedBy) => (
+                <>
+                  <div className="flex-1">
+                    <FormField id="sourcingCandidateId" label="Sourcing candidate id (must be eligible)">
+                      <Input id="sourcingCandidateId" name="sourcingCandidateId" type="text" required aria-describedby={describedBy} />
+                    </FormField>
+                  </div>
+                  <div className="flex-1">
+                    <FormField id="inviteReason" label="Reason (required)">
+                      <Input id="inviteReason" name="reason" type="text" required aria-describedby={describedBy} />
+                    </FormField>
+                  </div>
+                </>
+              )}
             </ActionForm>
           </details>
         ) : null}
@@ -329,7 +326,14 @@ export function RfqDetailPanel({
                                 variant="destructive"
                                 className="flex flex-col gap-1"
                               >
-                                <Input name="reason" type="text" placeholder="Reason (required)" required className="w-48 text-xs" />
+                                {(describedBy) => (
+                                  <>
+                                    <label htmlFor={`withdraw-response-${latest.id}`} className="sr-only">
+                                      Reason
+                                    </label>
+                                    <Input id={`withdraw-response-${latest.id}`} name="reason" type="text" placeholder="Reason (required)" required className="w-48 text-xs" aria-describedby={describedBy} />
+                                  </>
+                                )}
                               </ActionForm>
                             ) : null}
                           </div>
@@ -346,21 +350,52 @@ export function RfqDetailPanel({
                               variant="secondary"
                               className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2"
                             >
-                              <Input name="currency" type="text" placeholder="Currency (required)" maxLength={3} required />
-                              <Input name="totalAmount" type="number" min={0} step="0.01" placeholder="Total amount (required)" required />
-                              <Input name="leadTimeDays" type="number" min={0} placeholder="Lead time (days)" />
-                              <Input name="validityUntil" type="datetime-local" />
-                              <Input name="receivedAt" type="datetime-local" required />
-                              <select name="captureMode" defaultValue="offline" className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-                                <option value="offline">offline</option>
-                                <option value="email">email</option>
-                              </select>
-                              <Input name="sourceMessageRef" type="text" placeholder="Source message reference" className="sm:col-span-2" />
-                              <Input name="fileIds" type="text" placeholder="Attachment file id(s), comma-separated" className="sm:col-span-2" />
-                              <Input name="lateReason" type="text" placeholder="Late-capture reason (only if past deadline)" className="sm:col-span-2" />
-                              <label className="flex items-center gap-1 text-xs text-neutral-700 sm:col-span-2">
-                                <input type="checkbox" name="vendorConfirmed" /> Vendor confirmed this offer
-                              </label>
+                              {(describedBy) => (
+                                <>
+                                  <label htmlFor={`capture-currency-${invitation.id}`} className="sr-only">
+                                    Currency
+                                  </label>
+                                  <Input id={`capture-currency-${invitation.id}`} name="currency" type="text" placeholder="Currency (required)" maxLength={3} required aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-total-${invitation.id}`} className="sr-only">
+                                    Total amount
+                                  </label>
+                                  <Input id={`capture-total-${invitation.id}`} name="totalAmount" type="number" min={0} step="0.01" placeholder="Total amount (required)" required aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-lead-time-${invitation.id}`} className="sr-only">
+                                    Lead time (days)
+                                  </label>
+                                  <Input id={`capture-lead-time-${invitation.id}`} name="leadTimeDays" type="number" min={0} placeholder="Lead time (days)" aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-validity-${invitation.id}`} className="sr-only">
+                                    Validity until
+                                  </label>
+                                  <Input id={`capture-validity-${invitation.id}`} name="validityUntil" type="datetime-local" aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-received-${invitation.id}`} className="sr-only">
+                                    Received at
+                                  </label>
+                                  <Input id={`capture-received-${invitation.id}`} name="receivedAt" type="datetime-local" required aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-mode-${invitation.id}`} className="sr-only">
+                                    Capture mode
+                                  </label>
+                                  <Select id={`capture-mode-${invitation.id}`} name="captureMode" defaultValue="offline" className="text-xs" aria-describedby={describedBy}>
+                                    <option value="offline">offline</option>
+                                    <option value="email">email</option>
+                                  </Select>
+                                  <label htmlFor={`capture-source-ref-${invitation.id}`} className="sr-only">
+                                    Source message reference
+                                  </label>
+                                  <Input id={`capture-source-ref-${invitation.id}`} name="sourceMessageRef" type="text" placeholder="Source message reference" className="sm:col-span-2" aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-file-ids-${invitation.id}`} className="sr-only">
+                                    Attachment file id(s)
+                                  </label>
+                                  <Input id={`capture-file-ids-${invitation.id}`} name="fileIds" type="text" placeholder="Attachment file id(s), comma-separated" className="sm:col-span-2" aria-describedby={describedBy} />
+                                  <label htmlFor={`capture-late-reason-${invitation.id}`} className="sr-only">
+                                    Late-capture reason
+                                  </label>
+                                  <Input id={`capture-late-reason-${invitation.id}`} name="lateReason" type="text" placeholder="Late-capture reason (only if past deadline)" className="sm:col-span-2" aria-describedby={describedBy} />
+                                  <div className="sm:col-span-2">
+                                    <Checkbox id={`capture-vendor-confirmed-${invitation.id}`} name="vendorConfirmed" label="Vendor confirmed this offer" aria-describedby={describedBy} />
+                                  </div>
+                                </>
+                              )}
                             </ActionForm>
                           </details>
                         ) : null}
@@ -374,7 +409,14 @@ export function RfqDetailPanel({
                             variant="destructive"
                             className="flex flex-col gap-1"
                           >
-                            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-40 text-xs" />
+                            {(describedBy) => (
+                              <>
+                                <label htmlFor={`decline-invitation-${invitation.id}`} className="sr-only">
+                                  Reason
+                                </label>
+                                <Input id={`decline-invitation-${invitation.id}`} name="reason" type="text" placeholder="Reason (required)" required className="w-40 text-xs" aria-describedby={describedBy} />
+                              </>
+                            )}
                           </ActionForm>
                         ) : (
                           "—"
@@ -394,18 +436,20 @@ export function RfqDetailPanel({
 
         {isIssued ? (
           <ActionForm action={recordClarificationAction} submitLabel="Record clarification" loadingLabel="Recording…" variant="secondary" className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="clarQuestion" className="text-xs font-medium text-neutral-700">
-                Question (required)
-              </label>
-              <Input id="clarQuestion" name="question" type="text" required />
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="clarVendor" className="text-xs font-medium text-neutral-700">
-                Vendor id (blank = broadcast to all invited)
-              </label>
-              <Input id="clarVendor" name="vendorMasterId" type="text" />
-            </div>
+            {(describedBy) => (
+              <>
+                <div className="flex-1">
+                  <FormField id="clarQuestion" label="Question (required)">
+                    <Input id="clarQuestion" name="question" type="text" required aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+                <div className="flex-1">
+                  <FormField id="clarVendor" label="Vendor id (blank = broadcast to all invited)">
+                    <Input id="clarVendor" name="vendorMasterId" type="text" aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
@@ -431,7 +475,14 @@ export function RfqDetailPanel({
                     variant="secondary"
                     className="mt-1 flex items-center gap-2"
                   >
-                    <Input name="answer" type="text" placeholder="Answer (required)" required className="w-64 text-xs" />
+                    {(describedBy) => (
+                      <>
+                        <label htmlFor={`answer-clarification-${clarification.id}`} className="sr-only">
+                          Answer
+                        </label>
+                        <Input id={`answer-clarification-${clarification.id}`} name="answer" type="text" placeholder="Answer (required)" required className="w-64 text-xs" aria-describedby={describedBy} />
+                      </>
+                    )}
                   </ActionForm>
                 ) : null}
               </li>

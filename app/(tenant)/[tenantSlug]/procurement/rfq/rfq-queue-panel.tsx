@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { RFQ_STATUSES, type Rfq, type RfqStatus } from "../../../../../server/contracts/rfq/rfq.ts";
@@ -47,18 +49,16 @@ export function RfqQueuePanel({
   return (
     <div className="flex flex-col gap-4">
       <form action={draftFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4 sm:flex-row sm:items-end sm:gap-3" noValidate>
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor="sourcingRequestId" className="text-xs font-medium text-neutral-700">
-            Shortlisted sourcing request id
-          </label>
-          <Input id="sourcingRequestId" name="sourcingRequestId" type="text" required />
-          <p className="text-xs text-neutral-500">Inherits service/lanes/cargo from the sourcing request&apos;s own shortlisted candidates -- never re-typed.</p>
+        <div className="flex-1">
+          <FormField
+            id="sourcingRequestId"
+            label="Shortlisted sourcing request id"
+            helpText="Inherits service/lanes/cargo from the sourcing request's own shortlisted candidates -- never re-typed."
+            error={draftState.error ?? undefined}
+          >
+            <Input id="sourcingRequestId" name="sourcingRequestId" type="text" required invalid={Boolean(draftState.error)} aria-describedby={draftState.error ? "sourcingRequestId-error" : "sourcingRequestId-help"} />
+          </FormField>
         </div>
-        {draftState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {draftState.error}
-          </p>
-        ) : null}
         <Button type="submit" loading={draftPending} loadingLabel="Drafting…">
           Draft RFQ
         </Button>
@@ -68,10 +68,10 @@ export function RfqQueuePanel({
         <label htmlFor="rfq-status" className="text-xs font-medium text-neutral-600">
           Status
         </label>
-        <select
+        <Select
           id="rfq-status"
           defaultValue={statusFilter ?? ""}
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          className="w-auto py-1.5"
           onChange={(event) => applyStatusFilter(event.currentTarget.value)}
         >
           <option value="">All (excludes superseded)</option>
@@ -80,7 +80,7 @@ export function RfqQueuePanel({
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {rfqs.length === 0 ? (

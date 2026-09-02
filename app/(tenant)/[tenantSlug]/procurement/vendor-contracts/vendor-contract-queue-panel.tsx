@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { VENDOR_CONTRACT_STATUSES, type VendorContract, type VendorContractStatus } from "../../../../../server/contracts/vendor-contract/vendor-contract.ts";
@@ -44,6 +47,8 @@ export function VendorContractQueuePanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [createState, createFormAction, createPending] = useActionState(createAction, INITIAL_STATE);
+  const createErrorId = "vendor-contract-create-error";
+  const createDescribedBy = createState.error ? createErrorId : undefined;
 
   function applyStatusFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -56,52 +61,35 @@ export function VendorContractQueuePanel({
     <div className="flex flex-col gap-4">
       <form action={createFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="vendorMasterId" className="text-xs font-medium text-neutral-700">
-              Vendor (required, active only)
-            </label>
-            <select id="vendorMasterId" name="vendorMasterId" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
-              <option value="">Select a vendor…</option>
-              {activeVendors.map((v) => (
-                <option key={v.masterRecordId} value={v.masterRecordId}>
-                  {v.legalName} ({v.vendorCode})
-                </option>
-              ))}
-            </select>
+          <div className="sm:col-span-2">
+            <FormField id="vendorMasterId" label="Vendor (required, active only)">
+              <Select id="vendorMasterId" name="vendorMasterId" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
+                <option value="">Select a vendor…</option>
+                {activeVendors.map((v) => (
+                  <option key={v.masterRecordId} value={v.masterRecordId}>
+                    {v.legalName} ({v.vendorCode})
+                  </option>
+                ))}
+              </Select>
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="contractType" className="text-xs font-medium text-neutral-700">
-              Contract type
-            </label>
-            <select id="contractType" name="contractType" defaultValue="fixed_term" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+          <FormField id="contractType" label="Contract type">
+            <Select id="contractType" name="contractType" defaultValue="fixed_term" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
               <option value="fixed_term">Fixed term</option>
               <option value="framework">Framework (open-ended)</option>
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="effectiveStart" className="text-xs font-medium text-neutral-700">
-              Effective start (required)
-            </label>
-            <Input id="effectiveStart" name="effectiveStart" type="date" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="effectiveEnd" className="text-xs font-medium text-neutral-700">
-              Effective end (required for fixed term)
-            </label>
-            <Input id="effectiveEnd" name="effectiveEnd" type="date" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="paymentTermDays" className="text-xs font-medium text-neutral-700">
-              Payment term days
-            </label>
-            <Input id="paymentTermDays" name="paymentTermDays" type="number" min={0} />
-          </div>
+            </Select>
+          </FormField>
+          <FormField id="effectiveStart" label="Effective start (required)">
+            <Input id="effectiveStart" name="effectiveStart" type="date" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="effectiveEnd" label="Effective end (required for fixed term)">
+            <Input id="effectiveEnd" name="effectiveEnd" type="date" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="paymentTermDays" label="Payment term days">
+            <Input id="paymentTermDays" name="paymentTermDays" type="number" min={0} invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
         </div>
-        {createState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {createState.error}
-          </p>
-        ) : null}
+        {createState.error ? <ValidationMessage id={createErrorId}>{createState.error}</ValidationMessage> : null}
         <Button type="submit" loading={createPending} loadingLabel="Creating…" className="w-fit">
           Create draft contract
         </Button>
@@ -127,14 +115,14 @@ export function VendorContractQueuePanel({
         <label htmlFor="vc-status" className="text-xs font-medium text-neutral-600">
           Status
         </label>
-        <select id="vc-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
+        <Select id="vc-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
           <option value="">All</option>
           {VENDOR_CONTRACT_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {contracts.length === 0 ? (

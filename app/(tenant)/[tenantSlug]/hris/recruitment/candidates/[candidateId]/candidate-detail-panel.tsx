@@ -2,6 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import type { CandidateProfile, CandidateStatus, CandidateDuplicateMatch } from "../../../../../../../server/contracts/recruitment/recruitment.ts";
 import type { CandidateActionState, DuplicateSearchState, DuplicateFlagState } from "./actions.ts";
 
@@ -63,50 +67,36 @@ export function CandidateDetailPanel({
         <h2 className="text-sm font-semibold text-neutral-900">Profile</h2>
         <form action={profileFormAction} className="flex flex-col gap-3" noValidate>
           <div className="flex flex-wrap gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="fullName" className="text-xs font-medium text-neutral-700">
-                Full name
-              </label>
-              <input id="fullName" name="fullName" defaultValue={candidate.fullName} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <div className="flex-1">
+              <FormField id="fullName" label="Full name">
+                <Input id="fullName" name="fullName" defaultValue={candidate.fullName} required invalid={Boolean(profileState.error)} aria-describedby={profileState.error ? "profile-update-error" : undefined} />
+              </FormField>
             </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="phone" className="text-xs font-medium text-neutral-700">
-                Phone
-              </label>
-              <input id="phone" name="phone" defaultValue={candidate.phone ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <div className="flex-1">
+              <FormField id="phone" label="Phone">
+                <Input id="phone" name="phone" defaultValue={candidate.phone ?? ""} invalid={Boolean(profileState.error)} aria-describedby={profileState.error ? "profile-update-error" : undefined} />
+              </FormField>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="nationalIdNumber" className="text-xs font-medium text-neutral-700">
-                National ID number
-              </label>
-              <input id="nationalIdNumber" name="nationalIdNumber" defaultValue={candidate.nationalIdNumber ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <div className="flex-1">
+              <FormField id="nationalIdNumber" label="National ID number">
+                <Input id="nationalIdNumber" name="nationalIdNumber" defaultValue={candidate.nationalIdNumber ?? ""} invalid={Boolean(profileState.error)} aria-describedby={profileState.error ? "profile-update-error" : undefined} />
+              </FormField>
             </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="dateOfBirth" className="text-xs font-medium text-neutral-700">
-                Date of birth
-              </label>
-              <input id="dateOfBirth" name="dateOfBirth" type="date" defaultValue={candidate.dateOfBirth ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <div className="flex-1">
+              <FormField id="dateOfBirth" label="Date of birth">
+                <Input id="dateOfBirth" name="dateOfBirth" type="date" defaultValue={candidate.dateOfBirth ?? ""} invalid={Boolean(profileState.error)} aria-describedby={profileState.error ? "profile-update-error" : undefined} />
+              </FormField>
             </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="address" className="text-xs font-medium text-neutral-700">
-              Address
-            </label>
-            <textarea id="address" name="address" defaultValue={candidate.address ?? ""} rows={2} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="resumeFileId" className="text-xs font-medium text-neutral-700">
-              Resume file id
-            </label>
-            <input id="resumeFileId" name="resumeFileId" defaultValue={candidate.resumeFileId ?? ""} placeholder="uuid" className="w-72 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          </div>
-          {profileState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {profileState.error}
-            </p>
-          ) : null}
+          <FormField id="address" label="Address">
+            <Textarea id="address" name="address" defaultValue={candidate.address ?? ""} rows={2} invalid={Boolean(profileState.error)} aria-describedby={profileState.error ? "profile-update-error" : undefined} />
+          </FormField>
+          <FormField id="resumeFileId" label="Resume file id">
+            <Input id="resumeFileId" name="resumeFileId" defaultValue={candidate.resumeFileId ?? ""} placeholder="uuid" className="w-72" invalid={Boolean(profileState.error)} aria-describedby={profileState.error ? "profile-update-error" : undefined} />
+          </FormField>
+          {profileState.error ? <ValidationMessage id="profile-update-error">{profileState.error}</ValidationMessage> : null}
           <Button type="submit" loading={profilePending} loadingLabel="Saving…" className="w-fit">
             Save profile
           </Button>
@@ -121,34 +111,21 @@ export function CandidateDetailPanel({
           </p>
         </div>
         <form action={searchFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="dup-fullName" className="text-xs font-medium text-neutral-700">
-              Name
-            </label>
-            <input id="dup-fullName" name="fullName" defaultValue={candidate.fullName} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="dup-email" className="text-xs font-medium text-neutral-700">
-              Email
-            </label>
-            <input id="dup-email" name="email" defaultValue={candidate.personalDataMasked ? "" : (candidate.email ?? "")} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="dup-phone" className="text-xs font-medium text-neutral-700">
-              Phone
-            </label>
-            <input id="dup-phone" name="phone" defaultValue={candidate.personalDataMasked ? "" : (candidate.phone ?? "")} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          </div>
+          <FormField id="dup-fullName" label="Name">
+            <Input id="dup-fullName" name="fullName" defaultValue={candidate.fullName} invalid={Boolean(searchState.error)} aria-describedby={searchState.error ? "dup-search-error" : undefined} />
+          </FormField>
+          <FormField id="dup-email" label="Email">
+            <Input id="dup-email" name="email" defaultValue={candidate.personalDataMasked ? "" : (candidate.email ?? "")} invalid={Boolean(searchState.error)} aria-describedby={searchState.error ? "dup-search-error" : undefined} />
+          </FormField>
+          <FormField id="dup-phone" label="Phone">
+            <Input id="dup-phone" name="phone" defaultValue={candidate.personalDataMasked ? "" : (candidate.phone ?? "")} invalid={Boolean(searchState.error)} aria-describedby={searchState.error ? "dup-search-error" : undefined} />
+          </FormField>
           <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
             Search for duplicates
           </Button>
         </form>
 
-        {searchState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {searchState.error}
-          </p>
-        ) : null}
+        {searchState.error ? <ValidationMessage id="dup-search-error">{searchState.error}</ValidationMessage> : null}
 
         {searchState.searched && searchState.matches.length === 0 ? <p className="text-sm text-neutral-500">No possible duplicates found.</p> : null}
 
@@ -197,11 +174,7 @@ function CandidateStatusActions({ status, setStatusAction }: { status: Candidate
           </Button>
         </form>
       ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage>{error}</ValidationMessage> : null}
     </div>
   );
 }
@@ -235,11 +208,7 @@ function DuplicateMatchRow({
           </Button>
         </form>
       )}
-      {flagState.error ? (
-        <p role="alert" className="mt-1 text-xs text-danger">
-          {flagState.error}
-        </p>
-      ) : null}
+      {flagState.error ? <ValidationMessage>{flagState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -257,12 +226,19 @@ function DecideDuplicateForm({
   const [dismissState, dismissFormAction, dismissPending] = useActionState(decideAction(duplicateId, expectedVersion, "dismissed"), INITIAL_STATE);
   const [reason, setReason] = useState("");
 
+  const decideErrorId = `decide-duplicate-${duplicateId}-error`;
+  const decideError = linkState.error ?? dismissState.error;
   return (
     <div className="mt-2 flex flex-col gap-2">
-      <label className="text-xs font-medium text-neutral-700">
-        Decision reason
-        <input value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-      </label>
+      <FormField id={`decide-duplicate-reason-${duplicateId}`} label="Decision reason">
+        <Input
+          id={`decide-duplicate-reason-${duplicateId}`}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          invalid={Boolean(decideError)}
+          aria-describedby={decideError ? decideErrorId : undefined}
+        />
+      </FormField>
       <div className="flex gap-2">
         <form action={linkFormAction}>
           <input type="hidden" name="reason" value={reason} />
@@ -277,11 +253,7 @@ function DecideDuplicateForm({
           </Button>
         </form>
       </div>
-      {(linkState.error ?? dismissState.error) ? (
-        <p role="alert" className="text-xs text-danger">
-          {linkState.error ?? dismissState.error}
-        </p>
-      ) : null}
+      {decideError ? <ValidationMessage id={decideErrorId}>{decideError}</ValidationMessage> : null}
     </div>
   );
 }

@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { VendorProfileListRow } from "../../../../../server/contracts/vendor-profile/vendor-profile.ts";
@@ -23,21 +27,22 @@ type BoundFormAction = (prevState: VendorPerformanceActionState, formData: FormD
 
 function ArchiveDefinitionForm({ definition, archiveDefinitionAction }: { definition: VendorKpiDefinition; archiveDefinitionAction: BoundFormAction }) {
   const [state, formAction, pending] = useActionState(archiveDefinitionAction, INITIAL_STATE);
+  const errorId = `archive-def-${definition.id}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="mt-1 flex flex-col gap-1">
       <input type="hidden" name="definitionId" value={definition.id} />
       <input type="hidden" name="expectedVersion" value={definition.recordVersion} />
       <div className="flex items-center gap-1">
-        <Input name="reason" placeholder="Archive reason (required)" required className="w-40 text-xs" />
+        <label htmlFor={`archive-def-reason-${definition.id}`} className="sr-only">
+          Archive reason
+        </label>
+        <Input id={`archive-def-reason-${definition.id}`} name="reason" placeholder="Archive reason (required)" required className="w-40 text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Archiving…" className="shrink-0 text-xs">
           Archive
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -61,6 +66,8 @@ export function VendorPerformanceQueuePanel({
 }) {
   const [createState, createFormAction, createPending] = useActionState(createDefinitionAction, INITIAL_STATE);
   const [publishState, publishFormAction, publishPending] = useActionState(publishDefinitionAction, INITIAL_STATE);
+  const createErrorId = "kpi-create-error";
+  const createDescribedBy = createState.error ? createErrorId : undefined;
 
   const scorecardByVendor = new Map(scorecards.map((s) => [s.vendorMasterId, s]));
 
@@ -157,93 +164,60 @@ export function VendorPerformanceQueuePanel({
             </table>
           </div>
         )}
-        {publishState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {publishState.error}
-          </p>
-        ) : null}
+        {publishState.error ? <ValidationMessage>{publishState.error}</ValidationMessage> : null}
 
         <form action={createFormAction} className="mt-2 flex flex-col gap-2 border-t border-neutral-200 pt-3" noValidate>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="kpiCode" className="text-xs font-medium text-neutral-700">
-                Category (required)
-              </label>
-              <select id="kpiCode" name="kpiCode" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+            <FormField id="kpiCode" label="Category (required)">
+              <Select id="kpiCode" name="kpiCode" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
                 {VENDOR_KPI_CODES.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="name" className="text-xs font-medium text-neutral-700">
-                Name (required)
-              </label>
-              <Input id="name" name="name" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="measurementWindowDays" className="text-xs font-medium text-neutral-700">
-                Window (days)
-              </label>
-              <Input id="measurementWindowDays" name="measurementWindowDays" type="number" min={1} defaultValue={30} required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="minSampleSize" className="text-xs font-medium text-neutral-700">
-                Min sample size
-              </label>
-              <Input id="minSampleSize" name="minSampleSize" type="number" min={0} defaultValue={1} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="targetValue" className="text-xs font-medium text-neutral-700">
-                Target value (required)
-              </label>
-              <Input id="targetValue" name="targetValue" type="number" step="any" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="targetOperator" className="text-xs font-medium text-neutral-700">
-                Target operator
-              </label>
-              <select id="targetOperator" name="targetOperator" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+              </Select>
+            </FormField>
+            <FormField id="name" label="Name (required)">
+              <Input id="name" name="name" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+            </FormField>
+            <FormField id="measurementWindowDays" label="Window (days)">
+              <Input id="measurementWindowDays" name="measurementWindowDays" type="number" min={1} defaultValue={30} required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+            </FormField>
+            <FormField id="minSampleSize" label="Min sample size">
+              <Input id="minSampleSize" name="minSampleSize" type="number" min={0} defaultValue={1} invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+            </FormField>
+            <FormField id="targetValue" label="Target value (required)">
+              <Input id="targetValue" name="targetValue" type="number" step="any" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+            </FormField>
+            <FormField id="targetOperator" label="Target operator">
+              <Select id="targetOperator" name="targetOperator" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
                 {VENDOR_KPI_TARGET_OPERATORS.map((o) => (
                   <option key={o} value={o}>
                     {o === "gte" ? "higher is better (gte)" : "lower is better (lte)"}
                   </option>
                 ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="weight" className="text-xs font-medium text-neutral-700">
-                Weight (required, 0–100)
-              </label>
-              <Input id="weight" name="weight" type="number" min={0.01} max={100} step="any" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="unit" className="text-xs font-medium text-neutral-700">
-                Unit
-              </label>
-              <select id="unit" name="unit" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+              </Select>
+            </FormField>
+            <FormField id="weight" label="Weight (required, 0–100)">
+              <Input id="weight" name="weight" type="number" min={0.01} max={100} step="any" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+            </FormField>
+            <FormField id="unit" label="Unit">
+              <Select id="unit" name="unit" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
                 {VENDOR_KPI_UNITS.map((u) => (
                   <option key={u} value={u}>
                     {u}
                   </option>
                 ))}
-              </select>
-            </div>
+              </Select>
+            </FormField>
           </div>
           <div className="flex flex-col gap-1">
-            <label htmlFor="notComputable" className="flex items-center gap-2 text-xs font-medium text-neutral-700">
-              <input id="notComputable" name="notComputable" type="checkbox" />
-              This category is not yet sourced (e.g. invoice accuracy pending Prompt 265) — requires a source note below
-            </label>
-            <Input id="sourceNote" name="sourceNote" placeholder="Required only when not-yet-sourced is checked" />
+            <Checkbox id="notComputable" name="notComputable" label="This category is not yet sourced (e.g. invoice accuracy pending Prompt 265) — requires a source note below" aria-describedby={createDescribedBy} />
+            <FormField id="sourceNote" label={<span className="sr-only">Source note</span>}>
+              <Input id="sourceNote" name="sourceNote" placeholder="Required only when not-yet-sourced is checked" invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+            </FormField>
           </div>
-          {createState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {createState.error}
-            </p>
-          ) : null}
+          {createState.error ? <ValidationMessage id={createErrorId}>{createState.error}</ValidationMessage> : null}
           <Button type="submit" loading={createPending} loadingLabel="Creating…" className="w-fit">
             Create draft KPI definition
           </Button>

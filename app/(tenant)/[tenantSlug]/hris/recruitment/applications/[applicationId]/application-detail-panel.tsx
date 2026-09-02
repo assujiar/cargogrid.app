@@ -1,8 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import type {
   ApplicationDetail,
   CandidateProfile,
@@ -117,13 +121,19 @@ export function ApplicationDetailPanel({
             <summary className="cursor-pointer text-sm text-danger">Reject / withdraw</summary>
             <div className="mt-2 flex flex-col gap-2">
               <form action={rejectFormAction} className="flex items-center gap-2">
-                <input name="reason" placeholder="Rejection reason" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                <label className="sr-only" htmlFor="reject-reason">
+                  Rejection reason
+                </label>
+                <Input id="reject-reason" name="reason" placeholder="Rejection reason" required invalid={Boolean(rejectState.error)} aria-describedby={rejectState.error ? "reject-error" : undefined} />
                 <Button type="submit" variant="destructive" loading={rejectPending} loadingLabel="Rejecting…">
                   Reject
                 </Button>
               </form>
               <form action={withdrawFormAction} className="flex items-center gap-2">
-                <input name="reason" placeholder="Withdrawal reason" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                <label className="sr-only" htmlFor="withdraw-reason">
+                  Withdrawal reason
+                </label>
+                <Input id="withdraw-reason" name="reason" placeholder="Withdrawal reason" required invalid={Boolean(withdrawState.error)} aria-describedby={withdrawState.error ? "withdraw-error" : undefined} />
                 <Button type="submit" variant="secondary" loading={withdrawPending} loadingLabel="Withdrawing…">
                   Withdraw
                 </Button>
@@ -132,16 +142,8 @@ export function ApplicationDetailPanel({
           </details>
         </section>
       ) : null}
-      {rejectState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {rejectState.error}
-        </p>
-      ) : null}
-      {withdrawState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {withdrawState.error}
-        </p>
-      ) : null}
+      {rejectState.error ? <ValidationMessage id="reject-error">{rejectState.error}</ValidationMessage> : null}
+      {withdrawState.error ? <ValidationMessage id="withdraw-error">{withdrawState.error}</ValidationMessage> : null}
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-neutral-900">Stage history</h2>
@@ -186,43 +188,31 @@ export function ApplicationDetailPanel({
         ))}
         {application.stage === "assessment" || application.stage === "screening" ? (
           <form action={assessFormAction} className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-neutral-300 p-3" noValidate>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="assessmentType" className="text-xs font-medium text-neutral-700">
-                Type
-              </label>
-              <select id="assessmentType" name="assessmentType" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            <FormField id="assessmentType" label="Type">
+              <Select id="assessmentType" name="assessmentType" invalid={Boolean(assessState.error)} aria-describedby={assessState.error ? "assess-error" : undefined}>
                 <option value="screening">Screening</option>
                 <option value="technical">Technical</option>
                 <option value="behavioral">Behavioral</option>
                 <option value="case_study">Case study</option>
                 <option value="other">Other</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="criteriaVersion" className="text-xs font-medium text-neutral-700">
-                Criteria version
-              </label>
-              <input id="criteriaVersion" name="criteriaVersion" required className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="maxScore" className="text-xs font-medium text-neutral-700">
-                Max score
-              </label>
-              <input id="maxScore" name="maxScore" type="number" min="1" defaultValue={100} className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="passThreshold" className="text-xs font-medium text-neutral-700">
-                Pass threshold
-              </label>
-              <input id="passThreshold" name="passThreshold" type="number" min="0" className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
+              </Select>
+            </FormField>
+            <FormField id="criteriaVersion" label="Criteria version">
+              <Input id="criteriaVersion" name="criteriaVersion" required className="w-32" invalid={Boolean(assessState.error)} aria-describedby={assessState.error ? "assess-error" : undefined} />
+            </FormField>
+            <FormField id="maxScore" label="Max score">
+              <Input id="maxScore" name="maxScore" type="number" min="1" defaultValue={100} className="w-24" invalid={Boolean(assessState.error)} aria-describedby={assessState.error ? "assess-error" : undefined} />
+            </FormField>
+            <FormField id="passThreshold" label="Pass threshold">
+              <Input id="passThreshold" name="passThreshold" type="number" min="0" className="w-24" invalid={Boolean(assessState.error)} aria-describedby={assessState.error ? "assess-error" : undefined} />
+            </FormField>
             <Button type="submit" variant="secondary" loading={assessPending} loadingLabel="Adding…">
               Add assessment
             </Button>
             {assessState.error ? (
-              <p role="alert" className="w-full text-sm text-danger">
-                {assessState.error}
-              </p>
+              <div className="w-full">
+                <ValidationMessage id="assess-error">{assessState.error}</ValidationMessage>
+              </div>
             ) : null}
           </form>
         ) : null}
@@ -253,41 +243,29 @@ export function ApplicationDetailPanel({
         ))}
         {application.stage === "interview" ? (
           <form action={interviewFormAction} className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-neutral-300 p-3" noValidate>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="mode" className="text-xs font-medium text-neutral-700">
-                Mode
-              </label>
-              <select id="mode" name="mode" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            <FormField id="mode" label="Mode">
+              <Select id="mode" name="mode" invalid={Boolean(interviewState.error)} aria-describedby={interviewState.error ? "interview-error" : undefined}>
                 <option value="video">Video</option>
                 <option value="phone">Phone</option>
                 <option value="in_person">In person</option>
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="scheduledAt" className="text-xs font-medium text-neutral-700">
-                Scheduled at
-              </label>
-              <input id="scheduledAt" name="scheduledAt" type="datetime-local" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="durationMinutes" className="text-xs font-medium text-neutral-700">
-                Duration (min)
-              </label>
-              <input id="durationMinutes" name="durationMinutes" type="number" min="1" defaultValue={45} className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="interviewerEmployeeId" className="text-xs font-medium text-neutral-700">
-                Interviewer employee id
-              </label>
-              <input id="interviewerEmployeeId" name="interviewerEmployeeId" required placeholder="uuid" className="w-56 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
+              </Select>
+            </FormField>
+            <FormField id="scheduledAt" label="Scheduled at">
+              <Input id="scheduledAt" name="scheduledAt" type="datetime-local" required invalid={Boolean(interviewState.error)} aria-describedby={interviewState.error ? "interview-error" : undefined} />
+            </FormField>
+            <FormField id="durationMinutes" label="Duration (min)">
+              <Input id="durationMinutes" name="durationMinutes" type="number" min="1" defaultValue={45} className="w-24" invalid={Boolean(interviewState.error)} aria-describedby={interviewState.error ? "interview-error" : undefined} />
+            </FormField>
+            <FormField id="interviewerEmployeeId" label="Interviewer employee id">
+              <Input id="interviewerEmployeeId" name="interviewerEmployeeId" required placeholder="uuid" className="w-56" invalid={Boolean(interviewState.error)} aria-describedby={interviewState.error ? "interview-error" : undefined} />
+            </FormField>
             <Button type="submit" variant="secondary" loading={interviewPending} loadingLabel="Scheduling…">
               Schedule
             </Button>
             {interviewState.error ? (
-              <p role="alert" className="w-full text-sm text-danger">
-                {interviewState.error}
-              </p>
+              <div className="w-full">
+                <ValidationMessage id="interview-error">{interviewState.error}</ValidationMessage>
+              </div>
             ) : null}
           </form>
         ) : null}
@@ -318,44 +296,29 @@ export function ApplicationDetailPanel({
         )}
         {application.stage === "offer" && (!offer || ["draft", "approved", "declined"].includes(offer.status)) ? (
           <form action={offerFormAction} className="flex flex-wrap items-end gap-2 rounded-md border border-dashed border-neutral-300 p-3" noValidate>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="title" className="text-xs font-medium text-neutral-700">
-                Title
-              </label>
-              <input id="title" name="title" required defaultValue={detail.vacancyTitle} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="compensationAmount" className="text-xs font-medium text-neutral-700">
-                Compensation
-              </label>
-              <input id="compensationAmount" name="compensationAmount" type="number" min="0" step="0.01" required className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="compensationCurrency" className="text-xs font-medium text-neutral-700">
-                Currency
-              </label>
-              <input id="compensationCurrency" name="compensationCurrency" defaultValue="IDR" required className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="effectiveDate" className="text-xs font-medium text-neutral-700">
-                Effective date
-              </label>
-              <input id="effectiveDate" name="effectiveDate" type="date" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="expiryDate" className="text-xs font-medium text-neutral-700">
-                Response deadline
-              </label>
-              <input id="expiryDate" name="expiryDate" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
+            <FormField id="title" label="Title">
+              <Input id="title" name="title" required defaultValue={detail.vacancyTitle} invalid={Boolean(offerState.error)} aria-describedby={offerState.error ? "offer-error" : undefined} />
+            </FormField>
+            <FormField id="compensationAmount" label="Compensation">
+              <Input id="compensationAmount" name="compensationAmount" type="number" min="0" step="0.01" required className="w-32" invalid={Boolean(offerState.error)} aria-describedby={offerState.error ? "offer-error" : undefined} />
+            </FormField>
+            <FormField id="compensationCurrency" label="Currency">
+              <Input id="compensationCurrency" name="compensationCurrency" defaultValue="IDR" required className="w-20" invalid={Boolean(offerState.error)} aria-describedby={offerState.error ? "offer-error" : undefined} />
+            </FormField>
+            <FormField id="effectiveDate" label="Effective date">
+              <Input id="effectiveDate" name="effectiveDate" type="date" required invalid={Boolean(offerState.error)} aria-describedby={offerState.error ? "offer-error" : undefined} />
+            </FormField>
+            <FormField id="expiryDate" label="Response deadline">
+              <Input id="expiryDate" name="expiryDate" type="date" invalid={Boolean(offerState.error)} aria-describedby={offerState.error ? "offer-error" : undefined} />
+            </FormField>
             <input type="hidden" name="employmentType" value="full_time" />
             <Button type="submit" variant="secondary" loading={offerPending} loadingLabel="Saving…">
               {offer ? "Create revised version" : "Create offer"}
             </Button>
             {offerState.error ? (
-              <p role="alert" className="w-full text-sm text-danger">
-                {offerState.error}
-              </p>
+              <div className="w-full">
+                <ValidationMessage id="offer-error">{offerState.error}</ValidationMessage>
+              </div>
             ) : null}
           </form>
         ) : null}
@@ -370,38 +333,38 @@ function rankOf(stage: ApplicationStage): number {
 
 function StageButton({ label, action }: { label: string; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction} className="flex flex-col gap-1">
       <Button type="submit" loading={pending} loadingLabel="Working…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={`${reactId}-error`}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function AssessmentResultForm({ assessmentId, action }: { assessmentId: string; expectedVersion: number; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const notesId = `assessment-notes-${assessmentId}`;
+  const errorId = `assessment-result-error-${assessmentId}`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="mt-2 flex flex-wrap items-end gap-2">
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`assessment-score-${assessmentId}`} className="text-xs font-medium text-neutral-700">
-          Score
-        </label>
-        <input id={`assessment-score-${assessmentId}`} name="score" type="number" min="0" step="0.01" required className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-      </div>
-      <input name="notes" placeholder="Notes" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+      <FormField id={`assessment-score-${assessmentId}`} label="Score">
+        <Input id={`assessment-score-${assessmentId}`} name="score" type="number" min="0" step="0.01" required className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <label className="sr-only" htmlFor={notesId}>
+        Notes
+      </label>
+      <Input id={notesId} name="notes" placeholder="Notes" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Record result
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -410,20 +373,21 @@ function AssessmentResultForm({ assessmentId, action }: { assessmentId: string; 
 /** ISS-2026-067 item 3: `app.cancel_candidate_assessment`/`app.cancel_interview` had no UI caller. Shared shape -- both take just a reason. */
 function CancelForm({ label, reasonPlaceholder, action }: { label: string; reasonPlaceholder: string; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <details>
       <summary className="cursor-pointer text-sm text-danger">{label}</summary>
       <form action={formAction} className="mt-2 flex items-center gap-2">
-        <input name="reason" placeholder={reasonPlaceholder} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <label className="sr-only" htmlFor={reactId}>
+          {reasonPlaceholder}
+        </label>
+        <Input id={reactId} name="reason" placeholder={reasonPlaceholder} required invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…">
           Confirm
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="mt-1 text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </details>
   );
 }
@@ -431,57 +395,50 @@ function CancelForm({ label, reasonPlaceholder, action }: { label: string; reaso
 /** ISS-2026-067 item 3: `app.reschedule_interview` had no UI caller. */
 function RescheduleInterviewForm({ interview, action }: { interview: Interview; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const errorId = `reschedule-error-${interview.id}`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <details>
       <summary className="cursor-pointer text-sm text-primary">Reschedule</summary>
       <form action={formAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`reschedule-mode-${interview.id}`} className="text-xs font-medium text-neutral-700">
-            Mode
-          </label>
-          <select id={`reschedule-mode-${interview.id}`} name="mode" defaultValue={interview.mode} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+        <FormField id={`reschedule-mode-${interview.id}`} label="Mode">
+          <Select id={`reschedule-mode-${interview.id}`} name="mode" defaultValue={interview.mode} invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="video">Video</option>
             <option value="phone">Phone</option>
             <option value="in_person">In person</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`reschedule-at-${interview.id}`} className="text-xs font-medium text-neutral-700">
-            New scheduled time
-          </label>
-          <input id={`reschedule-at-${interview.id}`} name="scheduledAt" type="datetime-local" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`reschedule-duration-${interview.id}`} className="text-xs font-medium text-neutral-700">
-            Duration (min)
-          </label>
-          <input
+          </Select>
+        </FormField>
+        <FormField id={`reschedule-at-${interview.id}`} label="New scheduled time">
+          <Input id={`reschedule-at-${interview.id}`} name="scheduledAt" type="datetime-local" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`reschedule-duration-${interview.id}`} label="Duration (min)">
+          <Input
             id={`reschedule-duration-${interview.id}`}
             name="durationMinutes"
             type="number"
             min="1"
             defaultValue={interview.durationMinutes}
-            className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            className="w-24"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
           />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`reschedule-location-${interview.id}`} className="text-xs font-medium text-neutral-700">
-            Location / link
-          </label>
-          <input
+        </FormField>
+        <FormField id={`reschedule-location-${interview.id}`} label="Location / link">
+          <Input
             id={`reschedule-location-${interview.id}`}
             name="locationOrLink"
             defaultValue={interview.locationOrLink ?? ""}
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
           />
-        </div>
+        </FormField>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
           Reschedule
         </Button>
         {state.error ? (
-          <p role="alert" className="w-full text-xs text-danger">
-            {state.error}
-          </p>
+          <div className="w-full">
+            <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     </details>
@@ -490,35 +447,35 @@ function RescheduleInterviewForm({ interview, action }: { interview: Interview; 
 
 function FeedbackForm({ interviewId, action }: { interviewId: string; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const notesId = `feedback-notes-${interviewId}`;
+  const errorId = `feedback-error-${interviewId}`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <details>
       <summary className="cursor-pointer text-sm text-primary">Submit my feedback</summary>
       <form action={formAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`feedback-rating-${interviewId}`} className="text-xs font-medium text-neutral-700">
-            Rating (1-5)
-          </label>
-          <input id={`feedback-rating-${interviewId}`} name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`feedback-recommendation-${interviewId}`} className="text-xs font-medium text-neutral-700">
-            Recommendation
-          </label>
-          <select id={`feedback-recommendation-${interviewId}`} name="recommendation" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+        <FormField id={`feedback-rating-${interviewId}`} label="Rating (1-5)">
+          <Input id={`feedback-rating-${interviewId}`} name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`feedback-recommendation-${interviewId}`} label="Recommendation">
+          <Select id={`feedback-recommendation-${interviewId}`} name="recommendation" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="strong_yes">Strong yes</option>
             <option value="yes">Yes</option>
             <option value="no">No</option>
             <option value="strong_no">Strong no</option>
-          </select>
-        </div>
-        <input name="notes" placeholder="Notes" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          </Select>
+        </FormField>
+        <label className="sr-only" htmlFor={notesId}>
+          Notes
+        </label>
+        <Input id={notesId} name="notes" placeholder="Notes" invalid={Boolean(state.error)} aria-describedby={describedBy} />
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
           Submit feedback
         </Button>
         {state.error ? (
-          <p role="alert" className="w-full text-xs text-danger">
-            {state.error}
-          </p>
+          <div className="w-full">
+            <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     </details>
@@ -537,20 +494,20 @@ function FeedbackForm({ interviewId, action }: { interviewId: string; action: Bo
  */
 function ApprovalStepForm({ decideAction }: { decideAction: (requestStepId: string, decision: "approved" | "rejected") => Bound0 }) {
   const [requestStepId, setRequestStepId] = useState("");
+  const reactId = useId();
   return (
     <details>
       <summary className="cursor-pointer text-sm text-primary">Decide (as approver)</summary>
       <div className="mt-2 flex flex-col gap-2">
-        <label className="text-xs font-medium text-neutral-700">
-          Approval step id
-          <input
+        <FormField id={reactId} label="Approval step id">
+          <Input
+            id={reactId}
             value={requestStepId}
             onChange={(e) => setRequestStepId(e.target.value)}
             required
             placeholder="uuid"
-            className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1 text-sm"
           />
-        </label>
+        </FormField>
         {requestStepId ? (
           <div className="flex gap-2">
             <ApprovalDecisionButton label="Approve" decision="approved" requestStepId={requestStepId} action={decideAction} />
@@ -574,34 +531,40 @@ function ApprovalDecisionButton({
   action: (requestStepId: string, decision: "approved" | "rejected") => Bound0;
 }) {
   const [state, formAction, pending] = useActionState(action(requestStepId, decision), INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-1">
-      {decision === "rejected" ? <input name="reason" placeholder="Reason" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" /> : null}
+      {decision === "rejected" ? (
+        <>
+          <label className="sr-only" htmlFor={reactId}>
+            Reason
+          </label>
+          <Input id={reactId} name="reason" placeholder="Reason" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+        </>
+      ) : null}
       <Button type="submit" variant={decision === "rejected" ? "destructive" : "primary"} loading={pending} loadingLabel="Saving…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function OfferResponseForm({ label, action }: { label: string; action: Bound0 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-1">
-      <input name="responseNote" placeholder="Note (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+      <label className="sr-only" htmlFor={reactId}>
+        Note (optional)
+      </label>
+      <Input id={reactId} name="responseNote" placeholder="Note (optional)" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

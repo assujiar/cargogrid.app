@@ -1,8 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { Timeline, type ActivityItemData } from "../../../../../../components/ui/timeline.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
@@ -36,19 +41,23 @@ type PlainAction = (prevState: VendorActionState, formData: FormData) => Promise
 
 function ActionButton({ action, label, variant = "primary", confirmField }: { action: PlainAction; label: string; variant?: "primary" | "secondary" | "destructive"; confirmField?: { name: string; label: string; required?: boolean } }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
       {confirmField ? (
-        <input name={confirmField.name} type="text" placeholder={confirmField.label} required={confirmField.required !== false} className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <>
+          <label htmlFor={reactId} className="sr-only">
+            {confirmField.label}
+          </label>
+          <Input id={reactId} name={confirmField.name} type="text" placeholder={confirmField.label} required={confirmField.required !== false} className="text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </>
       ) : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={`${label}…`}>
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -58,10 +67,9 @@ function DecisionButtons({ action }: { action: (prevState: VendorActionState, fo
   const [reason, setReason] = useState("");
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-      <label htmlFor="review-reason" className="text-xs font-medium text-neutral-600">
-        Reason (required to reject)
-      </label>
-      <input id="review-reason" name="reason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+      <FormField id="review-reason" label="Reason (required to reject)" error={state.error ?? undefined}>
+        <Input id="review-reason" name="reason" value={reason} onChange={(event) => setReason(event.currentTarget.value)} invalid={Boolean(state.error)} aria-describedby={state.error ? "review-reason-error" : undefined} />
+      </FormField>
       <div className="flex gap-2">
         <Button type="submit" name="decision" value="approve" loading={pending} loadingLabel="Approving…">
           Approve
@@ -70,11 +78,6 @@ function DecisionButtons({ action }: { action: (prevState: VendorActionState, fo
           Reject
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
     </form>
   );
 }
@@ -315,31 +318,29 @@ function FlagButton({ action }: { action: PlainAction }) {
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Flagging…">
         Flag as duplicate
       </Button>
-      {state.error ? (
-        <span role="alert" className="text-danger">
-          {state.error}
-        </span>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function DuplicateDecisionForm({ action }: { action: PlainAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      <input name="reason" type="text" required placeholder="Decision reason" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+      <label htmlFor={reactId} className="sr-only">
+        Decision reason
+      </label>
+      <Input id={reactId} name="reason" type="text" required placeholder="Decision reason" className="text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" name="decision" value="linked" variant="secondary" loading={pending} loadingLabel="Saving…">
         Link (same vendor)
       </Button>
       <Button type="submit" name="decision" value="dismissed" loading={pending} loadingLabel="Saving…">
         Dismiss (different vendor)
       </Button>
-      {state.error ? (
-        <span role="alert" className="text-danger">
-          {state.error}
-        </span>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -367,21 +368,27 @@ function ContactsSection({ contacts, isDraft, addAction, removeActionFor }: { co
       )}
       {isDraft ? (
         <form action={formAction} className="flex flex-wrap items-end gap-2">
-          <input name="name" type="text" required placeholder="Name" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="title" type="text" placeholder="Title" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="email" type="email" placeholder="Email" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="phone" type="tel" placeholder="Phone" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <label className="flex items-center gap-1 text-xs text-neutral-600">
-            <input name="isPrimary" type="checkbox" /> Primary
+          <label htmlFor="contact-name" className="sr-only">
+            Name
           </label>
+          <Input id="contact-name" name="name" type="text" required placeholder="Name" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-contact-error" : undefined} />
+          <label htmlFor="contact-title" className="sr-only">
+            Title
+          </label>
+          <Input id="contact-title" name="title" type="text" placeholder="Title" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-contact-error" : undefined} />
+          <label htmlFor="contact-email" className="sr-only">
+            Email
+          </label>
+          <Input id="contact-email" name="email" type="email" placeholder="Email" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-contact-error" : undefined} />
+          <label htmlFor="contact-phone" className="sr-only">
+            Phone
+          </label>
+          <Input id="contact-phone" name="phone" type="tel" placeholder="Phone" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-contact-error" : undefined} />
+          <Checkbox id="contact-is-primary" name="isPrimary" label="Primary" aria-describedby={state.error ? "add-contact-error" : undefined} />
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add contact
           </Button>
-          {state.error ? (
-            <span role="alert" className="text-xs text-danger">
-              {state.error}
-            </span>
-          ) : null}
+          {state.error ? <ValidationMessage id="add-contact-error">{state.error}</ValidationMessage> : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Contacts may only be edited while this vendor is a draft.</p>
@@ -412,24 +419,38 @@ function AddressesSection({ addresses, isDraft, addAction, removeActionFor }: { 
       )}
       {isDraft ? (
         <form action={formAction} className="flex flex-wrap items-end gap-2">
-          <select name="addressType" required className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
+          <label htmlFor="address-type" className="sr-only">
+            Address type
+          </label>
+          <Select id="address-type" name="addressType" required className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-address-error" : undefined}>
             <option value="legal">legal</option>
             <option value="billing">billing</option>
             <option value="operational">operational</option>
-          </select>
-          <input name="street" type="text" required placeholder="Street" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="city" type="text" required placeholder="City" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="province" type="text" placeholder="Province" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="postalCode" type="text" placeholder="Postal code" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="country" type="text" required placeholder="Country" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+          </Select>
+          <label htmlFor="address-street" className="sr-only">
+            Street
+          </label>
+          <Input id="address-street" name="street" type="text" required placeholder="Street" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-address-error" : undefined} />
+          <label htmlFor="address-city" className="sr-only">
+            City
+          </label>
+          <Input id="address-city" name="city" type="text" required placeholder="City" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-address-error" : undefined} />
+          <label htmlFor="address-province" className="sr-only">
+            Province
+          </label>
+          <Input id="address-province" name="province" type="text" placeholder="Province" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-address-error" : undefined} />
+          <label htmlFor="address-postal-code" className="sr-only">
+            Postal code
+          </label>
+          <Input id="address-postal-code" name="postalCode" type="text" placeholder="Postal code" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-address-error" : undefined} />
+          <label htmlFor="address-country" className="sr-only">
+            Country
+          </label>
+          <Input id="address-country" name="country" type="text" required placeholder="Country" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-address-error" : undefined} />
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add address
           </Button>
-          {state.error ? (
-            <span role="alert" className="text-xs text-danger">
-              {state.error}
-            </span>
-          ) : null}
+          {state.error ? <ValidationMessage id="add-address-error">{state.error}</ValidationMessage> : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Addresses may only be edited while this vendor is a draft.</p>
@@ -457,15 +478,14 @@ function ServicesSection({ services, isDraft, addAction, removeActionFor }: { se
       )}
       {isDraft ? (
         <form action={formAction} className="flex flex-wrap items-end gap-2">
-          <input name="serviceType" type="text" required placeholder="Service type (e.g. trucking)" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+          <label htmlFor="service-type" className="sr-only">
+            Service type
+          </label>
+          <Input id="service-type" name="serviceType" type="text" required placeholder="Service type (e.g. trucking)" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-service-error" : undefined} />
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add service
           </Button>
-          {state.error ? (
-            <span role="alert" className="text-xs text-danger">
-              {state.error}
-            </span>
-          ) : null}
+          {state.error ? <ValidationMessage id="add-service-error">{state.error}</ValidationMessage> : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Services may only be edited while this vendor is a draft.</p>
@@ -496,16 +516,18 @@ function CoverageSection({ coverage, isDraft, addAction, removeActionFor }: { co
       )}
       {isDraft ? (
         <form action={formAction} className="flex flex-wrap items-end gap-2">
-          <input name="originLane" type="text" required placeholder="Origin lane / region" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <input name="destinationLane" type="text" placeholder="Destination lane (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+          <label htmlFor="coverage-origin-lane" className="sr-only">
+            Origin lane / region
+          </label>
+          <Input id="coverage-origin-lane" name="originLane" type="text" required placeholder="Origin lane / region" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-coverage-error" : undefined} />
+          <label htmlFor="coverage-destination-lane" className="sr-only">
+            Destination lane
+          </label>
+          <Input id="coverage-destination-lane" name="destinationLane" type="text" placeholder="Destination lane (optional)" className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? "add-coverage-error" : undefined} />
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
             Add coverage
           </Button>
-          {state.error ? (
-            <span role="alert" className="text-xs text-danger">
-              {state.error}
-            </span>
-          ) : null}
+          {state.error ? <ValidationMessage id="add-coverage-error">{state.error}</ValidationMessage> : null}
         </form>
       ) : (
         <p className="text-xs text-neutral-400">Coverage may only be edited while this vendor is a draft.</p>
@@ -521,11 +543,7 @@ function RemoveButton({ action }: { action: PlainAction }) {
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Removing…">
         Remove
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

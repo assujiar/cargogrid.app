@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { AssessmentActionState } from "./actions.ts";
@@ -42,6 +46,8 @@ export function AssessmentQueuePanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(startAction, INITIAL_STATE);
+  const startErrorId = "assessment-start-error";
+  const startDescribedBy = state.error ? startErrorId : undefined;
 
   function applyFilter(nextStatus: string, nextMine: boolean) {
     const next = new URLSearchParams(searchParams.toString());
@@ -69,14 +75,14 @@ export function AssessmentQueuePanel({
             <label htmlFor="assessment-status" className="text-xs font-medium text-neutral-600">
               Status
             </label>
-            <select id="assessment-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value, assignedToMe)}>
+            <Select id="assessment-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, assignedToMe)}>
               <option value="">All statuses</option>
               {VENDOR_ASSESSMENT_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -124,43 +130,34 @@ export function AssessmentQueuePanel({
             {templates.length === 0 ? "No published assessment template exists yet -- publish one from Manage templates first." : ""}
           </p>
         ) : (
-          <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="vendorMasterRecordId" className="text-xs font-medium text-neutral-600">
-                Vendor
-              </label>
-              <select id="vendorMasterRecordId" name="vendorMasterRecordId" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+          <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3" noValidate>
+            <FormField id="vendorMasterRecordId" label="Vendor">
+              <Select id="vendorMasterRecordId" name="vendorMasterRecordId" required invalid={Boolean(state.error)} aria-describedby={startDescribedBy}>
                 {vendors.map((v) => (
                   <option key={v.masterRecordId} value={v.masterRecordId}>
                     {v.vendorCode} — {v.legalName}
                   </option>
                 ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="templateVersionId" className="text-xs font-medium text-neutral-600">
-                Template
-              </label>
-              <select id="templateVersionId" name="templateVersionId" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+              </Select>
+            </FormField>
+            <FormField id="templateVersionId" label="Template">
+              <Select id="templateVersionId" name="templateVersionId" required invalid={Boolean(state.error)} aria-describedby={startDescribedBy}>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name} ({t.assessmentType}
                     {t.vendorCategory ? `, ${t.vendorCategory}` : ""})
                   </option>
                 ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="idempotencyKey" className="text-xs font-medium text-neutral-600">
-                Idempotency key (optional)
-              </label>
-              <input id="idempotencyKey" name="idempotencyKey" type="text" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-            </div>
+              </Select>
+            </FormField>
+            <FormField id="idempotencyKey" label="Idempotency key (optional)">
+              <Input id="idempotencyKey" name="idempotencyKey" type="text" invalid={Boolean(state.error)} aria-describedby={startDescribedBy} />
+            </FormField>
 
             {state.error ? (
-              <p role="alert" className="col-span-full text-sm text-danger">
-                {state.error}
-              </p>
+              <div className="col-span-full">
+                <ValidationMessage id={startErrorId}>{state.error}</ValidationMessage>
+              </div>
             ) : null}
 
             <div className="col-span-full">

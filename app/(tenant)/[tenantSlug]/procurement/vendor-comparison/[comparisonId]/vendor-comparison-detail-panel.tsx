@@ -1,8 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type {
@@ -36,21 +39,20 @@ function ActionForm({
   className = "flex flex-col gap-2",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className={className}>
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -140,42 +142,32 @@ export function VendorComparisonDetailPanel({
           <details className="text-xs">
             <summary className="cursor-pointer text-primary">Recalculate (governed exception -- creates a new version)</summary>
             <ActionForm action={reviseAction} submitLabel="Revise comparison" loadingLabel="Revising…" variant="secondary" className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseComparisonCurrency" className="text-xs font-medium text-neutral-700">
-                  New currency
-                </label>
-                <Input id="reviseComparisonCurrency" name="comparisonCurrency" type="text" maxLength={3} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseBasisWeight" className="text-xs font-medium text-neutral-700">
-                  New basis weight
-                </label>
-                <Input id="reviseBasisWeight" name="basisWeight" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseBasisVolume" className="text-xs font-medium text-neutral-700">
-                  New basis volume
-                </label>
-                <Input id="reviseBasisVolume" name="basisVolume" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="reviseBasisQuantity" className="text-xs font-medium text-neutral-700">
-                  New basis quantity
-                </label>
-                <Input id="reviseBasisQuantity" name="basisQuantity" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1 sm:col-span-4">
-                <label htmlFor="reviseCriteria" className="text-xs font-medium text-neutral-700">
-                  New criteria (JSON array, optional)
-                </label>
-                <Input id="reviseCriteria" name="criteria" type="text" />
-              </div>
-              <div className="flex flex-col gap-1 sm:col-span-4">
-                <label htmlFor="reviseReason" className="text-xs font-medium text-neutral-700">
-                  Reason (required)
-                </label>
-                <Input id="reviseReason" name="reason" type="text" required />
-              </div>
+              {(describedBy) => (
+                <>
+                  <FormField id="reviseComparisonCurrency" label="New currency">
+                    <Input id="reviseComparisonCurrency" name="comparisonCurrency" type="text" maxLength={3} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reviseBasisWeight" label="New basis weight">
+                    <Input id="reviseBasisWeight" name="basisWeight" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reviseBasisVolume" label="New basis volume">
+                    <Input id="reviseBasisVolume" name="basisVolume" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reviseBasisQuantity" label="New basis quantity">
+                    <Input id="reviseBasisQuantity" name="basisQuantity" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <div className="sm:col-span-4">
+                    <FormField id="reviseCriteria" label="New criteria (JSON array, optional)">
+                      <Input id="reviseCriteria" name="criteria" type="text" aria-describedby={describedBy} />
+                    </FormField>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <FormField id="reviseReason" label="Reason (required)">
+                      <Input id="reviseReason" name="reason" type="text" required aria-describedby={describedBy} />
+                    </FormField>
+                  </div>
+                </>
+              )}
             </ActionForm>
           </details>
         ) : null}
@@ -184,7 +176,14 @@ export function VendorComparisonDetailPanel({
       {isEditable ? (
         <section className="flex flex-wrap gap-3 rounded-md border border-neutral-200 p-4">
           <ActionForm action={cancelAction} submitLabel="Cancel comparison" loadingLabel="Cancelling…" variant="destructive" className="flex items-center gap-2">
-            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-64" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="cancel-comparison-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="cancel-comparison-reason" name="reason" type="text" placeholder="Reason (required)" required className="w-64" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         </section>
       ) : null}
@@ -232,7 +231,14 @@ export function VendorComparisonDetailPanel({
                           <details className="mt-1 text-xs">
                             <summary className="cursor-pointer text-primary">Link an approved rate</summary>
                             <ActionForm action={linkRateActionFor(offer.id, offer.recordVersion)} submitLabel="Link rate" loadingLabel="Linking…" variant="secondary" className="mt-1 flex items-center gap-1">
-                              <Input name="rateVersionId" type="text" placeholder="Rate version id" required className="w-40 text-xs" />
+                              {(describedBy) => (
+                                <>
+                                  <label htmlFor={`link-rate-${offer.id}`} className="sr-only">
+                                    Rate version id
+                                  </label>
+                                  <Input id={`link-rate-${offer.id}`} name="rateVersionId" type="text" placeholder="Rate version id" required className="w-40 text-xs" aria-describedby={describedBy} />
+                                </>
+                              )}
                             </ActionForm>
                           </details>
                         ) : null}
@@ -245,15 +251,28 @@ export function VendorComparisonDetailPanel({
                           <details className="mt-1">
                             <summary className="cursor-pointer text-primary">Score</summary>
                             <ActionForm action={scoreCriterionActionFor(offer.id)} submitLabel="Save score" loadingLabel="Saving…" variant="secondary" className="mt-1 flex flex-col gap-1">
-                              <select name="criterionKey" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" required>
-                                {nonPriceCriteria.map((c) => (
-                                  <option key={c.key} value={c.key}>
-                                    {c.label}
-                                  </option>
-                                ))}
-                              </select>
-                              <Input name="score" type="number" min={0} max={100} placeholder="0-100" required className="w-24 text-xs" />
-                              <Input name="notes" type="text" placeholder="Notes" className="w-40 text-xs" />
+                              {(describedBy) => (
+                                <>
+                                  <label htmlFor={`score-criterion-${offer.id}`} className="sr-only">
+                                    Criterion
+                                  </label>
+                                  <Select id={`score-criterion-${offer.id}`} name="criterionKey" className="text-xs" required aria-describedby={describedBy}>
+                                    {nonPriceCriteria.map((c) => (
+                                      <option key={c.key} value={c.key}>
+                                        {c.label}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                  <label htmlFor={`score-value-${offer.id}`} className="sr-only">
+                                    Score
+                                  </label>
+                                  <Input id={`score-value-${offer.id}`} name="score" type="number" min={0} max={100} placeholder="0-100" required className="w-24 text-xs" aria-describedby={describedBy} />
+                                  <label htmlFor={`score-notes-${offer.id}`} className="sr-only">
+                                    Notes
+                                  </label>
+                                  <Input id={`score-notes-${offer.id}`} name="notes" type="text" placeholder="Notes" className="w-40 text-xs" aria-describedby={describedBy} />
+                                </>
+                              )}
                             </ActionForm>
                             {scores.length > 0 ? (
                               <ul className="mt-1 text-xs text-neutral-500">
@@ -284,7 +303,14 @@ export function VendorComparisonDetailPanel({
                               variant="destructive"
                               className="flex flex-col gap-1"
                             >
-                              <Input name="reason" type="text" placeholder="Reason (required)" required className="w-40 text-xs" />
+                              {(describedBy) => (
+                                <>
+                                  <label htmlFor={`exclude-reason-${offer.id}`} className="sr-only">
+                                    Reason
+                                  </label>
+                                  <Input id={`exclude-reason-${offer.id}`} name="reason" type="text" placeholder="Reason (required)" required className="w-40 text-xs" aria-describedby={describedBy} />
+                                </>
+                              )}
                             </ActionForm>
                           ) : (
                             <ActionForm action={setInclusionActionFor(offer.id, true, offer.recordVersion)} submitLabel="Re-include" loadingLabel="Including…" variant="secondary" />
@@ -307,24 +333,26 @@ export function VendorComparisonDetailPanel({
           <h2 className="text-sm font-semibold text-neutral-900">Recommendation</h2>
           <p className="text-xs text-neutral-500">Lowest price is not automatic selection -- recommending any offer other than the lowest normalized cost requires a reason.</p>
           <ActionForm action={recommendAction} submitLabel="Recommend" loadingLabel="Recording…" variant="primary" className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="recommendOfferId" className="text-xs font-medium text-neutral-700">
-                Offer id
-              </label>
-              <select id="recommendOfferId" name="comparisonOfferId" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" required>
-                {includedOffers.map((offer) => (
-                  <option key={offer.id} value={offer.id}>
-                    {offer.vendorMasterId.slice(0, 8)} — {formatAmount(comparison.comparisonCurrency, offer.normalizedAmount)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="recommendReason" className="text-xs font-medium text-neutral-700">
-                Reason (required if not the lowest cost)
-              </label>
-              <Input id="recommendReason" name="reason" type="text" />
-            </div>
+            {(describedBy) => (
+              <>
+                <div className="flex-1">
+                  <FormField id="recommendOfferId" label="Offer id">
+                    <Select id="recommendOfferId" name="comparisonOfferId" required aria-describedby={describedBy}>
+                      {includedOffers.map((offer) => (
+                        <option key={offer.id} value={offer.id}>
+                          {offer.vendorMasterId.slice(0, 8)} — {formatAmount(comparison.comparisonCurrency, offer.normalizedAmount)}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                </div>
+                <div className="flex-1">
+                  <FormField id="recommendReason" label="Reason (required if not the lowest cost)">
+                    <Input id="recommendReason" name="reason" type="text" aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+              </>
+            )}
           </ActionForm>
         </section>
       ) : null}
@@ -343,24 +371,26 @@ export function VendorComparisonDetailPanel({
             </p>
           ) : null}
           <ActionForm action={submitAction} submitLabel="Submit for approval" loadingLabel="Submitting…" variant="primary" className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="selectedOfferId" className="text-xs font-medium text-neutral-700">
-                Selected offer id
-              </label>
-              <select id="selectedOfferId" name="selectedOfferId" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" required defaultValue={comparison.recommendedOfferId ?? ""}>
-                {includedOffers.map((offer) => (
-                  <option key={offer.id} value={offer.id}>
-                    {offer.vendorMasterId.slice(0, 8)} — {formatAmount(comparison.comparisonCurrency, offer.normalizedAmount)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="selectionReason" className="text-xs font-medium text-neutral-700">
-                Override reason (required if not the recommended offer)
-              </label>
-              <Input id="selectionReason" name="selectionReason" type="text" />
-            </div>
+            {(describedBy) => (
+              <>
+                <div className="flex-1">
+                  <FormField id="selectedOfferId" label="Selected offer id">
+                    <Select id="selectedOfferId" name="selectedOfferId" required defaultValue={comparison.recommendedOfferId ?? ""} aria-describedby={describedBy}>
+                      {includedOffers.map((offer) => (
+                        <option key={offer.id} value={offer.id}>
+                          {offer.vendorMasterId.slice(0, 8)} — {formatAmount(comparison.comparisonCurrency, offer.normalizedAmount)}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                </div>
+                <div className="flex-1">
+                  <FormField id="selectionReason" label="Override reason (required if not the recommended offer)">
+                    <Input id="selectionReason" name="selectionReason" type="text" aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+              </>
+            )}
           </ActionForm>
         </section>
       ) : null}

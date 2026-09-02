@@ -4,6 +4,12 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { ComplianceActionState } from "../actions.ts";
@@ -31,6 +37,8 @@ export function RequirementManagementPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const createErrorId = "requirement-create-error";
+  const createDescribedBy = state.error ? createErrorId : undefined;
 
   function applyFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -46,14 +54,14 @@ export function RequirementManagementPanel({
           <label htmlFor="requirement-status" className="text-xs font-medium text-neutral-600">
             Status
           </label>
-          <select id="requirement-status" defaultValue={statusFilter ?? ""} className="w-fit rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value)}>
+          <Select id="requirement-status" defaultValue={statusFilter ?? ""} className="w-fit py-1.5" onChange={(event) => applyFilter(event.currentTarget.value)}>
             <option value="">All statuses</option>
             {VENDOR_COMPLIANCE_REQUIREMENT_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {requirements.length === 0 ? (
@@ -96,63 +104,41 @@ export function RequirementManagementPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new requirement draft</h2>
-        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="name" className="text-xs font-medium text-neutral-600">
-              Name
-            </label>
-            <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="documentTypeCode" className="text-xs font-medium text-neutral-600">
-              Document type code
-            </label>
-            <input id="documentTypeCode" name="documentTypeCode" type="text" required placeholder="vendor_compliance_document" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="vendorCategory" className="text-xs font-medium text-neutral-600">
-              Vendor category (blank = any)
-            </label>
-            <input id="vendorCategory" name="vendorCategory" type="text" placeholder="trucking, warehousing…" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="serviceType" className="text-xs font-medium text-neutral-600">
-              Service type (blank = any)
-            </label>
-            <input id="serviceType" name="serviceType" type="text" placeholder="linehaul, trucking…" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="blockingEffect" className="text-xs font-medium text-neutral-600">
-              Blocking effect
-            </label>
-            <select id="blockingEffect" name="blockingEffect" defaultValue="blocking" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3" noValidate>
+          <FormField id="name" label="Name">
+            <Input id="name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="documentTypeCode" label="Document type code">
+            <Input id="documentTypeCode" name="documentTypeCode" type="text" required placeholder="vendor_compliance_document" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="vendorCategory" label="Vendor category (blank = any)">
+            <Input id="vendorCategory" name="vendorCategory" type="text" placeholder="trucking, warehousing…" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="serviceType" label="Service type (blank = any)">
+            <Input id="serviceType" name="serviceType" type="text" placeholder="linehaul, trucking…" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="blockingEffect" label="Blocking effect">
+            <Select id="blockingEffect" name="blockingEffect" defaultValue="blocking" invalid={Boolean(state.error)} aria-describedby={createDescribedBy}>
               <option value="blocking">Blocking (triggers an eligibility hold)</option>
               <option value="warning">Warning (never holds)</option>
-            </select>
+            </Select>
+          </FormField>
+          <FormField id="reminderOffsets" label="Reminder offsets (days before expiry, comma-separated)">
+            <Input id="reminderOffsets" name="reminderOffsets" type="text" defaultValue="30,14,7" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <div className="flex items-center pt-5">
+            <Checkbox id="requiresExpiry" name="requiresExpiry" defaultChecked label="This document type has an expiry date" aria-describedby={createDescribedBy} />
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="reminderOffsets" className="text-xs font-medium text-neutral-600">
-              Reminder offsets (days before expiry, comma-separated)
-            </label>
-            <input id="reminderOffsets" name="reminderOffsets" type="text" defaultValue="30,14,7" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex items-center gap-2 pt-5">
-            <input id="requiresExpiry" name="requiresExpiry" type="checkbox" defaultChecked className="h-4 w-4" />
-            <label htmlFor="requiresExpiry" className="text-xs font-medium text-neutral-600">
-              This document type has an expiry date
-            </label>
-          </div>
-          <div className="col-span-full flex flex-col gap-1">
-            <label htmlFor="description" className="text-xs font-medium text-neutral-600">
-              Description (optional)
-            </label>
-            <textarea id="description" name="description" rows={2} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+          <div className="col-span-full">
+            <FormField id="description" label="Description (optional)">
+              <Textarea id="description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+            </FormField>
           </div>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id={createErrorId}>{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

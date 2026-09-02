@@ -1,10 +1,14 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useId, useState, useTransition } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
 import { Input } from "../../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import type { VendorFinancialActionState, VendorBankAccountRevealActionState, VendorTaxIdentityRevealActionState, VendorFinancialEvidenceAccessState } from "./actions.ts";
 import type {
   VendorBankAccount,
@@ -54,18 +58,20 @@ function ReauthActionForm({
   const [reauthConfirmed, setReauthConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const reactId = useId();
   return (
     <div className="flex flex-col gap-2">
-      {requireReason ? <Input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" checked={reauthConfirmed} onChange={(e) => setReauthConfirmed(e.target.checked)} />
-        I have recently re-authenticated (required for this action)
-      </label>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
+      {requireReason ? (
+        <FormField id={reactId} label={<span className="sr-only">Reason</span>} error={error ?? undefined}>
+          <Input id={reactId} placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} invalid={Boolean(error)} aria-describedby={error ? `${reactId}-error` : undefined} />
+        </FormField>
       ) : null}
+      <Checkbox
+        checked={reauthConfirmed}
+        onChange={(e) => setReauthConfirmed(e.target.checked)}
+        label="I have recently re-authenticated (required for this action)"
+      />
+      {!requireReason && error ? <ValidationMessage>{error}</ValidationMessage> : null}
       <Button
         type="button"
         variant={variant}
@@ -104,19 +110,18 @@ function DecideForm({
 }) {
   const [reason, setReason] = useState("");
   const [reauthConfirmed, setReauthConfirmed] = useState(false);
+  const reactId = useId();
   return (
     <div className="flex flex-col gap-2 rounded-md border border-info/40 bg-info/5 p-3">
       <p className="text-sm font-medium text-neutral-900">Pending your decision (a different identity than the proposer must decide)</p>
-      <Input placeholder="Reason (required to reject)" value={reason} onChange={(e) => setReason(e.target.value)} />
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" checked={reauthConfirmed} onChange={(e) => setReauthConfirmed(e.target.checked)} />
-        I have recently re-authenticated (required for this decision)
-      </label>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      <FormField id={reactId} label={<span className="sr-only">Reason</span>} error={error ?? undefined}>
+        <Input id={reactId} placeholder="Reason (required to reject)" value={reason} onChange={(e) => setReason(e.target.value)} invalid={Boolean(error)} aria-describedby={error ? `${reactId}-error` : undefined} />
+      </FormField>
+      <Checkbox
+        checked={reauthConfirmed}
+        onChange={(e) => setReauthConfirmed(e.target.checked)}
+        label="I have recently re-authenticated (required for this decision)"
+      />
       <div className="flex gap-2">
         <Button type="button" disabled={!reauthConfirmed} loading={pending} loadingLabel="Approving…" onClick={() => decide("approved", null, new Date().toISOString())}>
           Approve
@@ -143,6 +148,7 @@ function RevealControl<T extends { status: string }>({
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<T | null>(null);
   const [pending, startTransition] = useTransition();
+  const revealReasonId = useId();
 
   if (revealed) {
     return (
@@ -166,16 +172,14 @@ function RevealControl<T extends { status: string }>({
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-      <Input placeholder="Reveal reason, e.g. invoice matching (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" checked={reauthConfirmed} onChange={(e) => setReauthConfirmed(e.target.checked)} />
-        I have recently re-authenticated (required to reveal)
-      </label>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      <FormField id={revealReasonId} label={<span className="sr-only">Reveal reason</span>} error={error ?? undefined}>
+        <Input id={revealReasonId} placeholder="Reveal reason, e.g. invoice matching (required)" value={reason} onChange={(e) => setReason(e.target.value)} invalid={Boolean(error)} aria-describedby={error ? `${revealReasonId}-error` : undefined} />
+      </FormField>
+      <Checkbox
+        checked={reauthConfirmed}
+        onChange={(e) => setReauthConfirmed(e.target.checked)}
+        label="I have recently re-authenticated (required to reveal)"
+      />
       <div className="flex gap-2">
         <Button
           type="button"
@@ -211,11 +215,7 @@ function EvidenceLink({ access }: { access: (accessType: VendorFinancialAccessTy
       <Button type="button" variant="secondary" loading={pending} loadingLabel="Checking…" onClick={() => startTransition(async () => setState(await access("metadata_view")))}>
         View evidence
       </Button>
-      {state?.error || state?.access?.accessResult === "denied" ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error ?? `Access denied: ${state.access?.accessReason ?? "unknown"}`}
-        </p>
-      ) : null}
+      {state?.error || state?.access?.accessResult === "denied" ? <ValidationMessage>{state.error ?? `Access denied: ${state.access?.accessReason ?? "unknown"}`}</ValidationMessage> : null}
     </div>
   );
 }
@@ -271,11 +271,7 @@ function BankAccountCard({
           </form>
         </div>
       ) : null}
-      {submitAction[0].error ? (
-        <p role="alert" className="text-sm text-danger">
-          {submitAction[0].error}
-        </p>
-      ) : null}
+      {submitAction[0].error ? <ValidationMessage>{submitAction[0].error}</ValidationMessage> : null}
 
       {account.status === "pending_approval" ? (
         <DecideForm
@@ -320,29 +316,41 @@ function BankAccountCard({
 
 function AddBankAccountForm({ action }: { action: PlainAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "add-bank-account-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-dashed border-neutral-300 p-4">
       <p className="text-sm font-medium text-neutral-900">Propose a bank account</p>
-      <Input name="accountHolderName" placeholder="Account holder name" required />
-      <Input name="bankName" placeholder="Bank name" required />
-      <Input name="bankAccountNumber" placeholder="Account number" required minLength={4} />
+      <label htmlFor="bank-account-holder-name" className="sr-only">
+        Account holder name
+      </label>
+      <Input id="bank-account-holder-name" name="accountHolderName" placeholder="Account holder name" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label htmlFor="bank-account-bank-name" className="sr-only">
+        Bank name
+      </label>
+      <Input id="bank-account-bank-name" name="bankName" placeholder="Bank name" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label htmlFor="bank-account-number" className="sr-only">
+        Account number
+      </label>
+      <Input id="bank-account-number" name="bankAccountNumber" placeholder="Account number" required minLength={4} invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <div className="flex gap-2">
-        <Input name="currency" placeholder="Currency (e.g. IDR)" maxLength={3} required className="w-32" />
-        <select name="purpose" defaultValue="primary" className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <label htmlFor="bank-account-currency" className="sr-only">
+          Currency
+        </label>
+        <Input id="bank-account-currency" name="currency" placeholder="Currency (e.g. IDR)" maxLength={3} required className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <label htmlFor="bank-account-purpose" className="sr-only">
+          Purpose
+        </label>
+        <Select id="bank-account-purpose" name="purpose" defaultValue="primary" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="primary">Primary</option>
           <option value="settlement">Settlement</option>
           <option value="other">Other</option>
-        </select>
+        </Select>
       </div>
-      <label className="text-xs text-neutral-600">
+      <label htmlFor="bank-account-evidence" className="text-xs text-neutral-600">
         Evidence (optional)
-        <input type="file" name="evidenceFile" className="mt-1 block w-full text-xs" />
+        <input id="bank-account-evidence" type="file" name="evidenceFile" className="mt-1 block w-full text-xs" aria-describedby={describedBy} />
       </label>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="add-bank-account-error">{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Proposing…" className="w-fit">
         Propose
       </Button>
@@ -399,11 +407,7 @@ function TaxIdentityCard({
           </Button>
         </form>
       ) : null}
-      {submitAction[0].error ? (
-        <p role="alert" className="text-sm text-danger">
-          {submitAction[0].error}
-        </p>
-      ) : null}
+      {submitAction[0].error ? <ValidationMessage>{submitAction[0].error}</ValidationMessage> : null}
 
       {taxIdentity.status === "pending_approval" ? (
         <DecideForm
@@ -448,21 +452,27 @@ function TaxIdentityCard({
 
 function AddTaxIdentityForm({ action }: { action: PlainAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "add-tax-identity-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-dashed border-neutral-300 p-4">
       <p className="text-sm font-medium text-neutral-900">Propose a tax identity</p>
-      <Input name="taxIdType" placeholder="Tax ID type (e.g. NPWP)" required />
-      <Input name="taxIdNumber" placeholder="Tax identifier" required minLength={4} />
-      <Input name="legalNameOnFile" placeholder="Legal name on file" required />
-      <label className="text-xs text-neutral-600">
-        Evidence (optional)
-        <input type="file" name="evidenceFile" className="mt-1 block w-full text-xs" />
+      <label htmlFor="tax-identity-type" className="sr-only">
+        Tax ID type
       </label>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      <Input id="tax-identity-type" name="taxIdType" placeholder="Tax ID type (e.g. NPWP)" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label htmlFor="tax-identity-number" className="sr-only">
+        Tax identifier
+      </label>
+      <Input id="tax-identity-number" name="taxIdNumber" placeholder="Tax identifier" required minLength={4} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label htmlFor="tax-identity-legal-name" className="sr-only">
+        Legal name on file
+      </label>
+      <Input id="tax-identity-legal-name" name="legalNameOnFile" placeholder="Legal name on file" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <label htmlFor="tax-identity-evidence" className="text-xs text-neutral-600">
+        Evidence (optional)
+        <input id="tax-identity-evidence" type="file" name="evidenceFile" className="mt-1 block w-full text-xs" aria-describedby={describedBy} />
+      </label>
+      {state.error ? <ValidationMessage id="add-tax-identity-error">{state.error}</ValidationMessage> : null}
       <Button type="submit" loading={pending} loadingLabel="Proposing…" className="w-fit">
         Propose
       </Button>
@@ -509,13 +519,15 @@ function PaymentTermSection({
         </div>
       ) : (
         <form action={proposeFormAction} className="flex flex-col gap-2">
-          <Input name="proposedPaymentTermDays" type="number" min={0} placeholder="Proposed payment term (days)" required />
-          <Input name="reason" placeholder="Reason (required)" required />
-          {proposeState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {proposeState.error}
-            </p>
-          ) : null}
+          <label htmlFor="payment-term-days" className="sr-only">
+            Proposed payment term (days)
+          </label>
+          <Input id="payment-term-days" name="proposedPaymentTermDays" type="number" min={0} placeholder="Proposed payment term (days)" required invalid={Boolean(proposeState.error)} aria-describedby={proposeState.error ? "payment-term-error" : undefined} />
+          <label htmlFor="payment-term-reason" className="sr-only">
+            Reason
+          </label>
+          <Input id="payment-term-reason" name="reason" placeholder="Reason (required)" required invalid={Boolean(proposeState.error)} aria-describedby={proposeState.error ? "payment-term-error" : undefined} />
+          {proposeState.error ? <ValidationMessage id="payment-term-error">{proposeState.error}</ValidationMessage> : null}
           <Button type="submit" loading={proposePending} loadingLabel="Proposing…" className="w-fit">
             Propose change
           </Button>

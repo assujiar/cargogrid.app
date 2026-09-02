@@ -2,6 +2,11 @@
 
 import { useActionState, useState, useCallback } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { MyAttendanceStatus, CorrectionRequestRow, CorrectionRequestType } from "../../../../../../server/contracts/attendance/attendance.ts";
@@ -74,7 +79,7 @@ function ClockControls({ open, clockAction }: { open: boolean; clockAction: (pre
 
       {geo.status === "denied" ? <p className="text-xs text-warning">Location permission was denied -- some policies require a verified location to clock in/out; this attempt may be rejected.</p> : null}
       {geo.status === "unsupported" ? <p className="text-xs text-warning">This browser does not support location capture.</p> : null}
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -90,32 +95,30 @@ function CorrectionRequestForm({
   const [requestType, setRequestType] = useState<CorrectionRequestType>("adjust_clock_out");
   const [idempotencyKey] = useState(() => `corr-${sessionId}-${crypto.randomUUID()}`);
 
+  const describedBy = state.error ? "correction-request-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-neutral-900">Request a correction for this session</h3>
       <input type="hidden" name="sessionId" value={sessionId} />
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-      <label className="text-xs text-neutral-500">
-        What needs fixing?
-        <select name="requestType" value={requestType} onChange={(e) => setRequestType(e.target.value as CorrectionRequestType)} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="correction-request-type" label="What needs fixing?">
+        <Select id="correction-request-type" name="requestType" value={requestType} onChange={(e) => setRequestType(e.target.value as CorrectionRequestType)} invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="adjust_clock_in">Adjust my clock-in time</option>
           <option value="adjust_clock_out">Adjust my clock-out time</option>
           <option value="add_missing_clock_in">I forgot to clock in</option>
           <option value="add_missing_clock_out">I forgot to clock out</option>
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Correct time
-        <input type="datetime-local" name="proposedTime" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason
-        <textarea name="reason" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={2} />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="correction-proposed-time" label="Correct time">
+        <Input id="correction-proposed-time" type="datetime-local" name="proposedTime" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="correction-reason" label="Reason">
+        <Textarea id="correction-reason" name="reason" required minLength={1} rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
         Submit for HR review
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="correction-request-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }

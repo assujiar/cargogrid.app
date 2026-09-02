@@ -3,6 +3,10 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import { RecruitmentExportForm, type RecruitmentExportActionState } from "../../../../../../components/domain/recruitment-export-form.tsx";
 import type { JobVacancyDetail, ApplicationPipelineRow, ApplicationStage } from "../../../../../../server/contracts/recruitment/recruitment.ts";
@@ -73,11 +77,7 @@ export function VacancyDetailPanel({
 
       {vacancy.description ? <p className="text-sm text-neutral-700">{vacancy.description}</p> : null}
 
-      {lastAnyError ? (
-        <p role="alert" className="text-sm text-danger">
-          {lastAnyError}
-        </p>
-      ) : null}
+      {lastAnyError ? <ValidationMessage>{lastAnyError}</ValidationMessage> : null}
 
       <div className="flex flex-wrap gap-2">
         {vacancy.status === "draft" ? (
@@ -86,7 +86,7 @@ export function VacancyDetailPanel({
               <label className="sr-only" htmlFor="validityDays">
                 Public link validity (days)
               </label>
-              <input id="validityDays" name="validityDays" type="number" min="1" defaultValue={30} className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+              <Input id="validityDays" name="validityDays" type="number" min="1" defaultValue={30} className="w-20" invalid={Boolean(publishState.error)} />
               <Button type="submit" loading={publishPending} loadingLabel="Publishing…">
                 Publish
               </Button>
@@ -144,42 +144,34 @@ export function VacancyDetailPanel({
       {showAdd ? (
         <form action={addFormAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
           <div className="flex gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="fullName" className="text-sm font-medium text-neutral-700">
-                Full name
-              </label>
-              <input id="fullName" name="fullName" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+            <div className="flex-1">
+              <FormField id="fullName" label="Full name">
+                <Input id="fullName" name="fullName" type="text" required invalid={Boolean(addState.error)} aria-describedby={addState.error ? "add-candidate-error" : undefined} />
+              </FormField>
             </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="email" className="text-sm font-medium text-neutral-700">
-                Email
-              </label>
-              <input id="email" name="email" type="email" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+            <div className="flex-1">
+              <FormField id="email" label="Email">
+                <Input id="email" name="email" type="email" required invalid={Boolean(addState.error)} aria-describedby={addState.error ? "add-candidate-error" : undefined} />
+              </FormField>
             </div>
           </div>
           <div className="flex gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="phone" className="text-sm font-medium text-neutral-700">
-                Phone (optional)
-              </label>
-              <input id="phone" name="phone" type="tel" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+            <div className="flex-1">
+              <FormField id="phone" label="Phone (optional)">
+                <Input id="phone" name="phone" type="tel" invalid={Boolean(addState.error)} aria-describedby={addState.error ? "add-candidate-error" : undefined} />
+              </FormField>
             </div>
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="source" className="text-sm font-medium text-neutral-700">
-                Source
-              </label>
-              <select id="source" name="source" className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
-                <option value="staff_created">Staff-entered</option>
-                <option value="agency">Agency</option>
-                <option value="talent_pool">Talent pool</option>
-              </select>
+            <div className="flex-1">
+              <FormField id="source" label="Source">
+                <Select id="source" name="source" invalid={Boolean(addState.error)} aria-describedby={addState.error ? "add-candidate-error" : undefined}>
+                  <option value="staff_created">Staff-entered</option>
+                  <option value="agency">Agency</option>
+                  <option value="talent_pool">Talent pool</option>
+                </Select>
+              </FormField>
             </div>
           </div>
-          {addState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {addState.error}
-            </p>
-          ) : null}
+          {addState.error ? <ValidationMessage id="add-candidate-error">{addState.error}</ValidationMessage> : null}
           <Button type="submit" loading={addPending} loadingLabel="Adding…">
             Add and apply
           </Button>

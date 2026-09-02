@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
@@ -92,6 +96,8 @@ function InboxSection({ tenantSlug, inbox }: { tenantSlug: string; inbox: readon
 
 function PoliciesSection({ policies, createPolicyAction, publishPolicyAction }: { policies: readonly ProcurementApprovalPolicyVersion[]; createPolicyAction: PolicyFormAction; publishPolicyAction: PublishAction }) {
   const [createState, createFormAction, createPending] = useActionState(createPolicyAction, INITIAL_STATE);
+  const createErrorId = "policy-create-error";
+  const createDescribedBy = createState.error ? createErrorId : undefined;
 
   const columns: readonly DataTableColumn<ProcurementApprovalPolicyVersion>[] = [
     { key: "entityType", header: "Decision type", render: (row) => ENTITY_TYPE_LABELS[row.entityType] ?? row.entityType },
@@ -110,37 +116,24 @@ function PoliciesSection({ policies, createPolicyAction, publishPolicyAction }: 
       </p>
 
       <form action={createFormAction} className="mt-3 flex flex-col gap-2 rounded-md border border-neutral-200 p-3 sm:flex-row sm:items-end sm:gap-3" noValidate>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="entityType" className="text-xs font-medium text-neutral-700">
-            Decision type
-          </label>
-          <select id="entityType" name="entityType" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <FormField id="entityType" label="Decision type">
+          <Select id="entityType" name="entityType" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy}>
             {PROCUREMENT_APPROVAL_ENTITY_TYPES.map((entityType) => (
               <option key={entityType} value={entityType}>
                 {ENTITY_TYPE_LABELS[entityType] ?? entityType}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="minValueAmount" className="text-xs font-medium text-neutral-700">
-            Min value amount (only for rate/selection/PO)
-          </label>
-          <Input id="minValueAmount" name="minValueAmount" type="number" min={0} />
-        </div>
-        <label className="flex items-center gap-2 text-xs font-medium text-neutral-700">
-          <input type="checkbox" name="alwaysRequired" />
-          Always required
-        </label>
+          </Select>
+        </FormField>
+        <FormField id="minValueAmount" label="Min value amount (only for rate/selection/PO)">
+          <Input id="minValueAmount" name="minValueAmount" type="number" min={0} invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+        </FormField>
+        <Checkbox id="alwaysRequired" name="alwaysRequired" label="Always required" aria-describedby={createDescribedBy} />
         <Button type="submit" disabled={createPending}>
           {createPending ? "Creating…" : "Create policy draft"}
         </Button>
       </form>
-      {createState.error ? (
-        <p role="alert" className="mt-1 text-xs text-danger">
-          {createState.error}
-        </p>
-      ) : null}
+      {createState.error ? <ValidationMessage id={createErrorId}>{createState.error}</ValidationMessage> : null}
 
       <div className="mt-3">
         {policies.length === 0 ? (
@@ -161,17 +154,15 @@ function PublishPolicyButton({ policy, publishPolicyAction }: { policy: Procurem
       <Button type="submit" variant="secondary" disabled={pending}>
         {pending ? "Publishing…" : "Publish"}
       </Button>
-      {state.error ? (
-        <span role="alert" className="text-xs text-danger">
-          {state.error}
-        </span>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function ExceptionsSection({ exceptions, createExceptionAction, cancelExceptionAction }: { exceptions: readonly ProcurementExceptionRequest[]; createExceptionAction: ExceptionFormAction; cancelExceptionAction: CancelAction }) {
   const [createState, createFormAction, createPending] = useActionState(createExceptionAction, INITIAL_STATE);
+  const exceptionErrorId = "exception-create-error";
+  const exceptionDescribedBy = createState.error ? exceptionErrorId : undefined;
 
   const columns: readonly DataTableColumn<ProcurementExceptionRequest>[] = [
     { key: "exceptionType", header: "Exception type", render: (row) => row.exceptionType },
@@ -188,46 +179,29 @@ function ExceptionsSection({ exceptions, createExceptionAction, cancelExceptionA
 
       <form action={createFormAction} className="mt-3 flex flex-col gap-2 rounded-md border border-neutral-200 p-3" noValidate>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="exceptionType" className="text-xs font-medium text-neutral-700">
-              Exception type (required)
-            </label>
-            <Input id="exceptionType" name="exceptionType" type="text" required />
+          <FormField id="exceptionType" label="Exception type (required)">
+            <Input id="exceptionType" name="exceptionType" type="text" required invalid={Boolean(createState.error)} aria-describedby={exceptionDescribedBy} />
+          </FormField>
+          <FormField id="relatedEntityType" label="Related entity type">
+            <Input id="relatedEntityType" name="relatedEntityType" type="text" invalid={Boolean(createState.error)} aria-describedby={exceptionDescribedBy} />
+          </FormField>
+          <FormField id="relatedEntityId" label="Related entity id">
+            <Input id="relatedEntityId" name="relatedEntityId" type="text" invalid={Boolean(createState.error)} aria-describedby={exceptionDescribedBy} />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField id="reason" label="Reason (required)">
+              <Input id="reason" name="reason" type="text" required invalid={Boolean(createState.error)} aria-describedby={exceptionDescribedBy} />
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="relatedEntityType" className="text-xs font-medium text-neutral-700">
-              Related entity type
-            </label>
-            <Input id="relatedEntityType" name="relatedEntityType" type="text" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="relatedEntityId" className="text-xs font-medium text-neutral-700">
-              Related entity id
-            </label>
-            <Input id="relatedEntityId" name="relatedEntityId" type="text" />
-          </div>
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="reason" name="reason" type="text" required />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="requestedOutcome" className="text-xs font-medium text-neutral-700">
-              Requested outcome
-            </label>
-            <Input id="requestedOutcome" name="requestedOutcome" type="text" />
-          </div>
+          <FormField id="requestedOutcome" label="Requested outcome">
+            <Input id="requestedOutcome" name="requestedOutcome" type="text" invalid={Boolean(createState.error)} aria-describedby={exceptionDescribedBy} />
+          </FormField>
         </div>
         <Button type="submit" disabled={createPending} className="w-fit">
           {createPending ? "Submitting…" : "Request exception / override"}
         </Button>
       </form>
-      {createState.error ? (
-        <p role="alert" className="mt-1 text-xs text-danger">
-          {createState.error}
-        </p>
-      ) : null}
+      {createState.error ? <ValidationMessage id={exceptionErrorId}>{createState.error}</ValidationMessage> : null}
 
       <div className="mt-3">
         {exceptions.length === 0 ? (
@@ -243,17 +217,18 @@ function ExceptionsSection({ exceptions, createExceptionAction, cancelExceptionA
 function CancelExceptionForm({ request, cancelExceptionAction }: { request: ProcurementExceptionRequest; cancelExceptionAction: CancelAction }) {
   const bound = cancelExceptionAction.bind(null, request.id, request.recordVersion);
   const [state, formAction, pending] = useActionState(bound, INITIAL_STATE);
+  const errorId = `withdraw-${request.id}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-1">
-      <Input name="reason" type="text" placeholder="Withdrawal reason" required className="text-xs" />
+      <label htmlFor={`withdraw-reason-${request.id}`} className="sr-only">
+        Withdrawal reason
+      </label>
+      <Input id={`withdraw-reason-${request.id}`} name="reason" type="text" placeholder="Withdrawal reason" required className="text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="destructive" disabled={pending}>
         {pending ? "Withdrawing…" : "Withdraw"}
       </Button>
-      {state.error ? (
-        <span role="alert" className="text-xs text-danger">
-          {state.error}
-        </span>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

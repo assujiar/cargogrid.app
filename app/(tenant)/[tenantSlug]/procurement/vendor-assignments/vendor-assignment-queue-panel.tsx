@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { VENDOR_ASSIGNMENT_INVITATION_STATUSES, type VendorAssignmentInvitation, type VendorAssignmentInvitationStatus } from "../../../../../server/contracts/vendor-assignment/vendor-assignment.ts";
@@ -44,6 +47,10 @@ export function VendorAssignmentQueuePanel({
   const searchParams = useSearchParams();
   const [proposeState, proposeFormAction, proposePending] = useActionState(proposeAction, INITIAL_STATE);
   const [overrideState, overrideFormAction, overridePending] = useActionState(overrideAction, INITIAL_STATE);
+  const proposeErrorId = "vasm-propose-error";
+  const proposeDescribedBy = proposeState.error ? proposeErrorId : undefined;
+  const overrideErrorId = "vasm-override-error";
+  const overrideDescribedBy = overrideState.error ? overrideErrorId : undefined;
 
   function applyStatusFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -57,55 +64,37 @@ export function VendorAssignmentQueuePanel({
       <form action={proposeFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
         <h2 className="text-sm font-semibold text-neutral-900">Propose an invitation</h2>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="propose-shipmentOrderId" className="text-xs font-medium text-neutral-700">
-              Shipment order ID (required)
-            </label>
-            <Input id="propose-shipmentOrderId" name="shipmentOrderId" type="text" required placeholder="uuid" />
+          <div className="sm:col-span-2">
+            <FormField id="propose-shipmentOrderId" label="Shipment order ID (required)">
+              <Input id="propose-shipmentOrderId" name="shipmentOrderId" type="text" required placeholder="uuid" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} />
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="propose-vendorMasterId" className="text-xs font-medium text-neutral-700">
-              Vendor (required, active only)
-            </label>
-            <select id="propose-vendorMasterId" name="vendorMasterId" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
-              <option value="">Select a vendor…</option>
-              {activeVendors.map((v) => (
-                <option key={v.masterRecordId} value={v.masterRecordId}>
-                  {v.legalName} ({v.vendorCode})
-                </option>
-              ))}
-            </select>
+          <div className="sm:col-span-2">
+            <FormField id="propose-vendorMasterId" label="Vendor (required, active only)">
+              <Select id="propose-vendorMasterId" name="vendorMasterId" required invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy}>
+                <option value="">Select a vendor…</option>
+                {activeVendors.map((v) => (
+                  <option key={v.masterRecordId} value={v.masterRecordId}>
+                    {v.legalName} ({v.vendorCode})
+                  </option>
+                ))}
+              </Select>
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="propose-contractId" className="text-xs font-medium text-neutral-700">
-              Governing contract ID
-            </label>
-            <Input id="propose-contractId" name="contractId" type="text" placeholder="optional uuid" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="propose-capacityReservationId" className="text-xs font-medium text-neutral-700">
-              Capacity reservation ID
-            </label>
-            <Input id="propose-capacityReservationId" name="capacityReservationId" type="text" placeholder="optional uuid" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="propose-poId" className="text-xs font-medium text-neutral-700">
-              PO ID
-            </label>
-            <Input id="propose-poId" name="poId" type="text" placeholder="optional uuid" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="propose-responseDeadline" className="text-xs font-medium text-neutral-700">
-              Response deadline
-            </label>
-            <Input id="propose-responseDeadline" name="responseDeadline" type="date" />
-          </div>
+          <FormField id="propose-contractId" label="Governing contract ID">
+            <Input id="propose-contractId" name="contractId" type="text" placeholder="optional uuid" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} />
+          </FormField>
+          <FormField id="propose-capacityReservationId" label="Capacity reservation ID">
+            <Input id="propose-capacityReservationId" name="capacityReservationId" type="text" placeholder="optional uuid" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} />
+          </FormField>
+          <FormField id="propose-poId" label="PO ID">
+            <Input id="propose-poId" name="poId" type="text" placeholder="optional uuid" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} />
+          </FormField>
+          <FormField id="propose-responseDeadline" label="Response deadline">
+            <Input id="propose-responseDeadline" name="responseDeadline" type="date" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} />
+          </FormField>
         </div>
-        {proposeState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {proposeState.error}
-          </p>
-        ) : null}
+        {proposeState.error ? <ValidationMessage id={proposeErrorId}>{proposeState.error}</ValidationMessage> : null}
         <Button type="submit" loading={proposePending} loadingLabel="Proposing…" className="w-fit">
           Propose invitation
         </Button>
@@ -115,37 +104,24 @@ export function VendorAssignmentQueuePanel({
         <h2 className="text-sm font-semibold text-neutral-900">Emergency override</h2>
         <p className="text-xs text-neutral-500">Bypasses the normal invite/accept/eligibility gate entirely. Requires both OPS:Assign and PRC:Override. No formal expiry/later-review workflow exists yet -- disclosed, not silently equivalent to a normal confirmed assignment.</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="override-shipmentOrderId" className="text-xs font-medium text-neutral-700">
-              Shipment order ID (required)
-            </label>
-            <Input id="override-shipmentOrderId" name="shipmentOrderId" type="text" required placeholder="uuid" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="override-vendorMasterId" className="text-xs font-medium text-neutral-700">
-              Vendor (required)
-            </label>
-            <select id="override-vendorMasterId" name="vendorMasterId" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+          <FormField id="override-shipmentOrderId" label="Shipment order ID (required)">
+            <Input id="override-shipmentOrderId" name="shipmentOrderId" type="text" required placeholder="uuid" invalid={Boolean(overrideState.error)} aria-describedby={overrideDescribedBy} />
+          </FormField>
+          <FormField id="override-vendorMasterId" label="Vendor (required)">
+            <Select id="override-vendorMasterId" name="vendorMasterId" required invalid={Boolean(overrideState.error)} aria-describedby={overrideDescribedBy}>
               <option value="">Select a vendor…</option>
               {activeVendors.map((v) => (
                 <option key={v.masterRecordId} value={v.masterRecordId}>
                   {v.legalName} ({v.vendorCode})
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="override-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="override-reason" name="reason" type="text" required />
-          </div>
+            </Select>
+          </FormField>
+          <FormField id="override-reason" label="Reason (required)">
+            <Input id="override-reason" name="reason" type="text" required invalid={Boolean(overrideState.error)} aria-describedby={overrideDescribedBy} />
+          </FormField>
         </div>
-        {overrideState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {overrideState.error}
-          </p>
-        ) : null}
+        {overrideState.error ? <ValidationMessage id={overrideErrorId}>{overrideState.error}</ValidationMessage> : null}
         <Button type="submit" variant="destructive" loading={overridePending} loadingLabel="Overriding…" className="w-fit">
           Direct-assign (override)
         </Button>
@@ -155,14 +131,14 @@ export function VendorAssignmentQueuePanel({
         <label htmlFor="vasm-status" className="text-xs font-medium text-neutral-600">
           Status
         </label>
-        <select id="vasm-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
+        <Select id="vasm-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyStatusFilter(event.currentTarget.value)}>
           <option value="">All</option>
           {VENDOR_ASSIGNMENT_INVITATION_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {invitations.length === 0 ? (

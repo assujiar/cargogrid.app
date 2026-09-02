@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import {
@@ -38,41 +42,51 @@ function ActivatePolicyForm({ policy, activatePolicyAction }: { policy: VendorBi
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Activating…" className="text-xs">
         Activate
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function EditPolicyDraftForm({ policy, updatePolicyAction }: { policy: VendorBillMatchTolerancePolicy; updatePolicyAction: BoundFormAction }) {
   const [state, formAction, pending] = useActionState(updatePolicyAction, INITIAL_STATE);
+  const errorId = `edit-policy-${policy.id}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <details className="w-full text-xs">
       <summary className="cursor-pointer font-medium text-neutral-700">Edit draft</summary>
       <form action={formAction} className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <input type="hidden" name="policyId" value={policy.id} />
         <input type="hidden" name="expectedVersion" value={policy.recordVersion} />
-        <Input name="name" placeholder="Policy name" required defaultValue={policy.name} className="col-span-2" />
-        <Input name="quantityTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Qty %" defaultValue={policy.quantityTolerancePct} />
-        <Input name="rateTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Rate %" defaultValue={policy.rateTolerancePct} />
-        <Input name="taxTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Tax %" defaultValue={policy.taxTolerancePct} />
-        <Input name="lineAmountToleranceAbs" type="number" min={0} step="0.01" placeholder="Abs buffer" defaultValue={policy.lineAmountToleranceAbs} />
-        <Input name="duplicateWindowDays" type="number" min={1} placeholder="Duplicate window (days)" defaultValue={policy.duplicateWindowDays} />
-        <label className="flex items-center gap-1 text-xs text-neutral-700">
-          <input type="checkbox" name="autoClearEnabled" defaultChecked={policy.autoClearEnabled} /> Auto-clear enabled
+        <label htmlFor={`edit-policy-name-${policy.id}`} className="sr-only">
+          Policy name
         </label>
+        <Input id={`edit-policy-name-${policy.id}`} name="name" placeholder="Policy name" required defaultValue={policy.name} className="col-span-2" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <label htmlFor={`edit-policy-qty-${policy.id}`} className="sr-only">
+          Quantity tolerance percent
+        </label>
+        <Input id={`edit-policy-qty-${policy.id}`} name="quantityTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Qty %" defaultValue={policy.quantityTolerancePct} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <label htmlFor={`edit-policy-rate-${policy.id}`} className="sr-only">
+          Rate tolerance percent
+        </label>
+        <Input id={`edit-policy-rate-${policy.id}`} name="rateTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Rate %" defaultValue={policy.rateTolerancePct} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <label htmlFor={`edit-policy-tax-${policy.id}`} className="sr-only">
+          Tax tolerance percent
+        </label>
+        <Input id={`edit-policy-tax-${policy.id}`} name="taxTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Tax %" defaultValue={policy.taxTolerancePct} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <label htmlFor={`edit-policy-abs-${policy.id}`} className="sr-only">
+          Absolute tolerance buffer
+        </label>
+        <Input id={`edit-policy-abs-${policy.id}`} name="lineAmountToleranceAbs" type="number" min={0} step="0.01" placeholder="Abs buffer" defaultValue={policy.lineAmountToleranceAbs} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <label htmlFor={`edit-policy-window-${policy.id}`} className="sr-only">
+          Duplicate window (days)
+        </label>
+        <Input id={`edit-policy-window-${policy.id}`} name="duplicateWindowDays" type="number" min={1} placeholder="Duplicate window (days)" defaultValue={policy.duplicateWindowDays} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        <Checkbox id={`edit-policy-autoclear-${policy.id}`} name="autoClearEnabled" defaultChecked={policy.autoClearEnabled} label="Auto-clear enabled" aria-describedby={describedBy} />
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="col-span-2 w-fit">
           Save draft
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="mt-1 text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </details>
   );
 }
@@ -102,6 +116,8 @@ export function VendorBillMatchQueuePanel({
   const searchParams = useSearchParams();
   const [startState, startFormAction, startPending] = useActionState(startMatchAction, INITIAL_STATE);
   const [createPolicyState, createPolicyFormAction, createPolicyPending] = useActionState(createPolicyAction, INITIAL_STATE);
+  const createPolicyErrorId = "create-policy-error";
+  const createPolicyDescribedBy = createPolicyState.error ? createPolicyErrorId : undefined;
 
   const activePolicy = policies.find((p) => p.status === "active") ?? null;
   const draftPolicies = policies.filter((p) => p.status === "draft");
@@ -122,21 +138,13 @@ export function VendorBillMatchQueuePanel({
           reads real Finance evidence.
         </p>
         <form action={startFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="billId" className="text-xs font-medium text-neutral-700">
-              Vendor bill id
-            </label>
-            <Input id="billId" name="billId" required className="w-80" placeholder="00000000-0000-0000-0000-000000000000" />
-          </div>
+          <FormField id="billId" label="Vendor bill id" error={startState.error ?? undefined}>
+            <Input id="billId" name="billId" required className="w-80" placeholder="00000000-0000-0000-0000-000000000000" invalid={Boolean(startState.error)} aria-describedby={startState.error ? "billId-error" : undefined} />
+          </FormField>
           <Button type="submit" loading={startPending} loadingLabel="Loading bill…">
             Continue
           </Button>
         </form>
-        {startState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {startState.error}
-          </p>
-        ) : null}
       </section>
 
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
@@ -169,24 +177,36 @@ export function VendorBillMatchQueuePanel({
         <details className="text-xs">
           <summary className="cursor-pointer font-medium text-neutral-700">Create a new tolerance policy draft</summary>
           <form action={createPolicyFormAction} className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Input name="name" placeholder="Policy name" required className="col-span-2" />
-            <Input name="quantityTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Qty %" defaultValue={0} />
-            <Input name="rateTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Rate %" defaultValue={0} />
-            <Input name="taxTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Tax %" defaultValue={0} />
-            <Input name="lineAmountToleranceAbs" type="number" min={0} step="0.01" placeholder="Abs buffer" defaultValue={0} />
-            <Input name="duplicateWindowDays" type="number" min={1} placeholder="Duplicate window (days)" defaultValue={30} />
-            <label className="flex items-center gap-1 text-xs text-neutral-700">
-              <input type="checkbox" name="autoClearEnabled" /> Auto-clear enabled
+            <label htmlFor="create-policy-name" className="sr-only">
+              Policy name
             </label>
+            <Input id="create-policy-name" name="name" placeholder="Policy name" required className="col-span-2" invalid={Boolean(createPolicyState.error)} aria-describedby={createPolicyDescribedBy} />
+            <label htmlFor="create-policy-qty" className="sr-only">
+              Quantity tolerance percent
+            </label>
+            <Input id="create-policy-qty" name="quantityTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Qty %" defaultValue={0} invalid={Boolean(createPolicyState.error)} aria-describedby={createPolicyDescribedBy} />
+            <label htmlFor="create-policy-rate" className="sr-only">
+              Rate tolerance percent
+            </label>
+            <Input id="create-policy-rate" name="rateTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Rate %" defaultValue={0} invalid={Boolean(createPolicyState.error)} aria-describedby={createPolicyDescribedBy} />
+            <label htmlFor="create-policy-tax" className="sr-only">
+              Tax tolerance percent
+            </label>
+            <Input id="create-policy-tax" name="taxTolerancePct" type="number" min={0} max={100} step="0.1" placeholder="Tax %" defaultValue={0} invalid={Boolean(createPolicyState.error)} aria-describedby={createPolicyDescribedBy} />
+            <label htmlFor="create-policy-abs" className="sr-only">
+              Absolute tolerance buffer
+            </label>
+            <Input id="create-policy-abs" name="lineAmountToleranceAbs" type="number" min={0} step="0.01" placeholder="Abs buffer" defaultValue={0} invalid={Boolean(createPolicyState.error)} aria-describedby={createPolicyDescribedBy} />
+            <label htmlFor="create-policy-window" className="sr-only">
+              Duplicate window (days)
+            </label>
+            <Input id="create-policy-window" name="duplicateWindowDays" type="number" min={1} placeholder="Duplicate window (days)" defaultValue={30} invalid={Boolean(createPolicyState.error)} aria-describedby={createPolicyDescribedBy} />
+            <Checkbox id="create-policy-autoclear" name="autoClearEnabled" label="Auto-clear enabled" aria-describedby={createPolicyDescribedBy} />
             <Button type="submit" loading={createPolicyPending} loadingLabel="Creating…" className="col-span-2 w-fit">
               Create draft
             </Button>
           </form>
-          {createPolicyState.error ? (
-            <p role="alert" className="mt-1 text-xs text-danger">
-              {createPolicyState.error}
-            </p>
-          ) : null}
+          {createPolicyState.error ? <ValidationMessage id={createPolicyErrorId}>{createPolicyState.error}</ValidationMessage> : null}
         </details>
       </section>
 
@@ -225,10 +245,10 @@ export function VendorBillMatchQueuePanel({
           <label htmlFor="vbm-status" className="text-xs font-medium text-neutral-600">
             Status
           </label>
-          <select
+          <Select
             id="vbm-status"
             defaultValue={statusFilter ?? ""}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+            className="w-auto py-1.5"
             onChange={(event) => applyStatusFilter(event.currentTarget.value)}
           >
             <option value="">All</option>
@@ -237,7 +257,7 @@ export function VendorBillMatchQueuePanel({
                 {s}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {cases.length === 0 ? (

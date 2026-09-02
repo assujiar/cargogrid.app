@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { SOURCING_REQUEST_STATUSES, type SourcingRequest, type SourcingRequestStatus } from "../../../../../server/contracts/sourcing/sourcing.ts";
@@ -49,6 +52,12 @@ export function SourcingQueuePanel({
   const [costingState, costingFormAction, costingPending] = useActionState(createFromCostingAction, INITIAL_STATE);
   const [demandState, demandFormAction, demandPending] = useActionState(createFromOperationalDemandAction, INITIAL_STATE);
   const [proactiveState, proactiveFormAction, proactivePending] = useActionState(createProactiveAction, INITIAL_STATE);
+  const costingErrorId = "sourcing-costing-error";
+  const costingDescribedBy = costingState.error ? costingErrorId : undefined;
+  const demandErrorId = "sourcing-demand-error";
+  const demandDescribedBy = demandState.error ? demandErrorId : undefined;
+  const proactiveErrorId = "sourcing-proactive-error";
+  const proactiveDescribedBy = proactiveState.error ? proactiveErrorId : undefined;
 
   function applyStatusFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -63,19 +72,13 @@ export function SourcingQueuePanel({
         <form action={costingFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
           <h2 className="text-sm font-semibold text-neutral-900">From a costing request</h2>
           <p className="text-xs text-neutral-500">Inherits service/lanes from the costing request&apos;s own requirements snapshot -- never re-typed. Starts open directly.</p>
-          <label htmlFor="costingRequestId" className="text-xs font-medium text-neutral-700">
-            Costing request id
-          </label>
-          <Input id="costingRequestId" name="costingRequestId" type="text" required />
-          <label htmlFor="costingSlaDueAt" className="text-xs font-medium text-neutral-700">
-            SLA due (optional)
-          </label>
-          <Input id="costingSlaDueAt" name="slaDueAt" type="datetime-local" />
-          {costingState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {costingState.error}
-            </p>
-          ) : null}
+          <FormField id="costingRequestId" label="Costing request id">
+            <Input id="costingRequestId" name="costingRequestId" type="text" required invalid={Boolean(costingState.error)} aria-describedby={costingDescribedBy} />
+          </FormField>
+          <FormField id="costingSlaDueAt" label="SLA due (optional)">
+            <Input id="costingSlaDueAt" name="slaDueAt" type="datetime-local" invalid={Boolean(costingState.error)} aria-describedby={costingDescribedBy} />
+          </FormField>
+          {costingState.error ? <ValidationMessage id={costingErrorId}>{costingState.error}</ValidationMessage> : null}
           <Button type="submit" loading={costingPending} loadingLabel="Creating…">
             Create from costing request
           </Button>
@@ -84,19 +87,13 @@ export function SourcingQueuePanel({
         <form action={demandFormAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
           <h2 className="text-sm font-semibold text-neutral-900">From a shipment order</h2>
           <p className="text-xs text-neutral-500">Inherits service/mode/lanes/cargo from the Operations shipment order. Starts open directly.</p>
-          <label htmlFor="shipmentOrderId" className="text-xs font-medium text-neutral-700">
-            Shipment order id
-          </label>
-          <Input id="shipmentOrderId" name="shipmentOrderId" type="text" required />
-          <label htmlFor="demandSlaDueAt" className="text-xs font-medium text-neutral-700">
-            SLA due (optional)
-          </label>
-          <Input id="demandSlaDueAt" name="slaDueAt" type="datetime-local" />
-          {demandState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {demandState.error}
-            </p>
-          ) : null}
+          <FormField id="shipmentOrderId" label="Shipment order id">
+            <Input id="shipmentOrderId" name="shipmentOrderId" type="text" required invalid={Boolean(demandState.error)} aria-describedby={demandDescribedBy} />
+          </FormField>
+          <FormField id="demandSlaDueAt" label="SLA due (optional)">
+            <Input id="demandSlaDueAt" name="slaDueAt" type="datetime-local" invalid={Boolean(demandState.error)} aria-describedby={demandDescribedBy} />
+          </FormField>
+          {demandState.error ? <ValidationMessage id={demandErrorId}>{demandState.error}</ValidationMessage> : null}
           <Button type="submit" loading={demandPending} loadingLabel="Creating…">
             Create from shipment order
           </Button>
@@ -106,48 +103,26 @@ export function SourcingQueuePanel({
           <h2 className="text-sm font-semibold text-neutral-900">Proactive sourcing</h2>
           <p className="text-xs text-neutral-500">No source demand -- starts draft, needs submit to reach open.</p>
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="serviceType" className="text-xs font-medium text-neutral-700">
-                Service type
-              </label>
-              <Input id="serviceType" name="serviceType" type="text" placeholder="ocean_freight" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="mode" className="text-xs font-medium text-neutral-700">
-                Mode (optional)
-              </label>
-              <Input id="mode" name="mode" type="text" placeholder="FCL" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="originLane" className="text-xs font-medium text-neutral-700">
-                Origin
-              </label>
-              <Input id="originLane" name="originLane" type="text" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="destinationLane" className="text-xs font-medium text-neutral-700">
-                Destination
-              </label>
-              <Input id="destinationLane" name="destinationLane" type="text" required />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="currency" className="text-xs font-medium text-neutral-700">
-                Currency (optional)
-              </label>
-              <Input id="currency" name="currency" type="text" maxLength={3} placeholder="IDR" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="budgetAmount" className="text-xs font-medium text-neutral-700">
-                Budget (optional)
-              </label>
-              <Input id="budgetAmount" name="budgetAmount" type="number" min={0} />
-            </div>
+            <FormField id="serviceType" label="Service type">
+              <Input id="serviceType" name="serviceType" type="text" placeholder="ocean_freight" required invalid={Boolean(proactiveState.error)} aria-describedby={proactiveDescribedBy} />
+            </FormField>
+            <FormField id="mode" label="Mode (optional)">
+              <Input id="mode" name="mode" type="text" placeholder="FCL" invalid={Boolean(proactiveState.error)} aria-describedby={proactiveDescribedBy} />
+            </FormField>
+            <FormField id="originLane" label="Origin">
+              <Input id="originLane" name="originLane" type="text" required invalid={Boolean(proactiveState.error)} aria-describedby={proactiveDescribedBy} />
+            </FormField>
+            <FormField id="destinationLane" label="Destination">
+              <Input id="destinationLane" name="destinationLane" type="text" required invalid={Boolean(proactiveState.error)} aria-describedby={proactiveDescribedBy} />
+            </FormField>
+            <FormField id="currency" label="Currency (optional)">
+              <Input id="currency" name="currency" type="text" maxLength={3} placeholder="IDR" invalid={Boolean(proactiveState.error)} aria-describedby={proactiveDescribedBy} />
+            </FormField>
+            <FormField id="budgetAmount" label="Budget (optional)">
+              <Input id="budgetAmount" name="budgetAmount" type="number" min={0} invalid={Boolean(proactiveState.error)} aria-describedby={proactiveDescribedBy} />
+            </FormField>
           </div>
-          {proactiveState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {proactiveState.error}
-            </p>
-          ) : null}
+          {proactiveState.error ? <ValidationMessage id={proactiveErrorId}>{proactiveState.error}</ValidationMessage> : null}
           <Button type="submit" loading={proactivePending} loadingLabel="Creating…">
             Start proactive sourcing
           </Button>
@@ -158,10 +133,10 @@ export function SourcingQueuePanel({
         <label htmlFor="sourcing-status" className="text-xs font-medium text-neutral-600">
           Status
         </label>
-        <select
+        <Select
           id="sourcing-status"
           defaultValue={statusFilter ?? ""}
-          className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          className="w-auto py-1.5"
           onChange={(event) => applyStatusFilter(event.currentTarget.value)}
         >
           <option value="">All statuses</option>
@@ -170,7 +145,7 @@ export function SourcingQueuePanel({
               {s.replace(/_/g, " ")}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {requests.length === 0 ? (

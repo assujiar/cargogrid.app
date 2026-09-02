@@ -1,9 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type {
   ScheduleAssignmentListRow,
   ShiftTemplateRow,
@@ -22,137 +27,137 @@ const COVERAGE_TONE: Record<string, StatusTone> = { met: "success", below_minimu
 function AssignForm({ shiftTemplates, assignEmployeeScheduleAction }: { shiftTemplates: ShiftTemplateRow[]; assignEmployeeScheduleAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(assignEmployeeScheduleAction, INITIAL_STATE);
   const published = shiftTemplates.filter((t) => t.publishedVersionId);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Employee id
-        <input name="employeeId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="employee UUID" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Shift version
-        <select name="shiftTemplateVersionId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+      <FormField id={`${reactId}-employeeId`} label="Employee id">
+        <Input id={`${reactId}-employeeId`} name="employeeId" required placeholder="employee UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-shiftTemplateVersionId`} label="Shift version">
+        <Select id={`${reactId}-shiftTemplateVersionId`} name="shiftTemplateVersionId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">— select —</option>
           {published.map((t) => (
             <option key={t.id} value={t.publishedVersionId ?? ""}>
               {t.code} (v{t.publishedVersionNumber})
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Work date
-        <input type="date" name="workDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`${reactId}-workDate`} label="Work date">
+        <Input id={`${reactId}-workDate`} type="date" name="workDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Assigning…">
         Assign schedule
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function PublishForm({ publishScheduleAssignmentsAction }: { publishScheduleAssignmentsAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(publishScheduleAssignmentsAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        From
-        <input type="date" name="fromDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        To
-        <input type="date" name="toDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={`${reactId}-fromDate`} label="From">
+        <Input id={`${reactId}-fromDate`} type="date" name="fromDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-toDate`} label="To">
+        <Input id={`${reactId}-toDate`} type="date" name="toDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Publishing…">
         Publish scheduled range
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function SwapDecisionForm({ requestId, expectedVersion, decision, decideSwapAction }: { requestId: string; expectedVersion: number; decision: "approve" | "reject"; decideSwapAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(decideSwapAction, INITIAL_STATE);
+  const reactId = useId();
+  const reasonId = `${reactId}-decidedReason`;
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="mt-1 flex flex-wrap items-end gap-2">
-      <label className="text-xs text-neutral-500">
-        Reason
-        <input name="decidedReason" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={reasonId} label="Reason">
+        <Input id={reasonId} name="decidedReason" required invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+      </FormField>
       <input type="hidden" name="requestId" value={requestId} />
       <input type="hidden" name="expectedVersion" value={expectedVersion} />
       <Button type="submit" variant={decision === "approve" ? "primary" : "destructive"} loading={pending} loadingLabel="Saving…">
         {decision === "approve" ? "Approve swap" : "Reject swap"}
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function HolidayForm({ setRosterHolidayAction }: { setRosterHolidayAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(setRosterHolidayAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Date
-        <input type="date" name="holidayDate" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Name
-        <input name="name" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. Independence Day" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Org unit id (optional -- blank = tenant-wide)
-        <input name="orgUnitId" className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="inline-flex items-center gap-1 text-xs text-neutral-500">
-        <input type="checkbox" name="isWorkingDay" /> Treat as a working day (override)
-      </label>
+      <FormField id={`${reactId}-holidayDate`} label="Date">
+        <Input id={`${reactId}-holidayDate`} type="date" name="holidayDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-name`} label="Name">
+        <Input id={`${reactId}-name`} name="name" required placeholder="e.g. Independence Day" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-orgUnitId`} label="Org unit id (optional -- blank = tenant-wide)">
+        <Input id={`${reactId}-orgUnitId`} name="orgUnitId" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <Checkbox name="isWorkingDay" label="Treat as a working day (override)" />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Add holiday
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function CoverageRequirementForm({ shiftTemplates, setCoverageRequirementAction }: { shiftTemplates: ShiftTemplateRow[]; setCoverageRequirementAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(setCoverageRequirementAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Org unit id
-        <input name="orgUnitId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Shift template
-        <select name="shiftTemplateId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+      <FormField id={`${reactId}-orgUnitId`} label="Org unit id">
+        <Input id={`${reactId}-orgUnitId`} name="orgUnitId" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-shiftTemplateId`} label="Shift template">
+        <Select id={`${reactId}-shiftTemplateId`} name="shiftTemplateId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">— select —</option>
           {shiftTemplates.map((t) => (
             <option key={t.id} value={t.id}>
               {t.code}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Day of week
-        <select name="dayOfWeek" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`${reactId}-dayOfWeek`} label="Day of week">
+        <Select id={`${reactId}-dayOfWeek`} name="dayOfWeek" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
           {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d, i) => (
             <option key={d} value={i}>
               {d}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Min headcount
-        <input type="number" name="minHeadcount" min="0" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`${reactId}-minHeadcount`} label="Min headcount">
+        <Input type="number" id={`${reactId}-minHeadcount`} name="minHeadcount" min="0" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Save requirement
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
