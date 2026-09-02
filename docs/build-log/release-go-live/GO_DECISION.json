@@ -1,8 +1,9 @@
 {
   "decision": "GO",
-  "authorizedCommitSha": "d48b589018321bba1c1fbb12f8befd7664b4fc34",
+  "authorizedCommitSha": "a9459f39ccd2b989d3da970e585c3a136d7b6a89",
   "releaseCandidate": "RC-2026.08.25-1",
   "decidedBy": "as.sujiar@gmail.com (project owner)",
-  "decidedAt": "2026-08-31T00:55:00Z",
-  "recordPath": "docs/build-log/release-go-live/RGL-414.md"
+  "decidedAt": "2026-09-03T00:00:00Z",
+  "recordPath": "docs/build-log/release-go-live/RGL-417.md",
+  "supersedes": "d48b589018321bba1c1fbb12f8befd7664b4fc34 (RGL-414.md)"
 }
