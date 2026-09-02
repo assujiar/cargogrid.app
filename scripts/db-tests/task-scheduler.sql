@@ -44,7 +44,7 @@ begin
 end;
 $$;
 
-\echo '>> the catalogue is real and Supreme-Admin-owned: twenty-one active tasks, each with an interval floor, and the delegation switch genuinely splits them'
+\echo '>> the catalogue is real and Supreme-Admin-owned: twenty-two active tasks, each with an interval floor, and the delegation switch genuinely splits them'
 do $$
 declare
   v_total integer;
@@ -54,10 +54,11 @@ begin
   select count(*) into v_total from app.scheduled_task_definitions where status = 'active';
   -- 11 seeded by 20260831090000, 5 added by 20260831100000 (the ISS-2026-249 authority denial
   -- sweep and ISS-2026-313's four), 3 added by 20260831230000 (loyalty earning/tier/points
-  -- posting), 1 added by 20260831240000 (loyalty liability reconciliation), and 1 added by
-  -- 20260902043000 (ISS-2026-070's onboarding/offboarding overdue-task sweep).
-  if v_total <> 21 then
-    raise exception 'assertion failed: expected 21 active catalogue tasks, got %', v_total;
+  -- posting), 1 added by 20260831240000 (loyalty liability reconciliation), 1 added by
+  -- 20260902043000 (ISS-2026-070's onboarding/offboarding overdue-task sweep), and 1 added by
+  -- 20260902221000 (ISS-2026-129 item 2's own loyalty benefit-issuance sweep).
+  if v_total <> 22 then
+    raise exception 'assertion failed: expected 22 active catalogue tasks, got %', v_total;
   end if;
 
   select count(*) into v_delegable from app.scheduled_task_definitions where status = 'active' and tenant_admin_configurable;
@@ -210,8 +211,8 @@ declare
   v_not_configurable integer;
 begin
   select count(*) into v_rows from app.list_tenant_scheduled_tasks(v_tenant1, v_admin);
-  if v_rows <> 21 then
-    raise exception 'assertion failed: expected all 21 active catalogue tasks listed, configured or not, got %', v_rows;
+  if v_rows <> 22 then
+    raise exception 'assertion failed: expected all 22 active catalogue tasks listed, configured or not, got %', v_rows;
   end if;
 
   select count(*) filter (where configurable_by_actor), count(*) filter (where not configurable_by_actor)
@@ -566,11 +567,11 @@ begin
     v_checked := v_checked + 1;
   end loop;
 
-  if v_checked <> 21 then
-    raise exception 'assertion failed: expected to exercise all 21 catalogue tasks, exercised %', v_checked;
+  if v_checked <> 22 then
+    raise exception 'assertion failed: expected to exercise all 22 catalogue tasks, exercised %', v_checked;
   end if;
 
-  raise notice 'PASS: all 21 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
+  raise notice 'PASS: all 22 catalogue tasks reach a real dispatch branch -- none is a silent no-op';
 end;
 $$;
 
