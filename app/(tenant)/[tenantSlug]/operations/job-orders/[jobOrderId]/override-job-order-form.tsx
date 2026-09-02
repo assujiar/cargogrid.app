@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { JobOrderFormState } from "./actions.ts";
 import { OVERRIDABLE_SNAPSHOT_COLUMNS, type OverridableSnapshotColumn } from "../../../../../../server/contracts/job-order/job-order.ts";
 
@@ -34,48 +38,40 @@ export function OverrideJobOrderForm({
     },
     INITIAL_STATE,
   );
+  const describedBy = state.error ? "override-job-order-error" : undefined;
 
   return (
     <form action={formAction} className="flex flex-col gap-2" noValidate>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="snapshotColumn" className="text-sm font-medium text-neutral-700">
-          Snapshot
-        </label>
-        <select id="snapshotColumn" name="snapshotColumn" className="w-64 rounded-md border border-neutral-300 px-3 py-2 text-sm" defaultValue={OVERRIDABLE_SNAPSHOT_COLUMNS[0]}>
+      <FormField id="snapshotColumn" label="Snapshot">
+        <Select
+          id="snapshotColumn"
+          name="snapshotColumn"
+          className="w-64"
+          defaultValue={OVERRIDABLE_SNAPSHOT_COLUMNS[0]}
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        >
           {OVERRIDABLE_SNAPSHOT_COLUMNS.map((column) => (
             <option key={column} value={column}>
               {SNAPSHOT_COLUMN_LABELS[column]}
             </option>
           ))}
-        </select>
-      </div>
+        </Select>
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="fieldPath" className="text-sm font-medium text-neutral-700">
-          Field path
-        </label>
-        <input id="fieldPath" name="fieldPath" type="text" required placeholder="e.g. contactPhone" className="w-64 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="fieldPath" label="Field path">
+        <Input id="fieldPath" name="fieldPath" type="text" required placeholder="e.g. contactPhone" className="w-64" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="newValue" className="text-sm font-medium text-neutral-700">
-          New value
-        </label>
-        <input id="newValue" name="newValue" type="text" required className="w-64 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="newValue" label="New value">
+        <Input id="newValue" name="newValue" type="text" required className="w-64" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="reason" className="text-sm font-medium text-neutral-700">
-          Reason (required)
-        </label>
-        <input id="reason" name="reason" type="text" required minLength={1} className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="reason" label="Reason (required)">
+        <Input id="reason" name="reason" type="text" required minLength={1} className="w-96" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="override-job-order-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Applying…" className="w-fit">
         Apply override

@@ -3,6 +3,7 @@
 import { useActionState, useId } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
 import { Input } from "../../../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../../../components/forms/select.tsx";
 import { Textarea } from "../../../../../../../components/forms/textarea.tsx";
@@ -29,7 +30,7 @@ function ActionForm({
   variant = "primary",
 }: {
   action: BoundFormAction;
-  children?: (describedBy: string | undefined) => React.ReactNode;
+  children?: (describedBy: string | undefined, invalid: boolean) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
@@ -40,7 +41,7 @@ function ActionForm({
   const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children?.(describedBy)}
+      {children?.(describedBy, Boolean(state.error))}
       {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
@@ -82,40 +83,49 @@ export function RequirementDetailPanel({
         <section className="rounded-md border border-neutral-200 p-4">
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">Edit draft</h2>
           <ActionForm action={updateDraftAction} submitLabel="Save changes" loadingLabel="Saving…" variant="secondary">
-            {(describedBy) => (
+            {(describedBy, invalid) => (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <label htmlFor="requirement-name" className="sr-only">
-                  Name
-                </label>
-                <Input id="requirement-name" name="name" defaultValue={requirement.name} required aria-describedby={describedBy} />
-                <label htmlFor="requirement-document-type-code" className="sr-only">
-                  Document type code
-                </label>
-                <Input id="requirement-document-type-code" name="documentTypeCode" defaultValue={requirement.documentTypeCode} required aria-describedby={describedBy} />
-                <label htmlFor="requirement-vendor-category" className="sr-only">
-                  Vendor category
-                </label>
-                <Input id="requirement-vendor-category" name="vendorCategory" defaultValue={requirement.vendorCategory ?? ""} placeholder="Vendor category (blank = any)" aria-describedby={describedBy} />
-                <label htmlFor="requirement-service-type" className="sr-only">
-                  Service type
-                </label>
-                <Input id="requirement-service-type" name="serviceType" defaultValue={requirement.serviceType ?? ""} placeholder="Service type (blank = any)" aria-describedby={describedBy} />
-                <label htmlFor="requirement-blocking-effect" className="sr-only">
-                  Blocking effect
-                </label>
-                <Select id="requirement-blocking-effect" name="blockingEffect" defaultValue={requirement.blockingEffect} aria-describedby={describedBy}>
-                  <option value="blocking">Blocking</option>
-                  <option value="warning">Warning</option>
-                </Select>
-                <label htmlFor="requirement-reminder-offsets" className="sr-only">
-                  Reminder offsets
-                </label>
-                <Input id="requirement-reminder-offsets" name="reminderOffsets" defaultValue={requirement.reminderOffsets.join(",")} aria-describedby={describedBy} />
+                <FormField id="requirement-name" label={<span className="sr-only">Name</span>}>
+                  <Input id="requirement-name" name="name" defaultValue={requirement.name} required invalid={invalid} aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="requirement-document-type-code" label={<span className="sr-only">Document type code</span>}>
+                  <Input id="requirement-document-type-code" name="documentTypeCode" defaultValue={requirement.documentTypeCode} required invalid={invalid} aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="requirement-vendor-category" label={<span className="sr-only">Vendor category</span>}>
+                  <Input
+                    id="requirement-vendor-category"
+                    name="vendorCategory"
+                    defaultValue={requirement.vendorCategory ?? ""}
+                    placeholder="Vendor category (blank = any)"
+                    invalid={invalid}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+                <FormField id="requirement-service-type" label={<span className="sr-only">Service type</span>}>
+                  <Input
+                    id="requirement-service-type"
+                    name="serviceType"
+                    defaultValue={requirement.serviceType ?? ""}
+                    placeholder="Service type (blank = any)"
+                    invalid={invalid}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+                <FormField id="requirement-blocking-effect" label={<span className="sr-only">Blocking effect</span>}>
+                  <Select id="requirement-blocking-effect" name="blockingEffect" defaultValue={requirement.blockingEffect} invalid={invalid} aria-describedby={describedBy}>
+                    <option value="blocking">Blocking</option>
+                    <option value="warning">Warning</option>
+                  </Select>
+                </FormField>
+                <FormField id="requirement-reminder-offsets" label={<span className="sr-only">Reminder offsets</span>}>
+                  <Input id="requirement-reminder-offsets" name="reminderOffsets" defaultValue={requirement.reminderOffsets.join(",")} invalid={invalid} aria-describedby={describedBy} />
+                </FormField>
                 <Checkbox id="requiresExpiry" name="requiresExpiry" defaultChecked={requirement.requiresExpiry} label="Tracks expiry" aria-describedby={describedBy} />
-                <label htmlFor="requirement-description" className="sr-only">
-                  Description
-                </label>
-                <Textarea id="requirement-description" name="description" defaultValue={requirement.description ?? ""} rows={2} className="sm:col-span-3" aria-describedby={describedBy} />
+                <div className="sm:col-span-3">
+                  <FormField id="requirement-description" label={<span className="sr-only">Description</span>}>
+                    <Textarea id="requirement-description" name="description" defaultValue={requirement.description ?? ""} rows={2} invalid={invalid} aria-describedby={describedBy} />
+                  </FormField>
+                </div>
               </div>
             )}
           </ActionForm>
@@ -139,13 +149,10 @@ export function RequirementDetailPanel({
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">Archive</h2>
           <p className="mb-2 text-xs text-neutral-500">Archiving removes this requirement from active enforcement without a replacement. Existing vendor compliance holds clear on the next recalculation.</p>
           <ActionForm action={archiveAction} submitLabel="Archive requirement" loadingLabel="Archiving…" variant="destructive">
-            {(describedBy) => (
-              <>
-                <label htmlFor="requirement-archive-reason" className="sr-only">
-                  Reason
-                </label>
-                <Input id="requirement-archive-reason" name="reason" placeholder="Reason (required)" required aria-describedby={describedBy} />
-              </>
+            {(describedBy, invalid) => (
+              <FormField id="requirement-archive-reason" label={<span className="sr-only">Reason</span>}>
+                <Input id="requirement-archive-reason" name="reason" placeholder="Reason (required)" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
             )}
           </ActionForm>
         </section>

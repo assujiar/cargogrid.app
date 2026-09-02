@@ -2,6 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { ShipmentOrderFormState } from "./actions.ts";
 import type { TransitionableStatus } from "../../../../../../server/contracts/shipment-lifecycle/shipment-lifecycle.ts";
 import { REASON_REQUIRED_STATUSES, EVIDENCE_REQUIRED_STATUSES } from "./lifecycle-transitions.ts";
@@ -52,51 +56,41 @@ export function TransitionShipmentOrderForm({
 
   const reasonRequired = selectedStatus ? REASON_REQUIRED_STATUSES.includes(selectedStatus) : false;
   const evidenceRequired = selectedStatus ? EVIDENCE_REQUIRED_STATUSES.includes(selectedStatus) : false;
+  const describedBy = state.error ? "transition-shipment-error" : undefined;
 
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="toStatus" className="text-sm font-medium text-neutral-700">
-          Move to
-        </label>
-        <select
-          id="toStatus"
+      <FormField id="transition-to-status" label="Move to">
+        <Select
+          id="transition-to-status"
           name="toStatus"
-          className="w-64 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-64"
           defaultValue={permittedNextStatuses[0]}
           onChange={(event) => setSelectedStatus(event.target.value as TransitionableStatus)}
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
         >
           {permittedNextStatuses.map((status) => (
             <option key={status} value={status}>
               {STATUS_LABELS[status] ?? status}
             </option>
           ))}
-        </select>
-      </div>
+        </Select>
+      </FormField>
 
       {reasonRequired ? (
-        <div className="flex flex-col gap-1">
-          <label htmlFor="reason" className="text-sm font-medium text-neutral-700">
-            Reason (required)
-          </label>
-          <input id="reason" name="reason" type="text" required minLength={1} className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
+        <FormField id="transition-reason" label="Reason (required)">
+          <Input id="transition-reason" name="reason" type="text" required minLength={1} className="w-96" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       ) : null}
 
       {evidenceRequired ? (
-        <div className="flex flex-col gap-1">
-          <label htmlFor="evidenceRef" className="text-sm font-medium text-neutral-700">
-            Evidence reference (required)
-          </label>
-          <input id="evidenceRef" name="evidenceRef" type="text" required minLength={1} className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
+        <FormField id="transition-evidence-ref" label="Evidence reference (required)">
+          <Input id="transition-evidence-ref" name="evidenceRef" type="text" required minLength={1} className="w-96" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       ) : null}
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="transition-shipment-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Transitioning…" className="w-fit">
         Apply transition

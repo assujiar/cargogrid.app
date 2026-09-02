@@ -1,7 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ShipmentOrderFormState } from "./actions.ts";
 import type { ExceptionDirectoryRow } from "../../../../../../server/contracts/exception-escalation/exception-escalation.ts";
@@ -54,6 +58,13 @@ function ExceptionRow({
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const availableActions = ACTIONS_BY_STATUS[exception.status];
+  // This component renders once per exception, so every id must be row-unique.
+  const rowId = useId();
+  const actionId = `${rowId}-action`;
+  const ownerUserId = `${rowId}-owner-user-id`;
+  const reasonId = `${rowId}-reason`;
+  const errorId = `${rowId}-error`;
+  const describedBy = state.error ? errorId : undefined;
 
   return (
     <li className="flex flex-col gap-2 border-b border-neutral-100 pb-3 last:border-b-0 last:pb-0">
@@ -80,30 +91,46 @@ function ExceptionRow({
 
       {availableActions.length > 0 ? (
         <form action={formAction} className="flex flex-wrap items-end gap-2">
-          <select name="action" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" defaultValue="">
-            <option value="" disabled>
-              Choose an action…
-            </option>
-            {availableActions.map((availableAction) => (
-              <option key={availableAction} value={availableAction}>
-                {availableAction.replace("_", " ")}
+          <FormField id={actionId} label="Action">
+            <Select id={actionId} name="action" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+              <option value="" disabled>
+                Choose an action…
               </option>
-            ))}
-          </select>
+              {availableActions.map((availableAction) => (
+                <option key={availableAction} value={availableAction}>
+                  {availableAction.replace("_", " ")}
+                </option>
+              ))}
+            </Select>
+          </FormField>
           {availableActions.includes("assign_owner") ? (
-            <input name="ownerUserId" type="text" placeholder="Owner user ID (for assign owner)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <FormField id={ownerUserId} label="Owner user ID">
+              <Input
+                id={ownerUserId}
+                name="ownerUserId"
+                type="text"
+                placeholder="Owner user ID (for assign owner)"
+                invalid={Boolean(state.error)}
+                aria-describedby={describedBy}
+              />
+            </FormField>
           ) : null}
-          <input name="reason" type="text" placeholder="Reason / evidence (as required)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          <FormField id={reasonId} label="Reason / evidence">
+            <Input
+              id={reasonId}
+              name="reason"
+              type="text"
+              placeholder="Reason / evidence (as required)"
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Working…" className="w-fit">
             Apply
           </Button>
         </form>
       ) : null}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </li>
   );
 }

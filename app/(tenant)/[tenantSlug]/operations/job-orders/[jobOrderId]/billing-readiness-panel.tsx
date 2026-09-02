@@ -2,6 +2,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { BillingReadinessEvaluation, BillingReadinessHandoff } from "../../../../../../server/contracts/billing-readiness/billing-readiness.ts";
 import type { JobOrderFormState } from "./actions.ts";
@@ -60,51 +63,70 @@ export function BillingReadinessPanel({
 
       <form action={evaluateFormAction} className="flex flex-wrap items-end gap-2" noValidate>
         {evaluation ? (
-          <label className="flex flex-col text-sm text-neutral-700">
-            Reevaluation reason (required to reevaluate)
-            <input type="text" name="reevaluationReason" className="rounded border border-neutral-300 px-2 py-1" />
-          </label>
+          <FormField id="reevaluationReason" label="Reevaluation reason (required to reevaluate)">
+            <Input
+              id="reevaluationReason"
+              type="text"
+              name="reevaluationReason"
+              invalid={Boolean(evaluateState.error)}
+              aria-describedby={evaluateState.error ? "evaluate-error" : undefined}
+            />
+          </FormField>
         ) : null}
         <Button type="submit" loading={evaluatePending} loadingLabel="Evaluating…" variant="secondary">
           {evaluation ? "Reevaluate" : "Evaluate billing readiness"}
         </Button>
         {evaluateState.error ? (
-          <p role="alert" className="w-full text-sm text-danger">
-            {evaluateState.error}
-          </p>
+          <div className="w-full">
+            <ValidationMessage id="evaluate-error">{evaluateState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
 
       {evaluation && evaluation.effectiveStatus === "not_ready" ? (
         <form action={overrideFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-          <label className="flex flex-col text-sm text-neutral-700">
-            Override reason
-            <input type="text" name="reason" required className="w-64 rounded border border-neutral-300 px-2 py-1" />
-          </label>
+          <FormField id="billing-readiness-override-reason" label="Override reason">
+            <Input
+              id="billing-readiness-override-reason"
+              type="text"
+              name="reason"
+              required
+              className="w-64"
+              invalid={Boolean(overrideState.error)}
+              aria-describedby={overrideState.error ? "billing-readiness-override-error" : undefined}
+            />
+          </FormField>
           <Button type="submit" loading={overridePending} loadingLabel="Overriding…" variant="secondary">
             Override to ready
           </Button>
           {overrideState.error ? (
-            <p role="alert" className="w-full text-sm text-danger">
-              {overrideState.error}
-            </p>
+            <div className="w-full">
+              <ValidationMessage id="billing-readiness-override-error">{overrideState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
       ) : null}
 
       {evaluation && evaluation.isOverridden ? (
         <form action={revokeFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-          <label className="flex flex-col text-sm text-neutral-700">
-            Revoke reason
-            <input type="text" name="reason" required className="w-64 rounded border border-neutral-300 px-2 py-1" />
-          </label>
+          <FormField id="billing-readiness-revoke-reason" label="Revoke reason">
+            <Input
+              id="billing-readiness-revoke-reason"
+              type="text"
+              name="reason"
+              required
+              className="w-64"
+              invalid={Boolean(revokeState.error)}
+              aria-describedby={revokeState.error ? "billing-readiness-revoke-error" : undefined}
+            />
+          </FormField>
           <Button type="submit" loading={revokePending} loadingLabel="Revoking…" variant="secondary">
             Revoke override
           </Button>
           {revokeState.error ? (
-            <p role="alert" className="w-full text-sm text-danger">
-              {revokeState.error}
-            </p>
+            <div className="w-full">
+              <ValidationMessage id="billing-readiness-revoke-error">{revokeState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
       ) : null}
@@ -115,9 +137,9 @@ export function BillingReadinessPanel({
             Hand off to Finance
           </Button>
           {handoffState.error ? (
-            <p role="alert" className="mt-1 text-sm text-danger">
-              {handoffState.error}
-            </p>
+            <div className="mt-1">
+              <ValidationMessage id="billing-readiness-handoff-error">{handoffState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
       ) : null}

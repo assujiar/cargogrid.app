@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { TransactionLineageManifest, TransactionLineageRelationType } from "../../../../../../server/contracts/transaction-lineage/transaction-lineage.ts";
 import type { JobOrderFormState } from "./actions.ts";
@@ -26,6 +30,7 @@ export function TransactionLineagePanel({
   readonly overrideAction: (prevState: JobOrderFormState, formData: FormData) => Promise<JobOrderFormState>;
 }) {
   const [overrideState, overrideFormAction, overridePending] = useActionState(overrideAction, INITIAL_STATE);
+  const describedBy = overrideState.error ? "lineage-override-error" : undefined;
 
   if (!manifest) {
     return <p className="text-sm text-neutral-500">Lineage is not available for this Job Order.</p>;
@@ -81,36 +86,28 @@ export function TransactionLineagePanel({
       <form action={overrideFormAction} className="flex flex-col gap-2 border-t border-neutral-200 pt-2" noValidate>
         <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Add a corrective lineage mapping</h3>
         <p className="text-xs text-neutral-500">Bounded, reasoned, audited -- adds an additional mapping without deleting any prior evidence. Requires OPS:Override.</p>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Relation
-          <select name="relationType" className="rounded border border-neutral-300 px-2 py-1" defaultValue="job_to_shipment">
+        <FormField id="lineage-relation-type" label="Relation">
+          <Select id="lineage-relation-type" name="relationType" defaultValue="job_to_shipment" invalid={Boolean(overrideState.error)} aria-describedby={describedBy}>
             {(Object.keys(RELATION_LABELS) as TransactionLineageRelationType[]).map((relationType) => (
               <option key={relationType} value={relationType}>
                 {RELATION_LABELS[relationType]}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Source ID
-          <input type="text" name="sourceId" required className="rounded border border-neutral-300 px-2 py-1" />
-        </label>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Target ID
-          <input type="text" name="targetId" required className="rounded border border-neutral-300 px-2 py-1" />
-        </label>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Reason
-          <input type="text" name="reason" required className="rounded border border-neutral-300 px-2 py-1" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id="lineage-source-id" label="Source ID">
+          <Input id="lineage-source-id" type="text" name="sourceId" required invalid={Boolean(overrideState.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="lineage-target-id" label="Target ID">
+          <Input id="lineage-target-id" type="text" name="targetId" required invalid={Boolean(overrideState.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="lineage-reason" label="Reason">
+          <Input id="lineage-reason" type="text" name="reason" required invalid={Boolean(overrideState.error)} aria-describedby={describedBy} />
+        </FormField>
         <Button type="submit" loading={overridePending} loadingLabel="Recording…" variant="secondary">
           Record correction
         </Button>
-        {overrideState.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {overrideState.error}
-          </p>
-        ) : null}
+        {overrideState.error ? <ValidationMessage id="lineage-override-error">{overrideState.error}</ValidationMessage> : null}
       </form>
     </div>
   );

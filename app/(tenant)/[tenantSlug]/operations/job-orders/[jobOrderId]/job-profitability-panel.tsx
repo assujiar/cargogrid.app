@@ -2,6 +2,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { JobProfitabilityDirectoryRow } from "../../../../../../server/contracts/job-profitability/job-profitability.ts";
 import type { JobOrderFormState } from "./actions.ts";
@@ -54,20 +57,21 @@ export function JobProfitabilityPanel({
 
       <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
         {snapshot ? (
-          <label className="flex flex-col text-sm text-neutral-700">
-            Recalculation reason (required to recalculate)
-            <input type="text" name="recalculationReason" className="rounded border border-neutral-300 px-2 py-1" />
-          </label>
+          <FormField id="recalculationReason" label="Recalculation reason (required to recalculate)">
+            <Input
+              id="recalculationReason"
+              type="text"
+              name="recalculationReason"
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? "job-profitability-error" : undefined}
+            />
+          </FormField>
         ) : null}
         <Button type="submit" loading={pending} loadingLabel="Calculating…" variant="secondary">
           {snapshot ? "Recalculate" : "Calculate profitability"}
         </Button>
       </form>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="job-profitability-error">{state.error}</ValidationMessage> : null}
     </div>
   );
 }

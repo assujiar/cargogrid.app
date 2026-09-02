@@ -1,7 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { DateInput } from "../../../../../components/forms/date-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import type { FleetFormState } from "./actions.ts";
 import {
@@ -121,29 +128,40 @@ export function VehicleSection({
 
 function RegisterVehicleForm({ action }: { action: FleetFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "register-vehicle-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="code" type="text" required placeholder="Vehicle code" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="name" type="text" required placeholder="Vehicle name" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <select name="ownershipType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Ownership…
-        </option>
-        {VEHICLE_OWNERSHIP_TYPES.map((type) => (
-          <option key={type} value={type}>
-            {type}
+      <FormField id="register-vehicle-code" label="Vehicle code">
+        <Input id="register-vehicle-code" name="code" type="text" required placeholder="Vehicle code" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-vehicle-name" label="Vehicle name">
+        <Input id="register-vehicle-name" name="name" type="text" required placeholder="Vehicle name" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-vehicle-ownership" label="Ownership">
+        <Select id="register-vehicle-ownership" name="ownershipType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Ownership…
           </option>
-        ))}
-      </select>
-      <input name="capacityWeightKg" type="number" step="any" placeholder="Capacity (kg)" className="w-32 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="capacityVolumeCbm" type="number" step="any" placeholder="Capacity (cbm)" className="w-32 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {VEHICLE_OWNERSHIP_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="register-vehicle-capacity-kg" label="Capacity (kg)">
+        <NumberInput id="register-vehicle-capacity-kg" name="capacityWeightKg" step="any" placeholder="Capacity (kg)" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-vehicle-capacity-cbm" label="Capacity (cbm)">
+        <NumberInput id="register-vehicle-capacity-cbm" name="capacityVolumeCbm" step="any" placeholder="Capacity (cbm)" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="register-vehicle-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -191,6 +209,9 @@ function DriverRow({
   consentActionFor: (driverProfileId: string, expectedVersion: number, consent: boolean) => FleetFormAction;
 }) {
   const [state, formAction, pending] = useActionState(consentActionFor(driver.id, driver.recordVersion, !driver.mobileTrackingConsent), INITIAL_STATE);
+  // This component renders once per driver row, so the error id must be row-unique.
+  const rowId = useId();
+  const errorId = `${rowId}-consent-error`;
   return (
     <li className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-2 text-sm first:border-t-0 first:pt-0">
       <span className="font-medium text-neutral-900">{label}</span>
@@ -204,9 +225,9 @@ function DriverRow({
         </Button>
       </form>
       {state.error ? (
-        <p role="alert" className="basis-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </li>
   );
@@ -214,19 +235,28 @@ function DriverRow({
 
 function RegisterDriverForm({ action }: { action: FleetFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "register-driver-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="code" type="text" required placeholder="Driver code" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="name" type="text" required placeholder="Driver name" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="licenseClass" type="text" placeholder="License class" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="licenseExpiryDate" type="date" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id="register-driver-code" label="Driver code">
+        <Input id="register-driver-code" name="code" type="text" required placeholder="Driver code" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-driver-name" label="Driver name">
+        <Input id="register-driver-name" name="name" type="text" required placeholder="Driver name" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-driver-license-class" label="License class">
+        <Input id="register-driver-license-class" name="licenseClass" type="text" placeholder="License class" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-driver-license-expiry" label="License expiry">
+        <DateInput id="register-driver-license-expiry" name="licenseExpiryDate" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="register-driver-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -297,6 +327,13 @@ function DeviceRow({
   const [assignState, assignFormAction, assignPending] = useActionState(assignAction, INITIAL_STATE);
   const [unassignState, unassignFormAction, unassignPending] = useActionState(unassignAction, INITIAL_STATE);
   const nextStatuses = NEXT_DEVICE_STATUSES[device.status];
+  // This component renders once per device row, so every id must be row-unique.
+  const rowId = useId();
+  const toStatusId = `${rowId}-to-status`;
+  const assignVehicleId = `${rowId}-assign-vehicle`;
+  const assignReasonId = `${rowId}-assign-reason`;
+  const unassignReasonId = `${rowId}-unassign-reason`;
+  const errorId = `${rowId}-error`;
 
   return (
     <li className="flex flex-col gap-2 border-t border-neutral-100 pt-2 first:border-t-0 first:pt-0">
@@ -318,16 +355,26 @@ function DeviceRow({
       <div className="flex flex-wrap items-center gap-2">
         {nextStatuses.length > 0 ? (
           <form action={transitionFormAction} className="flex items-center gap-2">
-            <select name="toStatus" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-              <option value="" disabled>
-                Move to…
-              </option>
-              {nextStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {status}
+            <FormField id={toStatusId} label={<span className="sr-only">Move device to status</span>}>
+              <Select
+                id={toStatusId}
+                name="toStatus"
+                required
+                defaultValue=""
+                className="text-xs"
+                invalid={Boolean(transitionState.error)}
+                aria-describedby={transitionState.error ? errorId : undefined}
+              >
+                <option value="" disabled>
+                  Move to…
                 </option>
-              ))}
-            </select>
+                {nextStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
             <Button type="submit" variant="secondary" loading={transitionPending} loadingLabel="…" className="w-fit text-xs">
               Transition
             </Button>
@@ -335,33 +382,62 @@ function DeviceRow({
         ) : null}
 
         <form action={assignFormAction} className="flex items-center gap-2">
-          <select name="vehicleProfileId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-            <option value="" disabled>
-              Assign to vehicle…
-            </option>
-            {vehicles.map((vehicle) => (
-              <option key={vehicle.id} value={vehicle.id}>
-                {masterLabel(vehicleMasterById, vehicle.vehicleMasterId)}
+          <FormField id={assignVehicleId} label={<span className="sr-only">Assign device to vehicle</span>}>
+            <Select
+              id={assignVehicleId}
+              name="vehicleProfileId"
+              required
+              defaultValue=""
+              className="text-xs"
+              invalid={Boolean(assignState.error)}
+              aria-describedby={assignState.error ? errorId : undefined}
+            >
+              <option value="" disabled>
+                Assign to vehicle…
               </option>
-            ))}
-          </select>
-          <input name="reason" type="text" placeholder="Reason (optional)" className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.id} value={vehicle.id}>
+                  {masterLabel(vehicleMasterById, vehicle.vehicleMasterId)}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField id={assignReasonId} label={<span className="sr-only">Assignment reason (optional)</span>}>
+            <Input
+              id={assignReasonId}
+              name="reason"
+              type="text"
+              placeholder="Reason (optional)"
+              className="w-32 text-xs"
+              invalid={Boolean(assignState.error)}
+              aria-describedby={assignState.error ? errorId : undefined}
+            />
+          </FormField>
           <Button type="submit" variant="secondary" loading={assignPending} loadingLabel="…" className="w-fit text-xs">
             Assign
           </Button>
         </form>
 
         <form action={unassignFormAction} className="flex items-center gap-2">
-          <input name="reason" type="text" required placeholder="Unassign reason" className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+          <FormField id={unassignReasonId} label={<span className="sr-only">Unassign reason</span>}>
+            <Input
+              id={unassignReasonId}
+              name="reason"
+              type="text"
+              required
+              placeholder="Unassign reason"
+              className="w-32 text-xs"
+              invalid={Boolean(unassignState.error)}
+              aria-describedby={unassignState.error ? errorId : undefined}
+            />
+          </FormField>
           <Button type="submit" variant="destructive" loading={unassignPending} loadingLabel="…" className="w-fit text-xs">
             Unassign
           </Button>
         </form>
       </div>
       {transitionState.error || assignState.error || unassignState.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {transitionState.error ?? assignState.error ?? unassignState.error}
-        </p>
+        <ValidationMessage id={errorId}>{transitionState.error ?? assignState.error ?? unassignState.error ?? ""}</ValidationMessage>
       ) : null}
     </li>
   );
@@ -369,27 +445,34 @@ function DeviceRow({
 
 function RegisterDeviceForm({ action }: { action: FleetFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "register-device-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="imei" type="text" required placeholder="IMEI" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="deviceModel" type="text" required placeholder="Device model" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <select name="ownershipType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Ownership…
-        </option>
-        {DEVICE_OWNERSHIP_TYPES.map((type) => (
-          <option key={type} value={type}>
-            {type}
+      <FormField id="register-device-imei" label="IMEI">
+        <Input id="register-device-imei" name="imei" type="text" required placeholder="IMEI" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-device-model" label="Device model">
+        <Input id="register-device-model" name="deviceModel" type="text" required placeholder="Device model" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-device-ownership" label="Ownership">
+        <Select id="register-device-ownership" name="ownershipType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Ownership…
           </option>
-        ))}
-      </select>
+          {DEVICE_OWNERSHIP_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </Select>
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="register-device-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -442,6 +525,10 @@ function SimRow({
 }) {
   const [assignState, assignFormAction, assignPending] = useActionState(assignAction, INITIAL_STATE);
   const [unassignState, unassignFormAction, unassignPending] = useActionState(unassignAction, INITIAL_STATE);
+  // This component renders once per SIM row, so every id must be row-unique.
+  const rowId = useId();
+  const assignDeviceId = `${rowId}-assign-device`;
+  const errorId = `${rowId}-error`;
 
   return (
     <li className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-2 text-sm first:border-t-0 first:pt-0">
@@ -456,25 +543,35 @@ function SimRow({
         </form>
       ) : (
         <form action={assignFormAction} className="flex items-center gap-2">
-          <select name="deviceId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-            <option value="" disabled>
-              Assign to device…
-            </option>
-            {devices.map((device) => (
-              <option key={device.id} value={device.id}>
-                {device.imei}
+          <FormField id={assignDeviceId} label={<span className="sr-only">Assign SIM to device</span>}>
+            <Select
+              id={assignDeviceId}
+              name="deviceId"
+              required
+              defaultValue=""
+              className="text-xs"
+              invalid={Boolean(assignState.error)}
+              aria-describedby={assignState.error ? errorId : undefined}
+            >
+              <option value="" disabled>
+                Assign to device…
               </option>
-            ))}
-          </select>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.imei}
+                </option>
+              ))}
+            </Select>
+          </FormField>
           <Button type="submit" variant="secondary" loading={assignPending} loadingLabel="…" className="w-fit text-xs">
             Assign
           </Button>
         </form>
       )}
       {assignState.error || unassignState.error ? (
-        <p role="alert" className="basis-full text-xs text-danger">
-          {assignState.error ?? unassignState.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{assignState.error ?? unassignState.error ?? ""}</ValidationMessage>
+        </div>
       ) : null}
     </li>
   );
@@ -482,18 +579,25 @@ function SimRow({
 
 function RegisterSimForm({ action }: { action: FleetFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "register-sim-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="iccid" type="text" required placeholder="ICCID" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="msisdn" type="text" placeholder="MSISDN (optional)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="carrier" type="text" placeholder="Carrier (optional)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id="register-sim-iccid" label="ICCID">
+        <Input id="register-sim-iccid" name="iccid" type="text" required placeholder="ICCID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-sim-msisdn" label="MSISDN (optional)">
+        <Input id="register-sim-msisdn" name="msisdn" type="text" placeholder="MSISDN (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-sim-carrier" label="Carrier (optional)">
+        <Input id="register-sim-carrier" name="carrier" type="text" placeholder="Carrier (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="register-sim-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -558,27 +662,42 @@ export function ProviderMappingSection({
 
 function RegisterProviderMappingForm({ vehicles, action }: { vehicles: readonly VehicleOperationalProfile[]; action: FleetFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "register-mapping-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <select name="vehicleMasterId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Vehicle…
-        </option>
-        {vehicles.map((vehicle) => (
-          <option key={vehicle.vehicleMasterId} value={vehicle.vehicleMasterId}>
-            {vehicle.vehicleMasterId}
+      <FormField id="register-mapping-vehicle" label="Vehicle">
+        <Select id="register-mapping-vehicle" name="vehicleMasterId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Vehicle…
           </option>
-        ))}
-      </select>
-      <input name="providerCode" type="text" required placeholder="Provider code" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="externalVehicleId" type="text" required placeholder="External vehicle ID" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {vehicles.map((vehicle) => (
+            <option key={vehicle.vehicleMasterId} value={vehicle.vehicleMasterId}>
+              {vehicle.vehicleMasterId}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="register-mapping-provider-code" label="Provider code">
+        <Input id="register-mapping-provider-code" name="providerCode" type="text" required placeholder="Provider code" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="register-mapping-external-vehicle-id" label="External vehicle ID">
+        <Input
+          id="register-mapping-external-vehicle-id"
+          name="externalVehicleId"
+          type="text"
+          required
+          placeholder="External vehicle ID"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="register-mapping-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -643,40 +762,44 @@ export function SourcePrioritySection({
 
 function SetSourcePriorityForm({ vehicles, action }: { vehicles: readonly VehicleOperationalProfile[]; action: FleetFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "set-source-priority-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <select name="vehicleMasterId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Vehicle…
-        </option>
-        {vehicles.map((vehicle) => (
-          <option key={vehicle.vehicleMasterId} value={vehicle.vehicleMasterId}>
-            {vehicle.vehicleMasterId}
+      <FormField id="source-priority-vehicle" label="Vehicle">
+        <Select id="source-priority-vehicle" name="vehicleMasterId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Vehicle…
           </option>
-        ))}
-      </select>
-      <select name="sourceType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Source…
-        </option>
-        {(["driver_mobile", "direct_device", "third_party_platform"] as const).map((sourceType) => (
-          <option key={sourceType} value={sourceType}>
-            {sourceType}
+          {vehicles.map((vehicle) => (
+            <option key={vehicle.vehicleMasterId} value={vehicle.vehicleMasterId}>
+              {vehicle.vehicleMasterId}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="source-priority-source-type" label="Source">
+        <Select id="source-priority-source-type" name="sourceType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Source…
           </option>
-        ))}
-      </select>
-      <input name="priorityRank" type="number" min={1} required placeholder="Rank" className="w-20 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <label className="flex items-center gap-1 text-xs text-neutral-600">
-        <input name="isEnabled" type="checkbox" defaultChecked />
-        Enabled
-      </label>
+          {(["driver_mobile", "direct_device", "third_party_platform"] as const).map((sourceType) => (
+            <option key={sourceType} value={sourceType}>
+              {sourceType}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="source-priority-rank" label="Rank">
+        <NumberInput id="source-priority-rank" name="priorityRank" min={1} required placeholder="Rank" className="w-20" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <Checkbox id="source-priority-enabled" name="isEnabled" defaultChecked label="Enabled" aria-describedby={describedBy} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
         Save
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="set-source-priority-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

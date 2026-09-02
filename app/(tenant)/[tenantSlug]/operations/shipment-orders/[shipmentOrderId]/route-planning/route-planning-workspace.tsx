@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../../components/ui/badge.tsx";
 import {
@@ -246,17 +251,40 @@ function CandidateCard({
 
 export function PrepareScenarioForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "prepare-scenario-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 border-t border-neutral-100 pt-2" noValidate>
-      <input name="requestedWeightKg" type="number" step="any" min={0} placeholder="Requested weight (kg)" className="w-40 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="requestedVolumeCbm" type="number" step="any" min={0} placeholder="Requested volume (cbm)" className="w-40 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id="prepare-requested-weight-kg" label="Requested weight (kg)">
+        <NumberInput
+          id="prepare-requested-weight-kg"
+          name="requestedWeightKg"
+          step="any"
+          min={0}
+          placeholder="Requested weight (kg)"
+          className="w-40"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id="prepare-requested-volume-cbm" label="Requested volume (cbm)">
+        <NumberInput
+          id="prepare-requested-volume-cbm"
+          name="requestedVolumeCbm"
+          step="any"
+          min={0}
+          placeholder="Requested volume (cbm)"
+          className="w-40"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Preparing…" className="w-fit">
         Prepare new scenario
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="prepare-scenario-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -264,31 +292,46 @@ export function PrepareScenarioForm({ action }: { action: RoutePlanningFormActio
 
 function AddStopForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "planning-add-stop-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="stopSequence" type="number" min={1} required placeholder="Seq" className="w-16 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <select name="stopType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Stop type…
-        </option>
-        {ROUTE_PLANNING_STOP_TYPES.map((stopType) => (
-          <option key={stopType} value={stopType}>
-            {stopType}
+      <FormField id="planning-stop-sequence" label="Seq">
+        <NumberInput id="planning-stop-sequence" name="stopSequence" min={1} required placeholder="Seq" className="w-16" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="planning-stop-type" label="Stop type">
+        <Select id="planning-stop-type" name="stopType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Stop type…
           </option>
-        ))}
-      </select>
-      <input name="locationName" type="text" required placeholder="Location name" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="longitude" type="number" step="any" placeholder="Longitude" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="latitude" type="number" step="any" placeholder="Latitude" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="timeWindowStart" type="datetime-local" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="timeWindowEnd" type="datetime-local" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {ROUTE_PLANNING_STOP_TYPES.map((stopType) => (
+            <option key={stopType} value={stopType}>
+              {stopType}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="planning-stop-location-name" label="Location name">
+        <Input id="planning-stop-location-name" name="locationName" type="text" required placeholder="Location name" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="planning-stop-longitude" label="Longitude">
+        <NumberInput id="planning-stop-longitude" name="longitude" step="any" placeholder="Longitude" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="planning-stop-latitude" label="Latitude">
+        <NumberInput id="planning-stop-latitude" name="latitude" step="any" placeholder="Latitude" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="planning-stop-time-window-start" label="Time window start">
+        <Input id="planning-stop-time-window-start" name="timeWindowStart" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="planning-stop-time-window-end" label="Time window end">
+        <Input id="planning-stop-time-window-end" name="timeWindowEnd" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…" className="w-fit">
         Add stop
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="planning-add-stop-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -296,36 +339,52 @@ function AddStopForm({ action }: { action: RoutePlanningFormAction }) {
 
 function AddConstraintForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "planning-add-constraint-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <select name="constraintType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Type…
-        </option>
-        {ROUTE_PLANNING_CONSTRAINT_TYPES.map((constraintType) => (
-          <option key={constraintType} value={constraintType}>
-            {constraintType}
+      <FormField id="planning-constraint-type" label="Type">
+        <Select id="planning-constraint-type" name="constraintType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Type…
           </option>
-        ))}
-      </select>
-      <select name="constraintKey" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Key…
-        </option>
-        {ROUTE_PLANNING_CONSTRAINT_KEYS.map((constraintKey) => (
-          <option key={constraintKey} value={constraintKey}>
-            {constraintKey}
+          {ROUTE_PLANNING_CONSTRAINT_TYPES.map((constraintType) => (
+            <option key={constraintType} value={constraintType}>
+              {constraintType}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="planning-constraint-key" label="Key">
+        <Select id="planning-constraint-key" name="constraintKey" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Key…
           </option>
-        ))}
-      </select>
-      <input name="value" type="text" required placeholder="Value (number, UUID, or datetime)" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {ROUTE_PLANNING_CONSTRAINT_KEYS.map((constraintKey) => (
+            <option key={constraintKey} value={constraintKey}>
+              {constraintKey}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="planning-constraint-value" label="Value">
+        <Input
+          id="planning-constraint-value"
+          name="value"
+          type="text"
+          required
+          placeholder="Value (number, UUID, or datetime)"
+          className="w-56"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…" className="w-fit">
         Add constraint
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="planning-add-constraint-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -338,11 +397,7 @@ function ValidateForm({ action }: { action: RoutePlanningFormAction }) {
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Validating…" className="w-fit">
         Validate scenario
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="planning-validate-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -354,11 +409,7 @@ function ExecuteForm({ action }: { action: RoutePlanningFormAction }) {
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Queuing…" className="w-fit">
         Execute (queue planning job)
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="planning-execute-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -371,11 +422,7 @@ function RunPlannerForm({ action }: { action: RoutePlanningFormAction }) {
         Run planner now
       </Button>
       <p className="text-xs text-neutral-500">No live worker polls this queue yet -- this runs the queued job on demand.</p>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="planning-run-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -384,14 +431,24 @@ function CancelForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="reason" type="text" required placeholder="Cancellation reason" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id="planning-cancel-reason" label="Cancellation reason">
+        <Input
+          id="planning-cancel-reason"
+          name="reason"
+          type="text"
+          required
+          placeholder="Cancellation reason"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "planning-cancel-error" : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…" className="w-fit">
         Cancel scenario
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="planning-cancel-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -399,32 +456,44 @@ function CancelForm({ action }: { action: RoutePlanningFormAction }) {
 
 function SelectForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per candidate card, so the error id must be candidate-unique.
+  const formId = useId();
   return (
     <form action={formAction} className="flex flex-col items-start gap-1" noValidate>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Selecting…" className="w-fit">
         Select this plan
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={`${formId}-error`}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function OverrideForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per candidate card, so every id must be candidate-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="overrideReason" type="text" required placeholder="Override reason" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id={`${formId}-override-reason`} label="Override reason">
+        <Input
+          id={`${formId}-override-reason`}
+          name="overrideReason"
+          type="text"
+          required
+          placeholder="Override reason"
+          className="w-56"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Overriding…" className="w-fit">
         Override select
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -434,14 +503,25 @@ function ReplanForm({ action }: { action: RoutePlanningFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="reason" type="text" required placeholder="Replan reason" className="w-64 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id="planning-replan-reason" label="Replan reason">
+        <Input
+          id="planning-replan-reason"
+          name="reason"
+          type="text"
+          required
+          placeholder="Replan reason"
+          className="w-64"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "planning-replan-error" : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Replanning…" className="w-fit">
         Replan
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="planning-replan-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

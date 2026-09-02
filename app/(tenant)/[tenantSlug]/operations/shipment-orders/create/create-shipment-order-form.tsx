@@ -2,6 +2,12 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { FormSection } from "../../../../../../components/forms/form-section.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { CreateShipmentOrderState } from "./actions.ts";
 import { SHIPMENT_MODES, type ShipmentMode } from "../../../../../../server/contracts/shipment-order/shipment-order.ts";
 
@@ -60,111 +66,73 @@ export function CreateShipmentOrderForm({
     INITIAL_STATE,
   );
 
+  const invalid = Boolean(state.error);
+  const describedBy = state.error ? "create-shipment-order-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="serviceType" className="text-sm font-medium text-neutral-700">
-            Service type
-          </label>
-          <input id="serviceType" name="serviceType" type="text" required defaultValue="ocean_freight" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="mode" className="text-sm font-medium text-neutral-700">
-            Mode
-          </label>
-          <select id="mode" name="mode" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" defaultValue={SHIPMENT_MODES[2]}>
+        <FormField id="serviceType" label="Service type">
+          <Input id="serviceType" name="serviceType" type="text" required defaultValue="ocean_freight" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="mode" label="Mode">
+          <Select id="mode" name="mode" defaultValue={SHIPMENT_MODES[2]} invalid={invalid} aria-describedby={describedBy}>
             {SHIPMENT_MODES.map((mode) => (
               <option key={mode} value={mode}>
                 {mode}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="origin" className="text-sm font-medium text-neutral-700">
-            Origin
-          </label>
-          <input id="origin" name="origin" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="destination" className="text-sm font-medium text-neutral-700">
-            Destination
-          </label>
-          <input id="destination" name="destination" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="plannedPickupAt" className="text-sm font-medium text-neutral-700">
-            Planned pickup
-          </label>
-          <input id="plannedPickupAt" name="plannedPickupAt" type="datetime-local" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="plannedDeliveryAt" className="text-sm font-medium text-neutral-700">
-            Planned delivery
-          </label>
-          <input id="plannedDeliveryAt" name="plannedDeliveryAt" type="datetime-local" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="allocatedQuantity" className="text-sm font-medium text-neutral-700">
-            Allocated quantity
-          </label>
-          <input id="allocatedQuantity" name="allocatedQuantity" type="number" step="any" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="allocatedWeightKg" className="text-sm font-medium text-neutral-700">
-            Allocated weight (kg)
-          </label>
-          <input id="allocatedWeightKg" name="allocatedWeightKg" type="number" step="any" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="allocatedVolumeCbm" className="text-sm font-medium text-neutral-700">
-            Allocated volume (cbm)
-          </label>
-          <input id="allocatedVolumeCbm" name="allocatedVolumeCbm" type="number" step="any" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
+          </Select>
+        </FormField>
+        <FormField id="origin" label="Origin">
+          <Input id="origin" name="origin" type="text" required invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="destination" label="Destination">
+          <Input id="destination" name="destination" type="text" required invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="plannedPickupAt" label="Planned pickup">
+          <Input id="plannedPickupAt" name="plannedPickupAt" type="datetime-local" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="plannedDeliveryAt" label="Planned delivery">
+          <Input id="plannedDeliveryAt" name="plannedDeliveryAt" type="datetime-local" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="allocatedQuantity" label="Allocated quantity">
+          <NumberInput id="allocatedQuantity" name="allocatedQuantity" step="any" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="allocatedWeightKg" label="Allocated weight (kg)">
+          <NumberInput id="allocatedWeightKg" name="allocatedWeightKg" step="any" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="allocatedVolumeCbm" label="Allocated volume (cbm)">
+          <NumberInput id="allocatedVolumeCbm" name="allocatedVolumeCbm" step="any" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
       </div>
 
       {isFirstShipment ? (
-        <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
-          <p className="text-xs text-neutral-500">
-            This is the first Shipment Order for this Job Order -- the totals below declare the Job Order&apos;s own governed allocation basis for every future split. Leave a dimension blank to leave it advisory-only (never enforced).
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1">
-              <label htmlFor="basisQuantity" className="text-sm font-medium text-neutral-700">
-                Total quantity
-              </label>
-              <input id="basisQuantity" name="basisQuantity" type="number" step="any" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="rounded-md border border-neutral-200 p-3">
+          <FormSection
+            title="Job Order allocation basis"
+            description="This is the first Shipment Order for this Job Order -- the totals below declare the Job Order's own governed allocation basis for every future split. Leave a dimension blank to leave it advisory-only (never enforced)."
+          >
+            <div className="grid grid-cols-3 gap-3">
+              <FormField id="basisQuantity" label="Total quantity">
+                <NumberInput id="basisQuantity" name="basisQuantity" step="any" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="basisWeightKg" label="Total weight (kg)">
+                <NumberInput id="basisWeightKg" name="basisWeightKg" step="any" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="basisVolumeCbm" label="Total volume (cbm)">
+                <NumberInput id="basisVolumeCbm" name="basisVolumeCbm" step="any" invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
             </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="basisWeightKg" className="text-sm font-medium text-neutral-700">
-                Total weight (kg)
-              </label>
-              <input id="basisWeightKg" name="basisWeightKg" type="number" step="any" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="basisVolumeCbm" className="text-sm font-medium text-neutral-700">
-                Total volume (cbm)
-              </label>
-              <input id="basisVolumeCbm" name="basisVolumeCbm" type="number" step="any" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-            </div>
-          </div>
+          </FormSection>
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
-          <label htmlFor="splitReason" className="text-sm font-medium text-neutral-700">
-            Split reason (required)
-          </label>
-          <input id="splitReason" name="splitReason" type="text" required minLength={1} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
+        <FormField id="splitReason" label="Split reason (required)">
+          <Input id="splitReason" name="splitReason" type="text" required minLength={1} invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
       )}
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="create-shipment-order-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create Shipment Order

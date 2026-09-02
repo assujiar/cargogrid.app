@@ -1,7 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { EpodCapture } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
 import type { ShipmentOrderFormState } from "./actions.ts";
@@ -48,9 +52,9 @@ export function EpodPanel({
               Start ePOD capture
             </Button>
             {startState.error ? (
-              <p role="alert" className="mt-1 text-sm text-danger">
-                {startState.error}
-              </p>
+              <div className="mt-1">
+                <ValidationMessage id="epod-start-error">{startState.error}</ValidationMessage>
+              </div>
             ) : null}
           </form>
         ) : (
@@ -104,6 +108,12 @@ function EpodCaptureActions({
   const [reviewState, reviewFormAction, reviewPending] = useActionState(reviewAction, INITIAL_STATE);
   const [reviseState, reviseFormAction, revisePending] = useActionState(reviseAction, INITIAL_STATE);
   const [completeState, completeFormAction, completePending] = useActionState(completeAction, INITIAL_STATE);
+  // This component renders once per capture version, so every id must be capture-unique.
+  const captureId = useId();
+  const evidenceErrorId = `${captureId}-evidence-error`;
+  const reviewErrorId = `${captureId}-review-error`;
+  const evidenceDescribedBy = evidenceState.error ? evidenceErrorId : undefined;
+  const reviewDescribedBy = reviewState.error ? reviewErrorId : undefined;
 
   if (capture.status === "revision_requested") {
     return (
@@ -112,9 +122,9 @@ function EpodCaptureActions({
           Start revision (new version)
         </Button>
         {reviseState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {reviseState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id={`${captureId}-revise-error`}>{reviseState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     );
@@ -125,47 +135,93 @@ function EpodCaptureActions({
       <>
         <form action={evidenceFormAction} className="mt-2 flex flex-col gap-2" noValidate>
           <div className="flex flex-wrap gap-2">
-            <label className="flex flex-col text-sm text-neutral-700">
-              Receiver name
-              <input type="text" name="receiverName" required defaultValue={capture.receiverName ?? ""} className="rounded border border-neutral-300 px-2 py-1" />
-            </label>
-            <label className="flex flex-col text-sm text-neutral-700">
-              Receiver position
-              <input type="text" name="receiverPosition" defaultValue={capture.receiverPosition ?? ""} className="rounded border border-neutral-300 px-2 py-1" />
-            </label>
+            <FormField id={`${captureId}-receiver-name`} label="Receiver name">
+              <Input
+                id={`${captureId}-receiver-name`}
+                type="text"
+                name="receiverName"
+                required
+                defaultValue={capture.receiverName ?? ""}
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
+            <FormField id={`${captureId}-receiver-position`} label="Receiver position">
+              <Input
+                id={`${captureId}-receiver-position`}
+                type="text"
+                name="receiverPosition"
+                defaultValue={capture.receiverPosition ?? ""}
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col text-sm text-neutral-700">
-              Signature filename
-              <input type="text" name="signatureFilename" placeholder="signature.png" className="rounded border border-neutral-300 px-2 py-1" />
-            </label>
-            <label className="flex flex-col text-sm text-neutral-700">
-              Photo filename
-              <input type="text" name="photoFilename" placeholder="delivery-photo.jpg" className="rounded border border-neutral-300 px-2 py-1" />
-            </label>
+            <FormField id={`${captureId}-signature-filename`} label="Signature filename">
+              <Input
+                id={`${captureId}-signature-filename`}
+                type="text"
+                name="signatureFilename"
+                placeholder="signature.png"
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
+            <FormField id={`${captureId}-photo-filename`} label="Photo filename">
+              <Input
+                id={`${captureId}-photo-filename`}
+                type="text"
+                name="photoFilename"
+                placeholder="delivery-photo.jpg"
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col text-sm text-neutral-700">
-              Latitude
-              <input type="number" name="latitude" step="any" min={-90} max={90} className="w-28 rounded border border-neutral-300 px-2 py-1" />
-            </label>
-            <label className="flex flex-col text-sm text-neutral-700">
-              Longitude
-              <input type="number" name="longitude" step="any" min={-180} max={180} className="w-28 rounded border border-neutral-300 px-2 py-1" />
-            </label>
-            <label className="flex flex-col text-sm text-neutral-700">
-              Captured at
-              <input type="datetime-local" name="capturedAt" className="rounded border border-neutral-300 px-2 py-1" />
-            </label>
+            <FormField id={`${captureId}-latitude`} label="Latitude">
+              <NumberInput
+                id={`${captureId}-latitude`}
+                name="latitude"
+                step="any"
+                min={-90}
+                max={90}
+                className="w-28"
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
+            <FormField id={`${captureId}-longitude`} label="Longitude">
+              <NumberInput
+                id={`${captureId}-longitude`}
+                name="longitude"
+                step="any"
+                min={-180}
+                max={180}
+                className="w-28"
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
+            <FormField id={`${captureId}-captured-at`} label="Captured at">
+              <Input
+                id={`${captureId}-captured-at`}
+                type="datetime-local"
+                name="capturedAt"
+                invalid={Boolean(evidenceState.error)}
+                aria-describedby={evidenceDescribedBy}
+              />
+            </FormField>
           </div>
           <Button type="submit" loading={evidencePending} loadingLabel="Saving…" variant="secondary" className="w-fit">
             Save evidence
           </Button>
         </form>
         {evidenceState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {evidenceState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id={evidenceErrorId}>{evidenceState.error}</ValidationMessage>
+          </div>
         ) : null}
 
         <form action={submitFormAction} className="mt-2">
@@ -173,9 +229,9 @@ function EpodCaptureActions({
             Submit for review
           </Button>
           {submitState.error ? (
-            <p role="alert" className="mt-1 text-sm text-danger">
-              {submitState.error}
-            </p>
+            <div className="mt-1">
+              <ValidationMessage id={`${captureId}-submit-error`}>{submitState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
       </>
@@ -185,10 +241,9 @@ function EpodCaptureActions({
   if (capture.status === "submitted") {
     return (
       <form action={reviewFormAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Notes
-          <input type="text" name="notes" className="rounded border border-neutral-300 px-2 py-1" />
-        </label>
+        <FormField id={`${captureId}-review-notes`} label="Notes">
+          <Input id={`${captureId}-review-notes`} type="text" name="notes" invalid={Boolean(reviewState.error)} aria-describedby={reviewDescribedBy} />
+        </FormField>
         <Button type="submit" name="decision" value="approved" loading={reviewPending} loadingLabel="Saving…">
           Approve
         </Button>
@@ -196,9 +251,9 @@ function EpodCaptureActions({
           Request revision
         </Button>
         {reviewState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {reviewState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id={reviewErrorId}>{reviewState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     );
@@ -211,9 +266,9 @@ function EpodCaptureActions({
           Complete ePOD
         </Button>
         {completeState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {completeState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id={`${captureId}-complete-error`}>{completeState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     );

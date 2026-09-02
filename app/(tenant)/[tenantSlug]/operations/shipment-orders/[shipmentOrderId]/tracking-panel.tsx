@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ShipmentTrackingToken } from "../../../../../../server/contracts/public-tracking/public-tracking.ts";
 import type { ShipmentOrderFormState, IssueTrackingTokenFormState } from "./actions.ts";
@@ -34,17 +38,25 @@ export function TrackingPanel({
       )}
 
       <form action={issueFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Validity (days)
-          <input type="number" name="validityDays" required min={1} defaultValue={30} className="w-24 rounded border border-neutral-300 px-2 py-1" />
-        </label>
+        <FormField id="tracking-validity-days" label="Validity (days)">
+          <NumberInput
+            id="tracking-validity-days"
+            name="validityDays"
+            required
+            min={1}
+            defaultValue={30}
+            className="w-24"
+            invalid={Boolean(issueState.error)}
+            aria-describedby={issueState.error ? "tracking-issue-error" : undefined}
+          />
+        </FormField>
         <Button type="submit" loading={issuePending} loadingLabel="Issuing…" className="w-fit">
           {token ? "Re-issue link (revokes the current one)" : "Issue tracking link"}
         </Button>
         {issueState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {issueState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id="tracking-issue-error">{issueState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
 
@@ -59,17 +71,24 @@ export function TrackingPanel({
 
       {token ? (
         <form action={revokeFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-          <label className="flex flex-col text-sm text-neutral-700">
-            Reason
-            <input type="text" name="reason" required className="w-64 rounded border border-neutral-300 px-2 py-1" />
-          </label>
+          <FormField id="tracking-revoke-reason" label="Reason">
+            <Input
+              id="tracking-revoke-reason"
+              type="text"
+              name="reason"
+              required
+              className="w-64"
+              invalid={Boolean(revokeState.error)}
+              aria-describedby={revokeState.error ? "tracking-revoke-error" : undefined}
+            />
+          </FormField>
           <Button type="submit" loading={revokePending} loadingLabel="Revoking…" variant="secondary" className="w-fit">
             Revoke link
           </Button>
           {revokeState.error ? (
-            <p role="alert" className="mt-1 text-sm text-danger">
-              {revokeState.error}
-            </p>
+            <div className="mt-1">
+              <ValidationMessage id="tracking-revoke-error">{revokeState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
       ) : null}

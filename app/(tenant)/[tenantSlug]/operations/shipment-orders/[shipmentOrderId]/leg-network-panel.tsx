@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ShipmentOrderFormState } from "./actions.ts";
 import {
@@ -141,29 +146,47 @@ export function LegNetworkPanel({
 
 function AddLegForm({ action }: { action: LegNetworkFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "add-leg-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="sequenceNo" type="number" min={1} required placeholder="Sequence" className="w-24 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <select name="mode" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Mode…
-        </option>
-        {SHIPMENT_LEG_MODES.map((mode) => (
-          <option key={mode} value={mode}>
-            {mode}
+      <FormField id="add-leg-sequence-no" label="Sequence">
+        <NumberInput id="add-leg-sequence-no" name="sequenceNo" min={1} required placeholder="Sequence" className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="add-leg-mode" label="Mode">
+        <Select id="add-leg-mode" name="mode" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Mode…
           </option>
-        ))}
-      </select>
-      <input name="carrierMasterId" type="text" placeholder="Carrier master ID (optional)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="plannedDepartureAt" type="datetime-local" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="plannedArrivalAt" type="datetime-local" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {SHIPMENT_LEG_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="add-leg-carrier-master-id" label="Carrier master ID (optional)">
+        <Input
+          id="add-leg-carrier-master-id"
+          name="carrierMasterId"
+          type="text"
+          placeholder="Carrier master ID (optional)"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id="add-leg-planned-departure" label="Planned departure">
+        <Input id="add-leg-planned-departure" name="plannedDepartureAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="add-leg-planned-arrival" label="Planned arrival">
+        <Input id="add-leg-planned-arrival" name="plannedArrivalAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…" className="w-fit">
         Add leg
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id="add-leg-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -176,11 +199,7 @@ function ConfirmNetworkForm({ action }: { action: LegNetworkFormAction }) {
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Confirming…" className="w-fit">
         Confirm leg network
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="confirm-network-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -193,11 +212,7 @@ function MigrateLegacyForm({ action }: { action: LegNetworkFormAction }) {
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Migrating…" className="w-fit">
         Migrate to single-leg network
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="migrate-legacy-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -312,30 +327,46 @@ function LegCard({
 
 function AddStopForm({ action }: { action: LegNetworkFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per leg card, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="stopSequence" type="number" min={1} required placeholder="Seq" className="w-16 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <select name="stopType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Stop type…
-        </option>
-        {SHIPMENT_LEG_STOP_TYPES.map((stopType) => (
-          <option key={stopType} value={stopType}>
-            {stopType}
+      <FormField id={`${formId}-stop-sequence`} label="Seq">
+        <NumberInput id={`${formId}-stop-sequence`} name="stopSequence" min={1} required placeholder="Seq" className="w-16" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-stop-type`} label="Stop type">
+        <Select id={`${formId}-stop-type`} name="stopType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Stop type…
           </option>
-        ))}
-      </select>
-      <input name="locationName" type="text" required placeholder="Location name" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="longitude" type="number" step="any" placeholder="Longitude" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="latitude" type="number" step="any" placeholder="Latitude" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="plannedAt" type="datetime-local" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {SHIPMENT_LEG_STOP_TYPES.map((stopType) => (
+            <option key={stopType} value={stopType}>
+              {stopType}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id={`${formId}-location-name`} label="Location name">
+        <Input id={`${formId}-location-name`} name="locationName" type="text" required placeholder="Location name" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-longitude`} label="Longitude">
+        <NumberInput id={`${formId}-longitude`} name="longitude" step="any" placeholder="Longitude" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-latitude`} label="Latitude">
+        <NumberInput id={`${formId}-latitude`} name="latitude" step="any" placeholder="Latitude" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-planned-at`} label="Planned at">
+        <Input id={`${formId}-planned-at`} name="plannedAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…" className="w-fit">
         Add stop
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -343,18 +374,28 @@ function AddStopForm({ action }: { action: LegNetworkFormAction }) {
 
 function AllocateCargoForm({ action }: { action: LegNetworkFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per leg card, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="allocatedQuantity" type="number" step="any" placeholder="Quantity" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="allocatedWeightKg" type="number" step="any" placeholder="Weight (kg)" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="allocatedVolumeCbm" type="number" step="any" placeholder="Volume (cbm)" className="w-28 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id={`${formId}-allocated-quantity`} label="Quantity">
+        <NumberInput id={`${formId}-allocated-quantity`} name="allocatedQuantity" step="any" placeholder="Quantity" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-allocated-weight-kg`} label="Weight (kg)">
+        <NumberInput id={`${formId}-allocated-weight-kg`} name="allocatedWeightKg" step="any" placeholder="Weight (kg)" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-allocated-volume-cbm`} label="Volume (cbm)">
+        <NumberInput id={`${formId}-allocated-volume-cbm`} name="allocatedVolumeCbm" step="any" placeholder="Volume (cbm)" className="w-28" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Allocating…" className="w-fit">
         Allocate cargo
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -362,16 +403,29 @@ function AllocateCargoForm({ action }: { action: LegNetworkFormAction }) {
 
 function CancelLegForm({ action }: { action: LegNetworkFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per leg card, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <input name="reason" type="text" required placeholder="Cancellation reason" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id={`${formId}-reason`} label="Cancellation reason">
+        <Input
+          id={`${formId}-reason`}
+          name="reason"
+          type="text"
+          required
+          placeholder="Cancellation reason"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…" className="w-fit">
         Cancel leg
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -379,25 +433,37 @@ function CancelLegForm({ action }: { action: LegNetworkFormAction }) {
 
 function TransitionLegForm({ action, nextStatuses }: { action: LegNetworkFormAction; nextStatuses: readonly ShipmentLeg["legStatus"][] }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per leg card, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <select name="toStatus" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Move to…
-        </option>
-        {nextStatuses.map((status) => (
-          <option key={status} value={status}>
-            {status}
+      <FormField id={`${formId}-to-status`} label="Move leg to status">
+        <Select
+          id={`${formId}-to-status`}
+          name="toStatus"
+          required
+          defaultValue=""
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        >
+          <option value="" disabled>
+            Move to…
           </option>
-        ))}
-      </select>
+          {nextStatuses.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </Select>
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Transitioning…" className="w-fit">
         Transition
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -405,28 +471,40 @@ function TransitionLegForm({ action, nextStatuses }: { action: LegNetworkFormAct
 
 function RecordCustodyEventForm({ action }: { action: LegNetworkFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // Rendered once per leg card, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <select name="eventType" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Custody event…
-        </option>
-        {SHIPMENT_LEG_CUSTODY_EVENT_TYPES.map((eventType) => (
-          <option key={eventType} value={eventType}>
-            {eventType}
+      <FormField id={`${formId}-event-type`} label="Custody event">
+        <Select id={`${formId}-event-type`} name="eventType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Custody event…
           </option>
-        ))}
-      </select>
-      <input name="fromParty" type="text" placeholder="From party (optional)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="toParty" type="text" required placeholder="To party" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="occurredAt" type="datetime-local" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+          {SHIPMENT_LEG_CUSTODY_EVENT_TYPES.map((eventType) => (
+            <option key={eventType} value={eventType}>
+              {eventType}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id={`${formId}-from-party`} label="From party (optional)">
+        <Input id={`${formId}-from-party`} name="fromParty" type="text" placeholder="From party (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-to-party`} label="To party">
+        <Input id={`${formId}-to-party`} name="toParty" type="text" required placeholder="To party" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${formId}-occurred-at`} label="Occurred at">
+        <Input id={`${formId}-occurred-at`} name="occurredAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…" className="w-fit">
         Record custody
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

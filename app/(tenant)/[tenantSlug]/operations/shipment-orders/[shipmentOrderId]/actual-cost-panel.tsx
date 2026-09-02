@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ShipmentActualCostDirectoryRow, ShipmentActualCostComponent, ActualCostVariance } from "../../../../../../server/contracts/actual-cost/actual-cost.ts";
 import type { AssignmentCandidate } from "../../../../../../server/contracts/resource-assignment/resource-assignment.ts";
@@ -47,21 +52,36 @@ export function ActualCostPanel({
   if (!cost) {
     return (
       <form action={createFormAction} className="flex flex-wrap items-end gap-2" noValidate>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Currency
-          <input type="text" name="currency" required defaultValue="IDR" className="w-20 rounded border border-neutral-300 px-2 py-1" />
-        </label>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Estimated amount (optional)
-          <input type="number" name="estimatedAmount" min={0} step="any" className="w-40 rounded border border-neutral-300 px-2 py-1" />
-        </label>
+        <FormField id="actual-cost-currency" label="Currency">
+          <Input
+            id="actual-cost-currency"
+            type="text"
+            name="currency"
+            required
+            defaultValue="IDR"
+            className="w-20"
+            invalid={Boolean(createState.error)}
+            aria-describedby={createState.error ? "actual-cost-create-error" : undefined}
+          />
+        </FormField>
+        <FormField id="actual-cost-estimated-amount" label="Estimated amount (optional)">
+          <NumberInput
+            id="actual-cost-estimated-amount"
+            name="estimatedAmount"
+            min={0}
+            step="any"
+            className="w-40"
+            invalid={Boolean(createState.error)}
+            aria-describedby={createState.error ? "actual-cost-create-error" : undefined}
+          />
+        </FormField>
         <Button type="submit" loading={createPending} loadingLabel="Starting…">
           Start actual cost
         </Button>
         {createState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {createState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id="actual-cost-create-error">{createState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     );
@@ -121,6 +141,8 @@ function ComponentRow({
   readonly removeAction: (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
 }) {
   const [removeState, removeFormAction, removePending] = useActionState(removeAction, INITIAL_STATE);
+  // This component renders once per cost component, so the error id must be row-unique.
+  const rowId = useId();
   return (
     <li className="flex flex-wrap items-center gap-2 rounded-md border border-neutral-200 p-2 text-sm">
       <span className="font-medium text-neutral-900">{component.category}</span>
@@ -138,11 +160,7 @@ function ComponentRow({
           </Button>
         </form>
       ) : null}
-      {removeState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {removeState.error}
-        </p>
-      ) : null}
+      {removeState.error ? <ValidationMessage id={`${rowId}-remove-error`}>{removeState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -155,11 +173,11 @@ function AddComponentForm({
   readonly vendors: readonly AssignmentCandidate[];
 }) {
   const [state, formAction, pending] = useActionState(addComponentAction, INITIAL_STATE);
+  const describedBy = state.error ? "add-component-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 border-t border-neutral-200 pt-2" noValidate>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Category
-        <select name="category" required defaultValue="freight" className="rounded border border-neutral-300 px-2 py-1">
+      <FormField id="component-category" label="Category">
+        <Select id="component-category" name="category" required defaultValue="freight" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="freight">freight</option>
           <option value="trucking">trucking</option>
           <option value="fuel_surcharge">fuel_surcharge</option>
@@ -167,53 +185,46 @@ function AddComponentForm({
           <option value="customs">customs</option>
           <option value="warehousing">warehousing</option>
           <option value="other">other</option>
-        </select>
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Source
-        <select name="sourceType" required defaultValue="vendor" className="rounded border border-neutral-300 px-2 py-1">
+        </Select>
+      </FormField>
+      <FormField id="component-source-type" label="Source">
+        <Select id="component-source-type" name="sourceType" required defaultValue="vendor" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="vendor">vendor</option>
           <option value="internal">internal</option>
-        </select>
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Vendor
-        <select name="vendorId" className="rounded border border-neutral-300 px-2 py-1">
+        </Select>
+      </FormField>
+      <FormField id="component-vendor-id" label="Vendor">
+        <Select id="component-vendor-id" name="vendorId" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">—</option>
           {vendors.map((vendor) => (
             <option key={vendor.id} value={vendor.id}>
               {vendor.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Quantity
-        <input type="number" name="quantity" required min={0.0001} step="any" defaultValue={1} className="w-24 rounded border border-neutral-300 px-2 py-1" />
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        UOM
-        <input type="text" name="uom" className="w-24 rounded border border-neutral-300 px-2 py-1" />
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Rate
-        <input type="number" name="rate" required min={0} step="any" className="w-32 rounded border border-neutral-300 px-2 py-1" />
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Minimum
-        <input type="number" name="minimumCharge" min={0} step="any" className="w-32 rounded border border-neutral-300 px-2 py-1" />
-      </label>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Surcharge
-        <input type="number" name="surcharge" min={0} step="any" defaultValue={0} className="w-24 rounded border border-neutral-300 px-2 py-1" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="component-quantity" label="Quantity">
+        <NumberInput id="component-quantity" name="quantity" required min={0.0001} step="any" defaultValue={1} className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="component-uom" label="UOM">
+        <Input id="component-uom" type="text" name="uom" className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="component-rate" label="Rate">
+        <NumberInput id="component-rate" name="rate" required min={0} step="any" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="component-minimum-charge" label="Minimum">
+        <NumberInput id="component-minimum-charge" name="minimumCharge" min={0} step="any" className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="component-surcharge" label="Surcharge">
+        <NumberInput id="component-surcharge" name="surcharge" min={0} step="any" defaultValue={0} className="w-24" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
         Add component
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="add-component-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -227,9 +238,9 @@ function SubmitForm({ submitAction }: { readonly submitAction: (prevState: Shipm
         Submit for approval
       </Button>
       {state.error ? (
-        <p role="alert" className="mt-1 text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="mt-1">
+          <ValidationMessage id="actual-cost-submit-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -239,10 +250,15 @@ function DecideForm({ decideAction }: { readonly decideAction: (prevState: Shipm
   const [state, formAction, pending] = useActionState(decideAction, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Reason (required to reject)
-        <input type="text" name="reason" className="rounded border border-neutral-300 px-2 py-1" />
-      </label>
+      <FormField id="actual-cost-decide-reason" label="Reason (required to reject)">
+        <Input
+          id="actual-cost-decide-reason"
+          type="text"
+          name="reason"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "actual-cost-decide-error" : undefined}
+        />
+      </FormField>
       <Button type="submit" name="decision" value="approved" loading={pending} loadingLabel="Saving…">
         Approve
       </Button>
@@ -250,9 +266,9 @@ function DecideForm({ decideAction }: { readonly decideAction: (prevState: Shipm
         Reject
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="actual-cost-decide-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -262,17 +278,23 @@ function AdjustForm({ adjustAction }: { readonly adjustAction: (prevState: Shipm
   const [state, formAction, pending] = useActionState(adjustAction, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 border-t border-neutral-200 pt-2" noValidate>
-      <label className="flex flex-col text-sm text-neutral-700">
-        Adjustment reason
-        <input type="text" name="adjustmentReason" required className="rounded border border-neutral-300 px-2 py-1" />
-      </label>
+      <FormField id="actual-cost-adjustment-reason" label="Adjustment reason">
+        <Input
+          id="actual-cost-adjustment-reason"
+          type="text"
+          name="adjustmentReason"
+          required
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "actual-cost-adjust-error" : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Starting…">
         Adjust (new version)
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="actual-cost-adjust-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

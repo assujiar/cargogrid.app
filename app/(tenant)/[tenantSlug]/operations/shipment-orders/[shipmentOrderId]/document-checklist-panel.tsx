@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ChecklistItemView, ChecklistCompleteness } from "../../../../../../server/contracts/document-requirement/document-requirement.ts";
 import type { ShipmentOrderFormState } from "./actions.ts";
@@ -46,9 +51,9 @@ export function DocumentChecklistPanel({
           Sync checklist
         </Button>
         {pinState.error ? (
-          <p role="alert" className="mt-1 text-sm text-danger">
-            {pinState.error}
-          </p>
+          <div className="mt-1">
+            <ValidationMessage id="checklist-pin-error">{pinState.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
 
@@ -76,6 +81,17 @@ function ChecklistItemRow({
 }) {
   const [uploadState, uploadFormAction, uploadPending] = useActionState(uploadAction, INITIAL_STATE);
   const [reviewState, reviewFormAction, reviewPending] = useActionState(reviewAction, INITIAL_STATE);
+  // This component renders once per checklist item, so every id must be row-unique.
+  const rowId = useId();
+  const filenameId = `${rowId}-original-filename`;
+  const mimeTypeId = `${rowId}-mime-type`;
+  const sizeBytesId = `${rowId}-size-bytes`;
+  const notesId = `${rowId}-notes`;
+  const expiresAtId = `${rowId}-expires-at`;
+  const uploadErrorId = `${rowId}-upload-error`;
+  const reviewErrorId = `${rowId}-review-error`;
+  const uploadDescribedBy = uploadState.error ? uploadErrorId : undefined;
+  const reviewDescribedBy = reviewState.error ? reviewErrorId : undefined;
 
   return (
     <li className="rounded-md border border-neutral-200 p-3">
@@ -88,42 +104,37 @@ function ChecklistItemRow({
       {item.reviewNotes ? <p className="mt-1 text-sm text-neutral-600">Notes: {item.reviewNotes}</p> : null}
 
       <form action={uploadFormAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Filename
-          <input type="text" name="originalFilename" required className="rounded border border-neutral-300 px-2 py-1" placeholder="pod.pdf" />
-        </label>
-        <label className="flex flex-col text-sm text-neutral-700">
-          MIME type
-          <select name="mimeType" required defaultValue="application/pdf" className="rounded border border-neutral-300 px-2 py-1">
+        <FormField id={filenameId} label="Filename">
+          <Input id={filenameId} type="text" name="originalFilename" required placeholder="pod.pdf" invalid={Boolean(uploadState.error)} aria-describedby={uploadDescribedBy} />
+        </FormField>
+        <FormField id={mimeTypeId} label="MIME type">
+          <Select id={mimeTypeId} name="mimeType" required defaultValue="application/pdf" invalid={Boolean(uploadState.error)} aria-describedby={uploadDescribedBy}>
             <option value="application/pdf">application/pdf</option>
             <option value="image/jpeg">image/jpeg</option>
             <option value="image/png">image/png</option>
-          </select>
-        </label>
-        <label className="flex flex-col text-sm text-neutral-700">
-          Size (bytes)
-          <input type="number" name="sizeBytes" required min={1} defaultValue={102400} className="w-28 rounded border border-neutral-300 px-2 py-1" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={sizeBytesId} label="Size (bytes)">
+          <NumberInput id={sizeBytesId} name="sizeBytes" required min={1} defaultValue={102400} className="w-28" invalid={Boolean(uploadState.error)} aria-describedby={uploadDescribedBy} />
+        </FormField>
         <Button type="submit" loading={uploadPending} loadingLabel="Uploading…" variant="secondary">
           Upload &amp; link
         </Button>
       </form>
       {uploadState.error ? (
-        <p role="alert" className="mt-1 text-sm text-danger">
-          {uploadState.error}
-        </p>
+        <div className="mt-1">
+          <ValidationMessage id={uploadErrorId}>{uploadState.error}</ValidationMessage>
+        </div>
       ) : null}
 
       {item.fileId ? (
         <form action={reviewFormAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
-          <label className="flex flex-col text-sm text-neutral-700">
-            Notes
-            <input type="text" name="notes" className="rounded border border-neutral-300 px-2 py-1" />
-          </label>
-          <label className="flex flex-col text-sm text-neutral-700">
-            Expires at (approve only)
-            <input type="datetime-local" name="expiresAt" className="rounded border border-neutral-300 px-2 py-1" />
-          </label>
+          <FormField id={notesId} label="Notes">
+            <Input id={notesId} type="text" name="notes" invalid={Boolean(reviewState.error)} aria-describedby={reviewDescribedBy} />
+          </FormField>
+          <FormField id={expiresAtId} label="Expires at (approve only)">
+            <Input id={expiresAtId} type="datetime-local" name="expiresAt" invalid={Boolean(reviewState.error)} aria-describedby={reviewDescribedBy} />
+          </FormField>
           <Button type="submit" name="decision" value="approved" loading={reviewPending} loadingLabel="Saving…" disabled={item.malwareScanStatus !== "clean"}>
             Approve
           </Button>
@@ -134,9 +145,9 @@ function ChecklistItemRow({
       ) : null}
       {item.fileId && item.malwareScanStatus !== "clean" ? <p className="mt-1 text-xs text-neutral-500">Scan status: {item.malwareScanStatus} — approval is blocked until the file scans clean.</p> : null}
       {reviewState.error ? (
-        <p role="alert" className="mt-1 text-sm text-danger">
-          {reviewState.error}
-        </p>
+        <div className="mt-1">
+          <ValidationMessage id={reviewErrorId}>{reviewState.error}</ValidationMessage>
+        </div>
       ) : null}
     </li>
   );
