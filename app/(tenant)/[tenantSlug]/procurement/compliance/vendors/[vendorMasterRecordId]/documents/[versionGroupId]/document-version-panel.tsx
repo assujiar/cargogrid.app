@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import { Button } from "../../../../../../../../../components/ui/button.tsx";
+import { Breadcrumb } from "../../../../../../../../../components/ui/breadcrumb.tsx";
 import { StatusBadge } from "../../../../../../../../../components/ui/status-badge.tsx";
 import { ValidationMessage } from "../../../../../../../../../components/forms/validation-message.tsx";
 import type { VendorComplianceDocument, VendorComplianceAccessResult } from "../../../../../../../../../server/contracts/vendor-compliance/vendor-compliance.ts";
@@ -84,9 +84,20 @@ export function DocumentVersionPanel({
   return (
     <div className="flex flex-col gap-4">
       <header>
-        <Link href={`/${tenantSlug}/procurement/compliance/vendors/${vendorMasterRecordId}`} className="text-xs text-primary underline">
-          ← Back to {vendorLegalName}
-        </Link>
+        {/* `ISS-2026-246`: five segments below the tenant root
+            (`/{tenant}/procurement/compliance/vendors/{id}/documents/{versionGroup}`),
+            with one "← Back to {vendor}" link as the only orientation. `Breadcrumb`
+            renders the trail and keeps that exact vendor href. "Procurement" carries no
+            `href`: `/{tenant}/procurement` has no index page, and a crumb must never
+            link to a route that does not exist. */}
+        <Breadcrumb
+          items={[
+            { label: "Procurement" },
+            { label: "Compliance", href: `/${tenantSlug}/procurement/compliance` },
+            { label: vendorLegalName, href: `/${tenantSlug}/procurement/compliance/vendors/${vendorMasterRecordId}` },
+            { label: "Version history" },
+          ]}
+        />
         <h1 className="mt-1 text-xl font-semibold text-neutral-900">{requirementName ?? "Compliance evidence"} — version history</h1>
         <p className="text-xs text-neutral-500">Every submitted/renewed version, oldest to newest. Renewal never deletes prior evidence.</p>
       </header>

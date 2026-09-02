@@ -70,3 +70,33 @@ export async function signInAction(_prevState: SignInFormState, formData: FormDa
 
   redirect(target);
 }
+
+/**
+ * Sign-out Server Action -- the counterpart `lib/supabase/server.ts`'s own header already
+ * described as existing ("login/logout (this checkpoint's own Server Actions) work
+ * correctly without it") and which in fact did not: before `ISS-2026-246` there was no
+ * sign-out path anywhere in this repository, so an authenticated principal could not end
+ * their own session from any portal. Built here, beside `signInAction`, because this file
+ * is already the one session-lifecycle action module and `app/(public)/` is the shared,
+ * portal-agnostic route group all three shells (Tenant Admin, Commercial, Supreme) reach.
+ *
+ * `supabase.auth.signOut()` revokes the refresh token server-side and clears the session
+ * cookie through the `setAll` writer in `lib/supabase/server.ts` -- writable here because
+ * a Server Action is exactly the context Next.js permits cookie writes in (that file's own
+ * header). A revocation failure (backend unreachable, token already expired) must still
+ * land the caller on `/login` rather than leaving them stranded inside a shell they can no
+ * longer act in, so the failure is swallowed and the redirect happens regardless; the
+ * cookie write is the part that actually ends this browser's session.
+ *
+ * `redirect()` throws its control-flow signal, so it is deliberately outside the `try`.
+ */
+export async function signOutAction(): Promise<void> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    await supabase.auth.signOut();
+  } catch {
+    // Never trap a user inside a portal because sign-out could not reach the backend.
+  }
+
+  redirect("/login");
+}
