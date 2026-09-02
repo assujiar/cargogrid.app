@@ -78,9 +78,9 @@ describe("requestTenantDomain", () => {
   });
 
   test("wraps a reserved_hostname error", async () => {
-    const client = fakeClient({ data: null, error: { message: "reserved_hostname: cargogrid.app is a reserved platform hostname and cannot be claimed" } });
+    const client = fakeClient({ data: null, error: { message: "reserved_hostname: app.cargogrid.net is a reserved platform hostname and cannot be claimed" } });
     await assert.rejects(
-      () => requestTenantDomain(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, hostname: "cargogrid.app", requestedBy: "tester" }),
+      () => requestTenantDomain(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, hostname: "app.cargogrid.net", requestedBy: "tester" }),
       (err: unknown) => {
         assert.ok(err instanceof CustomDomainMutationError);
         assert.equal(err.code, "reserved_hostname");

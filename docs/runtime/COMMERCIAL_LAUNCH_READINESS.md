@@ -49,6 +49,9 @@ someone owns, a person's signature, or a company's invoice.
 `docs/runbooks/human-execution-pack.md` has the exact steps for each. Below is what each one
 is and what it costs you to skip it.
 
+<details>
+<summary><strong>Superseded 2026-09-03 — the original §3.0, kept because this file is an append-only ledger and a superseded instruction is still evidence of what was believed at the time. Do not act on it; §3.0 below replaces it.</strong></summary>
+
 ### 3.0 Point `cargogrid.app` at CargoGrid — and know what it replaces
 
 **Read this one first.** It was found on 2026-08-31 during live verification and it changes what
@@ -81,6 +84,45 @@ if the current page matters, keep it somewhere first.
 
 **Tracked as** `ISS-2026-311`.
 
+</details>
+
+### 3.0 Point `app.cargogrid.net` at CargoGrid
+
+**Rewritten 2026-09-03, and the rewrite is the news.** This section previously said that
+publishing would *replace* a live public page, because the plan was to put CargoGrid on
+`cargogrid.app` — an address already serving a different site built with a website builder. The
+owner has since chosen a different address: **CargoGrid's standard domain is
+`app.cargogrid.net`**. That removes the whole replacement problem. Nothing public is taken away,
+because the app now lives in a different DNS zone entirely from whatever `cargogrid.app` serves.
+
+**What `app.cargogrid.net` is.** The standard address for tenants and for the Supreme Admin
+console — the one everybody uses who has not asked for something else. A tenant that wants its
+own branded address still requests one through the tenant custom-domain flow inside the app; that
+capability is unchanged and fully working, and this rename did not touch it.
+
+**"Deploy" and "publish" are still two separate actions, and only one of them is a deploy.**
+
+1. *Deploy* — put the current build live on the hosting platform. It becomes reachable at a
+   long `…vercel.app` address. This session can do that, once you say go.
+2. *Publish* — make `app.cargogrid.net` show CargoGrid: attach the domain in Vercel and add one
+   DNS record in the `cargogrid.net` zone. Exact steps are in
+   `docs/runbooks/human-execution-pack.md` §0.2.
+
+**Why step 2 is not done here.** It needs access to your DNS and your Vercel domain settings,
+neither of which this session has.
+
+**Risk if you skip it.** Nothing breaks — you simply have CargoGrid running at an address nobody
+knows, and no customer can reach it. Unlike the previous plan, there is no longer a risk of
+publishing *by accident* and taking a live page down with it: a brand-new subdomain on a separate
+zone replaces nothing.
+
+**One thing this document does not know, said plainly rather than assumed.** Whether the
+`cargogrid.net` zone is already under your control, and where its DNS is hosted, has not been
+verified from this session — the previous domain was on Cloudflare, but that tells us nothing
+about this one. Confirm you can add a record to `cargogrid.net` before scheduling the cutover.
+
+**Tracked as** `ISS-2026-311`.
+
 ### 3.0b You have exactly one administrator account — consider a second
 
 **Status: not urgent, and not a defect.** You confirmed you know the password for
@@ -88,10 +130,16 @@ if the current page matters, keep it somewhere first.
 launch-blocking question (`ISS-2026-294`).
 
 **What is still true.** That is the *only* administrator identity that exists. No second Supreme
-Admin, no other user account at all, and no recovery path anyone has tested. Note also that the
-address is on `cargogrid.net` while your product domain is `cargogrid.app` — if that was a typo
-when the account was created, the mailbox may not exist, and a password reset would have nowhere
-to go.
+Admin, no other user account at all, and no recovery path anyone has tested.
+
+**Resolved 2026-09-03 — the mismatch this paragraph used to warn about was not a mistake.** It
+previously read that the admin address sits on `cargogrid.net` while the product domain was
+`cargogrid.app`, and raised the possibility of a typo leaving the mailbox non-existent and a
+password reset with nowhere to go. The owner has now set the product's standard domain to
+`app.cargogrid.net` (`ISS-2026-311`), so the account and the product are on the same zone after
+all and the suspected typo was the *product domain*, not the account. Worth keeping the concrete
+check anyway: send a password reset to `service@cargogrid.net` once and confirm it arrives, since
+"the domain is right" and "the mailbox is deliverable" are still two different facts.
 
 **Risk if you skip it.** Ordinary bad luck: a forgotten password, a lost password manager, a
 laptop that dies. With one account and possibly no working reset mailbox, that is not an
@@ -225,12 +273,15 @@ with no failover (`ISS-2026-261`).
 **What is still deliberately not done, and why.** `/status` shares a host with the
 application: if the hosting platform itself goes down, the page never loads either. A page
 that survives *that* needs a second host, and standing one up is likely not the purchase it
-sounds like: `cargogrid.app` already resolves through Cloudflare's edge today (`server:
-cloudflare`, live-verified — see `ISS-2026-311`), so whoever controls that DNS zone can very
-likely host a free Cloudflare Pages page and point `status.cargogrid.app` at it with one DNS
-record, roughly the same ten minutes as this document's own CNAME step elsewhere — worth
-confirming against your actual Cloudflare account rather than assumed. It stays your call
-because this session holds no Cloudflare credential of any kind, not because it costs money.
+sounds like. The *previous* domain `cargogrid.app` resolved through Cloudflare's edge
+(`server: cloudflare`, live-verified at the time), which made a free Cloudflare Pages page an
+obvious ten-minute answer. That reasoning no longer transfers automatically: the product domain
+is now `app.cargogrid.net` (`ISS-2026-311`) and **where the `cargogrid.net` zone is hosted has
+not been verified from this session**. If it is also on Cloudflare, the same trick applies — a
+free Pages site with `status.cargogrid.net` pointed at it by one DNS record. If it is not, most
+registrars and hosts offer something equivalent. Confirm against your actual account rather than
+taking the old estimate forward. It stays your call because this session holds no DNS credential
+of any kind, not because it costs money.
 
 **Risk if you skip the second host.** In the one outage class `/status` cannot cover — the
 hosting platform itself down — you reach customers by whatever channel you already have, by

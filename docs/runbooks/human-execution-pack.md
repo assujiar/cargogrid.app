@@ -11,9 +11,9 @@ removes a whole class of accident, so do it first.
 
 ## 0. Promote the build to production, and put CargoGrid on a subdomain — `ISS-2026-311`
 
-**Time:** promote is 2 minutes; the subdomain is ~15 minutes plus DNS propagation.
-**Needs:** access to the Vercel project `cargogrid-app` (team `saiki-tech`) and to Cloudflare DNS
-for `cargogrid.app`.
+**Time:** promote is 2 minutes; the domain is ~15 minutes plus DNS propagation.
+**Needs:** access to the Vercel project `cargogrid-app` (team `saiki-tech`) and to DNS for
+`cargogrid.net`.
 
 The go decision is recorded (`GO_DECISION.json`, `RGL-414.md`). The build is finished and
 verified. Two steps remain and both need your account.
@@ -39,35 +39,45 @@ obstacle to work around.
 environment. Weigh it deliberately — it hands an automated session the ability to deploy to
 production.
 
-### 0.2 Put CargoGrid on a subdomain, leaving `cargogrid.app` alone
+### 0.2 Point `app.cargogrid.net` at the Vercel project
 
-You chose *"Pakai subdomain saja"*, so the page currently on `cargogrid.app` stays exactly as it
-is. Nothing public is replaced. `app.cargogrid.app` is the conventional choice; any subdomain
-works.
+**This section was rewritten 2026-09-03.** It previously described putting CargoGrid on
+`app.cargogrid.app`, alongside the existing page on `cargogrid.app`. The owner has since chosen a
+different domain entirely: **CargoGrid's standard domain is `app.cargogrid.net`**. That change
+makes the old "leave the existing site alone" instruction unnecessary rather than merely
+different — the app now lives in a separate DNS zone, so whatever `cargogrid.app` serves is
+untouched by construction and is out of this runbook's scope.
+
+`app.cargogrid.net` is the standard address for tenants and for the Supreme Admin console. It is
+not the only way in: a tenant that wants its own branded address still requests one through the
+tenant custom-domain flow in the app, which is unchanged and fully working.
 
 **In Vercel** — Project `cargogrid-app` → Settings → Domains → Add:
 
-- enter `app.cargogrid.app`;
+- enter `app.cargogrid.net`;
 - assign it to the **Production** environment;
 - Vercel will show the DNS record it wants. Copy it exactly rather than the example below — Vercel
   sometimes issues a project-specific target.
 
-**In Cloudflare** — DNS for `cargogrid.app` → Add record:
+**In your DNS provider for `cargogrid.net`** — add a record:
 
 | Field | Value |
 |---|---|
 | Type | `CNAME` |
 | Name | `app` |
 | Target | the value Vercel showed (typically `cname.vercel-dns.com`) |
-| Proxy status | **DNS only** (grey cloud, *not* orange) |
+| Proxy / CDN status | **off** — a plain DNS record, not proxied |
 | TTL | Auto |
 
-**The proxy setting matters.** Leaving Cloudflare's orange-cloud proxy on puts Cloudflare in front
-of Vercel's own edge. That commonly breaks TLS certificate issuance, and when it does not, you get
-two CDNs caching the same responses with different rules — which is a genuinely unpleasant class
-of bug to debug later. Grey cloud.
+**Stated rather than assumed: this runbook does not know how `cargogrid.net` is hosted.** The
+previous domain was fronted by Cloudflare, which is why the old text named Cloudflare's
+orange-cloud toggle specifically. Whether `cargogrid.net` sits on Cloudflare, on a registrar's own
+DNS, or somewhere else has not been verified from here, so the table says "proxy / CDN status"
+generically. If it *is* Cloudflare, the setting is the grey cloud (**DNS only**).
 
-**Do not touch the existing `cargogrid.app` or `www` records.** Those serve the current site.
+**Why proxying matters wherever it lives.** Putting another CDN in front of Vercel's own edge
+commonly breaks TLS certificate issuance, and when it does not, you get two CDNs caching the same
+responses under different rules — a genuinely unpleasant class of bug to debug months later.
 
 ### 0.3 Verify, and what to expect
 
@@ -75,21 +85,15 @@ Wait for Vercel to show the domain as **Valid Configuration** (usually minutes; 
 longer). Then:
 
 ```
-curl -sS https://app.cargogrid.app/api/health
-curl -sS https://app.cargogrid.app/api/ready
+curl -sS https://app.cargogrid.net/api/health
+curl -sS https://app.cargogrid.net/api/ready
 ```
 
 **Expect these to be blocked at first, and that is not a fault.** The project has Vercel
-Authentication (SSO) enabled for `all_except_custom_domains`. Once `app.cargogrid.app` is a real
+Authentication (SSO) enabled for `all_except_custom_domains`. Once `app.cargogrid.net` is a real
 custom domain it is exempt, so the endpoints answer. If you get a redirect to a Vercel login page
 instead, the domain is not yet recognised as a custom domain — wait for *Valid Configuration* and
 retry rather than changing the protection setting.
-
-Also confirm the untouched half:
-
-```
-curl -sSI https://cargogrid.app/ | head -1     # should still be the existing site, HTTP 200
-```
 
 ### 0.4 Tell me when it is done
 
@@ -345,18 +349,18 @@ CargoGrid runs on one backend vendor with no failover (`ISS-2026-261`). You are 
 this from scratch; skip straight to the residual below.
 
 **Time:** roughly ten minutes, likely without a purchase. **Needs:** access to whichever
-account controls the `cargogrid.app` DNS zone.
+account controls the `cargogrid.net` DNS zone.
 
 **The one thing `/status` cannot cover: the hosting platform itself going down.** It shares a
 host with the application, so it goes dark exactly when a platform-wide outage would make it
 most useful. A page that survives that needs a second host.
 
-`cargogrid.app` already resolves through Cloudflare's edge today (`server: cloudflare`,
+`cargogrid.net`'s hosting has not been verified from here (the previous domain, `cargogrid.app`, resolved through Cloudflare's edge —
 live-verified — see `ISS-2026-311`), which means the account that controls that DNS zone can
 very likely create a free Cloudflare Pages project, upload one static HTML page, and point
-`status.cargogrid.app` at it with a single DNS record — the same shape as this document's own
+`status.cargogrid.net` at it with a single DNS record — the same shape as this document's own
 CNAME step elsewhere, not a new subscription. Confirm you actually hold that Cloudflare account
-before starting; if `cargogrid.app` is fronted by someone else's Cloudflare zone (a reseller,
+before starting; if `cargogrid.net` is fronted by someone else's zone (a reseller,
 a prior owner), a hosted status service or a page on any other host and domain works exactly
 as well.
 

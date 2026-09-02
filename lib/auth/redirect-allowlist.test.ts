@@ -36,13 +36,13 @@ describe("validateRedirectTarget", () => {
   });
 
   test("rejects an absolute URL to a non-allowlisted origin", () => {
-    const result = validateRedirectTarget("https://evil.example/phish", ["https://cargogrid.app"]);
+    const result = validateRedirectTarget("https://evil.example/phish", ["https://app.cargogrid.net"]);
     assert.equal(result.safe, false);
     assert.equal(result.reason, "origin_not_allowlisted");
   });
 
   test("accepts an absolute URL whose origin is explicitly allowlisted", () => {
-    const result = validateRedirectTarget("https://cargogrid.app/dashboard", ["https://cargogrid.app"]);
+    const result = validateRedirectTarget("https://app.cargogrid.net/dashboard", ["https://app.cargogrid.net"]);
     assert.equal(result.safe, true);
   });
 
@@ -67,6 +67,6 @@ describe("validateRedirectTarget", () => {
   test("still accepts legitimate paths with no control characters", () => {
     assert.equal(validateRedirectTarget("/dashboard").safe, true);
     assert.equal(validateRedirectTarget("/tenant/acme/admin?tab=users").safe, true);
-    assert.equal(validateRedirectTarget("https://cargogrid.app/dashboard", ["https://cargogrid.app"]).safe, true);
+    assert.equal(validateRedirectTarget("https://app.cargogrid.net/dashboard", ["https://app.cargogrid.net"]).safe, true);
   });
 });

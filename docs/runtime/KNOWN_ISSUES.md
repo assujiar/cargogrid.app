@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 12 — 4 High, 3 Medium, 5 Low |
-| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 10 — formally ruled, not pending work |
-| `RESOLVED` | 255 |
+| `OPEN` | 3 — 1 Medium, 2 Low |
+| `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 18 — formally ruled, not pending work (8 added 2026-09-03 by owner override, see ADR-0027 Part B) |
+| `RESOLVED` | 256 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -56,9 +56,9 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-151` | Medium | `RESOLVED` | the mandatory RPD-023 step-up-authorization ruling: `app.assert_current_step_up_authorization` (IAE-027) is real and correct but has zero live callers |
 | `ISS-2026-249` | High | `RESOLVED` | IAE-030's own real, dedicated alerting system (`app.raise_observability_alert`) remains unwired from every failure producer except this checkpoint's o |
 | `ISS-2026-254` | Medium | `RESOLVED` | a database restore to a point predating an active security/compliance decision silently reverts that decision, with no compensating control |
-| `ISS-2026-255` | High | `OPEN` | real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in thi |
-| `ISS-2026-261` | High | `OPEN` | CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unco |
-| `ISS-2026-289` | High | `OPEN` | GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repos |
+| `ISS-2026-255` | High | `ACCEPTED_RISK` | real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in thi |
+| `ISS-2026-261` | High | `ACCEPTED_RISK` | CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unco |
+| `ISS-2026-289` | High | `ACCEPTED_RISK` | GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repos |
 | `ISS-2026-058` | Medium | `RESOLVED` | PRC-262 "manual confirmation with evidence" (§22) — undisclosed C-23 gap |
 | `ISS-2026-060` | Medium | `RESOLVED` | Vendor rate engine (PRC-255) has no `zone`/`distance` pricing dimension |
 | `ISS-2026-061` | Medium | `ACCEPTED_EXCEPTION` | Vendor invoice match-exception approval bypasses the canonical Platform approval engine |
@@ -75,11 +75,11 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-100` | Medium | `RESOLVED` | Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the re |
 | `ISS-2026-125` | Medium | `RESOLVED` | Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), p |
 | `ISS-2026-138` | Medium | `RESOLVED` | RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud rele |
-| `ISS-2026-140` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes |
+| `ISS-2026-140` | Medium | `ACCEPTED_RISK` | zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes |
 | `ISS-2026-141` | Medium | `RESOLVED` | zero load/performance-test evidence exists for any Phase 8 route or RPC at declared target volume |
 | `ISS-2026-142` | Medium | `RESOLVED` | Customer Portal and Loyalty Closure Verification (CPL-327): RPD-025 retention/legal-hold classification is unbuilt for every Phase 8 Customer Portal/L |
 | `ISS-2026-148` | Medium | `RESOLVED` | zero load/performance-test evidence exists for any Phase 9 route or RPC at a declared target volume, undisclosed until now |
-| `ISS-2026-153` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes |
+| `ISS-2026-153` | Medium | `ACCEPTED_RISK` | zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes |
 | `ISS-2026-155` | Medium | `RESOLVED` | a genuine breach of two different `job`-mapped workload types (e.g. `analytics` + `reports`) for the same tenant within the dedup window collapses int |
 | `ISS-2026-160` | Medium | `RESOLVED` | the `e2e` CI job provides no environment, so every guarded route returns 500 and the portal-guard specs fail; the specs also encode a fail-safe intent |
 | `ISS-2026-172` | Medium | `RESOLVED` | `app.files` carries a table-level grant with no access log on a direct RLS read, and `storage_path` leaks past RPC layers that deliberately withhold i |
@@ -113,10 +113,10 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-317` | Low | `RESOLVED` | payroll loan cutover has no import path, and it is not opening-balance-shaped |
 | `ISS-2026-318` | Medium | `RESOLVED` | 111 `public.*` wrappers have lost their `security definer` flag on the live project, and the parity gate is structurally unable to see it |
 | `ISS-2026-319` | Low | `RESOLVED` | `finance_ar_open_items` / `finance_ap_open_items`.`source_document_id` carry the same unresolved-polymorphic-id shape, one hop further out than the four tables `ISS-2026-206` named |
-| `ISS-2026-320` | Low | `OPEN` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
+| `ISS-2026-320` | Low | `ACCEPTED_RISK` | the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened |
 | `ISS-2026-321` | Low | `RESOLVED` | the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself |
 | `ISS-2026-322` | Low | `RESOLVED` | the loyalty-liability reconciliation exception-type contract never learned the fourth live value `20260828070000` added, crashing the admin dashboard on a real row of that type |
-| `ISS-2026-311` | High | `OPEN` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
+| `ISS-2026-311` | High | `RESOLVED` | `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; deploy and publish are two different actions |
 | `ISS-2026-053` | Low | `RESOLVED` | `app.enqueue_job` (PLT-132)'s idempotency replay matches the key but never verifies the target tuple |
 | `ISS-2026-063` | Low | `RESOLVED` | Procurement dashboard query-budget mechanism has no dedicated test (closed 2026-08-27); large-scale load proof extended to all remaining 5 surfaces, 4 needed a real index fix (closed 2026-09-01) |
 | `ISS-2026-064` | Low | `RESOLVED` | Employee Master (HRT-274): client-side document upload and browser/accessibility E2E were disclosed, not built (manager-team UI route resolved earlier, 2026-08-27) |
@@ -151,9 +151,9 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-197` | Low | `RESOLVED` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
 | `ISS-2026-208` | Low | `RESOLVED` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
 | `ISS-2026-223` | Low | `RESOLVED` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
-| `ISS-2026-239` | Low | `OPEN` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
+| `ISS-2026-239` | Low | `ACCEPTED_RISK` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
 | `ISS-2026-243` | Low | `RESOLVED` | switching the e2e harness to a production build makes the pre-existing `reuseExistingServer` setting a real local-dev stale-build footgun |
-| `ISS-2026-244` | Low | `OPEN` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
+| `ISS-2026-244` | Low | `ACCEPTED_RISK` | Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emula |
 | `ISS-2026-245` | Low | `RESOLVED` | no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive  |
 | `ISS-2026-246` | Low | `OPEN` | 33 of 50 files in `components/ui/`+`components/forms/` have zero real importers outside the internal design-system showcase — a corrected finding, not |
 | `ISS-2026-248` | Low | `RESOLVED` | no automated ESLint guard exists to catch a raw fixed-pixel-width table or a sub-44px touch target, so this defect class can recur silently |
@@ -3880,7 +3880,7 @@ This is deliberate, tested, documented behavior — `scripts/db-tests/customer-l
 
 **Update (`2026-08-28`, Track B Batch 5):** the same `ISS-2026-285`/`013`/`036`/`092`/`115`-class doc-drift finding recurring a sixth time this session — already fixed at `supabase/migrations/20260810600000_harden_loyalty_redemption_maker_checker.sql`, which explicitly states "closes ISS-2026-139" and adds a real `LYL:Configure` check to the `discount_voucher` auto-compose branch, exactly resolution option (a) this entry's own text proposed. `scripts/db-tests/customer-loyalty-redemption.sql:1000-1075` carries a live regression block ("HDN-373 (ISS-2026-139...)") proving an `LYL:Edit`-only clerk now falls back to `pending_approval`. Independently re-confirmed by direct read before annotating. **Status `RESOLVED`** (doc-only, already fixed) — owner: closed.
 
-### ISS-2026-140 — zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes (Phase 8, CPL-326, `CG-S13-CPL-028`, Medium for the Customer Portal half / Low for the admin-Loyalty half, OPEN — partial, portal-guard navigation coverage now complete)
+### ISS-2026-140 — zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes (Phase 8, CPL-326, `CG-S13-CPL-028`, was Medium for the Customer Portal half / Low for the admin-Loyalty half, ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE) — partial, portal-guard navigation coverage now complete)
 
 Discovered `2026-08-20` at `CG-S13-CPL-028` (Prompt 326, Customer Portal and Loyalty Documentation Handoff), UX/accessibility/performance lens, independently re-verified this checkpoint rather than accepted from the lens's own word alone.
 
@@ -3903,6 +3903,16 @@ Re-enumerated live against the actual `app/(tenant)/[tenantSlug]` tree rather th
 Added **all 37** this checkpoint, in two new files: `e2e/customer-portal-guard.spec.ts` (the 28 Customer Portal routes) and `e2e/admin-loyalty-guard.spec.ts` (the 9 admin Loyalty routes), 74 tests total (2 per route: a real-looking tenant slug, and a genuinely nonexistent one), mirroring the established portal-guard pattern exactly — live-run against a real `next build && next start` production server in this sandbox (`CARGOGRID_E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`): **74/74 passed**. Direct source read of all 37 pages, not assumed uniform, found two distinct fail-safe shapes: 16 Customer Portal pages call `redirect('/login')` on `status !== "allowed"` (asserted the same way `e2e/tenant-admin-portal.spec.ts` already does: non-5xx status, URL `/login$`); the other 12 Customer Portal pages, plus all 9 admin-Loyalty pages (nested under the single shared `app/(tenant)/[tenantSlug]/admin/layout.tsx`, which itself redirects to `/login` before any nested page body runs — live-verified, not assumed from the page component's own defense-in-depth `notFound()` alone) resolve to a bare Next `notFound()` (asserted the same way `e2e/hris-employee-master.spec.ts` already does: non-5xx status, a real static heading from the "allowed" shell absent). No axe-core scan was added for any of the 37: 25 redirect to the already axe-scanned `/login` (rescanning identical shared markup 25 more times adds no signal); 12 render Next's own default 404 template, framework markup this repository's own established convention already declines to axe-check for the identical reason in every prior guard spec. This is not a shortcut invented for this checkpoint — it is the same reasoning already governing every pre-existing guarded-route spec in `e2e/`.
 
 **Remaining gap, precisely, not "most"/"all": 0 of the 37 named/discovered routes lack portal-guard navigation coverage; all 37 still lack a genuine axe-core scan of the real authenticated shell**, because none of them render this application's own owned markup without a live backend — the identical root cause `HDN-380` already diagnosed (`RLIMIT_NOFILE`/`runc` blocking every non-Postgres Supabase container in this sandbox) and re-verified unchanged as of `2026-08-28`. This checkpoint closes the "zero navigation evidence" gap completely but does not, and structurally cannot from inside this sandbox, close the "zero real accessibility-audit evidence" gap the entry's own title states, so it is not marked resolved. Owner unchanged, the same future e2e-environment-enablement task; disposition here remains `OPEN`.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** No automated accessibility audit has ever run against the Customer Portal or the admin Loyalty screens. Whether a screen-reader or keyboard-only user can complete a task there is untested, so an accessibility defect would reach a customer before it reached a report.
+
+**What would actually close it.** An e2e environment with a real, seeded authentication backend that Playwright can sign into — the same enabling work `ISS-2026-153` needs.
+
+**Status `ACCEPTED_RISK`**, was Medium. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-141 — zero load/performance-test evidence exists for any Phase 8 route or RPC at declared target volume (Phase 8, CPL-326, `CG-S13-CPL-028`, Medium, RESOLVED)
 
@@ -4191,7 +4201,7 @@ Root cause: the region↔capability matrix is checked exactly once, at `approve_
 
 **Update (`2026-08-28`, Track B Batch 5):** **Status `RESOLVED`.** Independently re-verified root cause: `app.request_ai_governed_action` (IAE-019) never referenced `app.resolve_tenant_region`/`app.region_service_capabilities`/`app.region_capability_exceptions` anywhere. `supabase/migrations/20260828090000_harden_ai_governed_action_region_capability_consult.sql` — same-signature `CREATE OR REPLACE FUNCTION`: consults the region/capability matrix at dispatch time; a tenant whose resolved region does not support `ai_provider` is refused (`ai_governed_action_region_capability_unsupported`) unless a real, approved `app.region_capability_exceptions` row is on file, in which case dispatch proceeds and the audit event gains `region_capability_exception_id`. Zero behavior change for the default (`apac`, fully supported) case — live-verified against all 8 db-test files calling this function. Deliberately goes one step beyond this entry's own literal minimum ask (tagging only) by also enforcing denial in the unsupported-and-unexcepted case, disclosed explicitly in the migration's own comment as a judgment call a reviewer could narrow to warn-only. New regression in `scripts/db-tests/ai-governance-provider-boundary.sql` (default-region dispatch unaffected; unsupported-with-no-exception refused; unsupported-with-a-real-exception succeeds and is audit-tagged); full suite `ALL PASSED`; applied live, function body live-verified — owner: closed.
 
-### ISS-2026-153 — zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes (Phase 9, `CG-S14-IAE-038`, Prompt 366 Documentation Handoff, UX/accessibility/performance lens, `OPEN` — partial, portal-guard navigation coverage now complete, Medium)
+### ISS-2026-153 — zero automated accessibility-audit evidence exists for any of Phase 9's own ~9 new admin/reporting/automation/integration UI routes (Phase 9, `CG-S14-IAE-038`, Prompt 366 Documentation Handoff, UX/accessibility/performance lens, `ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE)` — partial, portal-guard navigation coverage now complete, was Medium)
 
 Discovered `2026-08-22` at `CG-S14-IAE-038` (Prompt 366, Intelligence, Automation and Enterprise Documentation Handoff), UX/accessibility/performance lens — the identical condition, one phase later, as Phase 8's already-registered `ISS-2026-140`, never disclosed for Phase 9 specifically until now.
 
@@ -4210,6 +4220,16 @@ Discovered `2026-08-22` at `CG-S14-IAE-038` (Prompt 366, Intelligence, Automatio
 Added **all 16** this checkpoint in one new file, `e2e/phase9-admin-guard.spec.ts`, 32 tests total (2 per route), mirroring the established portal-guard pattern exactly — live-run against a real `next build && next start` production server in this sandbox: **32/32 passed**. Direct source read of all 16 pages found two fail-safe shapes: the 12 `resolveCommercialAccessForRequest`-guarded routes call bare `notFound()` (asserted the same way `e2e/hris-employee-master.spec.ts` already does); the 4 `/admin/*`-nested routes (`admin/api-keys`, `admin/monitoring`, `admin/integrations`, `admin/scheduler`) sit under the same shared `admin/layout.tsx` `e2e/admin-loyalty-guard.spec.ts` (`ISS-2026-140`) already documents, which redirects to `/login` before any nested page body runs (asserted the same way `e2e/tenant-admin-portal.spec.ts` already does). No axe-core scan was added for any of the 16, for the identical reason `ISS-2026-140`'s own update above gives: none of them render this application's own owned markup without a live backend to authenticate against.
 
 **Remaining gap, precisely: 0 of the 16 routes in this entry's own scope lack portal-guard navigation coverage; all 16 still lack a genuine axe-core scan of the real authenticated admin shell**, same root cause as `ISS-2026-140` (`HDN-380`'s `RLIMIT_NOFILE`/`runc` blocker, re-verified unchanged 2026-08-28). This checkpoint closes the "zero navigation evidence" gap completely (and widens it past this entry's own original, incomplete 9-route count) but does not, and structurally cannot from inside this sandbox, close the "zero real accessibility-audit evidence" gap the entry's own title states, so it is not marked resolved. Owner unchanged, the same future e2e-environment-enablement task `ISS-2026-140` names; disposition here remains `OPEN`.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** The same gap for Phase 9's own admin, reporting, automation and integration screens. Portal-guard navigation coverage for all 16 routes does exist and passes; what is missing is the audit of the authenticated screens themselves.
+
+**What would actually close it.** The same e2e auth environment as `ISS-2026-140`. These two close together or not at all.
+
+**Status `ACCEPTED_RISK`**, was Medium. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-154 — `scripts/db-tests/hris-attendance.sql:561` fails when the suite happens to run inside the ~1-hour window straddling the tenant's own 04:00 Jakarta (21:00 UTC) shift-day boundary (Phase 7, `HRT-278`, pre-existing, surfaced while establishing the fresh baseline gate re-run for `CG-S14-IAE-038`, Prompt 366 Documentation Handoff, `RESOLVED` 2026-08-23 at `CG-S15-HDN-002`, was Low)
 
@@ -7144,7 +7164,7 @@ page) for the next reader.
 **The ~10 lower-severity siblings are deliberately not changed.** Each reads a config/rule/rate/directory-shaped table naturally bounded by business cardinality, and this entry says so itself. Capping them would add a truncation notice to lists that never truncate — a warning nobody can act on, which teaches people to ignore warnings. The helper is there when one of them stops being naturally bounded.
 
 Every cap is asserted, not assumed: the fake clients now record `.range()`/`p_limit` and the tests check the exact values, so dropping a cap fails the suite rather than silently restoring the unbounded read. `typecheck`, `lint`, 5,693 unit tests, full `db:test` `ALL PASSED` (403 migrations, 238 runner files); applied live and object-verified.
-### ISS-2026-239 — 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real production query telemetry that does not yet exist anywhere in this system (found at `HDN-379` Performance and Scalability, unindexed-FK triage lens, `OPEN`, Low, owner: re-open once real production query traffic exists — re-ruled at `HDN-387` per `BLOCKER_LEDGER.md`'s `HDN-BLK-006`, correcting `HDN-379`'s own procedurally-invalid self-acceptance caught at `HDN-386`)
+### ISS-2026-239 — 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real production query telemetry that does not yet exist anywhere in this system (found at `HDN-379` Performance and Scalability, unindexed-FK triage lens, `ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE)`, was Low, owner: re-open once real production query traffic exists — re-ruled at `HDN-387` per `BLOCKER_LEDGER.md`'s `HDN-BLK-006`, correcting `HDN-379`'s own procedurally-invalid self-acceptance caught at `HDN-386`)
 
 Reproduced the advisory class directly against a live schema (`pg_constraint`/`pg_index`/`pg_attribute`, matching the Supabase advisor's own rule — a FK constraint whose column(s) are not the leading prefix of any index on that table): **892 confirmed unindexed**, spanning 424 distinct tables, out of 1,766 total FK constraints across ~570 distinct tables in `app` — unchanged from the matrix's own seeded count, no drift since `HDN-378`.
 
@@ -7155,6 +7175,16 @@ Sampled 24 FKs across Finance, Advanced TMS/WMS, Procurement, HRIS, Customer Por
 **Correction (Tier C correctness re-derivation lens): `audit_logs.actor_auth_user_id` was miscategorized as cold — a real, granted RPC does filter on it.** `app.search_audit_logs` (`supabase/migrations/20260807300000_create_intelligence_advanced_audit_impersonation.sql:166`) filters `and (p_actor_auth_user_id_filter is null or actor_auth_user_id = p_actor_auth_user_id_filter)`, is `EXECUTE`-granted to `authenticated`, and has a real TS wrapper (`searchAuditLogs`, `server/queries/advanced-audit.ts`) — but has **zero live UI callers anywhere under `app/`** (dead at the page layer, live and callable at the RPC layer). This doesn't overturn the "don't index yet" conclusion for this column specifically (an unreachable-from-the-UI filter is not yet a real production access pattern), but the original claim that no RPC filters through it at all was factually wrong, not merely a severity judgment call — corrected here rather than left standing.
 
 **Status `ACCEPTED_EXCEPTION`** (re-ruled at `HDN-387` under `00_EXECUTION_INDEX.md` §8.2's full 5-condition test, correcting `HDN-379`'s own procedurally-invalid self-acceptance), Low severity — a genuine, sample-verified absence of any small, high-confidence, low-risk indexing opportunity, not a disguised defect. **Not fixed by this checkpoint** — blindly indexing the cold candidates would be pure write-amplification cost for zero read benefit on some of the highest-write-volume tables in the system (every invoice/journal/bill line posting writes these), exactly the "blindly index" failure mode this checkpoint's own charter forbids; and the tool that would resolve the remaining ambiguous ~300-row candidate population definitively — real production query telemetry (`pg_stat_statements` or equivalent) — does not exist anywhere in this system yet (confirmed by this same matrix section's own item 3, "982 `unused_index` advisories... the database has served no queries... not actionable until it has"). Owner: a dedicated future task, to be executed once real production/load query telemetry exists at declared target volume — re-run this categorization against the ~300-row ambiguous candidate list and apply confirmed-hot indexes only, per the decision framework recorded in `docs/build-log/full-system-hardening/HDN-379.md`.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** The database reports 892 foreign keys with no index. Adding all of them blind would slow every write for no proven read benefit, and a 24-key sample across seven domains found no high-confidence "index this now" candidate. So the risk being accepted is that some page may be slower than it needs to be once real data arrives.
+
+**What would actually close it.** Real query telemetry from live tenants — which, as the owner correctly points out, cannot exist until the product is actually reachable. This is genuinely better decided later than guessed now.
+
+**Status `ACCEPTED_RISK`**, was Low. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-240 — the `auth_rls_initplan` regression guard is structurally blind to the equivalent `default auth.uid()` helper-function pattern, used 72 times across 35 migrations since the very first migration (found at `HDN-379` Performance and Scalability, SELECT*/cache-safety verification lens, `RESOLVED`, Low, owner a dedicated future task)
 
@@ -7303,7 +7333,7 @@ That is an environment fact, not a verdict on this change, and it is recorded ra
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — `playwright.config.ts`'s `webServer.command` is still `next build && next start`, `reuseExistingServer: !process.env["CI"]`, and its own comment at line 106 already names this entry (`ISS-2026-243`) explicitly, confirmed by direct read. Changing the default is a deliberate local-dev-ergonomics trade-off (real developers rely on `reuseExistingServer` to avoid rebuilding on every local test run), not a mechanical patch. Disposition unchanged, still `OPEN`.
 
-### ISS-2026-244 — Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emulation are reachable (found at `HDN-381` Browser and Device Compatibility, environment feasibility lens, `OPEN`, Low, `TRACKED_GAP`)
+### ISS-2026-244 — Safari (WebKit) and Firefox are structurally untestable in this sandbox; only Chromium-engine browsers (Chrome/Edge) plus mobile/tablet viewport emulation are reachable (found at `HDN-381` Browser and Device Compatibility, environment feasibility lens, `ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE)`, was Low, `TRACKED_GAP`)
 
 Confirmed directly: `/opt/pw-browsers` (this sandbox's `PLAYWRIGHT_BROWSERS_PATH`) contains only `chromium`, `chromium-1194`, `chromium-1228`, `chromium_headless_shell-*`, and `ffmpeg-1011` **[corrected 2026-08-31: `chromium-1228` is no longer present — see `ISS-2026-316`. The directory today holds only `chromium`, `chromium-1194`, `chromium_headless_shell-1194` and `ffmpeg-1011`, so no Chromium e2e run is possible here either, not merely no WebKit/Firefox one. The WebKit/Firefox absence this entry reports remains accurate.]** — no `webkit-*` or `firefox-*` directory exists, and this environment's own setup instructions explicitly say not to run `playwright install` to fetch more (it is pre-configured deliberately). This is the same class of firm, documented sandbox constraint `HDN-380` found for the Supabase auth backend (`RLIMIT_NOFILE`/`runc`) — a real infrastructure boundary, not a configuration oversight this checkpoint could fix.
 
@@ -7312,6 +7342,16 @@ Confirmed directly: `/opt/pw-browsers` (this sandbox's `PLAYWRIGHT_BROWSERS_PATH
 **Status `OPEN`**, Low severity, `TRACKED_GAP` per `HARDENING_MATRIX.md`'s own status vocabulary — Chrome and Edge (both Chromium-engine) are covered by every existing e2e spec plus this checkpoint's own new device-viewport coverage; Safari and Firefox rendering-engine-specific bugs (a real, non-zero risk class — CSS/JS engine differences do exist) cannot be caught by any automated check in this repository today. **Not fixed by this checkpoint** — provisioning WebKit/Firefox binaries (or an external cross-browser testing service) is an environment-capability addition, not a bounded checkpoint repair. Owner: a dedicated future task, scoped to either provisioning the missing binaries in a capable environment or wiring an external cross-browser CI service (e.g. BrowserStack/Sauce Labs equivalents), whichever this repository's own tooling budget favors.
 
 **Update (`2026-08-28`, Track B Batch 5):** re-verified — `echo $PLAYWRIGHT_BROWSERS_PATH` still resolves to `/opt/pw-browsers`, which still contains only `chromium-1194/`, `chromium_headless_shell-1194/`, `ffmpeg-1011/`, and a `chromium` symlink; no `webkit-*`/`firefox-*` directory exists anywhere. `playwright.config.ts` still carries only the `chromium` project plus 3 Chromium-engine device-emulation projects that explicitly override `defaultBrowserType: "chromium"` (their native preset default is `webkit`, with an inline comment confirming no WebKit binary exists to launch), citing `ISS-2026-244` by name. A firm sandbox/infrastructure boundary, not a wiring/CI-config oversight — Firefox/WebKit are absent from the binary store entirely. Disposition unchanged, still `OPEN`.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** The app has never been run in Safari or Firefox. Chromium-family browsers and mobile/tablet viewport emulation are covered, so layout and touch-target behaviour are tested — but a WebKit- or Gecko-specific rendering or CSS bug would not have been caught. iPhone and Mac users are the realistic exposure.
+
+**What would actually close it.** A machine or CI runner where the WebKit and Gecko browser binaries can actually be installed.
+
+**Status `ACCEPTED_RISK`**, was Low. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-245 — no PWA manifest or service worker exists anywhere in the repository; RPD-004's "online-first responsive PWA" language should be scoped to "responsive web app," not an installable PWA (found at `HDN-381` Browser and Device Compatibility, environment feasibility + source sweep lenses, `RESOLVED` 2026-09-02 by owner ruling, was Low, owner closed)
 
@@ -7893,13 +7933,23 @@ having been configured. This is the closest true technical equivalent to that li
 interception, not a claim of achieving it. Owner: none remaining — this was the last item the
 partial resolution above scoped to a dedicated future task.
 
-### ISS-2026-255 — real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in this sandbox (found at `HDN-383` Backup and Restore, live investigation, `OPEN`, High, `TRACKED_GAP`, owner a dedicated future task)
+### ISS-2026-255 — real production-like restore evidence (Supabase Storage, Auth-service state, the real hosted project) remains untested, structurally infeasible in this sandbox (found at `HDN-383` Backup and Restore, live investigation, `ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE)`, was High, `TRACKED_GAP`, owner a dedicated future task)
 
 Live-confirmed: this sandbox's disposable Postgres is reachable and a full backup/restore cycle against it was executed and measured (`docs/runbooks/database-restore.md` §4, §7) — but the full Supabase stack (Auth service, Storage, PostgREST gateway) is not reachable here, matching `HDN-380`'s own documented `RLIMIT_NOFILE`/`runc` container-runtime constraint (the same class of firm sandbox limitation already disclosed for the Auth backend at `ISS-2026-140` and for Safari/Firefox at `ISS-2026-244`). `HARDENING_MATRIX.md` §14 item 6 additionally forbids ever targeting the real hosted project's own data for a rehearsal. Consequently: no Storage-object restore, no Auth-service-level restore (session/MFA/identity state beyond the raw `auth.users` table row), and no real hosted-project PITR restore have ever been executed or evidenced anywhere in this repository.
 
 **Status `OPEN`**, High severity, `TRACKED_GAP` (Prompt 383 §22's own alternative flow explicitly anticipates and permits this exact outcome: "If restore cannot be executed in current environment, Step 16 remains blocked until production-like restore evidence exists" — this is a disclosed, expected environmental limitation, not a defect this checkpoint introduced or could have avoided). Per `00_EXECUTION_INDEX.md` §8.1, "Backup and restore tested" (item 6) and "Runbooks available" (item 9) are 2 of the ten non-negotiable Step 16 eligibility gates — this finding directly keeps Step 16 correctly blocked pending real evidence a capable, non-sandboxed environment must produce. **Not fixed by this checkpoint** — requires either a genuinely reachable full Supabase stack in a future environment, or a staging/production-adjacent environment with real Storage/Auth access. Owner: a dedicated future task.
 
 **Re-verified, disposition confirmed accurate — and confirmed as a genuine omission from `BACKLOG_INVENTORY.md`'s own High-severity accounting, corrected here (2026-08-28, Track B Batch 8).** Independently confirmed the sandbox constraint still holds by direct inventory of this session's loaded Supabase MCP tool set (`list_tables`, `execute_sql`, `apply_migration`, `list_extensions`, `list_migrations`, `get_advisors`, `get_project`, `get_project_url`, `get_publishable_keys`, plus edge-function/branch/cost/org tools) — no Storage-object operation and no Auth-service-state operation exists among them; nothing has changed since `HDN-383`. No restore rehearsal was attempted this batch (`HARDENING_MATRIX.md` §14 item 6's prohibition on targeting the real hosted project's data correctly not violated). Separately confirmed a real, previously-undisclosed inventory gap: `BACKLOG_INVENTORY.md`'s own "High severity (6)" table lists exactly 6 rows (`249`/`250`/`258`/`261`/`273`/`289`) — this entry, itself tagged High, appears in none of them, nor in the "dr-runbook" theme-group row (which lists only `256, 259, 284` even though this entry was found at the same `HDN-383` checkpoint as `256`). **Status stays `OPEN`, High, `TRACKED_GAP`** — the correct, disclosed, environment-bound status Prompt 383 §22 itself anticipates, not something any code/migration pass can close. `BACKLOG_INVENTORY.md`'s own High-severity table and running tally are corrected in this same batch's own documentation update to include this entry, honestly reflecting the true count.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** If the database is ever lost or corrupted, nobody has yet proved the backups can actually be turned back into a working system. Backups exist; a restore has never been rehearsed against the real hosted project, its file storage or its login state. An untested backup is a plan, not a guarantee — the first time it is exercised will be the day it matters.
+
+**What would actually close it.** One rehearsed restore into a scratch project, with the elapsed time written down. That also converts `ISS-2026-256`'s RPO/RTO numbers from claims into measurements.
+
+**Status `ACCEPTED_RISK`**, was High. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-256 — this repository's own disclosed RPO/RTO defaults (15-minute RPO / 4-hour RTO, MVP tier) have never been operationally confirmed as active on the real hosted Supabase project (found at `HDN-383` Backup and Restore, live investigation, `ACCEPTED_RISK` 2026-09-01, Medium)
 
@@ -8177,7 +8227,7 @@ writing a zero would put a fabricated number in a forensic log. Full `db:test` g
 
 **RESOLVED**, 2026-08-27 (Step 16 historical-issue-backlog remediation, item 16): confirmed with the operator (`AskUserQuestion`) before implementing that a NEW, parallel, nullable `dr_scenario` column is the correct fix, rather than widening `component_scope`'s own CHECK constraint — mixing a mechanism taxonomy and a scenario taxonomy into one enum would make every future query against `component_scope` ambiguous about which taxonomy a given row's value belongs to. `supabase/migrations/20260826180000_create_dr_restore_scenario_taxonomy.sql` adds `dr_scenario` (CHECK-constrained to the 4 named scenarios or null) and widens `app.record_dr_restore_test` with one new, trailing, default-valued `p_dr_scenario` parameter. **A real defect self-caught and fixed during this same migration's authoring**: `CREATE OR REPLACE FUNCTION` cannot be used to append a new parameter to an existing function — appending one (even with a default) creates a second, distinct overload alongside the original rather than truly replacing it, making every pre-existing call site genuinely ambiguous (verified directly against a real disposable Postgres instance). Corrected by explicitly `DROP FUNCTION`-ing the original 13-argument signature (both `app.*` and its Option 2 `public.*` wrapper) before creating the new 14-argument one — confirmed by direct read to be the exact, already-established convention this repository's own FIN-206 migration used for the identical `p_lock_scope` append. New regression coverage in `scripts/db-tests/disaster-recovery-enterprise-support.sql` proves all 4 named scenarios can now be recorded alongside `component_scope`, an invalid scenario is rejected at both the RPC and table-CHECK-constraint layer, and every pre-existing 13-argument call site keeps working unchanged. Full local `db-tests` suite (353 migrations, 234 runner files) re-run clean; applied live to the hosted Supabase project; grants and the single-overload fix live-verified via direct `pg_proc` query; freeze digest amended (nineteenth pass). See `docs/build-log/release-go-live/RGL-404.md` §12.
 
-### ISS-2026-261 — CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unconfirmed SLA (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `OPEN`, High, owner a dedicated future task)
+### ISS-2026-261 — CargoGrid has no second infrastructure vendor; a genuine Supabase-wide outage has no failover path, only a wait-and-restore posture bounded by an unconfirmed SLA (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE)`, was High, owner a dedicated future task)
 
 `docs/architecture/11_DEVOPS_WORKSTREAM.md` §0/§6 (restated from Tech Arch §6) describes CargoGrid's physical architecture as a Next.js app-hosting layer in front of exactly one managed backend vendor — Supabase — providing Postgres, Auth, Storage, and the PostgREST gateway all from a single project. No multi-region or multi-vendor failover architecture is described anywhere in `docs/architecture/`; `ADR-CAND-ARCH-025` even chose to lean *further* into the platform-native mechanism for secrets specifically to avoid introducing a second vendor surface. This is a genuine, undisclosed-as-mitigated single point of failure for the "provider failure" and "major outage" DR scenarios specifically: if Supabase itself has an outage, CargoGrid has no infrastructure to fail over to — recovery is bounded entirely by Supabase's own SLA and support responsiveness, neither of which this repository controls or has operationally confirmed (the same underlying gap `ISS-2026-256` already names for the RPO/RTO promise specifically, now named at the architectural-dependency level rather than the SLA-confirmation level).
 
@@ -8195,6 +8245,16 @@ this is a business decision about acceptable risk vs. cost, not an engineering t
 correct answer. **Compensating control until decided**: the honest "wait-and-restore, bounded by
 Supabase's own unconfirmed SLA" posture stays disclosed in `docs/runbooks/disaster-recovery.md` §2;
 no false failover-capability claim is made anywhere in this repository's operational documentation.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** Everything runs on one vendor. If Supabase has a region-wide outage, CargoGrid is down for as long as they are, and the only available response is to wait. There is no second place to fail over to, and the recovery-time bound rests on an SLA nobody has confirmed in writing.
+
+**What would actually close it.** A contracted second vendor, or an explicit written decision that a single-vendor dependency is acceptable for this product's tier — the latter is cheap and is genuinely a real answer.
+
+**Status `ACCEPTED_RISK`**, was High. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-262 — `11_DEVOPS_WORKSTREAM.md` §8.5's own runbook catalogue names 6 files that do not exist anywhere in `docs/runbooks/` under those names (found at `HDN-384` Disaster Recovery Rehearsal, live investigation, `RESOLVED` at `HDN-388`, Low, owner a dedicated future task)
 
@@ -9116,7 +9176,7 @@ failed attempt). **Status stays `OPEN`** — authorization is no longer the bloc
 permission is: delete it directly via the GitHub UI/API with an account that holds branch-delete
 rights on this repository, or grant a future session that specific scope.
 
-### ISS-2026-289 — GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repository's own "pull request is mandatory" policy has never been enforceable (found at `RGL-393`, High) (OPEN, High)
+### ISS-2026-289 — GitHub branch protection was deferred from `PH0-087` to `PH0-088` and never configured; `main` and all 46 other branches are unprotected, so the repository's own "pull request is mandatory" policy has never been enforceable (found at `RGL-393`, was High) (ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE), High)
 
 `RGL-393`'s ingress audit queried the GitHub API for all 47 branches. **Every one, `main` included, reports `"protected": false`.** No branch protection, no required reviewers, no required status checks, anywhere.
 
@@ -9144,6 +9204,16 @@ requires the identical human action as closing that one. **Compensating control 
 this session's own PR-driven, gate-verified-before-push discipline (this exact commit sequence)
 substitutes for the missing enforced-in-platform control, but is not a substitute for the real
 setting — it depends on every future contributor voluntarily following the same discipline.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** Anyone with write access to the repository can push directly over `main`, force-push it, or delete it. Nothing mechanically prevents an accident or a bad merge from landing straight in the branch production is cut from.
+
+**What would actually close it.** Enabling branch protection on `main` in GitHub settings: a handful of clicks, no code.
+
+**Status `ACCEPTED_RISK`**, was High. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-290 — 17 already-committed Step 15 hardening migrations, including fixes for multiple live Critical vulnerabilities, were never applied to the live hosted Supabase project — production ran on schema state frozen at `20260809200000` while the repository's own migration history had already advanced to `20260819000000` (found during the `RGL-BLK-002` Option 2 remediation, 2026-08-25, Critical) (RESOLVED, Critical)
 
@@ -10043,7 +10113,7 @@ the first to exercise that.
 
 ---
 
-### ISS-2026-311 — `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; "deploy" and "publish" are two different actions and only one of them is a deploy (found 2026-08-31 during Bagian 5 live verification, `OPEN`, High)
+### ISS-2026-311 — `cargogrid.app` is served by Cloudflare from a different site and is not attached to the Vercel project; "deploy" and "publish" are two different actions and only one of them is a deploy (found 2026-08-31 during Bagian 5 live verification, `RESOLVED 2026-09-03 (domain moved to app.cargogrid.net)`, was High)
 
 **Severity: High — not because anything is broken, but because it is a launch prerequisite that
 the release record did not previously state, and it is the kind of gap that is discovered at the
@@ -10077,6 +10147,33 @@ they would be the wrong thing to do unilaterally even with access. Carried into
 `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` as an owner action with its consequence stated.
 
 ---
+
+**`RESOLVED` — `2026-09-03`. The domain changed rather than the attachment: the product's standard address is now `app.cargogrid.net`.**
+
+Owner instruction, verbatim: *"ganti seluruh dokumentasi dan implementasi terkait cargogrid.app jadi app.cargogrid.net"*, clarified in the same exchange: *"untuk mekanisme customs domain milik tenant tetap bisa ya. app.cargogrid.net itu standard domain aja buat tenant2 dan supremeadmin cargogrid yg ga request domain customs."* That clarification settled the one genuinely ambiguous part — whether tenant subdomains were moving too — and the answer is no: `app.cargogrid.net` is the default console for tenants and Supreme Admin who have **not** requested a custom domain, and the tenant custom-domain capability is untouched and fully working.
+
+**This entry's original problem dissolves rather than being solved.** It recorded that `cargogrid.app` was served by Cloudflare from a *different site*, was never attached to the Vercel project, and that publishing would therefore **replace a live public page** — the reason it stayed open was that replacing somebody's live site is not a decision an automated session should make. Moving to a new subdomain on a different zone removes that hazard entirely: `app.cargogrid.net` replaces nothing, so publishing is now an ordinary attach-and-point-DNS step with no destructive half.
+
+**The security half, which is the only part that was a code change.** `app.is_reserved_domain_hostname` refuses a tenant's custom-domain claim over hostnames the platform owns. It named only `cargogrid.app` and `*.cargogrid.app`, so the moment the product answers on `app.cargogrid.net`, **that hostname would have been claimable by any tenant** — a tenant successfully claiming it would be claiming the console every other tenant signs in through. `20260903160000_reserve_cargogrid_net_platform_hostnames_iss2026311.sql` adds `cargogrid.net` and `%.cargogrid.net` (the wildcard covers `app.`, `status.` and any future platform subdomain without another migration each time). **The old domain stays reserved too**, deliberately: un-reserving a hostname users may still be visiting during a cutover would let a tenant claim it, and removing a reservation is a security-weakening change with no upside here. The live definition was read via `pg_get_functiondef` before writing, and is reproduced verbatim apart from the two added disjuncts — `language sql`, `immutable`, the localhost arm and the IPv4-literal regex all unchanged.
+
+**What was deliberately NOT renamed, and why a blanket find-and-replace would have done real damage.** 220 files contain the string `cargogrid.app`; only **35** refer to the product's web domain. The other 185 are one of two things that must not change:
+
+- **`assujiar/cargogrid.app`** — the GitHub repository name (189 occurrences). Renaming these in prose would make every `mcp__github__*` citation, PR reference and collision-check record in the build log point at a repository that does not exist.
+- **`/home/user/cargogrid.app`** — the filesystem path in captured `psql` output and command transcripts (50 occurrences). These are verbatim evidence of what a command actually printed; editing them would falsify a transcript.
+
+A third category was found only by reading the matches rather than counting them: **`cargogrid.app` is also the Supabase project's own nickname** (`cargogrid.app` / `awdlicmwzdxquopwtcfd`) in `CARGOGRID_BUILD_STATUS.md`, `TASK_LEDGER.md`, `HANDOFF.md`, `CHANGE_MANIFEST.md` and `auth-schema-stub.sql`. That is a project label, not a URL, and it is unchanged by this rename.
+
+**Historical records were left intact, which is the append-only rule doing its job.** 25 `docs/build-log/` files and several `docs/runtime/` entries record live probes against `https://cargogrid.app/` as they were at the time. Those are true statements about the past; rewriting them would make them false. The change is recorded here and in the living documents instead.
+
+**Living documents were rewritten, not substituted, because substitution would have produced false sentences.** `docs/runbooks/human-execution-pack.md` §0.2-0.3 and `docs/runtime/COMMERCIAL_LAUNCH_READINESS.md` §3.0 were both written for a `cargogrid.app`-on-Cloudflare world, including the instruction *"Do not touch the existing `cargogrid.app` or `www` records — those serve the current site."* Find-and-replace would have turned that into a claim about a zone where no such site exists. Both sections were rewritten, and both now state plainly what this session **cannot** verify: **where the `cargogrid.net` zone is hosted is unknown from here.** The old Cloudflare-specific advice (grey cloud, free Cloudflare Pages for the status page) is marked as no longer transferring automatically rather than carried forward as fact.
+
+**An open worry resolved as a side effect.** `COMMERCIAL_LAUNCH_READINESS.md` §3.0b had flagged that the sole administrator account is `service@cargogrid.net` while the product domain was `cargogrid.app`, and warned this might be a typo leaving the mailbox non-existent and password reset with nowhere to go. It was not a typo — the account was on the owner's real domain all along, and it was the *product domain* that was wrong. Recorded there, with the concrete check kept anyway: "the domain is right" and "the mailbox is deliverable" remain two different facts.
+
+**Verification.** New db-test assertions prove `cargogrid.net`, `app.cargogrid.net` and `tenant.cargogrid.net` are reserved, that the previous domain's apex and subdomains **still** are, that an ordinary external hostname is not, and that `app.request_tenant_domain` refuses a claim on the standard console hostname. Full `pnpm run db:test`: **ALL PASSED**. `typecheck` clean; `server/mutations/custom-domain.test.ts` and `lib/auth/redirect-allowlist.test.ts` updated to the new domain.
+
+**What remains yours, and it is not code.** Attaching `app.cargogrid.net` in Vercel and adding one CNAME in the `cargogrid.net` zone — `docs/runbooks/human-execution-pack.md` §0.2 has the exact steps. Until that is done the app is reachable only at its `…vercel.app` address.
+
+**Status `RESOLVED`**, was High — the repository side is complete and the destructive-publish hazard that kept it open no longer exists.
 
 ### ISS-2026-312 — three of the 14 consumer-side record-scope guards exist in code but no test proves they fire (found 2026-08-31 while closing `ISS-2026-170`, `RESOLVED` the same day, was Low)
 
@@ -10595,7 +10692,7 @@ that the db-test set digest has drifted — expected and correct, since this clo
 files under `scripts/db-tests/`, and left for the orchestrating session to re-freeze rather than
 amended here.
 
-### ISS-2026-320 — the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened (found 2026-08-31 while closing `ISS-2026-304`, `OPEN`, Low)
+### ISS-2026-320 — the public status page shares fate with the hosting platform; a genuinely independent one needs an account nobody has opened (found 2026-08-31 while closing `ISS-2026-304`, `ACCEPTED_RISK 2026-09-03 (OWNER_OVERRIDE)`, was Low)
 
 `ISS-2026-304` is closed for the outage class that matters most here: `/status` is statically
 rendered and served from the CDN, so it loads and reports correctly while the application or
@@ -10650,6 +10747,16 @@ stale claim to survive. All three are corrected in place with dated notes, stati
 
 Status stays `OPEN`: the second-host page itself is not built, and remains the owner's call for
 the access reason above, not a cost one.
+
+**`ACCEPTED_RISK` (OWNER_OVERRIDE) — `2026-09-03`.** The project owner reviewed this entry in plain language and ruled it accepted so the product can be released with its full feature set, instructing verbatim: "1. nanti gue akan bikin backupnya, tutup issue ini, yg penting bisa release dulu dengan semua fitur2nya."
+
+**Recorded as accepted, not as passed, and the distinction is deliberate.** Nothing about this gap was fixed, tested, or made safer by this entry closing. The mechanism is ADR-0027 Part B, the same owner-risk-acceptance pattern `RGL-404.md` §7 already established, and it is used here for the reason that ADR gives: if an auditor, an enterprise customer or an insurer later asks whether this was done, a dated *"accepted as a risk by the owner"* is a position that can be defended, while a *"passed"* over a test that never ran is evidence against the person who wrote it. This entry stops blocking release; it does not stop being true.
+
+**What is being accepted, in plain language.** The status page lives on the same host as the app. In the one outage where customers most need it — the host itself failing — the status page fails with it, so nobody can find out what is happening.
+
+**What would actually close it.** A page on a second, independent host with a DNS record pointed at it. Often free; the blocker is an account, not a budget.
+
+**Status `ACCEPTED_RISK`**, was Low. Owner: the project owner, who has stated the intent to do this after release. Re-open by doing the work above — this disposition is a decision about timing, not a finding that the gap is acceptable forever.
 
 ### ISS-2026-321 — the payroll-loan opening-balance parameters `ISS-2026-317` widened onto `app.issue_payroll_loan` are reachable from no UI and exercised by no test outside the import adapter itself (found 2026-09-01 while closing `ISS-2026-317`, `RESOLVED` 2026-09-01, Low)
 

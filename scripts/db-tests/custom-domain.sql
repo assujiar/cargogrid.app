@@ -65,11 +65,25 @@ begin
     raise exception 'assertion failed: expected an un-normalized uppercase hostname to fail structural validation';
   end if;
 
+  -- ISS-2026-311: the platform's own hostnames, current AND previous. The tenant custom-domain
+  -- capability is unchanged by that rename -- what these assertions protect is the one thing it
+  -- must never allow, a tenant claiming the console every other tenant signs in through.
+  if not app.is_reserved_domain_hostname('cargogrid.net') then
+    raise exception 'assertion failed: expected the current platform apex to be reserved';
+  end if;
+  if not app.is_reserved_domain_hostname('app.cargogrid.net') then
+    raise exception 'assertion failed: expected the standard tenant/Supreme-Admin console hostname to be reserved -- a tenant claiming this as a custom domain would be claiming the console itself';
+  end if;
+  if not app.is_reserved_domain_hostname('tenant.cargogrid.net') then
+    raise exception 'assertion failed: expected a current platform subdomain to be reserved';
+  end if;
+  -- The previous domain stays reserved through and after the cutover: un-reserving a hostname
+  -- users may still be visiting would let a tenant claim it.
   if not app.is_reserved_domain_hostname('cargogrid.app') then
-    raise exception 'assertion failed: expected the platform apex to be reserved';
+    raise exception 'assertion failed: expected the previous platform apex to still be reserved';
   end if;
   if not app.is_reserved_domain_hostname('tenant.cargogrid.app') then
-    raise exception 'assertion failed: expected a platform subdomain to be reserved';
+    raise exception 'assertion failed: expected a previous-domain subdomain to still be reserved';
   end if;
   if not app.is_reserved_domain_hostname('localhost') then
     raise exception 'assertion failed: expected localhost to be reserved';
@@ -123,8 +137,8 @@ begin
   end;
 
   begin
-    perform app.request_tenant_domain(v_tenant_id, '00000000-0000-0000-0000-000000001001', 'cargogrid.app', 'tenant admin');
-    raise exception 'assertion failed: expected a reserved hostname to be rejected';
+    perform app.request_tenant_domain(v_tenant_id, '00000000-0000-0000-0000-000000001001', 'app.cargogrid.net', 'tenant admin');
+    raise exception 'assertion failed: expected the standard platform console hostname to be rejected as a custom-domain claim';
   exception
     when check_violation then
       null;

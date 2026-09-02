@@ -3488,7 +3488,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // nonexistent id would, while a same-tenant member lacking role authority still reaches
   // insufficient_authority. Every body is otherwise verbatim its live predecessor. Classifier
   // re-derived centrally after the merge: RISK_UNSCOPED_LOOKUP 468 sites / 436 functions -> 0 / 0.
-  migrationSetSha256: "4d064ccc938fcbf43cddcee5165b43b08f89a556ab4b70dc3eb3c9dea62907ff",
+  // HUNDRED-AND-FIRST PASS (2026-09-03, ISS-2026-311): 497 files (+1). The product's standard
+  // domain moves to app.cargogrid.net by owner instruction, and the one thing that had to change
+  // in the database is the reserved-hostname guard: app.is_reserved_domain_hostname named only
+  // the old domain, so app.cargogrid.net would have been claimable by any tenant as a custom
+  // domain -- claiming the console every other tenant signs in through. Now reserves
+  // cargogrid.net and every subdomain, while KEEPING the old domain reserved through the cutover
+  // (un-reserving a hostname users may still visit would let a tenant claim it). The tenant
+  // custom-domain capability itself is untouched and stays fully working.
+  migrationSetSha256: "58f6ffb411bb3213be951b6f081f0d6cf0be83bcf27e46d93455bfd0a04bc032",
+  // History: 4d064ccc938fcbf43cddcee5165b43b08f89a556ab4b70dc3eb3c9dea62907ff
+  // (496 files, ISS-2026-146 batch 3's 15 tenant-id disclosure migrations).
   // History: d0f1474e7bb323bd215d81f70e8f33734aa897b2fd6c606ad96abc587c711fb0
   // (481 files, ISS-2026-134 item 4's loyalty engagement-metrics snapshot).
   // History: ab38d1bb191f83ca6e65c3c69a1d176bd89d2efaee4d8a1e4553eb9b02ba1272
@@ -4212,7 +4222,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // insufficient_authority -- the distinction the whole fix turns on. Plus 34 pre-existing
   // db-tests updated where a fixture's cross-tenant actor legitimately now sees the new shape;
   // every one updates its assertion, none deletes or weakens it.
-  dbTestSetSha256: "a5878f102a570613a93841c439ebf859a3b37c760ff8cc34aec678f73c0399c6",
+  // HUNDRED-AND-FIRST PASS (2026-09-03, ISS-2026-311): 250 files, unchanged in count -- one
+  // extended (custom-domain.sql: the current platform apex, the standard console hostname
+  // app.cargogrid.net and a current-domain subdomain are all reserved; the PREVIOUS domain's apex
+  // and subdomains still are; an ordinary external hostname still is not; and a tenant claiming
+  // the standard console hostname as its custom domain is refused).
+  dbTestSetSha256: "9ca8a134673c439931ef4d376b42c04e7a98fb83cefdac3e8175fd9fcd03ffbc",
+  // History: a5878f102a570613a93841c439ebf859a3b37c760ff8cc34aec678f73c0399c6
+  // (250 files, ISS-2026-146 batch 3's redaction regressions).
   // History: 51695bdf21337090c1e3d3314b7aa4d78ce3f39fd574963319d981655691b391
   // (247 files, ISS-2026-134 item 4's snapshot regressions).
   // History: f039b0b7f3026dbafb24371dc1d23328d3c13fa06bd666441514d994a2cd5fe9
