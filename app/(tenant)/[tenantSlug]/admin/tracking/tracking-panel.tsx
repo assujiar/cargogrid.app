@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { TRACKING_SOURCE_TYPES, type ResolvedTenantTrackingSourcePolicy, type TrackingSourceType } from "../../../../../server/contracts/tracking-source-policy/tracking-source-policy.ts";
 import type { TrackingPolicyFormState } from "./actions.ts";
 
@@ -21,6 +25,8 @@ export function TrackingSourcePolicyPanel({
   action: (prevState: TrackingPolicyFormState, formData: FormData) => Promise<TrackingPolicyFormState>;
 }) {
   const [state, formAction] = useActionState(action, INITIAL_STATE);
+  // ISS-2026-242: the policy RPC returns one error for the whole save, never per-field ones.
+  const describedBy = state.error ? "tracking-policy-error" : undefined;
 
   return (
     <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
@@ -34,37 +40,56 @@ export function TrackingSourcePolicyPanel({
       <form action={formAction} className="flex flex-col gap-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[0, 1, 2].map((rankIndex) => (
-            <label key={rankIndex} className="flex flex-col gap-1 text-xs text-neutral-600">
-              Priority {rankIndex + 1} (highest wins)
-              <select name="defaultSourcePriority" defaultValue={sourcePolicy.defaultSourcePriority[rankIndex] ?? TRACKING_SOURCE_TYPES[rankIndex]} className="rounded border border-neutral-300 px-2 py-1 text-sm">
+            <FormField key={rankIndex} id={`tracking-priority-${rankIndex}`} label={`Priority ${rankIndex + 1} (highest wins)`}>
+              <Select
+                id={`tracking-priority-${rankIndex}`}
+                name="defaultSourcePriority"
+                defaultValue={sourcePolicy.defaultSourcePriority[rankIndex] ?? TRACKING_SOURCE_TYPES[rankIndex]}
+                invalid={Boolean(state.error)}
+                aria-describedby={describedBy}
+              >
                 {TRACKING_SOURCE_TYPES.map((sourceType) => (
                   <option key={sourceType} value={sourceType}>
                     {SOURCE_LABELS[sourceType]}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </FormField>
           ))}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Freshness threshold (seconds)
-            <input type="number" name="freshnessThresholdSeconds" min={1} defaultValue={sourcePolicy.freshnessThresholdSeconds} className="rounded border border-neutral-300 px-2 py-1 text-sm" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Accuracy threshold (meters)
-            <input type="number" name="accuracyThresholdMeters" min={1} defaultValue={sourcePolicy.accuracyThresholdMeters} className="rounded border border-neutral-300 px-2 py-1 text-sm" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Switch hysteresis (seconds)
-            <input type="number" name="switchHysteresisSeconds" min={0} defaultValue={sourcePolicy.switchHysteresisSeconds} className="rounded border border-neutral-300 px-2 py-1 text-sm" />
-          </label>
+          <FormField id="tracking-freshness" label="Freshness threshold (seconds)">
+            <NumberInput
+              id="tracking-freshness"
+              name="freshnessThresholdSeconds"
+              min={1}
+              defaultValue={sourcePolicy.freshnessThresholdSeconds}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
+          <FormField id="tracking-accuracy" label="Accuracy threshold (meters)">
+            <NumberInput
+              id="tracking-accuracy"
+              name="accuracyThresholdMeters"
+              min={1}
+              defaultValue={sourcePolicy.accuracyThresholdMeters}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
+          <FormField id="tracking-hysteresis" label="Switch hysteresis (seconds)">
+            <NumberInput
+              id="tracking-hysteresis"
+              name="switchHysteresisSeconds"
+              min={0}
+              defaultValue={sourcePolicy.switchHysteresisSeconds}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
         </div>
-        {state.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage id="tracking-policy-error">{state.error}</ValidationMessage> : null}
         <div>
           <Button type="submit">Save source policy</Button>
         </div>

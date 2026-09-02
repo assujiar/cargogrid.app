@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { FormSection } from "../../../../../components/forms/form-section.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { KpiCard } from "../../../../../components/ui/kpi-card.tsx";
 import type { LoyaltyLiabilityReconciliationRun, LoyaltyLiabilityReconciliationException, LoyaltyEngagementMetrics } from "../../../../../server/contracts/customer-portal-loyalty-liability/customer-portal-loyalty-liability.ts";
@@ -22,13 +26,10 @@ const STATUS_TONE: Record<LoyaltyLiabilityReconciliationRun["status"], StatusTon
   certified: "success",
 };
 
-function ErrorBanner({ error }: { error: string | null }) {
+/** ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby` points at. */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-xs text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 function formatAmount(value: number): string {
@@ -54,37 +55,49 @@ export function LoyaltyEngagementMetricsWidgets({ metrics }: { metrics: LoyaltyE
 
 export function ExecuteLoyaltyLiabilityReconciliationRunForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(executeLoyaltyLiabilityReconciliationRunAction.bind(null, tenantSlug), INITIAL_STATE);
+  // ISS-2026-242: the run RPC returns one error covering all three inputs, never per-field ones.
+  const describedBy = state.error ? "lrr-error" : undefined;
   return (
     <form action={formAction} noValidate className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <p className="text-sm font-semibold text-text-primary">Run a liability reconciliation</p>
-      <p className="text-xs text-text-secondary">
-        Recomputes every liability total LIVE from the raw ledger/event tables -- points (a raw units total, never converted to currency), cashback/discount/voucher (scoped to the currency below), and open physical_item/service_credit
-        reward-fulfillment exposure. Idempotent per (currency, day) unless you supply a distinct key.
-      </p>
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="lrr-currency" className="block text-xs font-medium text-text-secondary">
-            Currency
-          </label>
-          <input id="lrr-currency" name="currency" type="text" required maxLength={3} placeholder="USD" defaultValue="USD" className="w-24 rounded-md border border-neutral-300 px-2 py-1.5 text-sm uppercase" />
+      {/* ISS-2026-246: this heading + blurb pair was two <p> tags -- FormSection renders the real
+          <h2> the pair was already imitating. */}
+      <FormSection
+        title="Run a liability reconciliation"
+        description="Recomputes every liability total LIVE from the raw ledger/event tables -- points (a raw units total, never converted to currency), cashback/discount/voucher (scoped to the currency below), and open physical_item/service_credit reward-fulfillment exposure. Idempotent per (currency, day) unless you supply a distinct key."
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-24">
+            <FormField id="lrr-currency" label="Currency">
+              <Input
+                id="lrr-currency"
+                name="currency"
+                type="text"
+                required
+                maxLength={3}
+                placeholder="USD"
+                defaultValue="USD"
+                className="uppercase"
+                invalid={Boolean(state.error)}
+                aria-describedby={describedBy}
+              />
+            </FormField>
+          </div>
+          <div className="w-56">
+            <FormField id="lrr-as-of" label="As of (optional)">
+              <Input id="lrr-as-of" name="asOf" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+          <div className="w-64">
+            <FormField id="lrr-idem" label="Idempotency key (optional)">
+              <Input id="lrr-idem" name="idempotencyKey" type="text" placeholder="defaults to currency + today's date" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+          <Button type="submit" loading={pending} loadingLabel="Running…" className="w-fit">
+            Run reconciliation
+          </Button>
         </div>
-        <div>
-          <label htmlFor="lrr-as-of" className="block text-xs font-medium text-text-secondary">
-            As of (optional)
-          </label>
-          <input id="lrr-as-of" name="asOf" type="datetime-local" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-        </div>
-        <div>
-          <label htmlFor="lrr-idem" className="block text-xs font-medium text-text-secondary">
-            Idempotency key (optional)
-          </label>
-          <input id="lrr-idem" name="idempotencyKey" type="text" placeholder="defaults to currency + today's date" className="w-64 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-        </div>
-        <Button type="submit" loading={pending} loadingLabel="Running…" className="w-fit">
-          Run reconciliation
-        </Button>
-      </div>
-      <ErrorBanner error={state.error} />
+        <ErrorBanner id="lrr-error" error={state.error} />
+      </FormSection>
     </form>
   );
 }
@@ -171,11 +184,19 @@ function ExceptionRow({ tenantSlug, exception, runCurrency }: { tenantSlug: stri
       </div>
       {exception.status === "open" ? (
         <form action={formAction} noValidate className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-72">
             <label htmlFor={`resolve-reason-${exception.id}`} className="sr-only">
               Resolution reason
             </label>
-            <input id={`resolve-reason-${exception.id}`} name="resolutionReason" type="text" required placeholder="Resolution reason (required)" className="w-72 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <Input
+              id={`resolve-reason-${exception.id}`}
+              name="resolutionReason"
+              type="text"
+              required
+              placeholder="Resolution reason (required)"
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? `resolve-${exception.id}-error` : undefined}
+            />
           </div>
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Resolving…" className="w-fit">
             Resolve
@@ -186,7 +207,7 @@ function ExceptionRow({ tenantSlug, exception, runCurrency }: { tenantSlug: stri
           Resolved by {exception.resolvedBy ?? "—"}: {exception.resolutionReason ?? "—"}
         </p>
       )}
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`resolve-${exception.id}-error`} error={state.error} />
     </div>
   );
 }

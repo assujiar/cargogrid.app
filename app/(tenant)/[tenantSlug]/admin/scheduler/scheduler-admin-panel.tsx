@@ -17,6 +17,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { TenantScheduledTask, ScheduledTaskRunStatus } from "../../../../../server/contracts/task-scheduler/task-scheduler.ts";
@@ -50,9 +55,18 @@ function formatInstant(value: string | null): string {
   return value ? value.replace("T", " ").slice(0, 16) : "—";
 }
 
-function ErrorBanner({ error }: { error: string | null }) {
+/**
+ * ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby`
+ * points at, and `ValidationMessage` also carries the `role="alert"` this hand-rolled paragraph
+ * never had, so a save failure is announced rather than silently appearing.
+ */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return <p className="mt-2 text-xs text-status-danger-strong">{error}</p>;
+  return (
+    <div className="mt-2">
+      <ValidationMessage id={id}>{error}</ValidationMessage>
+    </div>
+  );
 }
 
 function SavedNote({ state }: { state: SchedulerFormState }) {
@@ -64,54 +78,62 @@ function ScheduleForm({ tenantSlug, task }: { tenantSlug: string; task: TenantSc
   const boundAction = configureScheduledTaskAction.bind(null, tenantSlug);
   const [state, formAction, pending] = useActionState(boundAction, SCHEDULER_INITIAL_STATE);
 
+  // ISS-2026-242: one ScheduleForm is rendered per task, so every id is scoped by taskCode; the
+  // configure RPC returns one error for the whole save, so every control points at that one text.
+  const intervalId = `sched-interval-${task.taskCode}`;
+  const errorId = `sched-${task.taskCode}-error`;
+  const describedBy = state.error ? errorId : undefined;
+
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-3">
       <input type="hidden" name="taskCode" value={task.taskCode} />
       <input type="hidden" name="requiredParams" value={task.requiredParams.join(",")} />
 
-      <label className="flex items-center gap-2 text-sm text-text-primary">
-        <input
-          type="checkbox"
-          name="enabled"
-          defaultChecked={task.enabled}
-          disabled={!task.configurableByActor}
-          className="h-4 w-4"
-        />
-        Run automatically
-      </label>
+      <Checkbox
+        id={`sched-enabled-${task.taskCode}`}
+        name="enabled"
+        label="Run automatically"
+        defaultChecked={task.enabled}
+        disabled={!task.configurableByActor}
+        aria-describedby={describedBy}
+      />
 
-      <label className="flex flex-col gap-1 text-xs text-text-secondary">
-        How often (minutes)
-        <input
-          type="number"
-          name="intervalMinutes"
-          min={task.minIntervalMinutes}
-          step={1}
-          defaultValue={task.intervalMinutes ?? task.defaultIntervalMinutes}
-          disabled={!task.configurableByActor}
-          className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-sm text-text-primary"
-        />
-        <span>No more often than every {task.minIntervalMinutes} min</span>
-      </label>
+      <div className="w-32">
+        <FormField id={intervalId} label="How often (minutes)" helpText={`No more often than every ${task.minIntervalMinutes} min`}>
+          <NumberInput
+            id={intervalId}
+            name="intervalMinutes"
+            min={task.minIntervalMinutes}
+            step={1}
+            defaultValue={task.intervalMinutes ?? task.defaultIntervalMinutes}
+            disabled={!task.configurableByActor}
+            invalid={Boolean(state.error)}
+            aria-describedby={state.error ? `${intervalId}-help ${errorId}` : `${intervalId}-help`}
+          />
+        </FormField>
+      </div>
 
       {task.requiredParams.map((key) => (
-        <label key={key} className="flex flex-col gap-1 text-xs text-text-secondary">
-          {key.replace(/_/g, " ")}
-          <input
-            type="text"
-            name={`param_${key}`}
-            defaultValue={String(task.params[key] ?? "")}
-            disabled={!task.configurableByActor}
-            className="w-64 rounded-md border border-neutral-300 px-2 py-1 text-sm text-text-primary"
-          />
-        </label>
+        <div key={key} className="w-64">
+          <FormField id={`sched-param-${task.taskCode}-${key}`} label={key.replace(/_/g, " ")}>
+            <Input
+              id={`sched-param-${task.taskCode}-${key}`}
+              type="text"
+              name={`param_${key}`}
+              defaultValue={String(task.params[key] ?? "")}
+              disabled={!task.configurableByActor}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
+        </div>
       ))}
 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" disabled={!task.configurableByActor}>
         Save
       </Button>
 
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={errorId} error={state.error} />
       <SavedNote state={state} />
     </form>
   );
@@ -129,20 +151,18 @@ function DelegationForm({ tenantSlug, task, actorIsSupreme }: { tenantSlug: stri
   return (
     <form action={formAction} className="mt-2 flex flex-wrap items-center gap-2 text-xs">
       <input type="hidden" name="taskCode" value={task.taskCode} />
-      <label className="flex items-center gap-2 text-text-secondary">
-        <input
-          type="checkbox"
-          name="tenantAdminConfigurable"
-          defaultChecked={task.tenantAdminConfigurable}
-          disabled={!actorIsSupreme}
-          className="h-4 w-4"
-        />
-        Organisation admins may configure this
-      </label>
+      <Checkbox
+        id={`sched-delegation-${task.taskCode}`}
+        name="tenantAdminConfigurable"
+        label="Organisation admins may configure this"
+        defaultChecked={task.tenantAdminConfigurable}
+        disabled={!actorIsSupreme}
+        aria-describedby={state.error ? `sched-delegation-${task.taskCode}-error` : undefined}
+      />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" disabled={!actorIsSupreme}>
         Update delegation
       </Button>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`sched-delegation-${task.taskCode}-error`} error={state.error} />
     </form>
   );
 }

@@ -9,6 +9,10 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { ApiKey, WebhookEndpoint } from "../../../../../server/contracts/api-key-webhook/api-key-webhook.ts";
@@ -49,13 +53,10 @@ const VENDOR_INITIAL_STATE: VendorApiKeyFormState = { error: null, createdKey: n
 const API_KEY_STATUS_TONE: Record<ApiKey["status"], StatusTone> = { active: "success", revoked: "danger", expired: "neutral" };
 const API_VERSION_STATUS_TONE: Record<ApiVersion["status"], StatusTone> = { active: "success", deprecated: "warning", sunset: "neutral" };
 
-function ErrorBanner({ error }: { error: string | null }) {
+/** ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby` points at. */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 /** A raw key/secret is shown here exactly once -- app.create_api_key/app.rotate_api_key structurally never return it again, so this callout is the ONLY place a tenant admin will ever see it in full. */
@@ -70,26 +71,24 @@ function RawKeyCallout({ rawKey }: { rawKey: string }) {
 
 export function CreateApiKeyForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(createApiKeyAction.bind(null, tenantSlug), INITIAL_STATE);
+  // ISS-2026-242: the create RPC returns one error for the whole call, never per-field ones.
+  const describedBy = state.error ? "ak-create-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Create an API key</h2>
-      <label htmlFor="ak-name" className="text-xs font-medium text-text-secondary">
-        Key name
-      </label>
-      <input id="ak-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="ak-scopes" className="text-xs font-medium text-text-secondary">
-        Scopes (comma-separated, e.g. INTHUB:View, INTHUB:Configure) -- can only narrow your own currently-held permissions, never widen them
-      </label>
-      <input id="ak-scopes" name="scopes" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="ak-rate-limit" className="text-xs font-medium text-text-secondary">
-        Rate limit per minute (optional -- blank means unlimited)
-      </label>
-      <input id="ak-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="ak-expires" className="text-xs font-medium text-text-secondary">
-        Expires at (optional -- blank means no expiry)
-      </label>
-      <input id="ak-expires" name="expiresAt" type="datetime-local" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <ErrorBanner error={state.error} />
+      <FormField id="ak-name" label="Key name">
+        <Input id="ak-name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="ak-scopes" label="Scopes (comma-separated, e.g. INTHUB:View, INTHUB:Configure) -- can only narrow your own currently-held permissions, never widen them">
+        <Input id="ak-scopes" name="scopes" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="ak-rate-limit" label="Rate limit per minute (optional -- blank means unlimited)">
+        <NumberInput id="ak-rate-limit" name="rateLimitPerMinute" min={1} max={100000} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="ak-expires" label="Expires at (optional -- blank means no expiry)">
+        <Input id="ak-expires" name="expiresAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <ErrorBanner id="ak-create-error" error={state.error} />
       {state.createdKey ? <RawKeyCallout rawKey={state.createdKey.rawKey} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create key
@@ -106,12 +105,21 @@ function RotateApiKeyForm({ tenantSlug, keyId }: { tenantSlug: string; keyId: st
         <label htmlFor={`rotate-overlap-${keyId}`} className="text-xs text-text-secondary">
           Overlap (min)
         </label>
-        <input id={`rotate-overlap-${keyId}`} name="overlapMinutes" type="number" min={0} max={10080} defaultValue={0} className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <NumberInput
+          id={`rotate-overlap-${keyId}`}
+          name="overlapMinutes"
+          min={0}
+          max={10080}
+          defaultValue={0}
+          className="w-20 text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? `rotate-${keyId}-error` : undefined}
+        />
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rotating…">
           Rotate
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`rotate-${keyId}-error`} error={state.error} />
       {state.createdKey ? <RawKeyCallout rawKey={state.createdKey.rawKey} /> : null}
     </form>
   );
@@ -122,12 +130,23 @@ function RevokeApiKeyForm({ tenantSlug, keyId }: { tenantSlug: string; keyId: st
   return (
     <form action={formAction} className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <input name="reason" type="text" placeholder="Reason (optional)" className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <label htmlFor={`revoke-reason-${keyId}`} className="sr-only">
+          Revocation reason
+        </label>
+        <Input
+          id={`revoke-reason-${keyId}`}
+          name="reason"
+          type="text"
+          placeholder="Reason (optional)"
+          className="w-32 text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? `revoke-${keyId}-error` : undefined}
+        />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Revoking…">
           Revoke
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`revoke-${keyId}-error`} error={state.error} />
     </form>
   );
 }
@@ -181,27 +200,24 @@ export function ApiKeyList({ tenantSlug, keys }: { tenantSlug: string; keys: rea
 /** IAE-011: staff-only creation (Supreme/tenant_admin) -- there is no vendor self-service, since no vendor login/session exists anywhere in this repository. The key is handed to the vendor out-of-band, mirroring how vendor intake tokens are already issued. */
 export function CreateVendorApiKeyForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(createVendorApiKeyAction.bind(null, tenantSlug), VENDOR_INITIAL_STATE);
+  const describedBy = state.error ? "vak-create-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Create a Vendor API key</h2>
-      <label htmlFor="vak-vendor-id" className="text-xs font-medium text-text-secondary">
-        Vendor id (app.vendor_profiles.master_record_id) -- must be an active, approved vendor
-      </label>
-      <input id="vak-vendor-id" name="vendorMasterRecordId" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="vak-name" className="text-xs font-medium text-text-secondary">
-        Key name
-      </label>
-      <input id="vak-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="vak-rate-limit" className="text-xs font-medium text-text-secondary">
-        Rate limit per minute (optional -- blank means unlimited)
-      </label>
-      <input id="vak-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="vak-expires" className="text-xs font-medium text-text-secondary">
-        Expires at (optional -- blank means no expiry)
-      </label>
-      <input id="vak-expires" name="expiresAt" type="datetime-local" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <FormField id="vak-vendor-id" label="Vendor id (app.vendor_profiles.master_record_id) -- must be an active, approved vendor">
+        <Input id="vak-vendor-id" name="vendorMasterRecordId" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="vak-name" label="Key name">
+        <Input id="vak-name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="vak-rate-limit" label="Rate limit per minute (optional -- blank means unlimited)">
+        <NumberInput id="vak-rate-limit" name="rateLimitPerMinute" min={1} max={100000} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="vak-expires" label="Expires at (optional -- blank means no expiry)">
+        <Input id="vak-expires" name="expiresAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <p className="text-xs text-text-secondary">This key lets the named vendor&apos;s own systems call the CargoGrid Vendor API (RFQ responses, assignment accept/decline) scoped to exactly this vendor -- never a broader tenant scope. Hand the raw key to the vendor out-of-band; it is never shown again.</p>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id="vak-create-error" error={state.error} />
       {state.createdKey ? <RawKeyCallout rawKey={state.createdKey.rawKey} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create vendor key
@@ -269,18 +285,17 @@ function RawSecretCallout({ rawSecret }: { rawSecret: string }) {
 /** IAE-012: registers an endpoint against one or more already-seeded event types in one step (app.register_webhook_endpoint itself takes the subscription list at creation time -- there is no separate "add subscription" step to build). */
 export function RegisterWebhookEndpointForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(registerWebhookEndpointAction.bind(null, tenantSlug), ENDPOINT_INITIAL_STATE);
+  const describedBy = state.error ? "we-register-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Register a webhook endpoint</h2>
-      <label htmlFor="we-url" className="text-xs font-medium text-text-secondary">
-        Endpoint URL (https only)
-      </label>
-      <input id="we-url" name="url" type="url" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="we-event-types" className="text-xs font-medium text-text-secondary">
-        Event types (comma-separated, e.g. shipment.status_changed, ticket.created)
-      </label>
-      <input id="we-event-types" name="eventTypeCodes" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <ErrorBanner error={state.error} />
+      <FormField id="we-url" label="Endpoint URL (https only)">
+        <Input id="we-url" name="url" type="url" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="we-event-types" label="Event types (comma-separated, e.g. shipment.status_changed, ticket.created)">
+        <Input id="we-event-types" name="eventTypeCodes" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <ErrorBanner id="we-register-error" error={state.error} />
       {state.createdEndpoint ? <RawSecretCallout rawSecret={state.createdEndpoint.rawSecret} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register endpoint
@@ -307,12 +322,23 @@ function DisableWebhookEndpointForm({ tenantSlug, endpointId }: { tenantSlug: st
   return (
     <form action={formAction} className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <input name="reason" type="text" placeholder="Reason (optional)" className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <label htmlFor={`disable-reason-${endpointId}`} className="sr-only">
+          Reason for disabling this endpoint
+        </label>
+        <Input
+          id={`disable-reason-${endpointId}`}
+          name="reason"
+          type="text"
+          placeholder="Reason (optional)"
+          className="w-32 text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? `disable-${endpointId}-error` : undefined}
+        />
         <Button type="submit" variant="destructive" loading={pending} loadingLabel="Disabling…">
           Disable
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`disable-${endpointId}-error`} error={state.error} />
     </form>
   );
 }
@@ -438,27 +464,24 @@ export function WebhookDeliveryList({ tenantSlug, deliveries }: { tenantSlug: st
 /** IAE-013: n8n calls the SAME /api/v1 REST surface and receives events through the SAME webhook delivery mechanism every other consumer already uses -- this form only labels/scopes/links a connector. */
 export function CreateN8nConnectorForm({ tenantSlug, allowlist }: { tenantSlug: string; allowlist: readonly N8nAllowlistedAction[] }) {
   const [state, formAction, pending] = useActionState(createN8nConnectorAction.bind(null, tenantSlug), N8N_INITIAL_STATE);
+  const describedBy = state.error ? "n8n-create-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Register an n8n connector</h2>
-      <label htmlFor="n8n-name" className="text-xs font-medium text-text-secondary">
-        Connector name
-      </label>
-      <input id="n8n-name" name="name" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="n8n-scopes" className="text-xs font-medium text-text-secondary">
-        Scopes (comma-separated) -- must be on the n8n safe-action allowlist below, and cannot exceed your own currently-held permissions
-      </label>
-      <input id="n8n-scopes" name="scopes" type="text" required className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="n8n-webhook-endpoint" className="text-xs font-medium text-text-secondary">
-        Linked webhook endpoint id (optional -- the endpoint you registered above, pointed at your n8n workflow&apos;s own webhook URL)
-      </label>
-      <input id="n8n-webhook-endpoint" name="webhookEndpointId" type="text" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="n8n-rate-limit" className="text-xs font-medium text-text-secondary">
-        Rate limit per minute (optional -- blank means unlimited)
-      </label>
-      <input id="n8n-rate-limit" name="rateLimitPerMinute" type="number" min={1} max={100000} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <FormField id="n8n-name" label="Connector name">
+        <Input id="n8n-name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="n8n-scopes" label="Scopes (comma-separated) -- must be on the n8n safe-action allowlist below, and cannot exceed your own currently-held permissions">
+        <Input id="n8n-scopes" name="scopes" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="n8n-webhook-endpoint" label="Linked webhook endpoint id (optional -- the endpoint you registered above, pointed at your n8n workflow's own webhook URL)">
+        <Input id="n8n-webhook-endpoint" name="webhookEndpointId" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="n8n-rate-limit" label="Rate limit per minute (optional -- blank means unlimited)">
+        <NumberInput id="n8n-rate-limit" name="rateLimitPerMinute" min={1} max={100000} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <p className="text-xs text-text-secondary">Safe-action allowlist: {allowlist.map((a) => a.scope).join(", ") || "none registered"}. n8n actions can never bypass domain approvals or human governance -- only read-only and low-risk scopes are ever allowlisted.</p>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id="n8n-create-error" error={state.error} />
       {state.createdConnector ? <RawKeyCallout rawKey={state.createdConnector.rawKey} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Registering…" className="w-fit">
         Register connector
@@ -483,12 +506,21 @@ function RotateN8nConnectorForm({ tenantSlug, connectorId }: { tenantSlug: strin
         <label htmlFor={`n8n-rotate-overlap-${connectorId}`} className="text-xs text-text-secondary">
           Overlap (min)
         </label>
-        <input id={`n8n-rotate-overlap-${connectorId}`} name="overlapMinutes" type="number" min={0} max={10080} defaultValue={0} className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        <NumberInput
+          id={`n8n-rotate-overlap-${connectorId}`}
+          name="overlapMinutes"
+          min={0}
+          max={10080}
+          defaultValue={0}
+          className="w-20 text-xs"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? `n8n-rotate-${connectorId}-error` : undefined}
+        />
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rotating…">
           Rotate
         </Button>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`n8n-rotate-${connectorId}-error`} error={state.error} />
       {state.createdConnector ? <RawKeyCallout rawKey={state.createdConnector.rawKey} /> : null}
     </form>
   );

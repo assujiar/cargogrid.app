@@ -3,6 +3,11 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Banner } from "../../../../../components/ui/banner.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { SupremeHelpdeskActionState } from "../actions.ts";
 import {
@@ -71,46 +76,57 @@ function MessageBubble({ message }: { message: TicketMessageRow }) {
 
 function ReplyForm({ replyAction }: { replyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(replyAction, INITIAL_STATE);
+  // ISS-2026-242: one action error covers the whole reply, so both fields point at it.
+  const describedBy = state.error ? "hd-reply-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Message
-        <textarea name="body" required minLength={1} rows={3} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Visibility
-        <select name="visibility" defaultValue="public" className="mt-1 w-full max-w-xs rounded border border-neutral-300 p-2 text-sm">
-          <option value="public">Tenant-visible reply</option>
-          <option value="internal">Platform-internal note</option>
-        </select>
-      </label>
+      <FormField id="hd-reply-body" label="Message">
+        <Textarea id="hd-reply-body" name="body" required minLength={1} rows={3} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <div className="max-w-xs">
+        <FormField id="hd-reply-visibility" label="Visibility">
+          <Select id="hd-reply-visibility" name="visibility" defaultValue="public" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+            <option value="public">Tenant-visible reply</option>
+            <option value="internal">Platform-internal note</option>
+          </Select>
+        </FormField>
+      </div>
       <div>
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Sending…">
           Send
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="hd-reply-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function TransitionForm({ toStatus, label, requiresReason, transitionAction }: { toStatus: TicketStatus; label: string; requiresReason: boolean; transitionAction: (toStatus: TicketStatus) => BoundAction }) {
   const [state, formAction, pending] = useActionState(transitionAction(toStatus), INITIAL_STATE);
+  // One TransitionForm is rendered per available next status, so every id is scoped by toStatus.
+  const errorId = `hd-transition-${toStatus}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      {requiresReason ? <input name="reason" required placeholder="Reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" /> : null}
+      {requiresReason ? (
+        <>
+          <label htmlFor={`hd-transition-reason-${toStatus}`} className="sr-only">
+            Reason for {label}
+          </label>
+          <Input
+            id={`hd-transition-reason-${toStatus}`}
+            name="reason"
+            required
+            placeholder="Reason (required)"
+            className="min-w-[10rem] flex-1 text-xs"
+            invalid={Boolean(state.error)}
+            aria-describedby={state.error ? errorId : undefined}
+          />
+        </>
+      ) : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Updating…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -119,17 +135,18 @@ function AssignForm({ assignAction }: { assignAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(assignAction, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <label className="text-xs text-neutral-500">
-        Assign to (Supreme Admin auth user id, blank to unassign)
-        <input name="assigneeAuthUserId" className="mt-1 w-72 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <div className="w-72">
+        <FormField id="hd-assignee" label="Assign to (Supreme Admin auth user id, blank to unassign)">
+          <Input id="hd-assignee" name="assigneeAuthUserId" invalid={Boolean(state.error)} aria-describedby={state.error ? "hd-assign-error" : undefined} />
+        </FormField>
+      </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Assigning…">
         Assign
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="hd-assign-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -137,32 +154,35 @@ function AssignForm({ assignAction }: { assignAction: BoundAction }) {
 
 function TransferForm({ queues, transferAction }: { queues: readonly SupportQueueRow[]; transferAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(transferAction, INITIAL_STATE);
+  const describedBy = state.error ? "hd-transfer-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <label className="text-xs text-neutral-500">
-        Support queue
-        <select name="supportQueueId" required defaultValue="" className="mt-1 w-48 rounded border border-neutral-300 p-2 text-sm">
-          <option value="" disabled>
-            Select a queue
-          </option>
-          {queues.map((q) => (
-            <option key={q.id} value={q.id}>
-              {q.name}
+      <div className="w-48">
+        <FormField id="hd-transfer-queue" label="Support queue">
+          <Select id="hd-transfer-queue" name="supportQueueId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+            <option value="" disabled>
+              Select a queue
             </option>
-          ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason
-        <input name="reason" required minLength={1} className="mt-1 w-56 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+            {queues.map((q) => (
+              <option key={q.id} value={q.id}>
+                {q.name}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+      </div>
+      <div className="w-56">
+        <FormField id="hd-transfer-reason" label="Reason">
+          <Input id="hd-transfer-reason" name="reason" required minLength={1} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Transferring…">
         Transfer
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="hd-transfer-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -170,11 +190,12 @@ function TransferForm({ queues, transferAction }: { queues: readonly SupportQueu
 
 function ClassificationForm({ categories, classifyAction }: { categories: readonly TicketCategoryRow[]; classifyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(classifyAction, INITIAL_STATE);
+  // ISS-2026-242: one reclassify error covers all five fields, so each points at the shared text.
+  const describedBy = state.error ? "hd-classify-error" : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-      <label className="text-xs text-neutral-500">
-        Category
-        <select name="categoryId" required defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="hd-classify-category" label="Category">
+        <Select id="hd-classify-category" name="categoryId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="" disabled>
             Select a category
           </option>
@@ -183,53 +204,51 @@ function ClassificationForm({ categories, classifyAction }: { categories: readon
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Priority
-        <select name="priority" defaultValue="normal" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="hd-classify-priority" label="Priority">
+        <Select id="hd-classify-priority" name="priority" defaultValue="normal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Severity
-        <select name="severity" defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="hd-classify-severity" label="Severity">
+        <Select id="hd-classify-severity" name="severity" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Not specified</option>
           {HELPDESK_SEVERITIES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Environment
-        <select name="environment" defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="hd-classify-environment" label="Environment">
+        <Select id="hd-classify-environment" name="environment" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Not specified</option>
           {HELPDESK_ENVIRONMENTS.map((e) => (
             <option key={e} value={e}>
               {e}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-3">
-        Product area
-        <input name="productArea" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <div className="sm:col-span-3">
+        <FormField id="hd-classify-product-area" label="Product area">
+          <Input id="hd-classify-product-area" name="productArea" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Updating…">
           Reclassify
         </Button>
       </div>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-4">
-          {state.error}
-        </p>
+        <div className="sm:col-span-4">
+          <ValidationMessage id="hd-classify-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -254,17 +273,24 @@ function SupportGrantCorrelationForm({ detail, linkAction }: { detail: PlatformH
         <p className="text-xs text-neutral-500">No support-access case is currently linked to this ticket.</p>
       )}
       <form action={formAction} className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-neutral-500">
-          Support-access case reference (blank to unlink)
-          <input name="caseRef" defaultValue={detail.supportAccessCaseRef ?? ""} className="mt-1 w-56 rounded border border-neutral-300 p-1.5 text-sm" />
-        </label>
+        <div className="w-56">
+          <FormField id="hd-case-ref" label="Support-access case reference (blank to unlink)">
+            <Input
+              id="hd-case-ref"
+              name="caseRef"
+              defaultValue={detail.supportAccessCaseRef ?? ""}
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? "hd-case-ref-error" : undefined}
+            />
+          </FormField>
+        </div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
           Update correlation
         </Button>
         {state.error ? (
-          <p role="alert" className="w-full text-xs text-danger">
-            {state.error}
-          </p>
+          <div className="w-full">
+            <ValidationMessage id="hd-case-ref-error">{state.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     </div>

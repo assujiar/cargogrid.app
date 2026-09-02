@@ -2,6 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { submitVendorSelfRegistrationAction, type VendorSelfRegistrationFormState } from "./actions.ts";
 
 const INITIAL_STATE: VendorSelfRegistrationFormState = { error: null, result: null };
@@ -24,78 +28,51 @@ export function VendorSelfRegistrationForm({ tenantId }: { tenantId: string }) {
     );
   }
 
+  // ISS-2026-242: one server-action error covers the whole submission, so every field is wired to
+  // it rather than fabricating a per-field attribution the action does not return.
+  const describedBy = state.error ? "vendor-self-registration-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="legalName" className="text-sm font-medium text-neutral-700">
-          Legal company name
-        </label>
-        <input id="legalName" name="legalName" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="legalName" label="Legal company name">
+        <Input id="legalName" name="legalName" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="tradeName" className="text-sm font-medium text-neutral-700">
-          Trade name (optional)
-        </label>
-        <input id="tradeName" name="tradeName" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="tradeName" label="Trade name (optional)">
+        <Input id="tradeName" name="tradeName" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="legalEntityType" className="text-sm font-medium text-neutral-700">
-          Legal entity type (e.g. PT, CV, Perorangan)
-        </label>
-        <input id="legalEntityType" name="legalEntityType" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="legalEntityType" label="Legal entity type (e.g. PT, CV, Perorangan)">
+        <Input id="legalEntityType" name="legalEntityType" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="businessRegistrationNumber" className="text-sm font-medium text-neutral-700">
-          Business registration number (optional)
-        </label>
-        <input id="businessRegistrationNumber" name="businessRegistrationNumber" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="businessRegistrationNumber" label="Business registration number (optional)">
+        <Input id="businessRegistrationNumber" name="businessRegistrationNumber" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="vendorCategory" className="text-sm font-medium text-neutral-700">
-          Service category (e.g. trucking, warehousing)
-        </label>
-        <input id="vendorCategory" name="vendorCategory" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="vendorCategory" label="Service category (e.g. trucking, warehousing)">
+        <Input id="vendorCategory" name="vendorCategory" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="paymentTermDays" className="text-sm font-medium text-neutral-700">
-          Requested payment term (days, optional)
-        </label>
-        <input id="paymentTermDays" name="paymentTermDays" type="number" min="0" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="paymentTermDays" label="Requested payment term (days, optional)">
+        <NumberInput id="paymentTermDays" name="paymentTermDays" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="contactName" className="text-sm font-medium text-neutral-700">
-          Primary contact name
-        </label>
-        <input id="contactName" name="contactName" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="contactName" label="Primary contact name">
+        <Input id="contactName" name="contactName" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="contactEmail" className="text-sm font-medium text-neutral-700">
-          Primary contact email
-        </label>
-        <input id="contactEmail" name="contactEmail" type="email" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="contactEmail" label="Primary contact email">
+        <Input id="contactEmail" name="contactEmail" type="email" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="contactPhone" className="text-sm font-medium text-neutral-700">
-          Primary contact phone
-        </label>
-        <input id="contactPhone" name="contactPhone" type="tel" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="contactPhone" label="Primary contact phone">
+        <Input id="contactPhone" name="contactPhone" type="tel" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="vendor-self-registration-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Submitting…">
         Submit registration

@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { LoyaltyRedemption } from "../../../../../server/contracts/customer-portal-loyalty-redemptions/customer-portal-loyalty-redemptions.ts";
 import {
@@ -25,13 +27,10 @@ const STATUS_TONE: Record<LoyaltyRedemption["status"], StatusTone> = {
   failed: "danger",
 };
 
-function ErrorBanner({ error }: { error: string | null }) {
+/** ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby` points at. */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-xs text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 function RedemptionSummary({ redemption }: { redemption: LoyaltyRedemption }) {
@@ -64,11 +63,19 @@ function ApproveRejectRow({ tenantSlug, redemption }: { tenantSlug: string; rede
         </form>
 
         <form action={rejectAction} noValidate className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-56">
             <label htmlFor={`reject-reason-${redemption.id}`} className="sr-only">
               Rejection reason
             </label>
-            <input id={`reject-reason-${redemption.id}`} name="reason" type="text" required placeholder="Reason (required)" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <Input
+              id={`reject-reason-${redemption.id}`}
+              name="reason"
+              type="text"
+              required
+              placeholder="Reason (required)"
+              invalid={Boolean(rejectState.error)}
+              aria-describedby={rejectState.error ? `reject-${redemption.id}-error` : undefined}
+            />
           </div>
           <Button type="submit" variant="secondary" loading={rejectPending} loadingLabel="Rejecting…" className="w-fit">
             Reject
@@ -76,7 +83,7 @@ function ApproveRejectRow({ tenantSlug, redemption }: { tenantSlug: string; rede
         </form>
       </div>
       <ErrorBanner error={approveState.error} />
-      <ErrorBanner error={rejectState.error} />
+      <ErrorBanner id={`reject-${redemption.id}-error`} error={rejectState.error} />
     </div>
   );
 }
@@ -100,11 +107,19 @@ function FulfillmentRow({ tenantSlug, redemption }: { tenantSlug: string; redemp
         </form>
 
         <form action={failedAction} noValidate className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-56">
             <label htmlFor={`fail-reason-${redemption.id}`} className="sr-only">
               Fulfillment failure reason
             </label>
-            <input id={`fail-reason-${redemption.id}`} name="reason" type="text" required placeholder="Reason (required)" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <Input
+              id={`fail-reason-${redemption.id}`}
+              name="reason"
+              type="text"
+              required
+              placeholder="Reason (required)"
+              invalid={Boolean(failedState.error)}
+              aria-describedby={failedState.error ? `fail-${redemption.id}-error` : undefined}
+            />
           </div>
           <Button type="submit" variant="secondary" loading={failedPending} loadingLabel="Marking failed…" className="w-fit">
             Mark failed
@@ -112,7 +127,7 @@ function FulfillmentRow({ tenantSlug, redemption }: { tenantSlug: string; redemp
         </form>
       </div>
       <ErrorBanner error={fulfilledState.error} />
-      <ErrorBanner error={failedState.error} />
+      <ErrorBanner id={`fail-${redemption.id}-error`} error={failedState.error} />
     </div>
   );
 }

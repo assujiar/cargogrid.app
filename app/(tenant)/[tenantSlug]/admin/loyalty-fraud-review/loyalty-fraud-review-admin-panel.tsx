@@ -3,6 +3,13 @@
 import { useActionState } from "react";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { FormSection } from "../../../../../components/forms/form-section.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { LOYALTY_FRAUD_RISK_SIGNAL_TYPES, type LoyaltyFraudReviewCase, type LoyaltyFraudReviewSuppression } from "../../../../../server/contracts/customer-portal-loyalty-expiry-fraud/customer-portal-loyalty-expiry-fraud.ts";
 import {
@@ -24,51 +31,50 @@ const STATUS_TONE: Record<LoyaltyFraudReviewCase["status"], StatusTone> = {
   cleared: "success",
 };
 
-function ErrorBanner({ error }: { error: string | null }) {
+/** ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby` points at. */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-xs text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 export function OpenLoyaltyFraudReviewCaseForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(openLoyaltyFraudReviewCaseAction.bind(null, tenantSlug), INITIAL_STATE);
+  // ISS-2026-242: the RPC returns one error for the whole case-open call, never per-field ones.
+  const describedBy = state.error ? "ofrc-error" : undefined;
   return (
     <form action={formAction} noValidate className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <p className="text-sm font-semibold text-text-primary">Open a fraud review case</p>
-      <p className="text-xs text-text-secondary">Immediately applies a provisional hold on the account. No autonomous punitive action -- a human reviewer must later confirm or clear.</p>
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="ofrc-account" className="block text-xs font-medium text-text-secondary">
-            Loyalty account id
-          </label>
-          <input id="ofrc-account" name="loyaltyAccountId" type="text" required className="w-72 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      {/* ISS-2026-246: this heading + blurb pair was two <p> tags -- FormSection renders the real
+          <h2> the pair was already imitating. */}
+      <FormSection
+        title="Open a fraud review case"
+        description="Immediately applies a provisional hold on the account. No autonomous punitive action -- a human reviewer must later confirm or clear."
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-72">
+            <FormField id="ofrc-account" label="Loyalty account id">
+              <Input id="ofrc-account" name="loyaltyAccountId" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+          <div className="w-48">
+            <FormField id="ofrc-signal" label="Risk signal type">
+              <Select id="ofrc-signal" name="riskSignalType" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
+                {LOYALTY_FRAUD_RISK_SIGNAL_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          </div>
         </div>
-        <div>
-          <label htmlFor="ofrc-signal" className="block text-xs font-medium text-text-secondary">
-            Risk signal type
-          </label>
-          <select id="ofrc-signal" name="riskSignalType" required className="w-48 rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-            {LOYALTY_FRAUD_RISK_SIGNAL_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div>
-        <label htmlFor="ofrc-detail" className="block text-xs font-medium text-text-secondary">
-          Internal risk signal detail (never shown to the customer)
-        </label>
-        <textarea id="ofrc-detail" name="riskSignalDetail" required rows={2} className="w-full max-w-2xl rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      </div>
-      <Button type="submit" loading={pending} loadingLabel="Opening case…" className="w-fit">
-        Open case
-      </Button>
-      <ErrorBanner error={state.error} />
+        <FormField id="ofrc-detail" label="Internal risk signal detail (never shown to the customer)">
+          <Textarea id="ofrc-detail" name="riskSignalDetail" required rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <Button type="submit" loading={pending} loadingLabel="Opening case…" className="w-fit">
+          Open case
+        </Button>
+        <ErrorBanner id="ofrc-error" error={state.error} />
+      </FormSection>
     </form>
   );
 }
@@ -101,11 +107,19 @@ function CaseRow({ tenantSlug, fraudCase }: { tenantSlug: string; fraudCase: Loy
         ) : null}
 
         <form action={confirmAction} noValidate className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-56">
             <label htmlFor={`confirm-reason-${fraudCase.id}`} className="sr-only">
               Confirm reason
             </label>
-            <input id={`confirm-reason-${fraudCase.id}`} name="reviewReason" type="text" required placeholder="Confirm reason (required)" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <Input
+              id={`confirm-reason-${fraudCase.id}`}
+              name="reviewReason"
+              type="text"
+              required
+              placeholder="Confirm reason (required)"
+              invalid={Boolean(confirmState.error)}
+              aria-describedby={confirmState.error ? `confirm-${fraudCase.id}-error` : undefined}
+            />
           </div>
           <Button type="submit" variant="secondary" loading={confirmPending} loadingLabel="Confirming…" className="w-fit">
             Confirm (keep hold)
@@ -113,11 +127,19 @@ function CaseRow({ tenantSlug, fraudCase }: { tenantSlug: string; fraudCase: Loy
         </form>
 
         <form action={clearAction} noValidate className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-56">
             <label htmlFor={`clear-reason-${fraudCase.id}`} className="sr-only">
               Clear reason
             </label>
-            <input id={`clear-reason-${fraudCase.id}`} name="reviewReason" type="text" required placeholder="Clear reason (required)" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <Input
+              id={`clear-reason-${fraudCase.id}`}
+              name="reviewReason"
+              type="text"
+              required
+              placeholder="Clear reason (required)"
+              invalid={Boolean(clearState.error)}
+              aria-describedby={clearState.error ? `clear-${fraudCase.id}-error` : undefined}
+            />
           </div>
           <Button type="submit" loading={clearPending} loadingLabel="Clearing…" className="w-fit">
             Clear (release hold)
@@ -125,8 +147,8 @@ function CaseRow({ tenantSlug, fraudCase }: { tenantSlug: string; fraudCase: Loy
         </form>
       </div>
       <ErrorBanner error={claimState.error} />
-      <ErrorBanner error={confirmState.error} />
-      <ErrorBanner error={clearState.error} />
+      <ErrorBanner id={`confirm-${fraudCase.id}-error`} error={confirmState.error} />
+      <ErrorBanner id={`clear-${fraudCase.id}-error`} error={clearState.error} />
     </div>
   );
 }
@@ -180,34 +202,36 @@ export function LoyaltyFraudReviewCaseHistoryTable({ cases }: { cases: readonly 
 
 export function SuppressLoyaltyFraudReviewForm({ tenantSlug }: { tenantSlug: string }) {
   const [state, formAction, pending] = useActionState(suppressLoyaltyFraudReviewAction.bind(null, tenantSlug), INITIAL_STATE);
+  const describedBy = state.error ? "sup-error" : undefined;
   return (
     <form action={formAction} noValidate className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <p className="text-sm font-semibold text-text-primary">Suppress fraud review for an account</p>
-      <p className="text-xs text-text-secondary">Prevents a NEW review case from being opened while active -- for example, after clearing a verified false positive.</p>
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="sup-account" className="block text-xs font-medium text-text-secondary">
-            Loyalty account id
-          </label>
-          <input id="sup-account" name="loyaltyAccountId" type="text" required className="w-72 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      {/* ISS-2026-246: same heading + blurb pair as the case-open form above, same real <h2>. */}
+      <FormSection
+        title="Suppress fraud review for an account"
+        description="Prevents a NEW review case from being opened while active -- for example, after clearing a verified false positive."
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-72">
+            <FormField id="sup-account" label="Loyalty account id">
+              <Input id="sup-account" name="loyaltyAccountId" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+          <div className="w-24">
+            <FormField id="sup-days" label="Days">
+              <NumberInput id="sup-days" name="days" min={1} defaultValue={7} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
+          </div>
         </div>
-        <div>
-          <label htmlFor="sup-days" className="block text-xs font-medium text-text-secondary">
-            Days
-          </label>
-          <input id="sup-days" name="days" type="number" min={1} defaultValue={7} required className="w-24 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+        <div className="max-w-xl">
+          <FormField id="sup-reason" label="Reason">
+            <Input id="sup-reason" name="reason" type="text" required placeholder="Reason (required)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
         </div>
-      </div>
-      <div>
-        <label htmlFor="sup-reason" className="block text-xs font-medium text-text-secondary">
-          Reason
-        </label>
-        <input id="sup-reason" name="reason" type="text" required placeholder="Reason (required)" className="w-full max-w-xl rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      </div>
-      <Button type="submit" loading={pending} loadingLabel="Suppressing…" className="w-fit">
-        Suppress
-      </Button>
-      <ErrorBanner error={state.error} />
+        <Button type="submit" loading={pending} loadingLabel="Suppressing…" className="w-fit">
+          Suppress
+        </Button>
+        <ErrorBanner id="sup-error" error={state.error} />
+      </FormSection>
     </form>
   );
 }
@@ -227,18 +251,25 @@ function SuppressionRow({ tenantSlug, suppression }: { tenantSlug: string; suppr
       </div>
       {isActive ? (
         <form action={formAction} noValidate className="flex flex-wrap items-end gap-2">
-          <div>
+          <div className="w-56">
             <label htmlFor={`revoke-reason-${suppression.id}`} className="sr-only">
               Revoke reason
             </label>
-            <input id={`revoke-reason-${suppression.id}`} name="reason" type="text" placeholder="Reason (optional)" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+            <Input
+              id={`revoke-reason-${suppression.id}`}
+              name="reason"
+              type="text"
+              placeholder="Reason (optional)"
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? `revoke-suppression-${suppression.id}-error` : undefined}
+            />
           </div>
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Revoking…" className="w-fit">
             Revoke
           </Button>
         </form>
       ) : null}
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id={`revoke-suppression-${suppression.id}-error`} error={state.error} />
     </div>
   );
 }

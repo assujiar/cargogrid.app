@@ -9,6 +9,12 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { LOYALTY_REWARD_TERMS_ALLOWED_MIME_TYPES, type LoyaltyReward } from "../../../../../server/contracts/customer-portal-loyalty-rewards/customer-portal-loyalty-rewards.ts";
 import type { LoyaltyTierDefinition } from "../../../../../server/contracts/customer-portal-loyalty-tier/customer-portal-loyalty-tier.ts";
@@ -34,13 +40,10 @@ function needsMediaUploadsEnabled(error: string | null): boolean {
   return !!error && error.includes("Enable reward media uploads");
 }
 
-function ErrorBanner({ error }: { error: string | null }) {
+/** ISS-2026-242: the shared field-error renderer -- `id` is what each control's `aria-describedby` points at. */
+function ErrorBanner({ id, error }: { id?: string; error: string | null }) {
   if (!error) return null;
-  return (
-    <p role="alert" className="text-sm text-danger">
-      {error}
-    </p>
-  );
+  return <ValidationMessage id={id}>{error}</ValidationMessage>;
 }
 
 /** Shown inline once a reward media upload fails with document_type_not_configured -- a one-time (re-runnable) per-tenant setup step, gated identically to every other action in this admin area. */
@@ -59,97 +62,92 @@ function EnableMediaUploadsButton({ tenantSlug, programId }: { tenantSlug: strin
 function RewardMediaFileField({ id }: { id: string }) {
   const [selected, setSelected] = useState<File | null>(null);
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-xs font-medium text-text-secondary">
-        Upload terms/media file
-      </label>
-      <input id={id} type="file" accept={MEDIA_UPLOAD_ACCEPT} onChange={(event) => setSelected(event.currentTarget.files?.[0] ?? null)} className="text-xs" />
+    <FormField id={id} label="Upload terms/media file" helpText="Choosing a file here overrides the manual file id fallback below.">
+      <Input
+        id={id}
+        type="file"
+        accept={MEDIA_UPLOAD_ACCEPT}
+        onChange={(event) => setSelected(event.currentTarget.files?.[0] ?? null)}
+        className="text-xs"
+        aria-describedby={`${id}-help`}
+      />
       <input type="hidden" name="mediaOriginalFilename" value={selected?.name ?? ""} />
       <input type="hidden" name="mediaMimeType" value={selected?.type || "application/octet-stream"} />
       <input type="hidden" name="mediaSizeBytes" value={selected?.size ?? 0} />
-      <p className="text-[11px] text-text-secondary">Choosing a file here overrides the manual file id fallback below.</p>
-    </div>
+    </FormField>
   );
 }
 
-function TierSelect({ id, publishedTiers, defaultValue }: { id: string; publishedTiers: readonly LoyaltyTierDefinition[]; defaultValue?: string | null }) {
+function TierSelect({
+  id,
+  publishedTiers,
+  defaultValue,
+  invalid,
+  describedBy,
+}: {
+  id: string;
+  publishedTiers: readonly LoyaltyTierDefinition[];
+  defaultValue?: string | null;
+  invalid?: boolean;
+  describedBy?: string;
+}) {
   return (
-    <select id={id} name="minTierId" defaultValue={defaultValue ?? ""} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+    <Select id={id} name="minTierId" defaultValue={defaultValue ?? ""} invalid={invalid} aria-describedby={describedBy}>
       <option value="">No tier requirement</option>
       {publishedTiers.map((tier) => (
         <option key={tier.id} value={tier.id}>
           {tier.tierName}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
 export function CreateLoyaltyRewardForm({ tenantSlug, programId, publishedTiers }: { tenantSlug: string; programId: string; publishedTiers: readonly LoyaltyTierDefinition[] }) {
   const [state, formAction, pending] = useActionState(createLoyaltyRewardDraftAction.bind(null, tenantSlug, programId), INITIAL_STATE);
+  // ISS-2026-242: the draft RPC returns one error for the whole reward, never per-field ones.
+  const describedBy = state.error ? "lr-create-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-text-primary">Add a reward</h3>
-      <label htmlFor="lr-name" className="text-xs font-medium text-text-secondary">
-        Reward name
-      </label>
-      <input id="lr-name" name="rewardName" type="text" required placeholder="e.g. Free Shipping Pass" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="lr-type" className="text-xs font-medium text-text-secondary">
-        Reward type
-      </label>
-      <select id="lr-type" name="rewardType" defaultValue="discount_voucher" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="discount_voucher">Discount voucher</option>
-        <option value="physical_item">Physical item</option>
-        <option value="service_credit">Service credit</option>
-      </select>
-      <label htmlFor="lr-description" className="text-xs font-medium text-text-secondary">
-        Description (customer-facing)
-      </label>
-      <textarea id="lr-description" name="description" rows={2} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      <label htmlFor="lr-terms" className="text-xs font-medium text-text-secondary">
-        Terms text (customer-facing)
-      </label>
-      <textarea id="lr-terms" name="termsText" rows={2} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+      <FormField id="lr-name" label="Reward name">
+        <Input id="lr-name" name="rewardName" type="text" required placeholder="e.g. Free Shipping Pass" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="lr-type" label="Reward type">
+        <Select id="lr-type" name="rewardType" defaultValue="discount_voucher" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="discount_voucher">Discount voucher</option>
+          <option value="physical_item">Physical item</option>
+          <option value="service_credit">Service credit</option>
+        </Select>
+      </FormField>
+      <FormField id="lr-description" label="Description (customer-facing)">
+        <Textarea id="lr-description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="lr-terms" label="Terms text (customer-facing)">
+        <Textarea id="lr-terms" name="termsText" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div className="grid grid-cols-2 gap-2">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="lr-min-tier" className="text-xs font-medium text-text-secondary">
-            Minimum tier
-          </label>
-          <TierSelect id="lr-min-tier" publishedTiers={publishedTiers} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="lr-min-points" className="text-xs font-medium text-text-secondary">
-            Minimum points required
-          </label>
-          <input id="lr-min-points" name="minPointsRequired" type="number" step="0.01" min="0" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="lr-total-stock" className="text-xs font-medium text-text-secondary">
-            Total stock (blank = unlimited)
-          </label>
-          <input id="lr-total-stock" name="totalStock" type="number" step="1" min="0" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="lr-internal-cost" className="text-xs font-medium text-text-secondary">
-            Internal cost (never shown to customers)
-          </label>
-          <input id="lr-internal-cost" name="internalCost" type="number" step="0.01" min="0" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="lr-vendor-ref" className="text-xs font-medium text-text-secondary">
-            Vendor reference (never shown to customers)
-          </label>
-          <input id="lr-vendor-ref" name="vendorRef" type="text" className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
+        <FormField id="lr-min-tier" label="Minimum tier">
+          <TierSelect id="lr-min-tier" publishedTiers={publishedTiers} invalid={Boolean(state.error)} describedBy={describedBy} />
+        </FormField>
+        <FormField id="lr-min-points" label="Minimum points required">
+          <NumberInput id="lr-min-points" name="minPointsRequired" step="0.01" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="lr-total-stock" label="Total stock (blank = unlimited)">
+          <NumberInput id="lr-total-stock" name="totalStock" step="1" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="lr-internal-cost" label="Internal cost (never shown to customers)">
+          <NumberInput id="lr-internal-cost" name="internalCost" step="0.01" min="0" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="lr-vendor-ref" label="Vendor reference (never shown to customers)">
+          <Input id="lr-vendor-ref" name="vendorRef" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
         <RewardMediaFileField id="lr-media-file" />
-        <div className="flex flex-col gap-1">
-          <label htmlFor="lr-file-id" className="text-xs font-medium text-text-secondary">
-            Manual fallback: an existing file id (e.g. from the Document Center)
-          </label>
-          <input id="lr-file-id" name="fileId" type="text" placeholder="app.files.id" className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
-        </div>
+        <FormField id="lr-file-id" label="Manual fallback: an existing file id (e.g. from the Document Center)">
+          <Input id="lr-file-id" name="fileId" type="text" placeholder="app.files.id" className="font-mono text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <ErrorBanner error={state.error} />
+      <ErrorBanner id="lr-create-error" error={state.error} />
       {needsMediaUploadsEnabled(state.error) ? <EnableMediaUploadsButton tenantSlug={tenantSlug} programId={programId} /> : null}
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Add reward
@@ -161,67 +159,80 @@ export function CreateLoyaltyRewardForm({ tenantSlug, programId, publishedTiers 
 export function EditLoyaltyRewardDraftForm({ tenantSlug, programId, reward, publishedTiers }: { tenantSlug: string; programId: string; reward: LoyaltyReward; publishedTiers: readonly LoyaltyTierDefinition[] }) {
   const [state, formAction, pending] = useActionState(updateLoyaltyRewardDraftAction.bind(null, tenantSlug, programId, reward.id, reward.recordVersion), INITIAL_STATE);
   const [publishState, publishAction, publishPending] = useActionState(publishLoyaltyRewardAction.bind(null, tenantSlug, programId, reward.id, reward.recordVersion), INITIAL_STATE);
+  // ISS-2026-242: the update RPC returns one error for the whole draft, never per-field ones.
+  const describedBy = state.error ? `lr-edit-${reward.id}-error` : undefined;
   return (
     <div className="mt-2 flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 p-3">
       <StatusBadge tone="neutral" label={`Draft v${reward.versionNumber}`} />
       <form action={formAction} className="flex flex-col gap-2" noValidate>
         <input type="hidden" name="rewardName" value={reward.rewardName} />
-        <label htmlFor={`lr-edit-type-${reward.id}`} className="text-xs font-medium text-text-secondary">
-          Reward type
-        </label>
-        <select id={`lr-edit-type-${reward.id}`} name="rewardType" defaultValue={reward.rewardType} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-          <option value="discount_voucher">Discount voucher</option>
-          <option value="physical_item">Physical item</option>
-          <option value="service_credit">Service credit</option>
-        </select>
-        <label htmlFor={`lr-edit-description-${reward.id}`} className="text-xs font-medium text-text-secondary">
-          Description
-        </label>
-        <textarea id={`lr-edit-description-${reward.id}`} name="description" rows={2} defaultValue={reward.description ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <label htmlFor={`lr-edit-terms-${reward.id}`} className="text-xs font-medium text-text-secondary">
-          Terms text
-        </label>
-        <textarea id={`lr-edit-terms-${reward.id}`} name="termsText" rows={2} defaultValue={reward.termsText ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <FormField id={`lr-edit-type-${reward.id}`} label="Reward type">
+          <Select id={`lr-edit-type-${reward.id}`} name="rewardType" defaultValue={reward.rewardType} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+            <option value="discount_voucher">Discount voucher</option>
+            <option value="physical_item">Physical item</option>
+            <option value="service_credit">Service credit</option>
+          </Select>
+        </FormField>
+        <FormField id={`lr-edit-description-${reward.id}`} label="Description">
+          <Textarea id={`lr-edit-description-${reward.id}`} name="description" rows={2} defaultValue={reward.description ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`lr-edit-terms-${reward.id}`} label="Terms text">
+          <Textarea id={`lr-edit-terms-${reward.id}`} name="termsText" rows={2} defaultValue={reward.termsText ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
         <div className="grid grid-cols-2 gap-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`lr-edit-min-tier-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Minimum tier
-            </label>
-            <TierSelect id={`lr-edit-min-tier-${reward.id}`} publishedTiers={publishedTiers} defaultValue={reward.minTierId} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`lr-edit-min-points-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Minimum points required
-            </label>
-            <input id={`lr-edit-min-points-${reward.id}`} name="minPointsRequired" type="number" step="0.01" min="0" defaultValue={reward.minPointsRequired ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`lr-edit-total-stock-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Total stock (blank = unlimited)
-            </label>
-            <input id={`lr-edit-total-stock-${reward.id}`} name="totalStock" type="number" step="1" min="0" defaultValue={reward.totalStock ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`lr-edit-internal-cost-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Internal cost
-            </label>
-            <input id={`lr-edit-internal-cost-${reward.id}`} name="internalCost" type="number" step="0.01" min="0" defaultValue={reward.internalCost ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`lr-edit-vendor-ref-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Vendor reference
-            </label>
-            <input id={`lr-edit-vendor-ref-${reward.id}`} name="vendorRef" type="text" defaultValue={reward.vendorRef ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
+          <FormField id={`lr-edit-min-tier-${reward.id}`} label="Minimum tier">
+            <TierSelect id={`lr-edit-min-tier-${reward.id}`} publishedTiers={publishedTiers} defaultValue={reward.minTierId} invalid={Boolean(state.error)} describedBy={describedBy} />
+          </FormField>
+          <FormField id={`lr-edit-min-points-${reward.id}`} label="Minimum points required">
+            <NumberInput
+              id={`lr-edit-min-points-${reward.id}`}
+              name="minPointsRequired"
+              step="0.01"
+              min="0"
+              defaultValue={reward.minPointsRequired ?? ""}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
+          <FormField id={`lr-edit-total-stock-${reward.id}`} label="Total stock (blank = unlimited)">
+            <NumberInput
+              id={`lr-edit-total-stock-${reward.id}`}
+              name="totalStock"
+              step="1"
+              min="0"
+              defaultValue={reward.totalStock ?? ""}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
+          <FormField id={`lr-edit-internal-cost-${reward.id}`} label="Internal cost">
+            <NumberInput
+              id={`lr-edit-internal-cost-${reward.id}`}
+              name="internalCost"
+              step="0.01"
+              min="0"
+              defaultValue={reward.internalCost ?? ""}
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
+          <FormField id={`lr-edit-vendor-ref-${reward.id}`} label="Vendor reference">
+            <Input id={`lr-edit-vendor-ref-${reward.id}`} name="vendorRef" type="text" defaultValue={reward.vendorRef ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
           <RewardMediaFileField id={`lr-edit-media-file-${reward.id}`} />
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`lr-edit-file-id-${reward.id}`} className="text-xs font-medium text-text-secondary">
-              Manual fallback: an existing file id (e.g. from the Document Center)
-            </label>
-            <input id={`lr-edit-file-id-${reward.id}`} name="fileId" type="text" defaultValue={reward.fileId ?? ""} className="w-full rounded-md border border-neutral-300 px-3 py-2 font-mono text-xs" />
-          </div>
+          <FormField id={`lr-edit-file-id-${reward.id}`} label="Manual fallback: an existing file id (e.g. from the Document Center)">
+            <Input
+              id={`lr-edit-file-id-${reward.id}`}
+              name="fileId"
+              type="text"
+              defaultValue={reward.fileId ?? ""}
+              className="font-mono text-xs"
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
         </div>
-        <ErrorBanner error={state.error} />
+        <ErrorBanner id={`lr-edit-${reward.id}-error`} error={state.error} />
         {needsMediaUploadsEnabled(state.error) ? <EnableMediaUploadsButton tenantSlug={tenantSlug} programId={programId} /> : null}
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
           Save draft
@@ -247,8 +258,18 @@ export function LiveRewardActions({ tenantSlug, programId, reward }: { tenantSlu
     <div className="mt-2 flex flex-wrap items-end gap-3">
       {reward.status === "published" ? (
         <form action={pauseAction} className="flex items-end gap-2" noValidate>
-          <input name="reason" placeholder="Pause reason (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-          <ErrorBanner error={pauseState.error} />
+          <label htmlFor={`lr-pause-reason-${reward.id}`} className="sr-only">
+            Pause reason
+          </label>
+          <Input
+            id={`lr-pause-reason-${reward.id}`}
+            name="reason"
+            placeholder="Pause reason (optional)"
+            className="text-xs"
+            invalid={Boolean(pauseState.error)}
+            aria-describedby={pauseState.error ? `lr-pause-${reward.id}-error` : undefined}
+          />
+          <ErrorBanner id={`lr-pause-${reward.id}-error`} error={pauseState.error} />
           <Button type="submit" variant="secondary" loading={pausePending} loadingLabel="Pausing…" className="w-fit">
             Pause
           </Button>
@@ -263,8 +284,18 @@ export function LiveRewardActions({ tenantSlug, programId, reward }: { tenantSlu
         </form>
       ) : null}
       <form action={archiveAction} className="flex items-end gap-2" noValidate>
-        <input name="reason" placeholder="Archive reason (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-        <ErrorBanner error={archiveState.error} />
+        <label htmlFor={`lr-archive-reason-${reward.id}`} className="sr-only">
+          Archive reason
+        </label>
+        <Input
+          id={`lr-archive-reason-${reward.id}`}
+          name="reason"
+          placeholder="Archive reason (optional)"
+          className="text-xs"
+          invalid={Boolean(archiveState.error)}
+          aria-describedby={archiveState.error ? `lr-archive-${reward.id}-error` : undefined}
+        />
+        <ErrorBanner id={`lr-archive-${reward.id}-error`} error={archiveState.error} />
         <Button type="submit" variant="destructive" loading={archivePending} loadingLabel="Archiving…" className="w-fit">
           Archive
         </Button>

@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { LoyaltyExpiryRun } from "../../../../../server/contracts/customer-portal-loyalty-expiry-fraud/customer-portal-loyalty-expiry-fraud.ts";
 import { runLoyaltyExpirySweepAction, type LoyaltyExpiryAdminFormState } from "./actions.ts";
@@ -28,21 +31,23 @@ export function RunLoyaltyExpirySweepForm({ tenantSlug }: { tenantSlug: string }
         callable entry point a future scheduler would invoke.
       </p>
       <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="expiry-run-label" className="block text-xs font-medium text-text-secondary">
-            Run label (optional)
-          </label>
-          <input id="expiry-run-label" name="runLabel" type="text" placeholder="defaults to today's date" className="w-56 rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+        <div className="w-56">
+          <FormField id="expiry-run-label" label="Run label (optional)">
+            <Input
+              id="expiry-run-label"
+              name="runLabel"
+              type="text"
+              placeholder="defaults to today's date"
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? "expiry-sweep-error" : undefined}
+            />
+          </FormField>
         </div>
         <Button type="submit" loading={pending} loadingLabel="Running sweep…" className="w-fit">
           Run expiry sweep
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="expiry-sweep-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
