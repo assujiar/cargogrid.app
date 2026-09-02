@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { SourcingRequest, SourcingCandidate, SourcingRequestEvent, SourcingRequestStatus, SourcingCandidateExclusionReason } from "../../../../../../server/contracts/sourcing/sourcing.ts";
@@ -43,21 +45,20 @@ function ActionForm({
   className = "flex flex-col gap-2",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className={className}>
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -72,11 +73,7 @@ function NoArgActionButton({ action, label, loadingLabel, variant = "secondary" 
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"}>
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -155,36 +152,27 @@ export function SourcingDetailPanel({
           <details className="text-xs">
             <summary className="cursor-pointer text-primary">Override constraints (governed exception)</summary>
             <ActionForm action={overrideAction} submitLabel="Apply override" loadingLabel="Applying…" variant="secondary" className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="cargoWeightMax" className="text-xs font-medium text-neutral-700">
-                  New cargo weight max (widen only)
-                </label>
-                <Input id="cargoWeightMax" name="cargoWeightMax" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="cargoVolumeMax" className="text-xs font-medium text-neutral-700">
-                  New cargo volume max (widen only)
-                </label>
-                <Input id="cargoVolumeMax" name="cargoVolumeMax" type="number" min={0} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="destinationLane" className="text-xs font-medium text-neutral-700">
-                  New destination lane
-                </label>
-                <Input id="destinationLane" name="destinationLane" type="text" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="overrideExpiresAt" className="text-xs font-medium text-neutral-700">
-                  Override expires (optional)
-                </label>
-                <Input id="overrideExpiresAt" name="overrideExpiresAt" type="datetime-local" />
-              </div>
-              <div className="flex flex-col gap-1 sm:col-span-4">
-                <label htmlFor="overrideReason" className="text-xs font-medium text-neutral-700">
-                  Reason (required)
-                </label>
-                <Input id="overrideReason" name="reason" type="text" required />
-              </div>
+              {(describedBy) => (
+                <>
+                  <FormField id="cargoWeightMax" label="New cargo weight max (widen only)">
+                    <Input id="cargoWeightMax" name="cargoWeightMax" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="cargoVolumeMax" label="New cargo volume max (widen only)">
+                    <Input id="cargoVolumeMax" name="cargoVolumeMax" type="number" min={0} aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="destinationLane" label="New destination lane">
+                    <Input id="destinationLane" name="destinationLane" type="text" aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="overrideExpiresAt" label="Override expires (optional)">
+                    <Input id="overrideExpiresAt" name="overrideExpiresAt" type="datetime-local" aria-describedby={describedBy} />
+                  </FormField>
+                  <div className="sm:col-span-4">
+                    <FormField id="overrideReason" label="Reason (required)">
+                      <Input id="overrideReason" name="reason" type="text" required aria-describedby={describedBy} />
+                    </FormField>
+                  </div>
+                </>
+              )}
             </ActionForm>
           </details>
         ) : null}
@@ -196,17 +184,38 @@ export function SourcingDetailPanel({
         {isOpen ? <NoArgActionButton action={submitShortlistAction} label={`Submit shortlist (${shortlistedCount} selected)`} loadingLabel="Submitting…" variant="primary" /> : null}
         {isOpen ? (
           <ActionForm action={closeNoSourceAction} submitLabel="Close: no source" loadingLabel="Closing…" variant="destructive" className="flex items-center gap-2">
-            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-64" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="close-no-source-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="close-no-source-reason" name="reason" type="text" placeholder="Reason (required)" required className="w-64" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         ) : null}
         {isDraft || isOpen ? (
           <ActionForm action={cancelAction} submitLabel="Cancel" loadingLabel="Cancelling…" variant="destructive" className="flex items-center gap-2">
-            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-64" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="cancel-sourcing-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="cancel-sourcing-reason" name="reason" type="text" placeholder="Reason (required)" required className="w-64" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         ) : null}
         {canReopen ? (
           <ActionForm action={reopenAction} submitLabel="Reopen" loadingLabel="Reopening…" variant="secondary" className="flex items-center gap-2">
-            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-64" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="reopen-sourcing-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="reopen-sourcing-reason" name="reason" type="text" placeholder="Reason (required)" required className="w-64" aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         ) : null}
       </section>
@@ -280,7 +289,14 @@ export function SourcingDetailPanel({
                             variant={candidate.eligible ? "primary" : "destructive"}
                             className="flex flex-col gap-1"
                           >
-                            <Input name="reason" type="text" placeholder="Reason (required)" required className="w-48 text-xs" />
+                            {(describedBy) => (
+                              <>
+                                <label htmlFor={`shortlist-reason-${candidate.id}`} className="sr-only">
+                                  Reason
+                                </label>
+                                <Input id={`shortlist-reason-${candidate.id}`} name="reason" type="text" placeholder="Reason (required)" required className="w-48 text-xs" aria-describedby={describedBy} />
+                              </>
+                            )}
                           </ActionForm>
                         ) : (
                           "—"

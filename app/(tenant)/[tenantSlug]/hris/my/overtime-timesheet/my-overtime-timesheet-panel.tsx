@@ -2,6 +2,11 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type {
@@ -23,38 +28,34 @@ function CreateOvertimeRequestForm({ createOvertimeRequestAction }: { createOver
   const [state, formAction, pending] = useActionState(createOvertimeRequestAction, INITIAL_STATE);
   const [requestType, setRequestType] = useState<RequestType>("planned");
 
+  const describedBy = state.error ? "create-overtime-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-neutral-900">Request overtime</h3>
-      <label className="text-xs text-neutral-500">
-        Type
-        <select name="requestType" value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="overtime-request-type" label="Type">
+        <Select id="overtime-request-type" name="requestType" value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="planned">Planned (before the work happens)</option>
           <option value="emergency_after_the_fact">Emergency (after the work happened)</option>
-        </select>
-      </label>
+        </Select>
+      </FormField>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Start
-          <input type="datetime-local" name="requestedStartAt" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          End
-          <input type="datetime-local" name="requestedEndAt" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id="overtime-start" label="Start">
+          <Input id="overtime-start" type="datetime-local" name="requestedStartAt" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="overtime-end" label="End">
+          <Input id="overtime-end" type="datetime-local" name="requestedEndAt" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <label className="text-xs text-neutral-500">
-        Unpaid break (minutes)
-        <input type="number" name="unpaidBreakMinutes" min={0} defaultValue={0} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason
-        <textarea name="reason" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={2} />
-      </label>
+      <FormField id="overtime-unpaid-break" label="Unpaid break (minutes)">
+        <Input id="overtime-unpaid-break" type="number" name="unpaidBreakMinutes" min={0} defaultValue={0} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="overtime-reason" label="Reason">
+        <Textarea id="overtime-reason" name="reason" required minLength={1} rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Requesting…">
         Request overtime
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="create-overtime-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -94,54 +95,54 @@ function OvertimeRequestRowItem({
         ) : null}
         {row.status === "draft" || row.status === "pending_approval" || row.status === "approved" ? (
           <form action={cancelFormAction} className="flex items-center gap-2">
-            <input name="reason" required placeholder="Cancel reason" className="rounded border border-neutral-300 p-2 text-xs" />
+            <label htmlFor={`cancel-ot-reason-${row.id}`} className="sr-only">
+              Cancel reason
+            </label>
+            <Input id={`cancel-ot-reason-${row.id}`} name="reason" required placeholder="Cancel reason" className="text-xs" invalid={Boolean(cancelState.error)} aria-describedby={cancelState.error ? `cancel-ot-${row.id}-error` : undefined} />
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">
               Cancel
             </Button>
           </form>
         ) : null}
       </div>
-      {submitState.error ? <p role="alert" className="text-xs text-danger">{submitState.error}</p> : null}
-      {cancelState.error ? <p role="alert" className="text-xs text-danger">{cancelState.error}</p> : null}
+      {submitState.error ? <ValidationMessage>{submitState.error}</ValidationMessage> : null}
+      {cancelState.error ? <ValidationMessage id={`cancel-ot-${row.id}-error`}>{cancelState.error}</ValidationMessage> : null}
     </li>
   );
 }
 
 function CreateTimesheetEntryForm({ createTimesheetEntryAction }: { createTimesheetEntryAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createTimesheetEntryAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-timesheet-entry-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h3 className="text-sm font-semibold text-neutral-900">Log a timesheet entry</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Work date
-          <input type="date" name="workDate" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Minutes worked
-          <input type="number" name="entryMinutes" min={1} max={1440} required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Unpaid break (minutes)
-          <input type="number" name="unpaidBreakMinutes" min={0} defaultValue={0} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Job order id (optional)
-          <input name="jobOrderId" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="job_order UUID" />
-        </label>
-        <label className="text-xs text-neutral-500 sm:col-span-2">
-          Shipment order id (optional -- multi-job allocation: log a SEPARATE entry per job/shipment for the same day)
-          <input name="shipmentOrderId" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="shipment_order UUID" />
-        </label>
+        <FormField id="entry-work-date" label="Work date">
+          <Input id="entry-work-date" type="date" name="workDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="entry-minutes" label="Minutes worked">
+          <Input id="entry-minutes" type="number" name="entryMinutes" min={1} max={1440} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="entry-unpaid-break" label="Unpaid break (minutes)">
+          <Input id="entry-unpaid-break" type="number" name="unpaidBreakMinutes" min={0} defaultValue={0} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="entry-job-order-id" label="Job order id (optional)">
+          <Input id="entry-job-order-id" name="jobOrderId" placeholder="job_order UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <div className="sm:col-span-2">
+          <FormField id="entry-shipment-order-id" label="Shipment order id (optional -- multi-job allocation: log a SEPARATE entry per job/shipment for the same day)">
+            <Input id="entry-shipment-order-id" name="shipmentOrderId" placeholder="shipment_order UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
       </div>
-      <label className="text-xs text-neutral-500">
-        Notes (optional)
-        <textarea name="notes" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={2} />
-      </label>
+      <FormField id="entry-notes" label="Notes (optional)">
+        <Textarea id="entry-notes" name="notes" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Logging…">
         Log entry
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="create-timesheet-entry-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -177,15 +178,18 @@ function TimesheetEntryRowItem({
         ) : null}
         {row.status === "draft" || row.status === "pending_approval" || row.status === "approved" ? (
           <form action={cancelFormAction} className="flex items-center gap-2">
-            <input name="reason" required placeholder="Cancel reason" className="rounded border border-neutral-300 p-2 text-xs" />
+            <label htmlFor={`cancel-ts-reason-${row.id}`} className="sr-only">
+              Cancel reason
+            </label>
+            <Input id={`cancel-ts-reason-${row.id}`} name="reason" required placeholder="Cancel reason" className="text-xs" invalid={Boolean(cancelState.error)} aria-describedby={cancelState.error ? `cancel-ts-${row.id}-error` : undefined} />
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">
               Cancel
             </Button>
           </form>
         ) : null}
       </div>
-      {submitState.error ? <p role="alert" className="text-xs text-danger">{submitState.error}</p> : null}
-      {cancelState.error ? <p role="alert" className="text-xs text-danger">{cancelState.error}</p> : null}
+      {submitState.error ? <ValidationMessage>{submitState.error}</ValidationMessage> : null}
+      {cancelState.error ? <ValidationMessage id={`cancel-ts-${row.id}-error`}>{cancelState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -202,22 +206,23 @@ function SubmitPeriodSummaryForm({ periods, myEmployeeId, submitTimesheetPeriodS
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4 sm:flex-row sm:items-end">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4 sm:flex-row sm:items-end" noValidate>
       <input type="hidden" name="employeeId" value={myEmployeeId} />
-      <label className="flex-1 text-xs text-neutral-500">
-        Period
-        <select name="periodId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-          {openPeriods.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.code} ({p.periodStart} to {p.periodEnd})
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex-1">
+        <FormField id="period-summary-id" label="Period">
+          <Select id="period-summary-id" name="periodId" required invalid={Boolean(state.error)} aria-describedby={state.error ? "submit-period-summary-error" : undefined}>
+            {openPeriods.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} ({p.periodStart} to {p.periodEnd})
+              </option>
+            ))}
+          </Select>
+        </FormField>
+      </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…">
         Submit my period summary
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="submit-period-summary-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }

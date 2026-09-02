@@ -4,6 +4,10 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { OnboardingExportForm, type OnboardingExportActionState } from "../../../../../components/domain/onboarding-export-form.tsx";
@@ -73,12 +77,12 @@ export function OnboardingCaseListPanel({
             <label htmlFor="case-search" className="text-xs font-medium text-neutral-600">
               Search (employee name)
             </label>
-            <input
+            <Input
               id="case-search"
               type="search"
               defaultValue={search}
               placeholder="Employee name"
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+              className="py-1.5"
               onKeyDown={(event) => {
                 if (event.key === "Enter") applyFilter(caseTypeFilter ?? "", statusFilter ?? "", event.currentTarget.value);
               }}
@@ -88,27 +92,27 @@ export function OnboardingCaseListPanel({
             <label htmlFor="case-type-filter" className="text-xs font-medium text-neutral-600">
               Case type
             </label>
-            <select id="case-type-filter" defaultValue={caseTypeFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value, statusFilter ?? "", search)}>
+            <Select id="case-type-filter" defaultValue={caseTypeFilter ?? ""} className="py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, statusFilter ?? "", search)}>
               <option value="">All types</option>
               {CASE_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="case-status-filter" className="text-xs font-medium text-neutral-600">
               Status
             </label>
-            <select id="case-status-filter" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(caseTypeFilter ?? "", event.currentTarget.value, search)}>
+            <Select id="case-status-filter" defaultValue={statusFilter ?? ""} className="py-1.5" onChange={(event) => applyFilter(caseTypeFilter ?? "", event.currentTarget.value, search)}>
               <option value="">All statuses</option>
               {CASE_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -159,122 +163,97 @@ export function OnboardingCaseListPanel({
         {publishedTemplateCount === 0 ? (
           <p className="text-xs text-warning">No published checklist template exists yet for any case type -- publish one under Checklist templates first, or starting will fail with no_published_checklist_template.</p>
         ) : null}
-        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="caseType" className="text-xs font-medium text-neutral-600">
-              Case type
-            </label>
-            <select id="caseType" name="caseType" required value={caseType} onChange={(e) => setCaseType(e.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate>
+          <FormField id="caseType" label="Case type">
+            <Select id="caseType" name="caseType" required value={caseType} onChange={(e) => setCaseType(e.currentTarget.value)} invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined}>
               {CASE_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="sourceType" className="text-xs font-medium text-neutral-600">
-              Source
-            </label>
-            <select id="sourceType" name="sourceType" required value={sourceType} onChange={(e) => setSourceType(e.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+            </Select>
+          </FormField>
+          <FormField id="sourceType" label="Source">
+            <Select id="sourceType" name="sourceType" required value={sourceType} onChange={(e) => setSourceType(e.currentTarget.value)} invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined}>
               {SOURCE_TYPES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FormField>
 
           {sourceType === "job_offer" ? (
-            <div className="flex flex-col gap-1 sm:col-span-2">
-              <label htmlFor="sourceJobOfferId" className="text-xs font-medium text-neutral-600">
-                Accepted job offer ID
-              </label>
-              <input
-                id="sourceJobOfferId"
-                name="sourceJobOfferId"
-                type="text"
-                required
-                placeholder="UUID of an app.job_offers row with status=accepted"
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
-                value={sourceJobOfferId}
-                onChange={(e) => setSourceJobOfferId(e.currentTarget.value)}
-              />
-              <p className="text-xs text-neutral-500">Find this on the candidate&apos;s application detail page under Recruitment once their offer is accepted.</p>
+            <div className="sm:col-span-2">
+              <FormField id="sourceJobOfferId" label="Accepted job offer ID" helpText="Find this on the candidate's application detail page under Recruitment once their offer is accepted.">
+                <Input
+                  id="sourceJobOfferId"
+                  name="sourceJobOfferId"
+                  type="text"
+                  required
+                  placeholder="UUID of an app.job_offers row with status=accepted"
+                  value={sourceJobOfferId}
+                  onChange={(e) => setSourceJobOfferId(e.currentTarget.value)}
+                  invalid={Boolean(state.error)}
+                  aria-describedby={state.error ? "start-case-error" : undefined}
+                />
+              </FormField>
             </div>
           ) : null}
 
           {sourceType === "existing_employee" ? (
-            <div className="flex flex-col gap-1 sm:col-span-2">
-              <label htmlFor="employeeMasterRecordId" className="text-xs font-medium text-neutral-600">
-                Employee ID (master record)
-              </label>
-              <input
-                id="employeeMasterRecordId"
-                name="employeeMasterRecordId"
-                type="text"
-                required
-                placeholder="UUID from the Employees directory"
-                className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
-                value={employeeMasterRecordId}
-                onChange={(e) => setEmployeeMasterRecordId(e.currentTarget.value)}
-              />
+            <div className="sm:col-span-2">
+              <FormField id="employeeMasterRecordId" label="Employee ID (master record)">
+                <Input
+                  id="employeeMasterRecordId"
+                  name="employeeMasterRecordId"
+                  type="text"
+                  required
+                  placeholder="UUID from the Employees directory"
+                  value={employeeMasterRecordId}
+                  onChange={(e) => setEmployeeMasterRecordId(e.currentTarget.value)}
+                  invalid={Boolean(state.error)}
+                  aria-describedby={state.error ? "start-case-error" : undefined}
+                />
+              </FormField>
             </div>
           ) : null}
 
           {sourceType === "direct_hire" ? (
             <>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="fullName" className="text-xs font-medium text-neutral-600">
-                  Full name
-                </label>
-                <input id="fullName" name="fullName" type="text" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="employmentType" className="text-xs font-medium text-neutral-600">
-                  Employment type
-                </label>
-                <select id="employmentType" name="employmentType" required defaultValue="full_time" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+              <FormField id="fullName" label="Full name">
+                <Input id="fullName" name="fullName" type="text" required invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined} />
+              </FormField>
+              <FormField id="employmentType" label="Employment type">
+                <Select id="employmentType" name="employmentType" required defaultValue="full_time" invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined}>
                   <option value="full_time">full time</option>
                   <option value="part_time">part time</option>
                   <option value="contract">contract</option>
                   <option value="intern">intern</option>
                   <option value="probation">probation</option>
                   <option value="daily_worker">daily worker</option>
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="workEmail" className="text-xs font-medium text-neutral-600">
-                  Work email (optional)
-                </label>
-                <input id="workEmail" name="workEmail" type="email" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label htmlFor="idempotencyKey" className="text-xs font-medium text-neutral-600">
-                  Idempotency key
-                </label>
-                <input id="idempotencyKey" name="idempotencyKey" type="text" required placeholder="a stable, unique key for this start attempt" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-              </div>
+                </Select>
+              </FormField>
+              <FormField id="workEmail" label="Work email (optional)">
+                <Input id="workEmail" name="workEmail" type="email" invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined} />
+              </FormField>
+              <FormField id="idempotencyKey" label="Idempotency key">
+                <Input id="idempotencyKey" name="idempotencyKey" type="text" required placeholder="a stable, unique key for this start attempt" invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined} />
+              </FormField>
             </>
           ) : null}
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor="effectiveDate" className="text-xs font-medium text-neutral-600">
-              Effective date
-            </label>
-            <input id="effectiveDate" name="effectiveDate" type="date" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="companyOrgUnitId" className="text-xs font-medium text-neutral-600">
-              Company org unit ID (optional)
-            </label>
-            <input id="companyOrgUnitId" name="companyOrgUnitId" type="text" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-          </div>
+          <FormField id="effectiveDate" label="Effective date">
+            <Input id="effectiveDate" name="effectiveDate" type="date" invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined} />
+          </FormField>
+          <FormField id="companyOrgUnitId" label="Company org unit ID (optional)">
+            <Input id="companyOrgUnitId" name="companyOrgUnitId" type="text" invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined} />
+          </FormField>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="start-case-error">{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full flex flex-wrap gap-2">

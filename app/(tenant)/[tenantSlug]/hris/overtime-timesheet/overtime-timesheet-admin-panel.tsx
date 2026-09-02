@@ -1,9 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type {
   OvertimeRequestAdminRow,
   TimesheetEntryAdminRow,
@@ -36,6 +41,10 @@ function DecideOvertimeRequestForm({
 }) {
   const [approveState, approveFormAction, approvePending] = useActionState(decideOvertimeRequestAction(row.id, row.recordVersion, "approve"), INITIAL_STATE);
   const [rejectState, rejectFormAction, rejectPending] = useActionState(decideOvertimeRequestAction(row.id, row.recordVersion, "reject"), INITIAL_STATE);
+  const reactId = useId();
+  const approveErrorId = `${reactId}-approve-error`;
+  const rejectErrorId = `${reactId}-reject-error`;
+  const describedByIds = [approveState.error ? approveErrorId : null, rejectState.error ? rejectErrorId : null].filter(Boolean).join(" ") || undefined;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -50,14 +59,14 @@ function DecideOvertimeRequestForm({
         {row.eligibleMinutes !== null ? ` · eligible ${row.eligibleMinutes}m (${row.eligibleClassification ?? "-"})` : ""}
       </div>
       <form action={approveFormAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="flex-1 text-xs text-neutral-500">
-          Decision reason
-          <textarea name="decidedReason" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={1} />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Override approved minutes (optional)
-          <input name="approvedMinutesOverride" type="number" min={0} className="mt-1 w-32 rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <div className="flex-1">
+          <FormField id={`${reactId}-decidedReason`} label="Decision reason">
+            <Textarea id={`${reactId}-decidedReason`} name="decidedReason" required minLength={1} rows={1} invalid={Boolean(approveState.error || rejectState.error)} aria-describedby={describedByIds} />
+          </FormField>
+        </div>
+        <FormField id={`${reactId}-approvedMinutesOverride`} label="Override approved minutes (optional)">
+          <Input id={`${reactId}-approvedMinutesOverride`} name="approvedMinutesOverride" type="number" min={0} className="w-32" invalid={Boolean(approveState.error || rejectState.error)} aria-describedby={describedByIds} />
+        </FormField>
         <div className="flex gap-2">
           <Button type="submit" variant="primary" loading={approvePending} loadingLabel="Approving…">
             Approve
@@ -67,8 +76,8 @@ function DecideOvertimeRequestForm({
           </Button>
         </div>
       </form>
-      {approveState.error ? <p role="alert" className="text-xs text-danger">{approveState.error}</p> : null}
-      {rejectState.error ? <p role="alert" className="text-xs text-danger">{rejectState.error}</p> : null}
+      {approveState.error ? <ValidationMessage id={approveErrorId}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={rejectErrorId}>{rejectState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -82,6 +91,10 @@ function DecideTimesheetEntryForm({
 }) {
   const [approveState, approveFormAction, approvePending] = useActionState(decideTimesheetEntryAction(row.id, row.recordVersion, "approve"), INITIAL_STATE);
   const [rejectState, rejectFormAction, rejectPending] = useActionState(decideTimesheetEntryAction(row.id, row.recordVersion, "reject"), INITIAL_STATE);
+  const reactId = useId();
+  const approveErrorId = `${reactId}-approve-error`;
+  const rejectErrorId = `${reactId}-reject-error`;
+  const describedByIds = [approveState.error ? approveErrorId : null, rejectState.error ? rejectErrorId : null].filter(Boolean).join(" ") || undefined;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -93,10 +106,11 @@ function DecideTimesheetEntryForm({
       </div>
       <div className="text-xs text-neutral-500">reconciliation {row.reconciliationStatus.replace(/_/g, " ")}</div>
       <form action={approveFormAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="flex-1 text-xs text-neutral-500">
-          Decision reason
-          <textarea name="decidedReason" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" rows={1} />
-        </label>
+        <div className="flex-1">
+          <FormField id={`${reactId}-decidedReason`} label="Decision reason">
+            <Textarea id={`${reactId}-decidedReason`} name="decidedReason" required minLength={1} rows={1} invalid={Boolean(approveState.error || rejectState.error)} aria-describedby={describedByIds} />
+          </FormField>
+        </div>
         <div className="flex gap-2">
           <Button type="submit" variant="primary" loading={approvePending} loadingLabel="Approving…">
             Approve
@@ -106,8 +120,8 @@ function DecideTimesheetEntryForm({
           </Button>
         </div>
       </form>
-      {approveState.error ? <p role="alert" className="text-xs text-danger">{approveState.error}</p> : null}
-      {rejectState.error ? <p role="alert" className="text-xs text-danger">{rejectState.error}</p> : null}
+      {approveState.error ? <ValidationMessage id={approveErrorId}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={rejectErrorId}>{rejectState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -124,20 +138,22 @@ function DecideTimesheetEntryForm({
  * outcome rather than a guess made in the browser.
  */
 function EmployeePicker({ employees, required = true }: { employees: readonly EmployeeOption[]; required?: boolean }) {
+  const reactId = useId();
   return (
-    <label className="flex-1 text-xs text-neutral-500">
-      Employee
-      <select name="employeeId" required={required} defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-        <option value="" disabled>
-          Choose an employee…
-        </option>
-        {employees.map((e) => (
-          <option key={e.masterRecordId} value={e.masterRecordId}>
-            {e.fullName} ({e.employeeNumber})
+    <div className="flex-1">
+      <FormField id={reactId} label="Employee">
+        <Select id={reactId} name="employeeId" required={required} defaultValue="">
+          <option value="" disabled>
+            Choose an employee…
           </option>
-        ))}
-      </select>
-    </label>
+          {employees.map((e) => (
+            <option key={e.masterRecordId} value={e.masterRecordId}>
+              {e.fullName} ({e.employeeNumber})
+            </option>
+          ))}
+        </Select>
+      </FormField>
+    </div>
   );
 }
 
@@ -149,42 +165,44 @@ function CreateOvertimeRequestForEmployeeForm({
   createOvertimeRequestForEmployeeAction: (prevState: OvertimeTimesheetAdminActionState, formData: FormData) => Promise<OvertimeTimesheetAdminActionState>;
 }) {
   const [state, formAction, pending] = useActionState(createOvertimeRequestForEmployeeAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <EmployeePicker employees={employees} />
-        <label className="text-xs text-neutral-500">
-          Type
-          <select name="requestType" defaultValue="planned" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id={`${reactId}-requestType`} label="Type">
+          <Select id={`${reactId}-requestType`} name="requestType" defaultValue="planned" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="planned">planned</option>
             <option value="emergency_after_the_fact">emergency (after the fact)</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500">
-          Unpaid break (min)
-          <input name="unpaidBreakMinutes" type="number" min={0} step={1} className="mt-1 w-32 rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={`${reactId}-unpaidBreakMinutes`} label="Unpaid break (min)">
+          <Input id={`${reactId}-unpaidBreakMinutes`} name="unpaidBreakMinutes" type="number" min={0} step={1} className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="flex-1 text-xs text-neutral-500">
-          Start
-          <input name="requestedStartAt" type="datetime-local" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="flex-1 text-xs text-neutral-500">
-          End
-          <input name="requestedEndAt" type="datetime-local" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <div className="flex-1">
+          <FormField id={`${reactId}-requestedStartAt`} label="Start">
+            <Input id={`${reactId}-requestedStartAt`} name="requestedStartAt" type="datetime-local" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+        <div className="flex-1">
+          <FormField id={`${reactId}-requestedEndAt`} label="End">
+            <Input id={`${reactId}-requestedEndAt`} name="requestedEndAt" type="datetime-local" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
       </div>
-      <label className="text-xs text-neutral-500">
-        Reason (recorded against the employee&apos;s record)
-        <textarea name="reason" required minLength={1} rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={`${reactId}-reason`} label="Reason (recorded against the employee's record)">
+        <Textarea id={`${reactId}-reason`} name="reason" required minLength={1} rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Filing…">
           File on behalf of employee
         </Button>
       </div>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -197,33 +215,32 @@ function CreateTimesheetEntryForEmployeeForm({
   createTimesheetEntryForEmployeeAction: (prevState: OvertimeTimesheetAdminActionState, formData: FormData) => Promise<OvertimeTimesheetAdminActionState>;
 }) {
   const [state, formAction, pending] = useActionState(createTimesheetEntryForEmployeeAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <EmployeePicker employees={employees} />
-        <label className="text-xs text-neutral-500">
-          Work date
-          <input name="workDate" type="date" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Worked (min)
-          <input name="entryMinutes" type="number" min={1} step={1} required className="mt-1 w-32 rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Unpaid break (min)
-          <input name="unpaidBreakMinutes" type="number" min={0} step={1} className="mt-1 w-32 rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-workDate`} label="Work date">
+          <Input id={`${reactId}-workDate`} name="workDate" type="date" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-entryMinutes`} label="Worked (min)">
+          <Input id={`${reactId}-entryMinutes`} name="entryMinutes" type="number" min={1} step={1} required className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-unpaidBreakMinutes`} label="Unpaid break (min)">
+          <Input id={`${reactId}-unpaidBreakMinutes`} name="unpaidBreakMinutes" type="number" min={0} step={1} className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <label className="text-xs text-neutral-500">
-        Notes (optional)
-        <input name="notes" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={`${reactId}-notes`} label="Notes (optional)">
+        <Input id={`${reactId}-notes`} name="notes" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…">
           Record on behalf of employee
         </Button>
       </div>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -236,6 +253,9 @@ function CorrectDraftEntryForm({
   updateTimesheetEntryDraftAction: (entryId: string, expectedVersion: number) => (prevState: OvertimeTimesheetAdminActionState, formData: FormData) => Promise<OvertimeTimesheetAdminActionState>;
 }) {
   const [state, formAction, pending] = useActionState(updateTimesheetEntryDraftAction(row.id, row.recordVersion), INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
       <div className="flex items-center justify-between">
@@ -250,23 +270,22 @@ function CorrectDraftEntryForm({
         never shown -- which is why ISS-2026-315 added `notes` to the listing in the same change.
       */}
       <form action={formAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <label className="text-xs text-neutral-500">
-          Worked (min)
-          <input name="entryMinutes" type="number" min={1} step={1} required defaultValue={row.entryMinutes} className="mt-1 w-32 rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Unpaid break (min)
-          <input name="unpaidBreakMinutes" type="number" min={0} step={1} defaultValue={row.unpaidBreakMinutes} className="mt-1 w-32 rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="flex-1 text-xs text-neutral-500">
-          Notes
-          <input name="notes" defaultValue={row.notes ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-entryMinutes`} label="Worked (min)">
+          <Input id={`${reactId}-entryMinutes`} name="entryMinutes" type="number" min={1} step={1} required defaultValue={row.entryMinutes} className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-unpaidBreakMinutes`} label="Unpaid break (min)">
+          <Input id={`${reactId}-unpaidBreakMinutes`} name="unpaidBreakMinutes" type="number" min={0} step={1} defaultValue={row.unpaidBreakMinutes} className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <div className="flex-1">
+          <FormField id={`${reactId}-notes`} label="Notes">
+            <Input id={`${reactId}-notes`} name="notes" defaultValue={row.notes ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
           Correct draft
         </Button>
       </form>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -292,31 +311,31 @@ function ReconcileOvertimeRequestRow({
           Reconcile against attendance
         </Button>
       </form>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
 
 function CreatePeriodForm({ createTimesheetPeriodAction }: { createTimesheetPeriodAction: (prevState: OvertimeTimesheetAdminActionState, formData: FormData) => Promise<OvertimeTimesheetAdminActionState> }) {
   const [state, formAction, pending] = useActionState(createTimesheetPeriodAction, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4 sm:flex-row sm:items-end">
-      <label className="text-xs text-neutral-500">
-        Code
-        <input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="P-2026-08" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Period start
-        <input name="periodStart" type="date" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Period end
-        <input name="periodEnd" type="date" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={`${reactId}-code`} label="Code">
+        <Input id={`${reactId}-code`} name="code" required placeholder="P-2026-08" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-periodStart`} label="Period start">
+        <Input id={`${reactId}-periodStart`} name="periodStart" type="date" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-periodEnd`} label="Period end">
+        <Input id={`${reactId}-periodEnd`} name="periodEnd" type="date" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
         Create period
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -340,6 +359,8 @@ function PeriodRow({
   const [reopenState, reopenFormAction, reopenPending] = useActionState(reopenTimesheetPeriodAction(period.id, period.recordVersion), INITIAL_STATE);
   const [genState, genFormAction, genPending] = useActionState(generatePayrollTimeInputsForPeriodAction(period.id), INITIAL_STATE);
   const [oneState, oneFormAction, onePending] = useActionState(generatePayrollTimeInputAction(period.id), INITIAL_STATE);
+  const reopenReasonId = `reopen-period-reason-${period.id}`;
+  const reopenErrorId = `reopen-period-error-${period.id}`;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -358,7 +379,10 @@ function PeriodRow({
           </form>
         ) : (
           <form action={reopenFormAction} className="flex items-center gap-2">
-            <input name="reason" required placeholder="Reopen reason" className="rounded border border-neutral-300 p-2 text-xs" />
+            <label className="sr-only" htmlFor={reopenReasonId}>
+              Reopen reason
+            </label>
+            <Input id={reopenReasonId} name="reason" required placeholder="Reopen reason" className="text-xs" invalid={Boolean(reopenState.error)} aria-describedby={reopenState.error ? reopenErrorId : undefined} />
             <Button type="submit" variant="secondary" loading={reopenPending} loadingLabel="Reopening…">
               Reopen (HRS:Override)
             </Button>
@@ -385,10 +409,10 @@ function PeriodRow({
           </Button>
         </form>
       ) : null}
-      {lockState.error ? <p role="alert" className="text-xs text-danger">{lockState.error}</p> : null}
-      {reopenState.error ? <p role="alert" className="text-xs text-danger">{reopenState.error}</p> : null}
-      {genState.error ? <p role="alert" className="text-xs text-danger">{genState.error}</p> : null}
-      {oneState.error ? <p role="alert" className="text-xs text-danger">{oneState.error}</p> : null}
+      {lockState.error ? <ValidationMessage>{lockState.error}</ValidationMessage> : null}
+      {reopenState.error ? <ValidationMessage id={reopenErrorId}>{reopenState.error}</ValidationMessage> : null}
+      {genState.error ? <ValidationMessage>{genState.error}</ValidationMessage> : null}
+      {oneState.error ? <ValidationMessage>{oneState.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -407,6 +431,11 @@ function SummaryRow({
   const [approveState, approveFormAction, approvePending] = useActionState(approveTimesheetPeriodSummaryAction(summary.id, summary.recordVersion), INITIAL_STATE);
   const [rejectState, rejectFormAction, rejectPending] = useActionState(rejectTimesheetPeriodSummaryAction(summary.id, summary.recordVersion), INITIAL_STATE);
   const [reopenState, reopenFormAction, reopenPending] = useActionState(reopenTimesheetPeriodSummaryAction(summary.id, summary.recordVersion), INITIAL_STATE);
+  const reactId = useId();
+  const approveErrorId = `${reactId}-approve-error`;
+  const rejectErrorId = `${reactId}-reject-error`;
+  const reopenErrorId = `${reactId}-reopen-error`;
+  const decisionDescribedBy = [approveState.error ? approveErrorId : null, rejectState.error ? rejectErrorId : null].filter(Boolean).join(" ") || undefined;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -421,10 +450,11 @@ function SummaryRow({
       </div>
       {summary.status === "submitted" ? (
         <form action={approveFormAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <label className="flex-1 text-xs text-neutral-500">
-            Reason
-            <input name="reason" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
+          <div className="flex-1">
+            <FormField id={`${reactId}-reason`} label="Reason">
+              <Input id={`${reactId}-reason`} name="reason" required invalid={Boolean(approveState.error || rejectState.error)} aria-describedby={decisionDescribedBy} />
+            </FormField>
+          </div>
           <div className="flex gap-2">
             <Button type="submit" variant="primary" loading={approvePending} loadingLabel="Approving…">
               Approve
@@ -437,15 +467,18 @@ function SummaryRow({
       ) : null}
       {summary.status === "approved" ? (
         <form action={reopenFormAction} className="flex items-center gap-2">
-          <input name="reason" required placeholder="Reopen reason" className="rounded border border-neutral-300 p-2 text-xs" />
+          <label className="sr-only" htmlFor={`${reactId}-reopen-reason`}>
+            Reopen reason
+          </label>
+          <Input id={`${reactId}-reopen-reason`} name="reason" required placeholder="Reopen reason" className="text-xs" invalid={Boolean(reopenState.error)} aria-describedby={reopenState.error ? reopenErrorId : undefined} />
           <Button type="submit" variant="secondary" loading={reopenPending} loadingLabel="Reopening…">
             Reopen (HRS:Override)
           </Button>
         </form>
       ) : null}
-      {approveState.error ? <p role="alert" className="text-xs text-danger">{approveState.error}</p> : null}
-      {rejectState.error ? <p role="alert" className="text-xs text-danger">{rejectState.error}</p> : null}
-      {reopenState.error ? <p role="alert" className="text-xs text-danger">{reopenState.error}</p> : null}
+      {approveState.error ? <ValidationMessage id={approveErrorId}>{approveState.error}</ValidationMessage> : null}
+      {rejectState.error ? <ValidationMessage id={rejectErrorId}>{rejectState.error}</ValidationMessage> : null}
+      {reopenState.error ? <ValidationMessage id={reopenErrorId}>{reopenState.error}</ValidationMessage> : null}
     </li>
   );
 }

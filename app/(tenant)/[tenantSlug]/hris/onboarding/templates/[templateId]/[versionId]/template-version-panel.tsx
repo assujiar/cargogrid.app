@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../../components/ui/empty-state.tsx";
 import type { TemplateActionState } from "../../actions.ts";
@@ -49,11 +54,7 @@ export function TemplateVersionPanel({
           </form>
         ) : null}
       </div>
-      {publishState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {publishState.error}
-        </p>
-      ) : null}
+      {publishState.error ? <ValidationMessage>{publishState.error}</ValidationMessage> : null}
       {realTasks.length === 0 ? <p className="text-xs text-warning">A version needs at least one task before it can be published.</p> : null}
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
@@ -97,40 +98,59 @@ export function TemplateVersionPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Add a task</h2>
-        <form action={addTaskFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <input name="taskKey" placeholder="task key (e.g. it-access)" required pattern="[a-z0-9_-]{2,64}" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="title" placeholder="Title" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <select name="taskType" required defaultValue="generic" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+        <form action={addTaskFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate>
+          <label htmlFor="task-key" className="sr-only">
+            Task key
+          </label>
+          <Input id="task-key" name="taskKey" placeholder="task key (e.g. it-access)" required pattern="[a-z0-9_-]{2,64}" invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined} />
+          <label htmlFor="task-title" className="sr-only">
+            Title
+          </label>
+          <Input id="task-title" name="title" placeholder="Title" required invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined} />
+          <label htmlFor="task-type" className="sr-only">
+            Task type
+          </label>
+          <Select id="task-type" name="taskType" required defaultValue="generic" invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined}>
             {TASK_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t.replace(/_/g, " ")}
               </option>
             ))}
-          </select>
-          <select name="handoffCategory" defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          </Select>
+          <label htmlFor="task-handoff-category" className="sr-only">
+            Handoff category
+          </label>
+          <Select id="task-handoff-category" name="handoffCategory" defaultValue="" invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined}>
             <option value="">No handoff category</option>
             {HANDOFF_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
-          <select name="ownerType" required defaultValue="hr" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          </Select>
+          <label htmlFor="task-owner-type" className="sr-only">
+            Owner type
+          </label>
+          <Select id="task-owner-type" name="ownerType" required defaultValue="hr" invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined}>
             {OWNER_TYPES.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>
             ))}
-          </select>
-          <input name="slaDays" type="number" min="1" defaultValue="3" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="sortOrder" type="number" defaultValue={realTasks.length + 1} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <label className="flex items-center gap-2 text-xs text-neutral-600">
-            <input type="checkbox" name="isMandatory" defaultChecked /> Mandatory
+          </Select>
+          <label htmlFor="task-sla-days" className="sr-only">
+            SLA days
           </label>
+          <Input id="task-sla-days" name="slaDays" type="number" min="1" defaultValue="3" invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined} />
+          <label htmlFor="task-sort-order" className="sr-only">
+            Sort order
+          </label>
+          <Input id="task-sort-order" name="sortOrder" type="number" defaultValue={realTasks.length + 1} invalid={Boolean(addTaskState.error)} aria-describedby={addTaskState.error ? "add-task-error" : undefined} />
+          <Checkbox id="task-is-mandatory" name="isMandatory" defaultChecked label="Mandatory" aria-describedby={addTaskState.error ? "add-task-error" : undefined} />
           {addTaskState.error ? (
-            <p role="alert" className="col-span-full text-xs text-danger">
-              {addTaskState.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="add-task-error">{addTaskState.error}</ValidationMessage>
+            </div>
           ) : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={addTaskPending} loadingLabel="Adding…">
@@ -142,13 +162,19 @@ export function TemplateVersionPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Add a dependency</h2>
-        <form action={addDepFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <input name="taskKey" placeholder="task key (depends)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="dependsOnTaskKey" placeholder="depends on task key" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <form action={addDepFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate>
+          <label htmlFor="dep-task-key" className="sr-only">
+            Task key
+          </label>
+          <Input id="dep-task-key" name="taskKey" placeholder="task key (depends)" required invalid={Boolean(addDepState.error)} aria-describedby={addDepState.error ? "add-dep-error" : undefined} />
+          <label htmlFor="dep-depends-on" className="sr-only">
+            Depends on task key
+          </label>
+          <Input id="dep-depends-on" name="dependsOnTaskKey" placeholder="depends on task key" required invalid={Boolean(addDepState.error)} aria-describedby={addDepState.error ? "add-dep-error" : undefined} />
           {addDepState.error ? (
-            <p role="alert" className="col-span-full text-xs text-danger">
-              {addDepState.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="add-dep-error">{addDepState.error}</ValidationMessage>
+            </div>
           ) : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={addDepPending} loadingLabel="Adding…">

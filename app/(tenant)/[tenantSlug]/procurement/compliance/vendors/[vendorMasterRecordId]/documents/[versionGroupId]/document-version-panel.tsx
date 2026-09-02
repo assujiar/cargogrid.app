@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { Button } from "../../../../../../../../../components/ui/button.tsx";
 import { StatusBadge } from "../../../../../../../../../components/ui/status-badge.tsx";
+import { ValidationMessage } from "../../../../../../../../../components/forms/validation-message.tsx";
 import type { VendorComplianceDocument, VendorComplianceAccessResult } from "../../../../../../../../../server/contracts/vendor-compliance/vendor-compliance.ts";
 import type { VendorComplianceEvidenceAccessState } from "../../../actions.ts";
 
@@ -35,11 +36,7 @@ function VersionRow({ version, accessAction }: { version: VendorComplianceDocume
       {version.rejectionReason ? <p className="text-xs text-danger">{version.rejectionReason}</p> : null}
 
       <form action={formAction} className="flex flex-col gap-2">
-        {state.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Checking access…" className="w-fit">
           View evidence
         </Button>

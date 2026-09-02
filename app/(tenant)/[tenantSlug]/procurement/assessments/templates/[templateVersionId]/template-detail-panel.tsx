@@ -1,7 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../../components/forms/textarea.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
 import type { TemplateActionState } from "../actions.ts";
@@ -25,20 +29,19 @@ function ActionForm({
   variant = "primary",
 }: {
   action: BoundFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -85,14 +88,34 @@ export function TemplateDetailPanel({
       {isDraft ? (
         <section className="rounded-md border border-neutral-200 p-4">
           <ActionForm action={updateDraftAction} submitLabel="Save changes" loadingLabel="Saving…" variant="secondary">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <input name="name" defaultValue={template.name} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              <input name="vendorCategory" defaultValue={template.vendorCategory ?? ""} placeholder="Vendor category (blank = any)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              <input name="validityPeriodDays" type="number" min={1} defaultValue={template.validityPeriodDays} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              <input name="passThreshold" type="number" min={0} max={100} defaultValue={template.passThreshold} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              <input name="conditionalThreshold" type="number" min={0} max={100} defaultValue={template.conditionalThreshold} required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              <textarea name="description" defaultValue={template.description ?? ""} rows={2} className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-3" />
-            </div>
+            {(describedBy) => (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <label htmlFor="template-name" className="sr-only">
+                  Name
+                </label>
+                <Input id="template-name" name="name" defaultValue={template.name} required aria-describedby={describedBy} />
+                <label htmlFor="template-vendor-category" className="sr-only">
+                  Vendor category
+                </label>
+                <Input id="template-vendor-category" name="vendorCategory" defaultValue={template.vendorCategory ?? ""} placeholder="Vendor category (blank = any)" aria-describedby={describedBy} />
+                <label htmlFor="template-validity-period-days" className="sr-only">
+                  Validity period days
+                </label>
+                <Input id="template-validity-period-days" name="validityPeriodDays" type="number" min={1} defaultValue={template.validityPeriodDays} required aria-describedby={describedBy} />
+                <label htmlFor="template-pass-threshold" className="sr-only">
+                  Pass threshold
+                </label>
+                <Input id="template-pass-threshold" name="passThreshold" type="number" min={0} max={100} defaultValue={template.passThreshold} required aria-describedby={describedBy} />
+                <label htmlFor="template-conditional-threshold" className="sr-only">
+                  Conditional threshold
+                </label>
+                <Input id="template-conditional-threshold" name="conditionalThreshold" type="number" min={0} max={100} defaultValue={template.conditionalThreshold} required aria-describedby={describedBy} />
+                <label htmlFor="template-description" className="sr-only">
+                  Description
+                </label>
+                <Textarea id="template-description" name="description" defaultValue={template.description ?? ""} rows={2} className="sm:col-span-3" aria-describedby={describedBy} />
+              </div>
+            )}
           </ActionForm>
         </section>
       ) : null}
@@ -128,17 +151,31 @@ export function TemplateDetailPanel({
 
         {isDraft ? (
           <ActionForm action={addCriterionAction} submitLabel="Add criterion" loadingLabel="Adding…" variant="secondary">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-              <input name="label" placeholder="Label" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-2" />
-              <select name="purposeTag" defaultValue="operational" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
-                <option value="operational">Operational</option>
-                <option value="safety">Safety</option>
-                <option value="financial">Financial</option>
-                <option value="compliance">Compliance</option>
-              </select>
-              <input name="weight" type="number" min={0.01} step="0.01" placeholder="Weight" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              <input name="scoringGuidance" placeholder="Scoring guidance (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-4" />
-            </div>
+            {(describedBy) => (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                <label htmlFor="criterion-label" className="sr-only">
+                  Label
+                </label>
+                <Input id="criterion-label" name="label" placeholder="Label" required className="sm:col-span-2" aria-describedby={describedBy} />
+                <label htmlFor="criterion-purpose-tag" className="sr-only">
+                  Purpose tag
+                </label>
+                <Select id="criterion-purpose-tag" name="purposeTag" defaultValue="operational" aria-describedby={describedBy}>
+                  <option value="operational">Operational</option>
+                  <option value="safety">Safety</option>
+                  <option value="financial">Financial</option>
+                  <option value="compliance">Compliance</option>
+                </Select>
+                <label htmlFor="criterion-weight" className="sr-only">
+                  Weight
+                </label>
+                <Input id="criterion-weight" name="weight" type="number" min={0.01} step="0.01" placeholder="Weight" required aria-describedby={describedBy} />
+                <label htmlFor="criterion-scoring-guidance" className="sr-only">
+                  Scoring guidance
+                </label>
+                <Input id="criterion-scoring-guidance" name="scoringGuidance" placeholder="Scoring guidance (optional)" className="sm:col-span-4" aria-describedby={describedBy} />
+              </div>
+            )}
           </ActionForm>
         ) : null}
       </section>
@@ -148,7 +185,7 @@ export function TemplateDetailPanel({
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">Publish</h2>
           {currentPublished ? <p className="mb-2 text-xs text-neutral-500">A published template already exists for this scope ({currentPublished.name}) — publishing this draft will supersede (archive) it.</p> : null}
           <ActionForm action={publishAction} submitLabel="Publish" loadingLabel="Publishing…">
-            {currentPublished ? <input type="hidden" name="supersedesVersionId" value={currentPublished.id} /> : null}
+            {() => (currentPublished ? <input type="hidden" name="supersedesVersionId" value={currentPublished.id} /> : null)}
           </ActionForm>
         </section>
       ) : null}
@@ -157,7 +194,14 @@ export function TemplateDetailPanel({
         <section className="rounded-md border border-neutral-200 p-4">
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">Archive</h2>
           <ActionForm action={archiveAction} submitLabel="Archive template" loadingLabel="Archiving…" variant="destructive">
-            <input name="reason" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            {(describedBy) => (
+              <>
+                <label htmlFor="template-archive-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="template-archive-reason" name="reason" placeholder="Reason (required)" required aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         </section>
       ) : null}

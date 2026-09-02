@@ -4,6 +4,11 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { TemplateActionState } from "./actions.ts";
@@ -31,6 +36,8 @@ export function TemplateManagementPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const templateErrorId = "template-create-error";
+  const templateDescribedBy = state.error ? templateErrorId : undefined;
 
   function applyFilter(nextStatus: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -46,14 +53,14 @@ export function TemplateManagementPanel({
           <label htmlFor="template-status" className="text-xs font-medium text-neutral-600">
             Status
           </label>
-          <select id="template-status" defaultValue={statusFilter ?? ""} className="w-fit rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value)}>
+          <Select id="template-status" defaultValue={statusFilter ?? ""} className="w-fit py-1.5" onChange={(event) => applyFilter(event.currentTarget.value)}>
             <option value="">All statuses</option>
             {VENDOR_ASSESSMENT_TEMPLATE_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {templates.length === 0 ? (
@@ -92,60 +99,41 @@ export function TemplateManagementPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new template draft</h2>
-        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="name" className="text-xs font-medium text-neutral-600">
-              Name
-            </label>
-            <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="assessmentType" className="text-xs font-medium text-neutral-600">
-              Assessment type
-            </label>
-            <select id="assessmentType" name="assessmentType" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3" noValidate>
+          <FormField id="name" label="Name">
+            <Input id="name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={templateDescribedBy} />
+          </FormField>
+          <FormField id="assessmentType" label="Assessment type">
+            <Select id="assessmentType" name="assessmentType" required invalid={Boolean(state.error)} aria-describedby={templateDescribedBy}>
               {VENDOR_ASSESSMENT_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="vendorCategory" className="text-xs font-medium text-neutral-600">
-              Vendor category (blank = any)
-            </label>
-            <input id="vendorCategory" name="vendorCategory" type="text" placeholder="trucking, warehousing…" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="validityPeriodDays" className="text-xs font-medium text-neutral-600">
-              Validity period (days)
-            </label>
-            <input id="validityPeriodDays" name="validityPeriodDays" type="number" min={1} defaultValue={180} required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="passThreshold" className="text-xs font-medium text-neutral-600">
-              Pass threshold
-            </label>
-            <input id="passThreshold" name="passThreshold" type="number" min={0} max={100} defaultValue={80} required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="conditionalThreshold" className="text-xs font-medium text-neutral-600">
-              Conditional threshold
-            </label>
-            <input id="conditionalThreshold" name="conditionalThreshold" type="number" min={0} max={100} defaultValue={60} required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="col-span-full flex flex-col gap-1">
-            <label htmlFor="description" className="text-xs font-medium text-neutral-600">
-              Description (optional)
-            </label>
-            <textarea id="description" name="description" rows={2} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+            </Select>
+          </FormField>
+          <FormField id="vendorCategory" label="Vendor category (blank = any)">
+            <Input id="vendorCategory" name="vendorCategory" type="text" placeholder="trucking, warehousing…" invalid={Boolean(state.error)} aria-describedby={templateDescribedBy} />
+          </FormField>
+          <FormField id="validityPeriodDays" label="Validity period (days)">
+            <Input id="validityPeriodDays" name="validityPeriodDays" type="number" min={1} defaultValue={180} required invalid={Boolean(state.error)} aria-describedby={templateDescribedBy} />
+          </FormField>
+          <FormField id="passThreshold" label="Pass threshold">
+            <Input id="passThreshold" name="passThreshold" type="number" min={0} max={100} defaultValue={80} required invalid={Boolean(state.error)} aria-describedby={templateDescribedBy} />
+          </FormField>
+          <FormField id="conditionalThreshold" label="Conditional threshold">
+            <Input id="conditionalThreshold" name="conditionalThreshold" type="number" min={0} max={100} defaultValue={60} required invalid={Boolean(state.error)} aria-describedby={templateDescribedBy} />
+          </FormField>
+          <div className="col-span-full">
+            <FormField id="description" label="Description (optional)">
+              <Textarea id="description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={templateDescribedBy} />
+            </FormField>
           </div>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id={templateErrorId}>{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

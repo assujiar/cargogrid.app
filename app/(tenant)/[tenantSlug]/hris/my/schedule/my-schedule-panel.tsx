@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { MyScheduleRow, MySwapRequestRow } from "../../../../../../server/contracts/shift-roster/shift-roster.ts";
@@ -14,35 +18,32 @@ const SWAP_TONE: Record<string, StatusTone> = { pending_approval: "warning", app
 
 function RequestSwapForm({ mySchedule, requestMySwapAction }: { mySchedule: MyScheduleRow[]; requestMySwapAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(requestMySwapAction, INITIAL_STATE);
+  const describedBy = state.error ? "request-swap-error" : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4 sm:flex-row sm:flex-wrap sm:items-end">
-      <label className="text-xs text-neutral-500">
-        My shift to swap
-        <select name="assignmentId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+    <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4 sm:flex-row sm:flex-wrap sm:items-end" noValidate>
+      <FormField id="swap-assignment-id" label="My shift to swap">
+        <Select id="swap-assignment-id" name="assignmentId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">— select —</option>
           {mySchedule.map((s) => (
             <option key={s.assignmentId} value={s.assignmentId}>
               {s.workDate} — {s.shiftTemplateName}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Colleague&apos;s employee id
-        <input name="targetEmployeeId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="employee UUID" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Their shift&apos;s assignment id
-        <input name="targetAssignmentId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="assignment UUID" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason
-        <input name="reason" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. family event" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="swap-target-employee-id" label="Colleague's employee id">
+        <Input id="swap-target-employee-id" name="targetEmployeeId" required placeholder="employee UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="swap-target-assignment-id" label="Their shift's assignment id">
+        <Input id="swap-target-assignment-id" name="targetAssignmentId" required placeholder="assignment UUID" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="swap-reason" label="Reason">
+        <Input id="swap-reason" name="reason" required placeholder="e.g. family event" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Requesting…">
         Request swap
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage id="request-swap-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -54,7 +55,7 @@ function CancelSwapButton({ requestId, expectedVersion, cancelMySwapAction }: { 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Cancelling…">
         Cancel request
       </Button>
-      {state.error ? <p role="alert" className="text-xs text-danger">{state.error}</p> : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

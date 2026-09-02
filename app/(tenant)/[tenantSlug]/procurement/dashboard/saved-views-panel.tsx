@@ -3,6 +3,9 @@
 import { useActionState, useMemo, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { PROCUREMENT_DASHBOARD_METRIC_GROUPS, type ProcurementDashboardMetricGroup, type ProcurementDashboardSavedView } from "../../../../../server/contracts/procurement-dashboard/procurement-dashboard.ts";
 import type { VendorRiskQueueFilters } from "./vendor-risk-queue-panel.tsx";
@@ -31,11 +34,7 @@ function DeleteSavedViewForm({ view, deleteAction }: { view: ProcurementDashboar
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Removing…" className="shrink-0 text-xs">
         Remove
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -69,6 +68,8 @@ export function SavedViewsPanel({
 }) {
   const [createState, createFormAction, createPending] = useActionState(createAction, INITIAL_STATE);
   const [metricGroup, setMetricGroup] = useState<ProcurementDashboardMetricGroup>("vendor_risk_compliance");
+  const createErrorId = `sv-create-error-${tenantSlug}`;
+  const createDescribedBy = createState.error ? createErrorId : undefined;
 
   const filtersToSave = useMemo(() => {
     if (metricGroup !== "vendor_risk_compliance") return {};
@@ -111,30 +112,29 @@ export function SavedViewsPanel({
       )}
 
       <form action={createFormAction} className="mt-2 flex flex-col gap-2 border-t border-neutral-200 pt-3 sm:flex-row sm:items-end" noValidate>
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor={`sv-name-${tenantSlug}`} className="text-xs font-medium text-neutral-700">
-            Name (required)
-          </label>
-          <Input id={`sv-name-${tenantSlug}`} name="name" required />
+        <div className="flex-1">
+          <FormField id={`sv-name-${tenantSlug}`} label="Name (required)">
+            <Input id={`sv-name-${tenantSlug}`} name="name" required invalid={Boolean(createState.error)} aria-describedby={createDescribedBy} />
+          </FormField>
         </div>
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor={`sv-group-${tenantSlug}`} className="text-xs font-medium text-neutral-700">
-            Section
-          </label>
-          <select
-            id={`sv-group-${tenantSlug}`}
-            name="metricGroup"
-            required
-            value={metricGroup}
-            onChange={(event) => setMetricGroup(event.currentTarget.value as ProcurementDashboardMetricGroup)}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
-          >
-            {PROCUREMENT_DASHBOARD_METRIC_GROUPS.map((g) => (
-              <option key={g} value={g}>
-                {GROUP_LABEL[g]}
-              </option>
-            ))}
-          </select>
+        <div className="flex-1">
+          <FormField id={`sv-group-${tenantSlug}`} label="Section">
+            <Select
+              id={`sv-group-${tenantSlug}`}
+              name="metricGroup"
+              required
+              value={metricGroup}
+              onChange={(event) => setMetricGroup(event.currentTarget.value as ProcurementDashboardMetricGroup)}
+              invalid={Boolean(createState.error)}
+              aria-describedby={createDescribedBy}
+            >
+              {PROCUREMENT_DASHBOARD_METRIC_GROUPS.map((g) => (
+                <option key={g} value={g}>
+                  {GROUP_LABEL[g]}
+                </option>
+              ))}
+            </Select>
+          </FormField>
         </div>
         {/* Tier C batch-5 fix: the filters actually applied to the vendor risk/
             compliance-expiry queue right now, captured only when that section is the
@@ -152,11 +152,7 @@ export function SavedViewsPanel({
           Save view
         </Button>
       </form>
-      {createState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {createState.error}
-        </p>
-      ) : null}
+      {createState.error ? <ValidationMessage id={createErrorId}>{createState.error}</ValidationMessage> : null}
     </section>
   );
 }

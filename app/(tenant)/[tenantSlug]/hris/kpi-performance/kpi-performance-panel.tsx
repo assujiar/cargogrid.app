@@ -1,9 +1,15 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type {
   PerformanceKpiDefinitionRow,
   PerformanceTemplateRow,
@@ -41,79 +47,74 @@ function nextStage(status: string): string | null {
 
 type BoundAction = (prevState: PerformanceAdminActionState, formData: FormData) => Promise<PerformanceAdminActionState>;
 
-function ErrorLine({ error }: { error: string | null }) {
-  return error ? <p role="alert" className="text-xs text-danger">{error}</p> : null;
+function ErrorLine({ error, id }: { error: string | null; id?: string }) {
+  return error ? <ValidationMessage id={id}>{error}</ValidationMessage> : null;
 }
 
 function CreateKpiForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Create a KPI</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Code
-          <input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. sales_target" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Name
-          <input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-code`} label="Code">
+          <Input id={`${reactId}-code`} name="code" required placeholder="e.g. sales_target" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-name`} label="Name">
+          <Input id={`${reactId}-name`} name="name" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-xs text-neutral-500">
-          Unit of measure
-          <select name="unitOfMeasure" defaultValue="percent" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id={`${reactId}-unitOfMeasure`} label="Unit of measure">
+          <Select id={`${reactId}-unitOfMeasure`} name="unitOfMeasure" defaultValue="percent" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="percent">Percent</option>
             <option value="count">Count</option>
             <option value="currency">Currency</option>
             <option value="ratio">Ratio</option>
             <option value="qualitative">Qualitative</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500">
-          Scoring method
-          <select name="scoringMethod" defaultValue="target_ratio" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`${reactId}-scoringMethod`} label="Scoring method">
+          <Select id={`${reactId}-scoringMethod`} name="scoringMethod" defaultValue="target_ratio" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="target_ratio">Target ratio (actual vs. target)</option>
             <option value="milestone_percent">Milestone percent (0-100 direct)</option>
             <option value="qualitative_scale">Qualitative (assessor-scored)</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500">
-          Target direction
-          <select name="targetDirection" defaultValue="higher_is_better" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`${reactId}-targetDirection`} label="Target direction">
+          <Select id={`${reactId}-targetDirection`} name="targetDirection" defaultValue="higher_is_better" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="higher_is_better">Higher is better</option>
             <option value="lower_is_better">Lower is better</option>
-          </select>
-        </label>
+          </Select>
+        </FormField>
       </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">Create KPI</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function CreateTemplateForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Create a cycle template</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Code
-          <input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. annual_std" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Name
-          <input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-code`} label="Code">
+          <Input id={`${reactId}-code`} name="code" required placeholder="e.g. annual_std" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+        </FormField>
+        <FormField id={`${reactId}-name`} label="Name">
+          <Input id={`${reactId}-name`} name="name" required invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+        </FormField>
       </div>
-      <label className="flex items-center gap-2 text-xs text-neutral-500">
-        <input type="checkbox" name="requiresReviewerStage" />
-        Requires a 360 reviewer stage
-      </label>
+      <Checkbox name="requiresReviewerStage" label="Requires a 360 reviewer stage" />
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">Create template</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -130,6 +131,9 @@ function TemplateCard({
   const [addState, addFormAction, addPending] = useActionState(addItemAction, INITIAL_STATE);
   const [pubState, pubFormAction, pubPending] = useActionState(publishAction, INITIAL_STATE);
   const weightSum = items.reduce((sum, i) => sum + Number(i.defaultWeight), 0);
+  const reactId = useId();
+  const addErrorId = `${reactId}-add-error`;
+  const pubErrorId = `${reactId}-pub-error`;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
@@ -145,24 +149,22 @@ function TemplateCard({
       {template.status === "draft" ? (
         <>
           <form action={addFormAction} className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-neutral-500">
-              KPI
-              <select name="kpiDefinitionId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+            <FormField id={`${reactId}-kpiDefinitionId`} label="KPI">
+              <Select id={`${reactId}-kpiDefinitionId`} name="kpiDefinitionId" required invalid={Boolean(addState.error)} aria-describedby={addState.error ? addErrorId : undefined}>
                 <option value="">Select…</option>
                 {kpiDefinitions.map((k) => <option key={k.id} value={k.id}>{k.code}</option>)}
-              </select>
-            </label>
-            <label className="text-xs text-neutral-500">
-              Default weight
-              <input type="number" name="defaultWeight" min={0} max={100} step="0.01" required className="mt-1 w-24 rounded border border-neutral-300 p-2 text-sm" />
-            </label>
+              </Select>
+            </FormField>
+            <FormField id={`${reactId}-defaultWeight`} label="Default weight">
+              <Input type="number" id={`${reactId}-defaultWeight`} name="defaultWeight" min={0} max={100} step="0.01" required className="w-24" invalid={Boolean(addState.error)} aria-describedby={addState.error ? addErrorId : undefined} />
+            </FormField>
             <Button type="submit" variant="secondary" loading={addPending} loadingLabel="Adding…">Add KPI item</Button>
           </form>
-          <ErrorLine error={addState.error} />
+          <ErrorLine error={addState.error} id={addErrorId} />
           <form action={pubFormAction}>
             <Button type="submit" variant="primary" loading={pubPending} loadingLabel="Publishing…">Publish template</Button>
           </form>
-          <ErrorLine error={pubState.error} />
+          <ErrorLine error={pubState.error} id={pubErrorId} />
         </>
       ) : null}
     </li>
@@ -172,38 +174,36 @@ function TemplateCard({
 function CreateCycleForm({ templates, action }: { templates: PerformanceTemplateRow[]; action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const published = templates.filter((t) => t.status === "published");
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Create a performance cycle</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Template
-          <select name="templateId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id={`${reactId}-templateId`} label="Template">
+          <Select id={`${reactId}-templateId`} name="templateId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="">Select a published template…</option>
             {published.map((t) => <option key={t.id} value={t.id}>{t.code}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-neutral-500">
-          Code
-          <input name="code" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. fy2026" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={`${reactId}-code`} label="Code">
+          <Input id={`${reactId}-code`} name="code" required placeholder="e.g. fy2026" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <label className="text-xs text-neutral-500">
-        Name
-        <input name="name" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id={`${reactId}-name`} label="Name">
+        <Input id={`${reactId}-name`} name="name" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Period start
-          <input type="date" name="periodStart" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Period end
-          <input type="date" name="periodEnd" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
+        <FormField id={`${reactId}-periodStart`} label="Period start">
+          <Input type="date" id={`${reactId}-periodStart`} name="periodStart" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-periodEnd`} label="Period end">
+          <Input type="date" id={`${reactId}-periodEnd`} name="periodEnd" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">Create cycle</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -212,6 +212,8 @@ function CycleRowItem({ cycle, advanceAction, cancelAction }: { cycle: Performan
   const next = nextStage(cycle.status);
   const [advanceState, advanceFormAction, advancePending] = useActionState(next ? advanceAction(next) : advanceAction(cycle.status), INITIAL_STATE);
   const [cancelState, cancelFormAction, cancelPending] = useActionState(cancelAction, INITIAL_STATE);
+  const reasonId = `cycle-cancel-reason-${cycle.id}`;
+  const errorId = `cycle-error-${cycle.id}`;
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
       <div className="flex items-center justify-between">
@@ -226,56 +228,59 @@ function CycleRowItem({ cycle, advanceAction, cancelAction }: { cycle: Performan
         ) : null}
         {cycle.status !== "closed" && cycle.status !== "cancelled" ? (
           <form action={cancelFormAction} className="flex items-center gap-1">
-            <input type="text" name="reason" placeholder="cancel reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+            <label className="sr-only" htmlFor={reasonId}>
+              Cancel reason
+            </label>
+            <Input id={reasonId} type="text" name="reason" placeholder="cancel reason" required className="text-xs" invalid={Boolean(cancelState.error)} aria-describedby={cancelState.error ? errorId : undefined} />
             <Button type="submit" variant="destructive" loading={cancelPending} loadingLabel="Cancelling…">Cancel</Button>
           </form>
         ) : null}
       </div>
-      <ErrorLine error={advanceState.error ?? cancelState.error} />
+      <ErrorLine error={advanceState.error ?? cancelState.error} id={errorId} />
     </li>
   );
 }
 
 function AssignGoalForm({ kpiDefinitions, action }: { kpiDefinitions: PerformanceKpiDefinitionRow[]; action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Assign a weighted goal</h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className="text-xs text-neutral-500">
-          Employee ID
-          <input name="employeeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="employee master_record_id" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          KPI
-          <select name="kpiDefinitionId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        <FormField id={`${reactId}-employeeId`} label="Employee ID">
+          <Input id={`${reactId}-employeeId`} name="employeeId" required placeholder="employee master_record_id" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-kpiDefinitionId`} label="KPI">
+          <Select id={`${reactId}-kpiDefinitionId`} name="kpiDefinitionId" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="">Select…</option>
             {kpiDefinitions.map((k) => <option key={k.id} value={k.id}>{k.code}</option>)}
-          </select>
-        </label>
+          </Select>
+        </FormField>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-xs text-neutral-500">
-          Weight
-          <input type="number" name="weight" min={0.01} max={100} step="0.01" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Target value (target_ratio KPIs)
-          <input type="number" name="targetValue" step="0.0001" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-        </label>
-        <label className="text-xs text-neutral-500">
-          Target unit
-          <input name="targetUnit" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="e.g. IDR" />
-        </label>
+        <FormField id={`${reactId}-weight`} label="Weight">
+          <Input type="number" id={`${reactId}-weight`} name="weight" min={0.01} max={100} step="0.01" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-targetValue`} label="Target value (target_ratio KPIs)">
+          <Input type="number" id={`${reactId}-targetValue`} name="targetValue" step="0.0001" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-targetUnit`} label="Target unit">
+          <Input id={`${reactId}-targetUnit`} name="targetUnit" placeholder="e.g. IDR" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Assigning…">Assign goal</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
 
 function GoalAssignmentRowItem({ goal, naAction }: { goal: PerformanceGoalAssignmentRow; naAction: (goalAssignmentId: string, expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(naAction(goal.id, goal.recordVersion), INITIAL_STATE);
+  const reasonId = `goal-na-reason-${goal.id}`;
+  const errorId = `goal-na-error-${goal.id}`;
   return (
     <li className="flex flex-col gap-1 rounded-md border border-neutral-200 p-2 text-sm">
       <div className="flex items-center justify-between">
@@ -284,38 +289,41 @@ function GoalAssignmentRowItem({ goal, naAction }: { goal: PerformanceGoalAssign
       </div>
       {goal.status === "active" ? (
         <form action={formAction} className="flex items-center gap-1">
-          <input type="text" name="reason" placeholder="not-applicable reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+          <label className="sr-only" htmlFor={reasonId}>
+            Not-applicable reason
+          </label>
+          <Input id={reasonId} type="text" name="reason" placeholder="not-applicable reason" required className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Marking…">Mark N/A</Button>
         </form>
       ) : (
         <span className="text-xs text-neutral-500">{goal.naReason}</span>
       )}
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </li>
   );
 }
 
 function AssignReviewerForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3 text-sm">
-      <label className="text-xs text-neutral-500">
-        Employee ID
-        <input name="employeeId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500">
-        Role
-        <select name="role" defaultValue="reviewer" className="mt-1 rounded border border-neutral-300 p-2 text-sm">
+      <FormField id={`${reactId}-employeeId`} label="Employee ID">
+        <Input id={`${reactId}-employeeId`} name="employeeId" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`${reactId}-role`} label="Role">
+        <Select id={`${reactId}-role`} name="role" defaultValue="reviewer" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="manager">Manager</option>
           <option value="reviewer">Reviewer (360)</option>
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Assign to (employee ID)
-        <input name="assignedToEmployeeId" required className="mt-1 rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`${reactId}-assignedToEmployeeId`} label="Assign to (employee ID)">
+        <Input id={`${reactId}-assignedToEmployeeId`} name="assignedToEmployeeId" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Assigning…">Assign</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -334,6 +342,9 @@ function ReviewerAssignmentRowItem({ assignment, reassignAction }: {
   reassignAction: (assignmentId: string) => BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(reassignAction(assignment.id), INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <li className="flex flex-col gap-1 rounded-md border border-neutral-200 p-2 text-sm">
       <div className="flex items-center justify-between">
@@ -344,17 +355,15 @@ function ReviewerAssignmentRowItem({ assignment, reassignAction }: {
         <details className="text-xs">
           <summary className="cursor-pointer">Reassign</summary>
           <form action={formAction} className="mt-1 flex flex-wrap items-end gap-2">
-            <label className="text-xs text-neutral-500">
-              New assignee (employee ID)
-              <input name="newAssignedToEmployeeId" required className="mt-1 rounded border border-neutral-300 p-1 text-xs" />
-            </label>
-            <label className="text-xs text-neutral-500">
-              Reason (required)
-              <input name="reason" required className="mt-1 rounded border border-neutral-300 p-1 text-xs" />
-            </label>
+            <FormField id={`${reactId}-newAssignedToEmployeeId`} label="New assignee (employee ID)">
+              <Input id={`${reactId}-newAssignedToEmployeeId`} name="newAssignedToEmployeeId" required className="text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
+            <FormField id={`${reactId}-reason`} label="Reason (required)">
+              <Input id={`${reactId}-reason`} name="reason" required className="text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
             <Button type="submit" variant="secondary" loading={pending} loadingLabel="Reassigning…">Reassign</Button>
           </form>
-          <ErrorLine error={state.error} />
+          <ErrorLine error={state.error} id={errorId} />
         </details>
       ) : null}
     </li>
@@ -370,26 +379,26 @@ function ScoreGoalForm({
   action: (assessmentId: string, goalAssignmentId: string) => BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(action(assessmentId, goal.id), INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-100 bg-neutral-50 p-2 text-xs">
       <span className="font-medium text-neutral-700">{goal.kpiCode} (weight {goal.weight}{goal.targetValue ? `, target ${goal.targetValue}` : ""})</span>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label>
-          Actual value
-          <input type="number" name="actualValue" step="0.0001" defaultValue={existingScore?.actualValue ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-1" />
-        </label>
-        <label>
-          Manual score (0-100, qualitative)
-          <input type="number" name="manualScore" min={0} max={100} step="0.001" defaultValue={existingScore?.manualScore ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-1" />
-        </label>
+        <FormField id={`${reactId}-actualValue`} label="Actual value">
+          <Input type="number" id={`${reactId}-actualValue`} name="actualValue" step="0.0001" defaultValue={existingScore?.actualValue ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={`${reactId}-manualScore`} label="Manual score (0-100, qualitative)">
+          <Input type="number" id={`${reactId}-manualScore`} name="manualScore" min={0} max={100} step="0.001" defaultValue={existingScore?.manualScore ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       </div>
-      <label>
-        Score rationale (required)
-        <textarea name="scoreRationale" required rows={2} defaultValue={existingScore?.scoreRationale ?? ""} className="mt-1 w-full rounded border border-neutral-300 p-1" />
-      </label>
+      <FormField id={`${reactId}-scoreRationale`} label="Score rationale (required)">
+        <Textarea id={`${reactId}-scoreRationale`} name="scoreRationale" required rows={2} defaultValue={existingScore?.scoreRationale ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       {existingScore ? <span className="text-neutral-500">current raw score: {existingScore.rawScore}</span> : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">Save score</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={errorId} />
     </form>
   );
 }
@@ -407,6 +416,8 @@ function MyAssessmentCard({
   const [expanded, setExpanded] = useState(false);
   const submitAction = assessment.assessmentType === "manager" ? submitManagerAction : submitReviewerAction;
   const [submitState, submitFormAction, submitPending] = useActionState(submitAction(assessment.id, assessment.recordVersion), INITIAL_STATE);
+  const commentId = `assessment-comment-${assessment.id}`;
+  const submitErrorId = `assessment-submit-error-${assessment.id}`;
   const scoreByGoalId = new Map(scores.map((s) => [s.goalAssignmentId, s]));
   const activeGoals = goals.filter((g) => g.status === "active");
 
@@ -428,12 +439,11 @@ function MyAssessmentCard({
           )}
           {assessment.status !== "submitted" ? (
             <form action={submitFormAction} className="flex flex-col gap-2">
-              <label className="text-xs text-neutral-500">
-                Overall comment
-                <textarea name="overallComment" rows={2} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-              </label>
+              <FormField id={commentId} label="Overall comment">
+                <Textarea id={commentId} name="overallComment" rows={2} invalid={Boolean(submitState.error)} aria-describedby={submitState.error ? submitErrorId : undefined} />
+              </FormField>
               <Button type="submit" variant="primary" loading={submitPending} loadingLabel="Submitting…">Submit {assessment.assessmentType} assessment</Button>
-              <ErrorLine error={submitState.error} />
+              <ErrorLine error={submitState.error} id={submitErrorId} />
             </form>
           ) : null}
         </div>
@@ -451,6 +461,10 @@ function CalibrationRow({
 }) {
   const [calState, calFormAction, calPending] = useActionState(calibrateAction(outcome.id, outcome.recordVersion), INITIAL_STATE);
   const [pubState, pubFormAction, pubPending] = useActionState(publishAction(outcome.id, outcome.recordVersion), INITIAL_STATE);
+  const scoreId = `calibrate-row-score-${outcome.id}`;
+  const reasonId = `calibrate-row-reason-${outcome.id}`;
+  const errorId = `calibrate-row-error-${outcome.id}`;
+  const describedBy = calState.error || pubState.error ? errorId : undefined;
   return (
     <tr className="border-b border-neutral-100">
       <td className="p-2">{outcome.employeeFullName ?? outcome.employeeId}</td>
@@ -461,8 +475,14 @@ function CalibrationRow({
       <td className="p-2">
         {outcome.status === "draft" || outcome.status === "published" || outcome.status === "reopened" ? (
           <form action={calFormAction} className="mb-1 flex items-center gap-1">
-            <input type="number" name="adjustedScore" min={0} max={100} step="0.001" placeholder="score" required className="w-20 rounded border border-neutral-300 p-1 text-xs" />
-            <input type="text" name="reason" placeholder="reason" required className="w-32 rounded border border-neutral-300 p-1 text-xs" />
+            <label className="sr-only" htmlFor={scoreId}>
+              Adjusted score
+            </label>
+            <Input id={scoreId} type="number" name="adjustedScore" min={0} max={100} step="0.001" placeholder="score" required className="w-20 text-xs" invalid={Boolean(calState.error)} aria-describedby={describedBy} />
+            <label className="sr-only" htmlFor={reasonId}>
+              Reason
+            </label>
+            <Input id={reasonId} type="text" name="reason" placeholder="reason" required className="w-32 text-xs" invalid={Boolean(calState.error)} aria-describedby={describedBy} />
             <Button type="submit" variant="secondary" loading={calPending} loadingLabel="…">Calibrate</Button>
           </form>
         ) : null}
@@ -471,7 +491,7 @@ function CalibrationRow({
             <Button type="submit" variant="primary" loading={pubPending} loadingLabel="…">Publish</Button>
           </form>
         ) : null}
-        <ErrorLine error={calState.error ?? pubState.error} />
+        <ErrorLine error={calState.error ?? pubState.error} id={errorId} />
       </td>
     </tr>
   );
@@ -486,6 +506,10 @@ function CalibrationCard({
 }) {
   const [calState, calFormAction, calPending] = useActionState(calibrateAction(outcome.id, outcome.recordVersion), INITIAL_STATE);
   const [pubState, pubFormAction, pubPending] = useActionState(publishAction(outcome.id, outcome.recordVersion), INITIAL_STATE);
+  const scoreId = `calibrate-card-score-${outcome.id}`;
+  const reasonId = `calibrate-card-reason-${outcome.id}`;
+  const calErrorId = `calibrate-card-cal-error-${outcome.id}`;
+  const pubErrorId = `calibrate-card-pub-error-${outcome.id}`;
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
       <div className="flex items-center justify-between">
@@ -499,18 +523,24 @@ function CalibrationCard({
       </dl>
       {outcome.status === "draft" || outcome.status === "published" || outcome.status === "reopened" ? (
         <form action={calFormAction} className="flex items-center gap-1">
-          <input type="number" name="adjustedScore" min={0} max={100} step="0.001" placeholder="score" required className="w-20 rounded border border-neutral-300 p-1 text-xs" />
-          <input type="text" name="reason" placeholder="reason" required className="flex-1 rounded border border-neutral-300 p-1 text-xs" />
+          <label className="sr-only" htmlFor={scoreId}>
+            Adjusted score
+          </label>
+          <Input id={scoreId} type="number" name="adjustedScore" min={0} max={100} step="0.001" placeholder="score" required className="w-20 text-xs" invalid={Boolean(calState.error)} aria-describedby={calState.error ? calErrorId : undefined} />
+          <label className="sr-only" htmlFor={reasonId}>
+            Reason
+          </label>
+          <Input id={reasonId} type="text" name="reason" placeholder="reason" required className="flex-1 text-xs" invalid={Boolean(calState.error)} aria-describedby={calState.error ? calErrorId : undefined} />
           <Button type="submit" variant="secondary" loading={calPending} loadingLabel="…">Calibrate</Button>
         </form>
       ) : null}
-      <ErrorLine error={calState.error} />
+      <ErrorLine error={calState.error} id={calErrorId} />
       {outcome.status === "draft" || outcome.status === "reopened" ? (
         <form action={pubFormAction}>
           <Button type="submit" variant="primary" loading={pubPending} loadingLabel="…">Publish</Button>
         </form>
       ) : null}
-      <ErrorLine error={pubState.error} />
+      <ErrorLine error={pubState.error} id={pubErrorId} />
     </li>
   );
 }
@@ -518,6 +548,10 @@ function CalibrationCard({
 function AppealRowItem({ appeal, decideAction }: { appeal: PerformanceAppealRow; decideAction: (appealId: string, expectedVersion: number, decision: "uphold" | "overturn") => BoundAction }) {
   const [upholdState, upholdFormAction, upholdPending] = useActionState(decideAction(appeal.id, appeal.recordVersion, "uphold"), INITIAL_STATE);
   const [overturnState, overturnFormAction, overturnPending] = useActionState(decideAction(appeal.id, appeal.recordVersion, "overturn"), INITIAL_STATE);
+  const upholdReasonId = `appeal-uphold-reason-${appeal.id}`;
+  const overturnReasonId = `appeal-overturn-reason-${appeal.id}`;
+  const errorId = `appeal-error-${appeal.id}`;
+  const describedBy = upholdState.error || overturnState.error ? errorId : undefined;
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3 text-sm">
       <div className="flex items-center justify-between">
@@ -527,18 +561,24 @@ function AppealRowItem({ appeal, decideAction }: { appeal: PerformanceAppealRow;
       {appeal.status === "submitted" || appeal.status === "under_review" ? (
         <div className="flex flex-col gap-2 sm:flex-row">
           <form action={upholdFormAction} className="flex items-center gap-1">
-            <input type="text" name="decisionReason" placeholder="uphold reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+            <label className="sr-only" htmlFor={upholdReasonId}>
+              Uphold reason
+            </label>
+            <Input id={upholdReasonId} type="text" name="decisionReason" placeholder="uphold reason" required className="text-xs" invalid={Boolean(upholdState.error)} aria-describedby={describedBy} />
             <Button type="submit" variant="secondary" loading={upholdPending} loadingLabel="…">Uphold</Button>
           </form>
           <form action={overturnFormAction} className="flex items-center gap-1">
-            <input type="text" name="decisionReason" placeholder="overturn reason" required className="rounded border border-neutral-300 p-1 text-xs" />
+            <label className="sr-only" htmlFor={overturnReasonId}>
+              Overturn reason
+            </label>
+            <Input id={overturnReasonId} type="text" name="decisionReason" placeholder="overturn reason" required className="text-xs" invalid={Boolean(overturnState.error)} aria-describedby={describedBy} />
             <Button type="submit" variant="primary" loading={overturnPending} loadingLabel="…">Overturn (reopen)</Button>
           </form>
         </div>
       ) : appeal.decisionReason ? (
         <span className="text-xs text-neutral-500">Decision: {appeal.decisionReason}</span>
       ) : null}
-      <ErrorLine error={upholdState.error ?? overturnState.error} />
+      <ErrorLine error={upholdState.error ?? overturnState.error} id={errorId} />
     </li>
   );
 }

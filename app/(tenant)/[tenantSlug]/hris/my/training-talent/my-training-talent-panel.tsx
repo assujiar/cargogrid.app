@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type {
@@ -25,8 +30,8 @@ const ACTION_STATUS_TONE: Record<string, StatusTone> = { planned: "neutral", in_
 
 type BoundAction = (prevState: MyTrainingTalentActionState, formData: FormData) => Promise<MyTrainingTalentActionState>;
 
-function ErrorLine({ error }: { error: string | null }) {
-  return error ? <p role="alert" className="text-xs text-danger">{error}</p> : null;
+function ErrorLine({ error, id }: { error: string | null; id?: string }) {
+  return error ? <ValidationMessage id={id}>{error}</ValidationMessage> : null;
 }
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -105,9 +110,13 @@ function MyEnrollmentsSection({ myEnrollments, cancelAction, rescheduleAction }:
 
 function CancelForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction} className="flex items-center gap-2">
-      <input name="reason" required placeholder="reason" className="rounded border border-neutral-300 p-2 text-sm" />
+      <label className="sr-only" htmlFor={reactId}>
+        Reason
+      </label>
+      <Input id={reactId} name="reason" required placeholder="reason" invalid={Boolean(state.error)} />
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Cancelling…">Cancel</Button>
       <ErrorLine error={state.error} />
     </form>
@@ -116,9 +125,13 @@ function CancelForm({ action }: { action: BoundAction }) {
 
 function RescheduleForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction} className="flex items-center gap-2">
-      <input name="newSessionId" required placeholder="new session id" className="rounded border border-neutral-300 p-2 text-sm" />
+      <label className="sr-only" htmlFor={reactId}>
+        New session id
+      </label>
+      <Input id={reactId} name="newSessionId" required placeholder="new session id" invalid={Boolean(state.error)} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rescheduling…">Reschedule</Button>
       <ErrorLine error={state.error} />
     </form>
@@ -184,12 +197,16 @@ function MyDevelopmentPlansSection({ myPlans, planActionsByPlanId, updateActionS
 
 function ProgressActionForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
   return (
     <form action={formAction} className="flex items-center gap-2">
-      <select name="status" className="rounded border border-neutral-300 p-1 text-xs">
+      <label className="sr-only" htmlFor={reactId}>
+        Status
+      </label>
+      <Select id={reactId} name="status" className="text-xs" invalid={Boolean(state.error)}>
         <option value="in_progress">In progress</option>
         <option value="completed">Completed</option>
-      </select>
+      </Select>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">Update</Button>
       <ErrorLine error={state.error} />
     </form>
@@ -217,17 +234,28 @@ function MyTalentReviewSection({ myReviewAssignments, submitReviewAction }: { my
 
 function SubmitReviewForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const describedBy = state.error ? `${reactId}-error` : undefined;
   return (
-    <form action={formAction} className="flex flex-col gap-2">
-      <select name="potentialRating" required className="rounded border border-neutral-300 p-2 text-sm">
+    <form action={formAction} className="flex flex-col gap-2" noValidate>
+      <label className="sr-only" htmlFor={`${reactId}-potential`}>
+        Potential rating
+      </label>
+      <Select id={`${reactId}-potential`} name="potentialRating" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
         <option value="">Potential rating…</option><option value="low">Low</option><option value="moderate">Moderate</option><option value="high">High</option>
-      </select>
-      <select name="riskOfLoss" className="rounded border border-neutral-300 p-2 text-sm">
+      </Select>
+      <label className="sr-only" htmlFor={`${reactId}-risk`}>
+        Risk of loss
+      </label>
+      <Select id={`${reactId}-risk`} name="riskOfLoss" invalid={Boolean(state.error)} aria-describedby={describedBy}>
         <option value="">Risk of loss (optional)…</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-      </select>
-      <textarea name="readinessNote" placeholder="readiness note" className="rounded border border-neutral-300 p-2 text-sm" />
+      </Select>
+      <label className="sr-only" htmlFor={`${reactId}-note`}>
+        Readiness note
+      </label>
+      <Textarea id={`${reactId}-note`} name="readinessNote" placeholder="readiness note" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…">Submit review</Button>
-      <ErrorLine error={state.error} />
+      <ErrorLine error={state.error} id={`${reactId}-error`} />
     </form>
   );
 }

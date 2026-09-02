@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import type { VendorAssignmentInvitation, VendorAssignmentInvitationStatus, VendorAssignmentEligibilityPreview } from "../../../../../../server/contracts/vendor-assignment/vendor-assignment.ts";
 import type { VendorAssignmentActionState } from "../actions.ts";
@@ -29,20 +31,19 @@ function ActionForm({
   variant = "primary",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -57,11 +58,7 @@ function NoArgActionButton({ action, label, loadingLabel, variant = "secondary" 
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"}>
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -162,13 +159,27 @@ export function VendorAssignmentInvitationDetailPanel({
 
         {canDecline ? (
           <ActionForm action={declineAction} submitLabel="Decline" loadingLabel="Declining…" variant="destructive">
-            <Input name="reason" type="text" placeholder="Reason (required)" required />
+            {(describedBy) => (
+              <>
+                <label htmlFor="decline-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="decline-reason" name="reason" type="text" placeholder="Reason (required)" required aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         ) : null}
 
         {canCancel ? (
           <ActionForm action={cancelAction} submitLabel="Cancel invitation" loadingLabel="Cancelling…" variant="destructive">
-            <Input name="reason" type="text" placeholder="Reason (required)" required />
+            {(describedBy) => (
+              <>
+                <label htmlFor="cancel-reason" className="sr-only">
+                  Reason
+                </label>
+                <Input id="cancel-reason" name="reason" type="text" placeholder="Reason (required)" required aria-describedby={describedBy} />
+              </>
+            )}
           </ActionForm>
         ) : null}
 
@@ -181,22 +192,22 @@ export function VendorAssignmentInvitationDetailPanel({
 
         {canReassign ? (
           <ActionForm action={reassignAction} submitLabel="Reassign to a new vendor" loadingLabel="Reassigning…" variant="secondary">
-            <label htmlFor="reassign-newVendorMasterId" className="text-xs font-medium text-neutral-700">
-              Replacement vendor master ID (required)
-            </label>
-            <Input id="reassign-newVendorMasterId" name="newVendorMasterId" type="text" required placeholder="uuid" />
-            <label htmlFor="reassign-newContractId" className="text-xs font-medium text-neutral-700">
-              New governing contract ID
-            </label>
-            <Input id="reassign-newContractId" name="newContractId" type="text" placeholder="optional uuid" />
-            <label htmlFor="reassign-newCapacityReservationId" className="text-xs font-medium text-neutral-700">
-              New capacity reservation ID
-            </label>
-            <Input id="reassign-newCapacityReservationId" name="newCapacityReservationId" type="text" placeholder="optional uuid" />
-            <label htmlFor="reassign-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="reassign-reason" name="reason" type="text" required />
+            {(describedBy) => (
+              <>
+                <FormField id="reassign-newVendorMasterId" label="Replacement vendor master ID (required)">
+                  <Input id="reassign-newVendorMasterId" name="newVendorMasterId" type="text" required placeholder="uuid" aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="reassign-newContractId" label="New governing contract ID">
+                  <Input id="reassign-newContractId" name="newContractId" type="text" placeholder="optional uuid" aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="reassign-newCapacityReservationId" label="New capacity reservation ID">
+                  <Input id="reassign-newCapacityReservationId" name="newCapacityReservationId" type="text" placeholder="optional uuid" aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="reassign-reason" label="Reason (required)">
+                  <Input id="reassign-reason" name="reason" type="text" required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 

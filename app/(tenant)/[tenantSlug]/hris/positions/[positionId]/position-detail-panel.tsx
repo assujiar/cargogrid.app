@@ -2,6 +2,10 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { PositionActionState } from "../actions.ts";
@@ -104,45 +108,42 @@ export function PositionDetailPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Details</h2>
-        <form action={updateFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <form action={updateFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2" noValidate>
           {editDirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-            Title
-            <input name="title" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("title")} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-            Org unit
-            <select name="orgUnitId" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("orgUnitId")}>
+          <FormField id="position-title" label="Title">
+            <Input id="position-title" name="title" required invalid={Boolean(updateState.error)} aria-describedby={updateState.error ? "position-update-error" : undefined} {...editField("title")} />
+          </FormField>
+          <FormField id="position-org-unit" label="Org unit">
+            <Select id="position-org-unit" name="orgUnitId" required invalid={Boolean(updateState.error)} aria-describedby={updateState.error ? "position-update-error" : undefined} {...editField("orgUnitId")}>
               {orgUnits.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} ({u.unitType})
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-            Grade
-            <select name="gradeId" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("gradeId")}>
+            </Select>
+          </FormField>
+          <FormField id="position-grade" label="Grade">
+            <Select id="position-grade" name="gradeId" invalid={Boolean(updateState.error)} aria-describedby={updateState.error ? "position-update-error" : undefined} {...editField("gradeId")}>
               <option value="">No grade</option>
               {grades.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.code} — {g.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-            Capacity
-            <input name="capacity" type="number" min="1" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("capacity")} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600 sm:col-span-2">
-            Description
-            <input name="description" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...editField("description")} />
-          </label>
+            </Select>
+          </FormField>
+          <FormField id="position-capacity" label="Capacity">
+            <Input id="position-capacity" name="capacity" type="number" min="1" required invalid={Boolean(updateState.error)} aria-describedby={updateState.error ? "position-update-error" : undefined} {...editField("capacity")} />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField id="position-description" label="Description">
+              <Input id="position-description" name="description" invalid={Boolean(updateState.error)} aria-describedby={updateState.error ? "position-update-error" : undefined} {...editField("description")} />
+            </FormField>
+          </div>
           {updateState.error ? (
-            <p role="alert" className="col-span-full text-xs text-danger">
-              {updateState.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="position-update-error">{updateState.error}</ValidationMessage>
+            </div>
           ) : null}
           <div className="col-span-full">
             <Button type="submit" loading={updatePending} loadingLabel="Saving…">
@@ -158,11 +159,7 @@ export function PositionDetailPanel({
           <Button type="submit" variant="secondary" loading={statusPending} loadingLabel="Working…">
             Set {nextStatus}
           </Button>
-          {statusState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {statusState.error}
-            </p>
-          ) : null}
+          {statusState.error ? <ValidationMessage>{statusState.error}</ValidationMessage> : null}
         </form>
       </section>
 

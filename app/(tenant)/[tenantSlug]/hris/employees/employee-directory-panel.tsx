@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { EmployeeActionState } from "./actions.ts";
@@ -38,6 +42,7 @@ export function EmployeeDirectoryPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const createDescribedBy = state.error ? "create-employee-error" : undefined;
 
   function applyFilter(nextStatus: string, nextSearch: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -57,12 +62,12 @@ export function EmployeeDirectoryPanel({
             <label htmlFor="employee-search" className="text-xs font-medium text-neutral-600">
               Search
             </label>
-            <input
+            <Input
               id="employee-search"
               type="search"
               defaultValue={search}
               placeholder="Name or employee number"
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+              className="py-1.5"
               onKeyDown={(event) => {
                 if (event.key === "Enter") applyFilter(statusFilter ?? "", event.currentTarget.value);
               }}
@@ -72,14 +77,14 @@ export function EmployeeDirectoryPanel({
             <label htmlFor="employee-status" className="text-xs font-medium text-neutral-600">
               Status
             </label>
-            <select id="employee-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value, search)}>
+            <Select id="employee-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, search)}>
               <option value="">All statuses</option>
               {EMPLOYEE_LIFECYCLE_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -123,18 +128,12 @@ export function EmployeeDirectoryPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new employee draft</h2>
-        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="fullName" className="text-xs font-medium text-neutral-600">
-              Full name
-            </label>
-            <input id="fullName" name="fullName" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="employmentType" className="text-xs font-medium text-neutral-600">
-              Employment type
-            </label>
-            <select id="employmentType" name="employmentType" required defaultValue="" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate>
+          <FormField id="fullName" label="Full name">
+            <Input id="fullName" name="fullName" type="text" required invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="employmentType" label="Employment type">
+            <Select id="employmentType" name="employmentType" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={createDescribedBy}>
               <option value="" disabled>
                 Select…
               </option>
@@ -143,25 +142,19 @@ export function EmployeeDirectoryPanel({
                   {t.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="workEmail" className="text-xs font-medium text-neutral-600">
-              Work email (optional)
-            </label>
-            <input id="workEmail" name="workEmail" type="email" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="hireDate" className="text-xs font-medium text-neutral-600">
-              Hire date (optional)
-            </label>
-            <input id="hireDate" name="hireDate" type="date" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
+            </Select>
+          </FormField>
+          <FormField id="workEmail" label="Work email (optional)">
+            <Input id="workEmail" name="workEmail" type="email" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="hireDate" label="Hire date (optional)">
+            <Input id="hireDate" name="hireDate" type="date" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="create-employee-error">{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

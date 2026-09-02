@@ -14,10 +14,13 @@
  * panel never auto-executes a suspend/blacklist/reactivate itself).
  */
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
@@ -122,34 +125,24 @@ function ActionForm({
   className,
 }: {
   action: SimpleFormAction;
-  children?: ReactNode;
+  children?: (describedBy: string | undefined) => ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
   className?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className={className ?? "flex flex-col gap-2"}>
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
     </form>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-neutral-700">{label}</span>
-      {children}
-    </div>
   );
 }
 
@@ -194,23 +187,27 @@ function DrilldownRow({ line, raiseDisputeAction }: { line: VendorKpiScorecardDr
             {open ? (
               <div className="mt-2 w-64">
                 <ActionForm action={raiseDisputeAction} submitLabel="Raise dispute" loadingLabel="Raising…" variant="destructive">
-                  <input type="hidden" name="kpiCode" value={line.kpiCode} />
-                  <Field label="Source event id (required)">
-                    <select name="sourceId" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-                      <option value="">Select a contributing source…</option>
-                      {sourceIds.map((id) => (
-                        <option key={String(id)} value={String(id)}>
-                          {String(id)}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Source label">
-                    <Input name="sourceLabel" placeholder="Optional human label" />
-                  </Field>
-                  <Field label="Reason (required)">
-                    <Input name="reason" required />
-                  </Field>
+                  {(describedBy) => (
+                    <>
+                      <input type="hidden" name="kpiCode" value={line.kpiCode} />
+                      <FormField id={`dispute-source-${line.lineId}`} label="Source event id (required)">
+                        <Select id={`dispute-source-${line.lineId}`} name="sourceId" required aria-describedby={describedBy}>
+                          <option value="">Select a contributing source…</option>
+                          {sourceIds.map((id) => (
+                            <option key={String(id)} value={String(id)}>
+                              {String(id)}
+                            </option>
+                          ))}
+                        </Select>
+                      </FormField>
+                      <FormField id={`dispute-source-label-${line.lineId}`} label="Source label">
+                        <Input id={`dispute-source-label-${line.lineId}`} name="sourceLabel" placeholder="Optional human label" aria-describedby={describedBy} />
+                      </FormField>
+                      <FormField id={`dispute-reason-${line.lineId}`} label="Reason (required)">
+                        <Input id={`dispute-reason-${line.lineId}`} name="reason" required aria-describedby={describedBy} />
+                      </FormField>
+                    </>
+                  )}
                 </ActionForm>
               </div>
             ) : null}
@@ -241,17 +238,21 @@ function DisputeRow({ dispute, decideDisputeAction }: { dispute: VendorKpiSource
         </p>
       ) : (
         <ActionForm action={decideDisputeAction} submitLabel="Record decision" loadingLabel="Deciding…" variant="secondary" className="flex flex-col gap-2 border-t border-neutral-200 pt-2">
-          <input type="hidden" name="disputeId" value={dispute.id} />
-          <input type="hidden" name="expectedVersion" value={dispute.recordVersion} />
-          <Field label="Decision (required)">
-            <select name="decision" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="upheld">Uphold (exclude this source from the metric)</option>
-              <option value="rejected">Reject (keep the source, no change)</option>
-            </select>
-          </Field>
-          <Field label="Decision notes (required)">
-            <Input name="decisionNotes" required />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="disputeId" value={dispute.id} />
+              <input type="hidden" name="expectedVersion" value={dispute.recordVersion} />
+              <FormField id={`dispute-decision-${dispute.id}`} label="Decision (required)">
+                <Select id={`dispute-decision-${dispute.id}`} name="decision" required aria-describedby={describedBy}>
+                  <option value="upheld">Uphold (exclude this source from the metric)</option>
+                  <option value="rejected">Reject (keep the source, no change)</option>
+                </Select>
+              </FormField>
+              <FormField id={`dispute-decision-notes-${dispute.id}`} label="Decision notes (required)">
+                <Input id={`dispute-decision-notes-${dispute.id}`} name="decisionNotes" required aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
       )}
     </div>
@@ -277,18 +278,22 @@ function CorrectiveActionRow({ action, updateAction }: { action: VendorPerforman
       {action.completionNote ? <p className="text-xs text-neutral-500">{action.completionNote}</p> : null}
       {canUpdate ? (
         <ActionForm action={updateAction} submitLabel="Update status" loadingLabel="Updating…" variant="secondary" className="mt-1 flex flex-wrap items-end gap-2">
-          <input type="hidden" name="actionId" value={action.id} />
-          <input type="hidden" name="expectedVersion" value={action.recordVersion} />
-          <Field label="Status">
-            <select name="status" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="in_progress">in_progress</option>
-              <option value="completed">completed</option>
-              <option value="cancelled">cancelled</option>
-            </select>
-          </Field>
-          <Field label="Completion note">
-            <Input name="completionNote" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="actionId" value={action.id} />
+              <input type="hidden" name="expectedVersion" value={action.recordVersion} />
+              <FormField id={`ca-status-${action.id}`} label="Status">
+                <Select id={`ca-status-${action.id}`} name="status" aria-describedby={describedBy}>
+                  <option value="in_progress">in_progress</option>
+                  <option value="completed">completed</option>
+                  <option value="cancelled">cancelled</option>
+                </Select>
+              </FormField>
+              <FormField id={`ca-completion-note-${action.id}`} label="Completion note">
+                <Input id={`ca-completion-note-${action.id}`} name="completionNote" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
       ) : null}
     </div>
@@ -332,18 +337,22 @@ function IssueRow({
 
       {canUpdate ? (
         <ActionForm action={updateIssueStatusAction} submitLabel="Update status" loadingLabel="Updating…" variant="secondary" className="flex flex-wrap items-end gap-2 border-t border-neutral-200 pt-2">
-          <input type="hidden" name="issueId" value={issue.id} />
-          <input type="hidden" name="expectedVersion" value={issue.recordVersion} />
-          <Field label="Status">
-            <select name="status" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="in_progress">in_progress</option>
-              <option value="resolved">resolved</option>
-              <option value="closed">closed</option>
-            </select>
-          </Field>
-          <Field label="Resolution note">
-            <Input name="resolutionNote" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="issueId" value={issue.id} />
+              <input type="hidden" name="expectedVersion" value={issue.recordVersion} />
+              <FormField id={`issue-status-${issue.id}`} label="Status">
+                <Select id={`issue-status-${issue.id}`} name="status" aria-describedby={describedBy}>
+                  <option value="in_progress">in_progress</option>
+                  <option value="resolved">resolved</option>
+                  <option value="closed">closed</option>
+                </Select>
+              </FormField>
+              <FormField id={`issue-resolution-note-${issue.id}`} label="Resolution note">
+                <Input id={`issue-resolution-note-${issue.id}`} name="resolutionNote" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
       ) : null}
 
@@ -354,16 +363,20 @@ function IssueRow({
           <CorrectiveActionRow key={action.id} action={action} updateAction={updateCorrectiveActionStatusAction} />
         ))}
         <ActionForm action={addCorrectiveActionAction} submitLabel="Add corrective action" loadingLabel="Adding…" variant="secondary" className="flex flex-wrap items-end gap-2">
-          <input type="hidden" name="issueId" value={issue.id} />
-          <Field label="Description (required)">
-            <Input name="description" required className="min-w-[16rem]" />
-          </Field>
-          <Field label="Owner">
-            <Input name="ownerLabel" />
-          </Field>
-          <Field label="Due date">
-            <Input name="dueDate" type="date" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="issueId" value={issue.id} />
+              <FormField id={`ca-new-description-${issue.id}`} label="Description (required)">
+                <Input id={`ca-new-description-${issue.id}`} name="description" required className="min-w-[16rem]" aria-describedby={describedBy} />
+              </FormField>
+              <FormField id={`ca-new-owner-${issue.id}`} label="Owner">
+                <Input id={`ca-new-owner-${issue.id}`} name="ownerLabel" aria-describedby={describedBy} />
+              </FormField>
+              <FormField id={`ca-new-due-date-${issue.id}`} label="Due date">
+                <Input id={`ca-new-due-date-${issue.id}`} name="dueDate" type="date" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
       </div>
     </div>
@@ -392,17 +405,21 @@ function AdjustmentRow({ adjustment, decideAdjustmentAction }: { adjustment: Ven
         </p>
       ) : (
         <ActionForm action={decideAdjustmentAction} submitLabel="Record decision" loadingLabel="Deciding…" variant="secondary" className="flex flex-col gap-2 border-t border-neutral-200 pt-2">
-          <input type="hidden" name="adjustmentId" value={adjustment.id} />
-          <input type="hidden" name="expectedVersion" value={adjustment.recordVersion} />
-          <Field label="Decision (required)">
-            <select name="decision" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="approved">Approve</option>
-              <option value="rejected">Reject</option>
-            </select>
-          </Field>
-          <Field label="Decision notes (required)">
-            <Input name="decisionNotes" required />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="adjustmentId" value={adjustment.id} />
+              <input type="hidden" name="expectedVersion" value={adjustment.recordVersion} />
+              <FormField id={`adjustment-decision-${adjustment.id}`} label="Decision (required)">
+                <Select id={`adjustment-decision-${adjustment.id}`} name="decision" required aria-describedby={describedBy}>
+                  <option value="approved">Approve</option>
+                  <option value="rejected">Reject</option>
+                </Select>
+              </FormField>
+              <FormField id={`adjustment-decision-notes-${adjustment.id}`} label="Decision notes (required)">
+                <Input id={`adjustment-decision-notes-${adjustment.id}`} name="decisionNotes" required aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
       )}
     </div>
@@ -439,23 +456,27 @@ function RecommendationRow({ recommendation, decideRecommendationAction }: { rec
           variant="destructive"
           className="flex flex-col gap-2 border-t border-neutral-200 pt-2"
         >
-          <input type="hidden" name="recommendationId" value={recommendation.id} />
-          <input type="hidden" name="expectedVersion" value={recommendation.recordVersion} />
-          <Field label="Decided action (required -- this system never auto-executes; a human always decides)">
-            <select name="decidedAction" defaultValue={recommendation.recommendedAction} required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              {VENDOR_LIFECYCLE_RECOMMENDATION_ACTIONS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Decision notes (required)">
-            <Input name="decisionNotes" required />
-          </Field>
-          <Field label="Evidence reference (required for suspend/blacklist)">
-            <Input name="evidenceRef" placeholder="e.g. incident id, contract clause, audit ref" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="recommendationId" value={recommendation.id} />
+              <input type="hidden" name="expectedVersion" value={recommendation.recordVersion} />
+              <FormField id={`recommendation-decided-action-${recommendation.id}`} label="Decided action (required -- this system never auto-executes; a human always decides)">
+                <Select id={`recommendation-decided-action-${recommendation.id}`} name="decidedAction" defaultValue={recommendation.recommendedAction} required aria-describedby={describedBy}>
+                  {VENDOR_LIFECYCLE_RECOMMENDATION_ACTIONS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField id={`recommendation-decision-notes-${recommendation.id}`} label="Decision notes (required)">
+                <Input id={`recommendation-decision-notes-${recommendation.id}`} name="decisionNotes" required aria-describedby={describedBy} />
+              </FormField>
+              <FormField id={`recommendation-evidence-ref-${recommendation.id}`} label="Evidence reference (required for suspend/blacklist)">
+                <Input id={`recommendation-evidence-ref-${recommendation.id}`} name="evidenceRef" placeholder="e.g. incident id, contract clause, audit ref" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
       )}
     </div>
@@ -552,23 +573,31 @@ export function VendorPerformanceDetailPanel({
         <div className="flex-1">
           <h3 className="text-xs font-semibold uppercase text-neutral-500">1. Calculate metrics for a window</h3>
           <ActionForm action={calculateAction} submitLabel="Calculate" loadingLabel="Calculating…" variant="secondary" className="mt-2 flex flex-wrap items-end gap-2">
-            <Field label="Window start (required)">
-              <Input name="windowStart" type="datetime-local" defaultValue={defaultWindowStart} required />
-            </Field>
-            <Field label="Window end (required)">
-              <Input name="windowEnd" type="datetime-local" defaultValue={defaultWindowEnd} required />
-            </Field>
+            {(describedBy) => (
+              <>
+                <FormField id="calc-window-start" label="Window start (required)">
+                  <Input id="calc-window-start" name="windowStart" type="datetime-local" defaultValue={defaultWindowStart} required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="calc-window-end" label="Window end (required)">
+                  <Input id="calc-window-end" name="windowEnd" type="datetime-local" defaultValue={defaultWindowEnd} required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         </div>
         <div className="flex-1">
           <h3 className="text-xs font-semibold uppercase text-neutral-500">2. Publish the scorecard for that window</h3>
           <ActionForm action={publishAction} submitLabel="Publish" loadingLabel="Publishing…" className="mt-2 flex flex-wrap items-end gap-2">
-            <Field label="Window start (required, must match a calculated run)">
-              <Input name="windowStart" type="datetime-local" defaultValue={defaultWindowStart} required />
-            </Field>
-            <Field label="Window end (required)">
-              <Input name="windowEnd" type="datetime-local" defaultValue={defaultWindowEnd} required />
-            </Field>
+            {(describedBy) => (
+              <>
+                <FormField id="publish-window-start" label="Window start (required, must match a calculated run)">
+                  <Input id="publish-window-start" name="windowStart" type="datetime-local" defaultValue={defaultWindowStart} required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="publish-window-end" label="Window end (required)">
+                  <Input id="publish-window-end" name="windowEnd" type="datetime-local" defaultValue={defaultWindowEnd} required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         </div>
       </section>
@@ -632,31 +661,35 @@ export function VendorPerformanceDetailPanel({
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Issues &amp; corrective actions</h2>
         <ActionForm action={raiseIssueAction} submitLabel="Raise issue" loadingLabel="Raising…" variant="secondary" className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-          <input type="hidden" name="scorecardId" value={currentCard?.id ?? ""} />
-          <Field label="Title (required)">
-            <Input name="title" required className="min-w-[16rem]" />
-          </Field>
-          <Field label="Severity (required)">
-            <select name="severity" required defaultValue="medium" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-              <option value="critical">critical</option>
-            </select>
-          </Field>
-          <Field label="KPI category">
-            <select name="kpiCode" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="">(not tied to one category)</option>
-              {VENDOR_KPI_CODES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Description">
-            <Input name="description" className="min-w-[16rem]" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="scorecardId" value={currentCard?.id ?? ""} />
+              <FormField id="raise-issue-title" label="Title (required)">
+                <Input id="raise-issue-title" name="title" required className="min-w-[16rem]" aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="raise-issue-severity" label="Severity (required)">
+                <Select id="raise-issue-severity" name="severity" required defaultValue="medium" aria-describedby={describedBy}>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                  <option value="critical">critical</option>
+                </Select>
+              </FormField>
+              <FormField id="raise-issue-kpi-code" label="KPI category">
+                <Select id="raise-issue-kpi-code" name="kpiCode" aria-describedby={describedBy}>
+                  <option value="">(not tied to one category)</option>
+                  {VENDOR_KPI_CODES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField id="raise-issue-description" label="Description">
+                <Input id="raise-issue-description" name="description" className="min-w-[16rem]" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
 
         {issues.length === 0 ? (
@@ -685,22 +718,26 @@ export function VendorPerformanceDetailPanel({
           variant="secondary"
           className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3"
         >
-          <input type="hidden" name="scorecardId" value={currentCard?.id ?? ""} />
-          <Field label="KPI category (required)">
-            <select name="kpiCode" required className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              {VENDOR_KPI_CODES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Adjusted normalized score, 0-100 (required)">
-            <Input name="adjustedNormalizedScore" type="number" min={0} max={100} step="any" required />
-          </Field>
-          <Field label="Reason (required)">
-            <Input name="reason" required className="min-w-[16rem]" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="scorecardId" value={currentCard?.id ?? ""} />
+              <FormField id="adjustment-kpi-code" label="KPI category (required)">
+                <Select id="adjustment-kpi-code" name="kpiCode" required aria-describedby={describedBy}>
+                  {VENDOR_KPI_CODES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField id="adjustment-score" label="Adjusted normalized score, 0-100 (required)">
+                <Input id="adjustment-score" name="adjustedNormalizedScore" type="number" min={0} max={100} step="any" required aria-describedby={describedBy} />
+              </FormField>
+              <FormField id="adjustment-reason" label="Reason (required)">
+                <Input id="adjustment-reason" name="reason" required className="min-w-[16rem]" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
 
         {adjustments.length === 0 ? (
@@ -723,20 +760,24 @@ export function VendorPerformanceDetailPanel({
           variant="secondary"
           className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3"
         >
-          <input type="hidden" name="scorecardId" value={currentCard?.id ?? ""} />
-          <Field label="Override action (optional -- leave blank to use the current scorecard's band)">
-            <select name="overrideAction" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-              <option value="">(derive from current scorecard band)</option>
-              {VENDOR_LIFECYCLE_RECOMMENDATION_ACTIONS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Rationale (required if overriding)">
-            <Input name="rationale" className="min-w-[16rem]" />
-          </Field>
+          {(describedBy) => (
+            <>
+              <input type="hidden" name="scorecardId" value={currentCard?.id ?? ""} />
+              <FormField id="recommendation-override-action" label="Override action (optional -- leave blank to use the current scorecard's band)">
+                <Select id="recommendation-override-action" name="overrideAction" aria-describedby={describedBy}>
+                  <option value="">(derive from current scorecard band)</option>
+                  {VENDOR_LIFECYCLE_RECOMMENDATION_ACTIONS.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+              <FormField id="recommendation-rationale" label="Rationale (required if overriding)">
+                <Input id="recommendation-rationale" name="rationale" className="min-w-[16rem]" aria-describedby={describedBy} />
+              </FormField>
+            </>
+          )}
         </ActionForm>
 
         {pendingRecommendations.length === 0 && decidedRecommendations.length === 0 ? (

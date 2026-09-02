@@ -1,8 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import Link from "next/link";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { TemplateActionState } from "./actions.ts";
@@ -53,20 +56,29 @@ export function TemplateListPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new template</h2>
-        <form action={createFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <input name="code" placeholder="Code (e.g. ONB-STD)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="name" placeholder="Name" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <select name="caseType" required defaultValue="onboarding" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+        <form action={createFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4" noValidate>
+          <label htmlFor="template-code" className="sr-only">
+            Code
+          </label>
+          <Input id="template-code" name="code" placeholder="Code (e.g. ONB-STD)" required invalid={Boolean(createState.error)} aria-describedby={createState.error ? "template-create-error" : undefined} />
+          <label htmlFor="template-name" className="sr-only">
+            Name
+          </label>
+          <Input id="template-name" name="name" placeholder="Name" required invalid={Boolean(createState.error)} aria-describedby={createState.error ? "template-create-error" : undefined} />
+          <label htmlFor="template-case-type" className="sr-only">
+            Case type
+          </label>
+          <Select id="template-case-type" name="caseType" required defaultValue="onboarding" invalid={Boolean(createState.error)} aria-describedby={createState.error ? "template-create-error" : undefined}>
             {CASE_TYPES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
+          </Select>
           {createState.error ? (
-            <p role="alert" className="col-span-full text-xs text-danger">
-              {createState.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="template-create-error">{createState.error}</ValidationMessage>
+            </div>
           ) : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={createPending} loadingLabel="Creating…">
@@ -93,11 +105,7 @@ function TemplateRow({ template, openDraftAction }: { template: TemplateListRow;
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Opening…">
             Manage draft version
           </Button>
-          {state.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {state.error}
-            </p>
-          ) : null}
+          {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
         </form>
       </td>
     </tr>

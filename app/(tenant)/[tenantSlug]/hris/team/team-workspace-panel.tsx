@@ -1,12 +1,17 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Card } from "../../../../../components/ui/card.tsx";
 import { Stat } from "../../../../../components/ui/stat.tsx";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { Link } from "../../../../../components/ui/link.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { MssTeamWorkspace, ManagerApprovalQueueItem } from "../../../../../server/contracts/self-service/self-service.ts";
 import type { MssActionState } from "./actions.ts";
 
@@ -14,36 +19,27 @@ const INITIAL_STATE: MssActionState = { error: null };
 
 type BoundAction = (prevState: MssActionState, formData: FormData) => Promise<MssActionState>;
 
-function ErrorLine({ error }: { error: string | null }) {
-  return error ? (
-    <p role="alert" className="text-xs text-danger">
-      {error}
-    </p>
-  ) : null;
-}
-
 function LeaveQueueForm({ item, action }: { item: Extract<ManagerApprovalQueueItem, { kind: "leave" }>; action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <label className="text-xs text-neutral-500">
-        Decision
-        <select name="decision" defaultValue="approved" className="mt-1 block rounded border border-neutral-300 p-1 text-sm">
+      <FormField id={`${reactId}-decision`} label="Decision">
+        <Select id={`${reactId}-decision`} name="decision" defaultValue="approved" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="approved">Approve</option>
           <option value="rejected">Reject</option>
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason (required)
-        <input type="text" name="reason" required className="mt-1 block w-56 rounded border border-neutral-300 p-1 text-sm" />
-      </label>
-      <label className="flex items-center gap-1 text-xs text-neutral-500">
-        <input type="checkbox" name="overrideCoverage" /> Override coverage
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`${reactId}-reason`} label="Reason (required)">
+        <Input type="text" id={`${reactId}-reason`} name="reason" required className="w-56" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <Checkbox name="overrideCoverage" label="Override coverage" />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Decide
       </Button>
-      <ErrorLine error={state.error} />
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -58,29 +54,29 @@ function ImperativeQueueForm({
   showMinutesOverride: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <label className="text-xs text-neutral-500">
-        Decision
-        <select name="decision" defaultValue="approve" className="mt-1 block rounded border border-neutral-300 p-1 text-sm">
+      <FormField id={`${reactId}-decision`} label="Decision">
+        <Select id={`${reactId}-decision`} name="decision" defaultValue="approve" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="approve">Approve</option>
           <option value="reject">Reject</option>
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Reason{reasonFieldName === "decidedReason" ? " (required)" : ""}
-        <input type="text" name={reasonFieldName} required={reasonFieldName === "decidedReason"} className="mt-1 block w-56 rounded border border-neutral-300 p-1 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`${reactId}-reason`} label={`Reason${reasonFieldName === "decidedReason" ? " (required)" : ""}`}>
+        <Input type="text" id={`${reactId}-reason`} name={reasonFieldName} required={reasonFieldName === "decidedReason"} className="w-56" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       {showMinutesOverride ? (
-        <label className="text-xs text-neutral-500">
-          Approved minutes override
-          <input type="number" name="approvedMinutesOverride" min={0} className="mt-1 block w-32 rounded border border-neutral-300 p-1 text-sm" />
-        </label>
+        <FormField id={`${reactId}-approvedMinutesOverride`} label="Approved minutes override">
+          <Input type="number" id={`${reactId}-approvedMinutesOverride`} name="approvedMinutesOverride" min={0} className="w-32" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       ) : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Decide
       </Button>
-      <ErrorLine error={state.error} />
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

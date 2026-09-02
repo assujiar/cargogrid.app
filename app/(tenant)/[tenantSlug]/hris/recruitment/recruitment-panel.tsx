@@ -4,6 +4,11 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { RecruitmentExportForm, type RecruitmentExportActionState } from "../../../../../components/domain/recruitment-export-form.tsx";
 import type { JobVacancy, VacancyStatus } from "../../../../../server/contracts/recruitment/recruitment.ts";
@@ -61,7 +66,7 @@ export function RecruitmentPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <input
+        <Input
           type="search"
           defaultValue={search}
           placeholder="Search vacancy title…"
@@ -69,16 +74,15 @@ export function RecruitmentPanel({
           onKeyDown={(e) => {
             if (e.key === "Enter") applyFilter({ q: (e.target as HTMLInputElement).value });
           }}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
         />
-        <select aria-label="Filter by status" value={statusFilter ?? ""} onChange={(e) => applyFilter({ status: e.target.value })} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <Select aria-label="Filter by status" value={statusFilter ?? ""} onChange={(e) => applyFilter({ status: e.target.value })} className="w-auto">
           <option value="">All statuses</option>
           <option value="draft">Draft</option>
           <option value="open">Open</option>
           <option value="on_hold">On hold</option>
           <option value="closed">Closed</option>
           <option value="cancelled">Cancelled</option>
-        </select>
+        </Select>
         <div className="ml-auto">
           <Button type="button" variant="secondary" onClick={() => setShowCreate((v) => !v)} disabled={positions.length === 0}>
             {showCreate ? "Cancel" : "New vacancy"}
@@ -94,61 +98,43 @@ export function RecruitmentPanel({
 
       {showCreate ? (
         <form action={createFormAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="positionId" className="text-sm font-medium text-neutral-700">
-              Position
-            </label>
-            <select id="positionId" name="positionId" value={positionId} onChange={(e) => setPositionId(e.target.value)} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+          <FormField id="positionId" label="Position">
+            <Select id="positionId" name="positionId" value={positionId} onChange={(e) => setPositionId(e.target.value)} invalid={Boolean(createState.error)} aria-describedby={createState.error ? "create-vacancy-error" : undefined}>
               {positions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.title} ({p.code})
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="title" className="text-sm font-medium text-neutral-700">
-              Vacancy title
-            </label>
-            <input id="title" name="title" type="text" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
+            </Select>
+          </FormField>
+          <FormField id="title" label="Vacancy title">
+            <Input id="title" name="title" type="text" required invalid={Boolean(createState.error)} aria-describedby={createState.error ? "create-vacancy-error" : undefined} />
+          </FormField>
           <div className="flex gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <label htmlFor="employmentType" className="text-sm font-medium text-neutral-700">
-                Employment type
-              </label>
-              <select id="employmentType" name="employmentType" className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
-                <option value="full_time">Full time</option>
-                <option value="part_time">Part time</option>
-                <option value="contract">Contract</option>
-                <option value="internship">Internship</option>
-                <option value="temporary">Temporary</option>
-              </select>
+            <div className="flex-1">
+              <FormField id="employmentType" label="Employment type">
+                <Select id="employmentType" name="employmentType" invalid={Boolean(createState.error)} aria-describedby={createState.error ? "create-vacancy-error" : undefined}>
+                  <option value="full_time">Full time</option>
+                  <option value="part_time">Part time</option>
+                  <option value="contract">Contract</option>
+                  <option value="internship">Internship</option>
+                  <option value="temporary">Temporary</option>
+                </Select>
+              </FormField>
             </div>
-            <div className="flex w-28 flex-col gap-1">
-              <label htmlFor="headcount" className="text-sm font-medium text-neutral-700">
-                Headcount
-              </label>
-              <input id="headcount" name="headcount" type="number" min="1" defaultValue={1} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+            <div className="w-28">
+              <FormField id="headcount" label="Headcount">
+                <Input id="headcount" name="headcount" type="number" min="1" defaultValue={1} invalid={Boolean(createState.error)} aria-describedby={createState.error ? "create-vacancy-error" : undefined} />
+              </FormField>
             </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="description" className="text-sm font-medium text-neutral-700">
-              Description
-            </label>
-            <textarea id="description" name="description" rows={3} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="requirements" className="text-sm font-medium text-neutral-700">
-              Requirements
-            </label>
-            <textarea id="requirements" name="requirements" rows={3} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          </div>
-          {createState.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {createState.error}
-            </p>
-          ) : null}
+          <FormField id="description" label="Description">
+            <Textarea id="description" name="description" rows={3} invalid={Boolean(createState.error)} aria-describedby={createState.error ? "create-vacancy-error" : undefined} />
+          </FormField>
+          <FormField id="requirements" label="Requirements">
+            <Textarea id="requirements" name="requirements" rows={3} invalid={Boolean(createState.error)} aria-describedby={createState.error ? "create-vacancy-error" : undefined} />
+          </FormField>
+          {createState.error ? <ValidationMessage id="create-vacancy-error">{createState.error}</ValidationMessage> : null}
           <Button type="submit" loading={createPending} loadingLabel="Creating…">
             Create draft
           </Button>

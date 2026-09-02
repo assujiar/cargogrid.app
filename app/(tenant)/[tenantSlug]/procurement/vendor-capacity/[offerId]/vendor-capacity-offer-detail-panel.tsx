@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { DataTable, type DataTableColumn } from "../../../../../../components/tables/data-table.tsx";
 import type { VendorCapacityOffer, VendorCapacityBlackout, VendorCapacityReservation, VendorCapacityOfferStatus, VendorCapacityReservationStatus } from "../../../../../../server/contracts/vendor-capacity/vendor-capacity.ts";
@@ -34,20 +36,19 @@ function ActionForm({
   variant = "primary",
 }: {
   action: SimpleFormAction;
-  children?: React.ReactNode;
+  children?: (describedBy: string | undefined) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {children?.(describedBy)}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
       </Button>
@@ -62,11 +63,7 @@ function NoArgActionButton({ action, label, loadingLabel, variant = "secondary" 
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"}>
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -151,22 +148,22 @@ export function VendorCapacityOfferDetailPanel({
 
         {canUpdate ? (
           <ActionForm action={updateAction} submitLabel="Save draft terms" loadingLabel="Saving…" variant="secondary">
-            <label htmlFor="update-quantity" className="text-xs font-medium text-neutral-700">
-              Quantity (required)
-            </label>
-            <Input id="update-quantity" name="quantity" type="number" min={0.001} step="any" defaultValue={offer.quantity} required />
-            <label htmlFor="update-uom" className="text-xs font-medium text-neutral-700">
-              UOM (required)
-            </label>
-            <Input id="update-uom" name="uom" type="text" defaultValue={offer.uom} required />
-            <label htmlFor="update-windowStart" className="text-xs font-medium text-neutral-700">
-              Window start (required)
-            </label>
-            <Input id="update-windowStart" name="windowStart" type="date" defaultValue={offer.windowStart.slice(0, 10)} required />
-            <label htmlFor="update-windowEnd" className="text-xs font-medium text-neutral-700">
-              Window end (required)
-            </label>
-            <Input id="update-windowEnd" name="windowEnd" type="date" defaultValue={offer.windowEnd.slice(0, 10)} required />
+            {(describedBy) => (
+              <>
+                <FormField id="update-quantity" label="Quantity (required)">
+                  <Input id="update-quantity" name="quantity" type="number" min={0.001} step="any" defaultValue={offer.quantity} required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="update-uom" label="UOM (required)">
+                  <Input id="update-uom" name="uom" type="text" defaultValue={offer.uom} required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="update-windowStart" label="Window start (required)">
+                  <Input id="update-windowStart" name="windowStart" type="date" defaultValue={offer.windowStart.slice(0, 10)} required aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="update-windowEnd" label="Window end (required)">
+                  <Input id="update-windowEnd" name="windowEnd" type="date" defaultValue={offer.windowEnd.slice(0, 10)} required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         ) : null}
 
@@ -183,24 +180,21 @@ export function VendorCapacityOfferDetailPanel({
         </div>
         <div className="mt-3">
           <ActionForm action={addBlackoutAction} submitLabel="Add blackout" loadingLabel="Adding…" variant="secondary">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label htmlFor="blackout-windowStart" className="text-xs font-medium text-neutral-700">
-                  Start (required)
-                </label>
-                <Input id="blackout-windowStart" name="windowStart" type="date" required />
-              </div>
-              <div>
-                <label htmlFor="blackout-windowEnd" className="text-xs font-medium text-neutral-700">
-                  End (required)
-                </label>
-                <Input id="blackout-windowEnd" name="windowEnd" type="date" required />
-              </div>
-            </div>
-            <label htmlFor="blackout-reason" className="text-xs font-medium text-neutral-700">
-              Reason (required)
-            </label>
-            <Input id="blackout-reason" name="reason" type="text" required />
+            {(describedBy) => (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <FormField id="blackout-windowStart" label="Start (required)">
+                    <Input id="blackout-windowStart" name="windowStart" type="date" required aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="blackout-windowEnd" label="End (required)">
+                    <Input id="blackout-windowEnd" name="windowEnd" type="date" required aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+                <FormField id="blackout-reason" label="Reason (required)">
+                  <Input id="blackout-reason" name="reason" type="text" required aria-describedby={describedBy} />
+                </FormField>
+              </>
+            )}
           </ActionForm>
         </div>
       </section>
@@ -210,26 +204,19 @@ export function VendorCapacityOfferDetailPanel({
         {canReserve ? (
           <div className="mb-3">
             <ActionForm action={reserveAction} submitLabel="Reserve" loadingLabel="Reserving…" variant="secondary">
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label htmlFor="reserve-requestedQuantity" className="text-xs font-medium text-neutral-700">
-                    Quantity (required)
-                  </label>
-                  <Input id="reserve-requestedQuantity" name="requestedQuantity" type="number" min={0.001} step="any" required />
+              {(describedBy) => (
+                <div className="grid grid-cols-3 gap-2">
+                  <FormField id="reserve-requestedQuantity" label="Quantity (required)">
+                    <Input id="reserve-requestedQuantity" name="requestedQuantity" type="number" min={0.001} step="any" required aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reserve-windowStart" label="Start (required)">
+                    <Input id="reserve-windowStart" name="windowStart" type="date" required aria-describedby={describedBy} />
+                  </FormField>
+                  <FormField id="reserve-windowEnd" label="End (required)">
+                    <Input id="reserve-windowEnd" name="windowEnd" type="date" required aria-describedby={describedBy} />
+                  </FormField>
                 </div>
-                <div>
-                  <label htmlFor="reserve-windowStart" className="text-xs font-medium text-neutral-700">
-                    Start (required)
-                  </label>
-                  <Input id="reserve-windowStart" name="windowStart" type="date" required />
-                </div>
-                <div>
-                  <label htmlFor="reserve-windowEnd" className="text-xs font-medium text-neutral-700">
-                    End (required)
-                  </label>
-                  <Input id="reserve-windowEnd" name="windowEnd" type="date" required />
-                </div>
-              </div>
+              )}
             </ActionForm>
           </div>
         ) : null}
@@ -256,7 +243,14 @@ export function VendorCapacityOfferDetailPanel({
                     <>
                       <NoArgActionButton action={acceptReservationAction(r.id, r.recordVersion)} label="Accept" loadingLabel="Accepting…" variant="primary" />
                       <ActionForm action={declineReservationAction(r.id, r.recordVersion)} submitLabel="Decline" loadingLabel="Declining…" variant="destructive">
-                        <Input name="reason" type="text" placeholder="Reason (required)" required />
+                        {(describedBy) => (
+                          <>
+                            <label htmlFor={`decline-reservation-${r.id}`} className="sr-only">
+                              Reason
+                            </label>
+                            <Input id={`decline-reservation-${r.id}`} name="reason" type="text" placeholder="Reason (required)" required aria-describedby={describedBy} />
+                          </>
+                        )}
                       </ActionForm>
                     </>
                   ) : null}
@@ -264,7 +258,14 @@ export function VendorCapacityOfferDetailPanel({
                     <>
                       <NoArgActionButton action={consumeReservationAction(r.id, r.recordVersion)} label="Mark consumed" loadingLabel="Marking…" variant="primary" />
                       <ActionForm action={releaseReservationAction(r.id, r.recordVersion)} submitLabel="Release" loadingLabel="Releasing…" variant="destructive">
-                        <Input name="reason" type="text" placeholder="Reason (required)" required />
+                        {(describedBy) => (
+                          <>
+                            <label htmlFor={`release-reservation-${r.id}`} className="sr-only">
+                              Reason
+                            </label>
+                            <Input id={`release-reservation-${r.id}`} name="reason" type="text" placeholder="Reason (required)" required aria-describedby={describedBy} />
+                          </>
+                        )}
                       </ActionForm>
                     </>
                   ) : null}

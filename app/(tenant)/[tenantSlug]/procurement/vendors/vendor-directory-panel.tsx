@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { VendorActionState } from "./actions.ts";
@@ -38,6 +42,8 @@ export function VendorDirectoryPanel({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const createErrorId = "vendor-create-error";
+  const createDescribedBy = state.error ? createErrorId : undefined;
 
   function applyFilter(nextStatus: string, nextSearch: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -57,12 +63,12 @@ export function VendorDirectoryPanel({
             <label htmlFor="vendor-search" className="text-xs font-medium text-neutral-600">
               Search
             </label>
-            <input
+            <Input
               id="vendor-search"
               type="search"
               defaultValue={search}
               placeholder="Legal name, trade name, or code"
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+              className="py-1.5"
               onKeyDown={(event) => {
                 if (event.key === "Enter") applyFilter(statusFilter ?? "", event.currentTarget.value);
               }}
@@ -72,14 +78,14 @@ export function VendorDirectoryPanel({
             <label htmlFor="vendor-status" className="text-xs font-medium text-neutral-600">
               Status
             </label>
-            <select id="vendor-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value, search)}>
+            <Select id="vendor-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, search)}>
               <option value="">All statuses</option>
               {VENDOR_LIFECYCLE_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -124,48 +130,30 @@ export function VendorDirectoryPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Register a new vendor</h2>
-        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="legalName" className="text-xs font-medium text-neutral-600">
-              Legal name
-            </label>
-            <input id="legalName" name="legalName" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="tradeName" className="text-xs font-medium text-neutral-600">
-              Trade name (optional)
-            </label>
-            <input id="tradeName" name="tradeName" type="text" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="legalEntityType" className="text-xs font-medium text-neutral-600">
-              Legal entity type
-            </label>
-            <input id="legalEntityType" name="legalEntityType" type="text" placeholder="PT, CV, Perorangan, Foreign…" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="businessRegistrationNumber" className="text-xs font-medium text-neutral-600">
-              Business registration number (optional)
-            </label>
-            <input id="businessRegistrationNumber" name="businessRegistrationNumber" type="text" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="vendorCategory" className="text-xs font-medium text-neutral-600">
-              Category
-            </label>
-            <input id="vendorCategory" name="vendorCategory" type="text" placeholder="trucking, warehousing…" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="paymentTermDays" className="text-xs font-medium text-neutral-600">
-              Payment term (days, optional)
-            </label>
-            <input id="paymentTermDays" name="paymentTermDays" type="number" min="0" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
+        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate>
+          <FormField id="legalName" label="Legal name">
+            <Input id="legalName" name="legalName" type="text" required invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="tradeName" label="Trade name (optional)">
+            <Input id="tradeName" name="tradeName" type="text" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="legalEntityType" label="Legal entity type">
+            <Input id="legalEntityType" name="legalEntityType" type="text" placeholder="PT, CV, Perorangan, Foreign…" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="businessRegistrationNumber" label="Business registration number (optional)">
+            <Input id="businessRegistrationNumber" name="businessRegistrationNumber" type="text" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="vendorCategory" label="Category">
+            <Input id="vendorCategory" name="vendorCategory" type="text" placeholder="trucking, warehousing…" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
+          <FormField id="paymentTermDays" label="Payment term (days, optional)">
+            <Input id="paymentTermDays" name="paymentTermDays" type="number" min="0" invalid={Boolean(state.error)} aria-describedby={createDescribedBy} />
+          </FormField>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id={createErrorId}>{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

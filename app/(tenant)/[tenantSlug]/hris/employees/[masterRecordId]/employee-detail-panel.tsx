@@ -1,9 +1,14 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { EMPLOYMENT_TYPES, type EmployeeLifecycleStatus, type EmployeeProfile, type EmployeeEmergencyContact, type EmployeeLifecycleEvent, type EmployeeDuplicateCandidate, type EmployeeChangeRequest } from "../../../../../../server/contracts/employee/employee.ts";
 import type { FileSummary as HrisFile } from "../../../../../../server/contracts/document/document.ts";
 import type { EmployeeActionState } from "../actions.ts";
@@ -33,11 +38,13 @@ type OrgUnit = { id: string; name: string; unitType: string };
  * consumes, so every raw form below is wrapped here rather than passed a `BoundAction`
  * directly.
  */
-function FormWithState({ action, className, children }: { action: BoundAction; className?: string; children: (pending: boolean, error: string | null) => React.ReactNode }) {
+function FormWithState({ action, className, children }: { action: BoundAction; className?: string; children: (pending: boolean, error: string | null, describedBy: string | undefined) => React.ReactNode }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className={className}>
-      {children(pending, state.error)}
+      {children(pending, state.error, state.error ? errorId : undefined)}
     </form>
   );
 }
@@ -45,43 +52,38 @@ function FormWithState({ action, className, children }: { action: BoundAction; c
 /** Small, reusable action-button form -- every lifecycle transition below is one of these. */
 function ActionForm({ action, label, variant = "secondary", confirmReason, extraFields }: { action: BoundAction; label: string; variant?: "primary" | "secondary" | "destructive"; confirmReason?: string; extraFields?: React.ReactNode }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
   return (
     <form action={formAction} className="flex flex-col gap-1">
       {extraFields}
       <Button type="submit" variant={variant} loading={pending} loadingLabel="Working…" onClick={confirmReason ? (e) => { if (!confirm(confirmReason)) e.preventDefault(); } : undefined}>
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function ReasonActionForm({ action, label, variant = "secondary", reasonLabel = "Reason", requireReason = true, extraDateField }: { action: BoundAction; label: string; variant?: "primary" | "secondary" | "destructive"; reasonLabel?: string; requireReason?: boolean; extraDateField?: boolean }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-1 rounded-md border border-neutral-200 p-2">
-      <label className="text-xs font-medium text-neutral-600">
-        {reasonLabel}
-        <input name="reason" type="text" required={requireReason} className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-      </label>
+      <FormField id={`${reactId}-reason`} label={reasonLabel}>
+        <Input id={`${reactId}-reason`} name="reason" type="text" required={requireReason} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       {extraDateField ? (
-        <label className="text-xs font-medium text-neutral-600">
-          Effective date
-          <input name="employmentEndDate" type="date" required className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-        </label>
+        <FormField id={`${reactId}-employmentEndDate`} label="Effective date">
+          <Input id={`${reactId}-employmentEndDate`} name="employmentEndDate" type="date" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
       ) : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel="Working…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -193,97 +195,85 @@ function EmployeeEditForm({ profile, orgUnits, action }: { profile: EmployeeProf
     return { value: values[key], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setValues((v) => ({ ...v, [key]: e.target.value })) };
   }
 
+  const errorId = "employee-edit-error";
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {dirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Full name
-        <input name="fullName" type="text" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("fullName")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Employment type
-        <select name="employmentType" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("employmentType")}>
+      <FormField id="fullName" label="Full name">
+        <Input id="fullName" name="fullName" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("fullName")} />
+      </FormField>
+      <FormField id="employmentType" label="Employment type">
+        <Select id="employmentType" name="employmentType" required invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("employmentType")}>
           {EMPLOYMENT_TYPES.map((t) => (
             <option key={t} value={t}>
               {t.replace(/_/g, " ")}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Work email
-        <input name="workEmail" type="email" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("workEmail")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Personal email
-        <input name="personalEmail" type="email" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("personalEmail")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Personal phone
-        <input name="personalPhone" type="tel" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("personalPhone")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        National ID number
-        <input name="nationalIdNumber" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("nationalIdNumber")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Date of birth
-        <input name="dateOfBirth" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("dateOfBirth")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Gender
-        <input name="gender" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("gender")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Hire date
-        <input name="hireDate" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("hireDate")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Probation end date
-        <input name="probationEndDate" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("probationEndDate")} />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Company
-        <select name="companyOrgUnitId" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("companyOrgUnitId")}>
+        </Select>
+      </FormField>
+      <FormField id="workEmail" label="Work email">
+        <Input id="workEmail" name="workEmail" type="email" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("workEmail")} />
+      </FormField>
+      <FormField id="personalEmail" label="Personal email">
+        <Input id="personalEmail" name="personalEmail" type="email" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("personalEmail")} />
+      </FormField>
+      <FormField id="personalPhone" label="Personal phone">
+        <Input id="personalPhone" name="personalPhone" type="tel" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("personalPhone")} />
+      </FormField>
+      <FormField id="nationalIdNumber" label="National ID number">
+        <Input id="nationalIdNumber" name="nationalIdNumber" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("nationalIdNumber")} />
+      </FormField>
+      <FormField id="dateOfBirth" label="Date of birth">
+        <Input id="dateOfBirth" name="dateOfBirth" type="date" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("dateOfBirth")} />
+      </FormField>
+      <FormField id="gender" label="Gender">
+        <Input id="gender" name="gender" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("gender")} />
+      </FormField>
+      <FormField id="hireDate" label="Hire date">
+        <Input id="hireDate" name="hireDate" type="date" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("hireDate")} />
+      </FormField>
+      <FormField id="probationEndDate" label="Probation end date">
+        <Input id="probationEndDate" name="probationEndDate" type="date" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("probationEndDate")} />
+      </FormField>
+      <FormField id="companyOrgUnitId" label="Company">
+        <Select id="companyOrgUnitId" name="companyOrgUnitId" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("companyOrgUnitId")}>
           <option value="">—</option>
           {orgUnits.filter((u) => u.unitType === "company").map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Branch
-        <select name="branchOrgUnitId" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("branchOrgUnitId")}>
+        </Select>
+      </FormField>
+      <FormField id="branchOrgUnitId" label="Branch">
+        <Select id="branchOrgUnitId" name="branchOrgUnitId" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("branchOrgUnitId")}>
           <option value="">—</option>
           {orgUnits.filter((u) => u.unitType === "branch").map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Department
-        <select name="departmentOrgUnitId" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("departmentOrgUnitId")}>
+        </Select>
+      </FormField>
+      <FormField id="departmentOrgUnitId" label="Department">
+        <Select id="departmentOrgUnitId" name="departmentOrgUnitId" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("departmentOrgUnitId")}>
           <option value="">—</option>
           {orgUnits.filter((u) => u.unitType === "department").map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-        Position title
-        <input name="positionTitle" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...field("positionTitle")} />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id="positionTitle" label="Position title">
+        <Input id="positionTitle" name="positionTitle" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} {...field("positionTitle")} />
+      </FormField>
 
       {state.error ? (
-        <p role="alert" className="col-span-full text-sm text-danger">
-          {state.error}
-        </p>
+        <div className="col-span-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
 
       <div className="col-span-full">
@@ -469,22 +459,32 @@ export function EmployeeDetailPanel({
               </ul>
             )}
             <FormWithState action={addContactAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {(pending, error) => (
+              {(pending, error, describedBy) => (
                 <>
-                  <input name="name" type="text" placeholder="Name" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-                  <input name="relationship" type="text" placeholder="Relationship" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-                  <input name="phone" type="tel" placeholder="Phone" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-                  <input name="email" type="email" placeholder="Email" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-                  <label className="flex items-center gap-1 text-xs text-neutral-600">
-                    <input name="isPrimary" type="checkbox" /> Primary
+                  <label className="sr-only" htmlFor="new-contact-name">
+                    Name
                   </label>
+                  <Input id="new-contact-name" name="name" type="text" placeholder="Name" required invalid={Boolean(error)} aria-describedby={describedBy} />
+                  <label className="sr-only" htmlFor="new-contact-relationship">
+                    Relationship
+                  </label>
+                  <Input id="new-contact-relationship" name="relationship" type="text" placeholder="Relationship" invalid={Boolean(error)} aria-describedby={describedBy} />
+                  <label className="sr-only" htmlFor="new-contact-phone">
+                    Phone
+                  </label>
+                  <Input id="new-contact-phone" name="phone" type="tel" placeholder="Phone" invalid={Boolean(error)} aria-describedby={describedBy} />
+                  <label className="sr-only" htmlFor="new-contact-email">
+                    Email
+                  </label>
+                  <Input id="new-contact-email" name="email" type="email" placeholder="Email" invalid={Boolean(error)} aria-describedby={describedBy} />
+                  <Checkbox name="isPrimary" label="Primary" />
                   <Button type="submit" loading={pending} loadingLabel="Adding…">
                     Add contact
                   </Button>
                   {error ? (
-                    <p role="alert" className="col-span-full text-xs text-danger">
-                      {error}
-                    </p>
+                    <div className="col-span-full">
+                      <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                    </div>
                   ) : null}
                 </>
               )}
@@ -499,9 +499,12 @@ export function EmployeeDetailPanel({
                   <li key={d.id} className="rounded-md border border-neutral-100 p-2 text-sm">
                     <p className="text-xs text-neutral-500">Basis: {d.similarityBasis} {d.similarityScore != null ? `(score ${d.similarityScore})` : ""}</p>
                     <FormWithState action={decideDuplicateAction(d.id, d.recordVersion)} className="mt-1 flex flex-wrap items-center gap-2">
-                      {(pending, error) => (
+                      {(pending, error, describedBy) => (
                         <>
-                          <input name="reason" type="text" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                          <label className="sr-only" htmlFor={`duplicate-reason-${d.id}`}>
+                            Reason
+                          </label>
+                          <Input id={`duplicate-reason-${d.id}`} name="reason" type="text" placeholder="Reason (required)" required invalid={Boolean(error)} aria-describedby={describedBy} />
                           <Button type="submit" name="decision" value="dismissed" variant="secondary" loading={pending}>
                             Not a duplicate
                           </Button>
@@ -509,9 +512,9 @@ export function EmployeeDetailPanel({
                             Confirm duplicate
                           </Button>
                           {error ? (
-                            <p role="alert" className="w-full text-xs text-danger">
-                              {error}
-                            </p>
+                            <div className="w-full">
+                              <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                            </div>
                           ) : null}
                         </>
                       )}
@@ -537,9 +540,12 @@ export function EmployeeDetailPanel({
                     </p>
                     {r.status === "pending" ? (
                       <FormWithState action={decideChangeRequestAction(r.id, r.recordVersion)} className="mt-1 flex flex-wrap items-center gap-2">
-                        {(pending, error) => (
+                        {(pending, error, describedBy) => (
                           <>
-                            <input name="decidedReason" type="text" placeholder="Reason (required)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                            <label className="sr-only" htmlFor={`change-request-reason-${r.id}`}>
+                              Reason
+                            </label>
+                            <Input id={`change-request-reason-${r.id}`} name="decidedReason" type="text" placeholder="Reason (required)" required invalid={Boolean(error)} aria-describedby={describedBy} />
                             <Button type="submit" name="decision" value="rejected" variant="secondary" loading={pending}>
                               Reject
                             </Button>
@@ -547,9 +553,9 @@ export function EmployeeDetailPanel({
                               Approve
                             </Button>
                             {error ? (
-                              <p role="alert" className="w-full text-xs text-danger">
-                                {error}
-                              </p>
+                              <div className="w-full">
+                                <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                              </div>
                             ) : null}
                           </>
                         )}
@@ -599,9 +605,12 @@ export function EmployeeDetailPanel({
             <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
               <h2 className="text-sm font-semibold text-neutral-900">Approval decision</h2>
               <FormWithState action={decideApprovalAction} className="flex flex-wrap items-center gap-2">
-                {(pending, error) => (
+                {(pending, error, describedBy) => (
                   <>
-                    <input name="reason" type="text" placeholder="Reason (required to reject)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                    <label className="sr-only" htmlFor="approval-decision-reason">
+                      Reason
+                    </label>
+                    <Input id="approval-decision-reason" name="reason" type="text" placeholder="Reason (required to reject)" invalid={Boolean(error)} aria-describedby={describedBy} />
                     <Button type="submit" name="decision" value="reject" variant="destructive" loading={pending}>
                       Reject
                     </Button>
@@ -609,9 +618,9 @@ export function EmployeeDetailPanel({
                       Approve
                     </Button>
                     {error ? (
-                      <p role="alert" className="w-full text-xs text-danger">
-                        {error}
-                      </p>
+                      <div className="w-full">
+                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                      </div>
                     ) : null}
                   </>
                 )}
@@ -624,16 +633,19 @@ export function EmployeeDetailPanel({
               <h2 className="text-sm font-semibold text-neutral-900">Link a Platform user</h2>
               <p className="text-xs text-neutral-500">This profile was created before a Platform user account existed. Link one now to enable self-service access.</p>
               <FormWithState action={linkUserAction} className="flex flex-wrap items-center gap-2">
-                {(pending, error) => (
+                {(pending, error, describedBy) => (
                   <>
-                    <input name="userId" type="text" placeholder="Platform user id (uuid)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                    <label className="sr-only" htmlFor="link-user-id">
+                      Platform user id
+                    </label>
+                    <Input id="link-user-id" name="userId" type="text" placeholder="Platform user id (uuid)" required invalid={Boolean(error)} aria-describedby={describedBy} />
                     <Button type="submit" loading={pending} loadingLabel="Linking…">
                       Link user
                     </Button>
                     {error ? (
-                      <p role="alert" className="w-full text-xs text-danger">
-                        {error}
-                      </p>
+                      <div className="w-full">
+                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                      </div>
                     ) : null}
                   </>
                 )}
@@ -684,39 +696,66 @@ export function EmployeeDetailPanel({
               <h2 className="text-sm font-semibold text-neutral-900">Transfer (free-text, ungoverned)</h2>
               <p className="text-xs text-neutral-500">Full before/after history is preserved (see the History tab). Cyclic reporting lines are rejected. Prefer the governed assignment timeline above when a position/grade catalogue exists for this role.</p>
               <FormWithState action={transferAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {(pending, error) => (
+                {(pending, error, describedBy) => (
                   <>
-                    <select name="companyOrgUnitId" defaultValue={profile.companyOrgUnitId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+                    <label className="sr-only" htmlFor="transfer-company">
+                      Company
+                    </label>
+                    <Select id="transfer-company" name="companyOrgUnitId" defaultValue={profile.companyOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
                       <option value="">Company: —</option>
                       {orgUnits.filter((u) => u.unitType === "company").map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name}
                         </option>
                       ))}
-                    </select>
-                    <select name="branchOrgUnitId" defaultValue={profile.branchOrgUnitId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+                    </Select>
+                    <label className="sr-only" htmlFor="transfer-branch">
+                      Branch
+                    </label>
+                    <Select id="transfer-branch" name="branchOrgUnitId" defaultValue={profile.branchOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
                       <option value="">Branch: —</option>
                       {orgUnits.filter((u) => u.unitType === "branch").map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name}
                         </option>
                       ))}
-                    </select>
-                    <select name="departmentOrgUnitId" defaultValue={profile.departmentOrgUnitId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+                    </Select>
+                    <label className="sr-only" htmlFor="transfer-department">
+                      Department
+                    </label>
+                    <Select id="transfer-department" name="departmentOrgUnitId" defaultValue={profile.departmentOrgUnitId ?? ""} invalid={Boolean(error)} aria-describedby={describedBy}>
                       <option value="">Department: —</option>
                       {orgUnits.filter((u) => u.unitType === "department").map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name}
                         </option>
                       ))}
-                    </select>
-                    <input name="positionTitle" type="text" placeholder="Position title" defaultValue={profile.positionTitle ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-                    <input name="managerEmployeeId" type="text" placeholder="Manager employee id (uuid, optional)" defaultValue={profile.managerEmployeeId ?? ""} className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-2" />
-                    <input name="reason" type="text" placeholder="Reason (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-2" />
+                    </Select>
+                    <label className="sr-only" htmlFor="transfer-position-title">
+                      Position title
+                    </label>
+                    <Input id="transfer-position-title" name="positionTitle" type="text" placeholder="Position title" defaultValue={profile.positionTitle ?? ""} invalid={Boolean(error)} aria-describedby={describedBy} />
+                    <label className="sr-only" htmlFor="transfer-manager-id">
+                      Manager employee id
+                    </label>
+                    <Input
+                      id="transfer-manager-id"
+                      name="managerEmployeeId"
+                      type="text"
+                      placeholder="Manager employee id (uuid, optional)"
+                      defaultValue={profile.managerEmployeeId ?? ""}
+                      className="sm:col-span-2"
+                      invalid={Boolean(error)}
+                      aria-describedby={describedBy}
+                    />
+                    <label className="sr-only" htmlFor="transfer-reason">
+                      Reason
+                    </label>
+                    <Input id="transfer-reason" name="reason" type="text" placeholder="Reason (optional)" className="sm:col-span-2" invalid={Boolean(error)} aria-describedby={describedBy} />
                     {error ? (
-                      <p role="alert" className="col-span-full text-xs text-danger">
-                        {error}
-                      </p>
+                      <div className="col-span-full">
+                        <ValidationMessage id={describedBy}>{error}</ValidationMessage>
+                      </div>
                     ) : null}
                     <div className="col-span-full">
                       <Button type="submit" loading={pending} loadingLabel="Transferring…">
@@ -751,21 +790,18 @@ export function EmployeeDetailPanel({
             </ul>
           )}
           <FormWithState action={uploadDocumentAction} className="mt-3 flex flex-col gap-2 rounded-md border border-dashed border-neutral-300 p-3 sm:flex-row sm:items-end sm:gap-3">
-            {(pending, error) => (
+            {(pending, error, describedBy) => (
               <>
-                <label className="flex-1 text-xs text-neutral-600">
-                  Upload a document
-                  <input name="file" type="file" required className="mt-1 block w-full text-sm" />
-                </label>
+                <div className="flex-1">
+                  <FormField id="employee-document-file" label="Upload a document">
+                    <Input id="employee-document-file" name="file" type="file" required invalid={Boolean(error)} aria-describedby={describedBy} />
+                  </FormField>
+                </div>
                 <div className="flex flex-col gap-1">
                   <Button type="submit" loading={pending} loadingLabel="Uploading…">
                     Upload
                   </Button>
-                  {error ? (
-                    <p role="alert" className="text-xs text-danger">
-                      {error}
-                    </p>
-                  ) : null}
+                  {error ? <ValidationMessage id={describedBy}>{error}</ValidationMessage> : null}
                 </div>
               </>
             )}

@@ -1,9 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../components/ui/empty-state.tsx";
+import { Input } from "../../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
 import type { PositionWizardActionState } from "./actions.ts";
 import type { EmployeeProfile } from "../../../../../../../server/contracts/employee/employee.ts";
 import { ASSIGNMENT_TYPES, CHANGE_REASONS, type EmployeePositionAssignment, type AssignmentStatus, type PositionListRow, type PositionGrade } from "../../../../../../../server/contracts/position/position.ts";
@@ -172,6 +176,8 @@ function AssignmentRow({
 function DecisionForm({ action, label, variant }: { action: WizardAction; label: string; variant: "primary" | "secondary" | "destructive" }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   const [open, setOpen] = useState(false);
+  const reactId = useId();
+  const errorId = `${reactId}-error`;
 
   if (!open) {
     return (
@@ -183,18 +189,13 @@ function DecisionForm({ action, label, variant }: { action: WizardAction; label:
 
   return (
     <form action={formAction} className="flex flex-col gap-1 rounded-md border border-neutral-200 p-2">
-      <label className="text-xs font-medium text-neutral-600">
-        Reason
-        <input name="reason" type="text" required className="mt-1 block w-full rounded-md border border-neutral-300 px-2 py-1 text-xs" />
-      </label>
+      <FormField id={reactId} label="Reason">
+        <Input id={reactId} name="reason" type="text" required className="text-xs" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+      </FormField>
       <Button type="submit" variant={variant} loading={pending} loadingLabel="Working…" className="text-xs">
         Confirm {label.toLowerCase()}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -235,6 +236,10 @@ function AssignmentWizard({
     };
   }
 
+  const proposeErrorId = "propose-error";
+  const previewErrorId = "preview-error";
+  const proposeDescribedBy = proposeState.error ? proposeErrorId : undefined;
+
   if (positions.length === 0) {
     return (
       <EmptyState
@@ -257,9 +262,16 @@ function AssignmentWizard({
       {wizardDirty ? <p className="text-xs text-warning">You have unsaved changes.</p> : null}
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Position
-          <select name="positionId" form="assignment-wizard-form" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("positionId")}>
+        <FormField id="positionId" label="Position">
+          <Select
+            id="positionId"
+            name="positionId"
+            form="assignment-wizard-form"
+            required
+            invalid={Boolean(proposeState.error)}
+            aria-describedby={proposeDescribedBy}
+            {...wizardField("positionId")}
+          >
             <option value="" disabled>
               Select…
             </option>
@@ -268,66 +280,98 @@ function AssignmentWizard({
                 {p.code} — {p.title} ({p.currentHeadcount}/{p.capacity})
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Grade (optional, defaults to the position&apos;s own grade)
-          <select name="gradeId" form="assignment-wizard-form" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("gradeId")}>
+          </Select>
+        </FormField>
+        <FormField id="gradeId" label="Grade (optional, defaults to the position's own grade)">
+          <Select id="gradeId" name="gradeId" form="assignment-wizard-form" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} {...wizardField("gradeId")}>
             <option value="">Use position default</option>
             {grades.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.code} — {g.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Manager (employee id, optional)
-          <input
+          </Select>
+        </FormField>
+        <FormField id="managerEmployeeId" label="Manager (employee id, optional)">
+          <Input
+            id="managerEmployeeId"
             name="managerEmployeeId"
             form="assignment-wizard-form"
             type="text"
             placeholder="uuid, leave blank for none"
-            className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
+            invalid={Boolean(proposeState.error)}
+            aria-describedby={proposeDescribedBy}
             {...wizardField("managerEmployeeId")}
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Assignment type
-          <select name="assignmentType" form="assignment-wizard-form" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("assignmentType")}>
+        </FormField>
+        <FormField id="assignmentType" label="Assignment type">
+          <Select id="assignmentType" name="assignmentType" form="assignment-wizard-form" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} {...wizardField("assignmentType")}>
             {ASSIGNMENT_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Allocation % (optional, default 100)
-          <input name="allocationPct" form="assignment-wizard-form" type="number" min="1" max="100" placeholder="100" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("allocationPct")} />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Effective start date
-          <input name="effectiveStartDate" form="assignment-wizard-form" type="date" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("effectiveStartDate")} />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Effective end date (optional, open-ended if blank)
-          <input name="effectiveEndDate" form="assignment-wizard-form" type="date" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("effectiveEndDate")} />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-          Change reason
-          <select name="changeReason" form="assignment-wizard-form" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("changeReason")}>
+          </Select>
+        </FormField>
+        <FormField id="allocationPct" label="Allocation % (optional, default 100)">
+          <Input
+            id="allocationPct"
+            name="allocationPct"
+            form="assignment-wizard-form"
+            type="number"
+            min="1"
+            max="100"
+            placeholder="100"
+            invalid={Boolean(proposeState.error)}
+            aria-describedby={proposeDescribedBy}
+            {...wizardField("allocationPct")}
+          />
+        </FormField>
+        <FormField id="effectiveStartDate" label="Effective start date">
+          <Input
+            id="effectiveStartDate"
+            name="effectiveStartDate"
+            form="assignment-wizard-form"
+            type="date"
+            required
+            invalid={Boolean(proposeState.error)}
+            aria-describedby={proposeDescribedBy}
+            {...wizardField("effectiveStartDate")}
+          />
+        </FormField>
+        <FormField id="effectiveEndDate" label="Effective end date (optional, open-ended if blank)">
+          <Input
+            id="effectiveEndDate"
+            name="effectiveEndDate"
+            form="assignment-wizard-form"
+            type="date"
+            invalid={Boolean(proposeState.error)}
+            aria-describedby={proposeDescribedBy}
+            {...wizardField("effectiveEndDate")}
+          />
+        </FormField>
+        <FormField id="changeReason" label="Change reason">
+          <Select id="changeReason" name="changeReason" form="assignment-wizard-form" invalid={Boolean(proposeState.error)} aria-describedby={proposeDescribedBy} {...wizardField("changeReason")}>
             {CHANGE_REASONS.map((r) => (
               <option key={r} value={r}>
                 {r.replace(/_/g, " ")}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600 sm:col-span-3">
-          Reason note (optional)
-          <input name="reasonNote" form="assignment-wizard-form" type="text" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" {...wizardField("reasonNote")} />
-        </label>
+          </Select>
+        </FormField>
+        <div className="sm:col-span-3">
+          <FormField id="reasonNote" label="Reason note (optional)">
+            <Input
+              id="reasonNote"
+              name="reasonNote"
+              form="assignment-wizard-form"
+              type="text"
+              invalid={Boolean(proposeState.error)}
+              aria-describedby={proposeDescribedBy}
+              {...wizardField("reasonNote")}
+            />
+          </FormField>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -346,17 +390,9 @@ function AssignmentWizard({
         </form>
       </div>
 
-      {previewState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {previewState.error}
-        </p>
-      ) : null}
+      {previewState.error ? <ValidationMessage id={previewErrorId}>{previewState.error}</ValidationMessage> : null}
       {previewState.preview ? <ImpactPreviewCard preview={previewState.preview} /> : null}
-      {proposeState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {proposeState.error}
-        </p>
-      ) : null}
+      {proposeState.error ? <ValidationMessage id={proposeErrorId}>{proposeState.error}</ValidationMessage> : null}
     </section>
   );
 }

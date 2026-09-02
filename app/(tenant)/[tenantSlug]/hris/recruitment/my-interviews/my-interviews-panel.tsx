@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { MyAssignedInterview } from "../../../../../../server/contracts/recruitment/recruitment.ts";
 import type { MyInterviewsActionState } from "./actions.ts";
 
@@ -36,33 +40,31 @@ export function MyInterviewsPanel({ interviews, submitFeedbackAction }: { interv
 
 function FeedbackForm({ interviewId, action }: { interviewId: string; action: Bound }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? `feedback-${interviewId}-error` : undefined;
   return (
     <form action={formAction} className="mt-3 flex flex-wrap items-end gap-2" noValidate>
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`feedback-rating-${interviewId}`} className="text-xs font-medium text-neutral-700">
-          Rating (1-5)
-        </label>
-        <input id={`feedback-rating-${interviewId}`} name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`feedback-recommendation-${interviewId}`} className="text-xs font-medium text-neutral-700">
-          Recommendation
-        </label>
-        <select id={`feedback-recommendation-${interviewId}`} name="recommendation" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+      <FormField id={`feedback-rating-${interviewId}`} label="Rating (1-5)">
+        <Input id={`feedback-rating-${interviewId}`} name="rating" type="number" min="1" max="5" defaultValue={3} className="w-16" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`feedback-recommendation-${interviewId}`} label="Recommendation">
+        <Select id={`feedback-recommendation-${interviewId}`} name="recommendation" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="strong_yes">Strong yes</option>
           <option value="yes">Yes</option>
           <option value="no">No</option>
           <option value="strong_no">Strong no</option>
-        </select>
-      </div>
-      <input name="notes" placeholder="Notes" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        </Select>
+      </FormField>
+      <label htmlFor={`feedback-notes-${interviewId}`} className="sr-only">
+        Notes
+      </label>
+      <Input id={`feedback-notes-${interviewId}`} name="notes" placeholder="Notes" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
         Submit feedback
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={`feedback-${interviewId}-error`}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

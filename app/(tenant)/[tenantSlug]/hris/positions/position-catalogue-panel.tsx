@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { PositionActionState } from "./actions.ts";
@@ -84,15 +88,27 @@ export function PositionCataloguePanel({
           </div>
         )}
 
-        <form action={createGradeFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-          <input name="code" placeholder="Code (e.g. GR-3)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="name" placeholder="Name" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="rank" type="number" placeholder="Rank (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="description" placeholder="Description (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <form action={createGradeFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4" noValidate>
+          <label htmlFor="grade-code" className="sr-only">
+            Code
+          </label>
+          <Input id="grade-code" name="code" placeholder="Code (e.g. GR-3)" required invalid={Boolean(createGradeState.error)} aria-describedby={createGradeState.error ? "create-grade-error" : undefined} />
+          <label htmlFor="grade-name" className="sr-only">
+            Name
+          </label>
+          <Input id="grade-name" name="name" placeholder="Name" required invalid={Boolean(createGradeState.error)} aria-describedby={createGradeState.error ? "create-grade-error" : undefined} />
+          <label htmlFor="grade-rank" className="sr-only">
+            Rank
+          </label>
+          <Input id="grade-rank" name="rank" type="number" placeholder="Rank (optional)" invalid={Boolean(createGradeState.error)} aria-describedby={createGradeState.error ? "create-grade-error" : undefined} />
+          <label htmlFor="grade-description" className="sr-only">
+            Description
+          </label>
+          <Input id="grade-description" name="description" placeholder="Description (optional)" invalid={Boolean(createGradeState.error)} aria-describedby={createGradeState.error ? "create-grade-error" : undefined} />
           {createGradeState.error ? (
-            <p role="alert" className="col-span-full text-xs text-danger">
-              {createGradeState.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="create-grade-error">{createGradeState.error}</ValidationMessage>
+            </div>
           ) : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={createGradePending} loadingLabel="Creating…">
@@ -108,12 +124,12 @@ export function PositionCataloguePanel({
             <label htmlFor="position-search" className="text-xs font-medium text-neutral-600">
               Search
             </label>
-            <input
+            <Input
               id="position-search"
               type="search"
               defaultValue={search}
               placeholder="Code or title"
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+              className="py-1.5"
               onKeyDown={(event) => {
                 if (event.key === "Enter") applyFilter(statusFilter ?? "", event.currentTarget.value);
               }}
@@ -123,14 +139,14 @@ export function PositionCataloguePanel({
             <label htmlFor="position-status" className="text-xs font-medium text-neutral-600">
               Status
             </label>
-            <select id="position-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(event.currentTarget.value, search)}>
+            <Select id="position-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, search)}>
               <option value="">All statuses</option>
               {POSITION_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -173,10 +189,19 @@ export function PositionCataloguePanel({
           </div>
         )}
 
-        <form action={createPosFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <input name="code" placeholder="Code (e.g. POS-042)" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="title" placeholder="Title" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <select name="orgUnitId" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+        <form action={createPosFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate>
+          <label htmlFor="pos-code" className="sr-only">
+            Code
+          </label>
+          <Input id="pos-code" name="code" placeholder="Code (e.g. POS-042)" required invalid={Boolean(createPosState.error)} aria-describedby={createPosState.error ? "create-position-error" : undefined} />
+          <label htmlFor="pos-title" className="sr-only">
+            Title
+          </label>
+          <Input id="pos-title" name="title" placeholder="Title" required invalid={Boolean(createPosState.error)} aria-describedby={createPosState.error ? "create-position-error" : undefined} />
+          <label htmlFor="pos-org-unit" className="sr-only">
+            Org unit
+          </label>
+          <Select id="pos-org-unit" name="orgUnitId" required defaultValue="" invalid={Boolean(createPosState.error)} aria-describedby={createPosState.error ? "create-position-error" : undefined}>
             <option value="" disabled>
               Org unit…
             </option>
@@ -185,21 +210,30 @@ export function PositionCataloguePanel({
                 {u.name} ({u.unitType})
               </option>
             ))}
-          </select>
-          <select name="gradeId" defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+          </Select>
+          <label htmlFor="pos-grade" className="sr-only">
+            Grade
+          </label>
+          <Select id="pos-grade" name="gradeId" defaultValue="" invalid={Boolean(createPosState.error)} aria-describedby={createPosState.error ? "create-position-error" : undefined}>
             <option value="">No grade</option>
             {grades.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.code} — {g.name}
               </option>
             ))}
-          </select>
-          <input name="capacity" type="number" min="1" placeholder="Capacity (default 1)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          <input name="description" placeholder="Description (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+          </Select>
+          <label htmlFor="pos-capacity" className="sr-only">
+            Capacity
+          </label>
+          <Input id="pos-capacity" name="capacity" type="number" min="1" placeholder="Capacity (default 1)" invalid={Boolean(createPosState.error)} aria-describedby={createPosState.error ? "create-position-error" : undefined} />
+          <label htmlFor="pos-description" className="sr-only">
+            Description
+          </label>
+          <Input id="pos-description" name="description" placeholder="Description (optional)" invalid={Boolean(createPosState.error)} aria-describedby={createPosState.error ? "create-position-error" : undefined} />
           {createPosState.error ? (
-            <p role="alert" className="col-span-full text-xs text-danger">
-              {createPosState.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="create-position-error">{createPosState.error}</ValidationMessage>
+            </div>
           ) : null}
           <div className="col-span-full">
             <Button type="submit" loading={createPosPending} loadingLabel="Creating…">
@@ -229,11 +263,7 @@ function GradeRow({ grade, action }: { grade: PositionGrade; action: (id: string
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Working…">
             Set {nextStatus}
           </Button>
-          {state.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {state.error}
-            </p>
-          ) : null}
+          {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
         </form>
       </td>
     </tr>
