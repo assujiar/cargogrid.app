@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { ShipmentOrderFormState } from "./actions.ts";
 import type { MilestoneCode } from "../../../../../../server/contracts/milestone-management/milestone-management.ts";
 
@@ -16,15 +20,13 @@ export function IngestMilestoneEventForm({
   milestoneCodes: readonly MilestoneCode[];
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "ingest-milestone-error" : undefined;
 
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="milestoneCode" className="text-sm font-medium text-neutral-700">
-            Milestone
-          </label>
-          <select id="milestoneCode" name="milestoneCode" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" defaultValue="">
+        <FormField id="milestoneCode" label="Milestone">
+          <Select id="milestoneCode" name="milestoneCode" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="" disabled>
               Select a milestone…
             </option>
@@ -33,39 +35,25 @@ export function IngestMilestoneEventForm({
                 {code.name}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="eventTime" className="text-sm font-medium text-neutral-700">
-            Occurred at
-          </label>
-          <input id="eventTime" name="eventTime" type="datetime-local" required className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="locationLabel" className="text-sm font-medium text-neutral-700">
-            Location (optional)
-          </label>
-          <input id="locationLabel" name="locationLabel" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="correctsEventId" className="text-sm font-medium text-neutral-700">
-            Corrects event ID (optional)
-          </label>
-          <input id="correctsEventId" name="correctsEventId" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        </div>
-        <div className="col-span-2 flex flex-col gap-1">
-          <label htmlFor="reason" className="text-sm font-medium text-neutral-700">
-            Reason (required only for a correction)
-          </label>
-          <input id="reason" name="reason" type="text" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          </Select>
+        </FormField>
+        <FormField id="eventTime" label="Occurred at">
+          <Input id="eventTime" name="eventTime" type="datetime-local" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="locationLabel" label="Location (optional)">
+          <Input id="locationLabel" name="locationLabel" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="correctsEventId" label="Corrects event ID (optional)">
+          <Input id="correctsEventId" name="correctsEventId" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <div className="col-span-2">
+          <FormField id="reason" label="Reason (required only for a correction)">
+            <Input id="reason" name="reason" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
         </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="ingest-milestone-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…" className="w-fit">
         Record milestone event

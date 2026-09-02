@@ -2,7 +2,9 @@
 
 import { useActionState, useId } from "react";
 import { Button } from "../../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../../components/forms/form-field.tsx";
 import { Input } from "../../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../../components/forms/number-input.tsx";
 import { Select } from "../../../../../../../components/forms/select.tsx";
 import { Textarea } from "../../../../../../../components/forms/textarea.tsx";
 import { ValidationMessage } from "../../../../../../../components/forms/validation-message.tsx";
@@ -29,7 +31,7 @@ function ActionForm({
   variant = "primary",
 }: {
   action: BoundFormAction;
-  children?: (describedBy: string | undefined) => React.ReactNode;
+  children?: (describedBy: string | undefined, invalid: boolean) => React.ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
@@ -40,7 +42,7 @@ function ActionForm({
   const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children?.(describedBy)}
+      {children?.(describedBy, Boolean(state.error))}
       {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
@@ -88,32 +90,61 @@ export function TemplateDetailPanel({
       {isDraft ? (
         <section className="rounded-md border border-neutral-200 p-4">
           <ActionForm action={updateDraftAction} submitLabel="Save changes" loadingLabel="Saving…" variant="secondary">
-            {(describedBy) => (
+            {(describedBy, invalid) => (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <label htmlFor="template-name" className="sr-only">
-                  Name
-                </label>
-                <Input id="template-name" name="name" defaultValue={template.name} required aria-describedby={describedBy} />
-                <label htmlFor="template-vendor-category" className="sr-only">
-                  Vendor category
-                </label>
-                <Input id="template-vendor-category" name="vendorCategory" defaultValue={template.vendorCategory ?? ""} placeholder="Vendor category (blank = any)" aria-describedby={describedBy} />
-                <label htmlFor="template-validity-period-days" className="sr-only">
-                  Validity period days
-                </label>
-                <Input id="template-validity-period-days" name="validityPeriodDays" type="number" min={1} defaultValue={template.validityPeriodDays} required aria-describedby={describedBy} />
-                <label htmlFor="template-pass-threshold" className="sr-only">
-                  Pass threshold
-                </label>
-                <Input id="template-pass-threshold" name="passThreshold" type="number" min={0} max={100} defaultValue={template.passThreshold} required aria-describedby={describedBy} />
-                <label htmlFor="template-conditional-threshold" className="sr-only">
-                  Conditional threshold
-                </label>
-                <Input id="template-conditional-threshold" name="conditionalThreshold" type="number" min={0} max={100} defaultValue={template.conditionalThreshold} required aria-describedby={describedBy} />
-                <label htmlFor="template-description" className="sr-only">
-                  Description
-                </label>
-                <Textarea id="template-description" name="description" defaultValue={template.description ?? ""} rows={2} className="sm:col-span-3" aria-describedby={describedBy} />
+                <FormField id="template-name" label={<span className="sr-only">Name</span>}>
+                  <Input id="template-name" name="name" defaultValue={template.name} required invalid={invalid} aria-describedby={describedBy} />
+                </FormField>
+                <FormField id="template-vendor-category" label={<span className="sr-only">Vendor category</span>}>
+                  <Input
+                    id="template-vendor-category"
+                    name="vendorCategory"
+                    defaultValue={template.vendorCategory ?? ""}
+                    placeholder="Vendor category (blank = any)"
+                    invalid={invalid}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+                <FormField id="template-validity-period-days" label={<span className="sr-only">Validity period days</span>}>
+                  <NumberInput
+                    id="template-validity-period-days"
+                    name="validityPeriodDays"
+                    min={1}
+                    defaultValue={template.validityPeriodDays}
+                    required
+                    invalid={invalid}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+                <FormField id="template-pass-threshold" label={<span className="sr-only">Pass threshold</span>}>
+                  <NumberInput
+                    id="template-pass-threshold"
+                    name="passThreshold"
+                    min={0}
+                    max={100}
+                    defaultValue={template.passThreshold}
+                    required
+                    invalid={invalid}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+                <FormField id="template-conditional-threshold" label={<span className="sr-only">Conditional threshold</span>}>
+                  <NumberInput
+                    id="template-conditional-threshold"
+                    name="conditionalThreshold"
+                    min={0}
+                    max={100}
+                    defaultValue={template.conditionalThreshold}
+                    required
+                    invalid={invalid}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+                <div className="sm:col-span-3">
+                  <FormField id="template-description" label={<span className="sr-only">Description</span>}>
+                    <Textarea id="template-description" name="description" defaultValue={template.description ?? ""} rows={2} invalid={invalid} aria-describedby={describedBy} />
+                  </FormField>
+                </div>
               </div>
             )}
           </ActionForm>
@@ -151,29 +182,29 @@ export function TemplateDetailPanel({
 
         {isDraft ? (
           <ActionForm action={addCriterionAction} submitLabel="Add criterion" loadingLabel="Adding…" variant="secondary">
-            {(describedBy) => (
+            {(describedBy, invalid) => (
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
-                <label htmlFor="criterion-label" className="sr-only">
-                  Label
-                </label>
-                <Input id="criterion-label" name="label" placeholder="Label" required className="sm:col-span-2" aria-describedby={describedBy} />
-                <label htmlFor="criterion-purpose-tag" className="sr-only">
-                  Purpose tag
-                </label>
-                <Select id="criterion-purpose-tag" name="purposeTag" defaultValue="operational" aria-describedby={describedBy}>
-                  <option value="operational">Operational</option>
-                  <option value="safety">Safety</option>
-                  <option value="financial">Financial</option>
-                  <option value="compliance">Compliance</option>
-                </Select>
-                <label htmlFor="criterion-weight" className="sr-only">
-                  Weight
-                </label>
-                <Input id="criterion-weight" name="weight" type="number" min={0.01} step="0.01" placeholder="Weight" required aria-describedby={describedBy} />
-                <label htmlFor="criterion-scoring-guidance" className="sr-only">
-                  Scoring guidance
-                </label>
-                <Input id="criterion-scoring-guidance" name="scoringGuidance" placeholder="Scoring guidance (optional)" className="sm:col-span-4" aria-describedby={describedBy} />
+                <div className="sm:col-span-2">
+                  <FormField id="criterion-label" label={<span className="sr-only">Label</span>}>
+                    <Input id="criterion-label" name="label" placeholder="Label" required invalid={invalid} aria-describedby={describedBy} />
+                  </FormField>
+                </div>
+                <FormField id="criterion-purpose-tag" label={<span className="sr-only">Purpose tag</span>}>
+                  <Select id="criterion-purpose-tag" name="purposeTag" defaultValue="operational" invalid={invalid} aria-describedby={describedBy}>
+                    <option value="operational">Operational</option>
+                    <option value="safety">Safety</option>
+                    <option value="financial">Financial</option>
+                    <option value="compliance">Compliance</option>
+                  </Select>
+                </FormField>
+                <FormField id="criterion-weight" label={<span className="sr-only">Weight</span>}>
+                  <NumberInput id="criterion-weight" name="weight" min={0.01} step="0.01" placeholder="Weight" required invalid={invalid} aria-describedby={describedBy} />
+                </FormField>
+                <div className="sm:col-span-4">
+                  <FormField id="criterion-scoring-guidance" label={<span className="sr-only">Scoring guidance</span>}>
+                    <Input id="criterion-scoring-guidance" name="scoringGuidance" placeholder="Scoring guidance (optional)" invalid={invalid} aria-describedby={describedBy} />
+                  </FormField>
+                </div>
               </div>
             )}
           </ActionForm>
@@ -194,13 +225,10 @@ export function TemplateDetailPanel({
         <section className="rounded-md border border-neutral-200 p-4">
           <h2 className="mb-2 text-sm font-semibold text-neutral-900">Archive</h2>
           <ActionForm action={archiveAction} submitLabel="Archive template" loadingLabel="Archiving…" variant="destructive">
-            {(describedBy) => (
-              <>
-                <label htmlFor="template-archive-reason" className="sr-only">
-                  Reason
-                </label>
-                <Input id="template-archive-reason" name="reason" placeholder="Reason (required)" required aria-describedby={describedBy} />
-              </>
+            {(describedBy, invalid) => (
+              <FormField id="template-archive-reason" label={<span className="sr-only">Reason</span>}>
+                <Input id="template-archive-reason" name="reason" placeholder="Reason (required)" required invalid={invalid} aria-describedby={describedBy} />
+              </FormField>
             )}
           </ActionForm>
         </section>

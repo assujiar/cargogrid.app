@@ -22,6 +22,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { SearchInput } from "../../../../../components/forms/search-input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { VENDOR_LIFECYCLE_STATUSES } from "../../../../../server/contracts/vendor-profile/vendor-profile.ts";
@@ -78,51 +82,43 @@ export function VendorRiskQueuePanel({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="vrq-search" className="text-xs font-medium text-neutral-600">
-            Search
-          </label>
-          <input
+        <FormField id="vrq-search" label="Search">
+          <SearchInput
             id="vrq-search"
-            type="search"
             defaultValue={filters.search}
             placeholder="Legal or trade name"
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+            className="py-1.5"
             onKeyDown={(event) => {
               if (event.key === "Enter") applyFilter({ search: event.currentTarget.value });
             }}
           />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="vrq-status" className="text-xs font-medium text-neutral-600">
-            Lifecycle status
-          </label>
-          <select id="vrq-status" defaultValue={filters.status} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter({ status: event.currentTarget.value })}>
+        </FormField>
+        <FormField id="vrq-status" label="Lifecycle status">
+          <Select id="vrq-status" defaultValue={filters.status} className="py-1.5" onChange={(event) => applyFilter({ status: event.currentTarget.value })}>
             <option value="">All statuses</option>
             {VENDOR_LIFECYCLE_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s.replace(/_/g, " ")}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="vrq-band" className="text-xs font-medium text-neutral-600">
-            Scorecard band
-          </label>
-          <select id="vrq-band" defaultValue={filters.band} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter({ band: event.currentTarget.value })}>
+          </Select>
+        </FormField>
+        <FormField id="vrq-band" label="Scorecard band">
+          <Select id="vrq-band" defaultValue={filters.band} className="py-1.5" onChange={(event) => applyFilter({ band: event.currentTarget.value })}>
             <option value="">All bands</option>
             {VENDOR_KPI_BANDS.map((b) => (
               <option key={b} value={b}>
                 {b}
               </option>
             ))}
-          </select>
-        </div>
-        <label htmlFor="vrq-hold" className="flex items-center gap-2 pb-1.5 text-xs font-medium text-neutral-600">
-          <input id="vrq-hold" type="checkbox" defaultChecked={filters.hold} onChange={(event) => applyFilter({ hold: event.currentTarget.checked })} />
-          Compliance hold only
-        </label>
+          </Select>
+        </FormField>
+        <Checkbox
+          id="vrq-hold"
+          defaultChecked={filters.hold}
+          onChange={(event) => applyFilter({ hold: event.currentTarget.checked })}
+          label="Compliance hold only"
+        />
       </div>
 
       {rows.length === 0 ? (

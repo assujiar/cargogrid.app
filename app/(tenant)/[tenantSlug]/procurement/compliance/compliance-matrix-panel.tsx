@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
@@ -68,10 +69,7 @@ export function ComplianceMatrixPanel({
               Expired
             </button>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="compliance-status" className="text-xs font-medium text-neutral-600">
-              Status
-            </label>
+          <FormField id="compliance-status" label="Status">
             <Select id="compliance-status" defaultValue={statusFilter ?? ""} className="w-auto py-1.5" onChange={(event) => applyFilter(event.currentTarget.value, holdOnly)}>
               <option value="">All statuses</option>
               {VENDOR_COMPLIANCE_STATUSES.map((s) => (
@@ -80,14 +78,14 @@ export function ComplianceMatrixPanel({
                 </option>
               ))}
             </Select>
-          </div>
+          </FormField>
           <form action={formAction} className="ml-auto flex flex-col gap-1">
             <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recalculating…">
               Recalculate all
             </Button>
           </form>
         </div>
-        {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
+        {state.error ? <ValidationMessage id="compliance-recalculate-error">{state.error}</ValidationMessage> : null}
 
         {rows.length === 0 ? (
           <EmptyState title="No compliance rows match this view" description="Adjust your filters, or publish a requirement so vendors have something to submit against." />

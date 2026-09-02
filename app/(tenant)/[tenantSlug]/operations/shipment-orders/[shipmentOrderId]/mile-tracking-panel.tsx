@@ -1,7 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
 import { Badge } from "../../../../../../components/ui/badge.tsx";
 import {
@@ -107,103 +113,175 @@ export function MileTrackingPanel({
   );
 }
 
-function SourceSelect({ name }: { name: string }) {
+function SourceSelect({ id, name, invalid, describedBy }: { id: string; name: string; invalid: boolean; describedBy: string | undefined }) {
   return (
-    <select name={name} required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-      <option value="" disabled>
-        Source…
-      </option>
-      {TRACKING_SOURCE_TYPES.map((source) => (
-        <option key={source} value={source}>
-          {source}
+    <FormField id={id} label="Source">
+      <Select id={id} name={name} required defaultValue="" invalid={invalid} aria-describedby={describedBy}>
+        <option value="" disabled>
+          Source…
         </option>
-      ))}
-    </select>
+        {TRACKING_SOURCE_TYPES.map((source) => (
+          <option key={source} value={source}>
+            {source}
+          </option>
+        ))}
+      </Select>
+    </FormField>
   );
 }
 
 function PolicyForm({ action, existing }: { action: MileTrackingFormAction; existing: ShipmentLegTrackingPolicy | null }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // This panel renders once per leg, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 border-t border-neutral-200 pt-2 text-xs" noValidate>
-      <label className="flex items-center gap-1">
-        <input type="checkbox" name="trackingRequired" defaultChecked={existing?.trackingRequired ?? false} /> Tracking required
-      </label>
-      <div className="flex flex-wrap gap-2">
-        {TRACKING_SOURCE_TYPES.map((source) => (
-          <label key={source} className="flex items-center gap-1">
-            <input type="checkbox" name="allowedSources" value={source} defaultChecked={existing?.allowedSources.includes(source) ?? false} /> {source}
-          </label>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-end gap-2">
-        <select name="preferredSource" defaultValue={existing?.preferredSource ?? ""} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-          <option value="">Preferred source…</option>
+      <Checkbox
+        id={`${formId}-tracking-required`}
+        name="trackingRequired"
+        defaultChecked={existing?.trackingRequired ?? false}
+        label="Tracking required"
+        aria-describedby={describedBy}
+      />
+      <fieldset>
+        <legend className="text-sm font-medium text-text-primary">Allowed sources</legend>
+        <div className="flex flex-wrap gap-2">
           {TRACKING_SOURCE_TYPES.map((source) => (
-            <option key={source} value={source}>
-              {source}
-            </option>
+            <Checkbox
+              key={source}
+              id={`${formId}-allowed-source-${source}`}
+              name="allowedSources"
+              value={source}
+              defaultChecked={existing?.allowedSources.includes(source) ?? false}
+              label={source}
+              aria-describedby={describedBy}
+            />
           ))}
-        </select>
-        <select name="startTrigger" defaultValue={existing?.startTrigger ?? "leg_dispatch"} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-          {TRACKING_START_TRIGGERS.map((trigger) => (
-            <option key={trigger} value={trigger}>
-              start: {trigger}
-            </option>
-          ))}
-        </select>
-        <select name="endTrigger" defaultValue={existing?.endTrigger ?? "leg_complete"} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-          {TRACKING_END_TRIGGERS.map((trigger) => (
-            <option key={trigger} value={trigger}>
-              end: {trigger}
-            </option>
-          ))}
-        </select>
-        <input
-          name="noSignalEscalationSeconds"
-          type="number"
-          min={1}
-          placeholder="No-signal escalation (s)"
-          defaultValue={existing?.noSignalEscalationSeconds ?? ""}
-          className="w-48 rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
+        </div>
+      </fieldset>
+      <div className="flex flex-wrap items-end gap-2">
+        <FormField id={`${formId}-preferred-source`} label="Preferred source">
+          <Select
+            id={`${formId}-preferred-source`}
+            name="preferredSource"
+            defaultValue={existing?.preferredSource ?? ""}
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          >
+            <option value="">Preferred source…</option>
+            {TRACKING_SOURCE_TYPES.map((source) => (
+              <option key={source} value={source}>
+                {source}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField id={`${formId}-start-trigger`} label="Start trigger">
+          <Select
+            id={`${formId}-start-trigger`}
+            name="startTrigger"
+            defaultValue={existing?.startTrigger ?? "leg_dispatch"}
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          >
+            {TRACKING_START_TRIGGERS.map((trigger) => (
+              <option key={trigger} value={trigger}>
+                start: {trigger}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField id={`${formId}-end-trigger`} label="End trigger">
+          <Select
+            id={`${formId}-end-trigger`}
+            name="endTrigger"
+            defaultValue={existing?.endTrigger ?? "leg_complete"}
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          >
+            {TRACKING_END_TRIGGERS.map((trigger) => (
+              <option key={trigger} value={trigger}>
+                end: {trigger}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField id={`${formId}-no-signal-escalation-seconds`} label="No-signal escalation (s)">
+          <NumberInput
+            id={`${formId}-no-signal-escalation-seconds`}
+            name="noSignalEscalationSeconds"
+            min={1}
+            placeholder="No-signal escalation (s)"
+            defaultValue={existing?.noSignalEscalationSeconds ?? ""}
+            className="w-48"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+        <Checkbox
+          id={`${formId}-customer-visible`}
+          name="customerVisible"
+          defaultChecked={existing?.customerVisible ?? false}
+          label="Customer visible"
+          aria-describedby={describedBy}
         />
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="customerVisible" defaultChecked={existing?.customerVisible ?? false} /> Customer visible
-        </label>
       </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
         {existing ? "Update policy" : "Define policy"}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function StartForm({ action }: { action: MileTrackingFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // This panel renders once per leg, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 text-xs" noValidate>
-      <SourceSelect name="sourceType" />
-      <select name="resourceKind" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Resource kind…
-        </option>
-        <option value="vehicle">vehicle</option>
-        <option value="driver">driver</option>
-      </select>
-      <input name="resourceMasterId" type="text" required placeholder="Resource master ID" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="deviceId" type="text" placeholder="Device ID (direct_device only)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <SourceSelect id={`${formId}-source-type`} name="sourceType" invalid={Boolean(state.error)} describedBy={describedBy} />
+      <FormField id={`${formId}-resource-kind`} label="Resource kind">
+        <Select id={`${formId}-resource-kind`} name="resourceKind" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Resource kind…
+          </option>
+          <option value="vehicle">vehicle</option>
+          <option value="driver">driver</option>
+        </Select>
+      </FormField>
+      <FormField id={`${formId}-resource-master-id`} label="Resource master ID">
+        <Input
+          id={`${formId}-resource-master-id`}
+          name="resourceMasterId"
+          type="text"
+          required
+          placeholder="Resource master ID"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id={`${formId}-device-id`} label="Device ID">
+        <Input
+          id={`${formId}-device-id`}
+          name="deviceId"
+          type="text"
+          placeholder="Device ID (direct_device only)"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Starting…" className="w-fit">
         Start tracking session
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -211,26 +289,61 @@ function StartForm({ action }: { action: MileTrackingFormAction }) {
 
 function HandoffForm({ action }: { action: MileTrackingFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // This panel renders once per leg, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 text-xs" noValidate>
-      <SourceSelect name="sourceType" />
-      <select name="resourceKind" required defaultValue="" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="" disabled>
-          Resource kind…
-        </option>
-        <option value="vehicle">vehicle</option>
-        <option value="driver">driver</option>
-      </select>
-      <input name="resourceMasterId" type="text" required placeholder="Resource master ID" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="deviceId" type="text" placeholder="Device ID (direct_device only)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-      <input name="handoffReason" type="text" required placeholder="Handoff reason" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <SourceSelect id={`${formId}-source-type`} name="sourceType" invalid={Boolean(state.error)} describedBy={describedBy} />
+      <FormField id={`${formId}-resource-kind`} label="Resource kind">
+        <Select id={`${formId}-resource-kind`} name="resourceKind" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Resource kind…
+          </option>
+          <option value="vehicle">vehicle</option>
+          <option value="driver">driver</option>
+        </Select>
+      </FormField>
+      <FormField id={`${formId}-resource-master-id`} label="Resource master ID">
+        <Input
+          id={`${formId}-resource-master-id`}
+          name="resourceMasterId"
+          type="text"
+          required
+          placeholder="Resource master ID"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id={`${formId}-device-id`} label="Device ID">
+        <Input
+          id={`${formId}-device-id`}
+          name="deviceId"
+          type="text"
+          placeholder="Device ID (direct_device only)"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id={`${formId}-handoff-reason`} label="Handoff reason">
+        <Input
+          id={`${formId}-handoff-reason`}
+          name="handoffReason"
+          type="text"
+          required
+          placeholder="Handoff reason"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Handing off…" className="w-fit">
         Hand off source
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -238,21 +351,36 @@ function HandoffForm({ action }: { action: MileTrackingFormAction }) {
 
 function EndForm({ action }: { action: MileTrackingFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // This panel renders once per leg, so every id must be leg-unique.
+  const formId = useId();
+  const errorId = `${formId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 text-xs" noValidate>
-      <select name="endReason" required defaultValue="leg_completed" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
-        <option value="leg_completed">leg_completed</option>
-        <option value="manual_stop">manual_stop</option>
-        <option value="unauthorized_override">unauthorized_override (requires OPS:Override)</option>
-      </select>
-      <input name="reasonNote" type="text" placeholder="Reason (required for manual_stop/override)" className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      <FormField id={`${formId}-end-reason`} label="End reason">
+        <Select id={`${formId}-end-reason`} name="endReason" required defaultValue="leg_completed" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="leg_completed">leg_completed</option>
+          <option value="manual_stop">manual_stop</option>
+          <option value="unauthorized_override">unauthorized_override (requires OPS:Override)</option>
+        </Select>
+      </FormField>
+      <FormField id={`${formId}-reason-note`} label="Reason note">
+        <Input
+          id={`${formId}-reason-note`}
+          name="reasonNote"
+          type="text"
+          placeholder="Reason (required for manual_stop/override)"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Ending…" className="w-fit">
         End session
       </Button>
       {state.error ? (
-        <p role="alert" className="basis-full text-danger">
-          {state.error}
-        </p>
+        <div className="basis-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -260,17 +388,15 @@ function EndForm({ action }: { action: MileTrackingFormAction }) {
 
 function EvaluateEscalationForm({ action }: { action: MileTrackingFormAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  // This panel renders once per leg, so the error id must be leg-unique.
+  const formId = useId();
   return (
     <form action={formAction} className="flex flex-col items-start gap-1 text-xs" noValidate>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Checking…" className="w-fit">
         Check no-signal escalation
       </Button>
       <p className="text-neutral-500">No live poller runs this automatically yet -- this button is the manual stand-in.</p>
-      {state.error ? (
-        <p role="alert" className="text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={`${formId}-error`}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

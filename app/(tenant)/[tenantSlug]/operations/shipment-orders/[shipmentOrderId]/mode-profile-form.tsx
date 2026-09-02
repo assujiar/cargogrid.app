@@ -2,6 +2,9 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import type { ShipmentOrderFormState } from "./actions.ts";
 import type { ShipmentModeProfile, ShipmentModeProfileMode } from "../../../../../../server/contracts/shipment-mode-baseline/shipment-mode-baseline.ts";
 
@@ -36,44 +39,56 @@ export function ModeProfileForm({
   const land = existingProfile?.mode === "land" ? existingProfile : null;
   const air = existingProfile?.mode === "air" ? existingProfile : null;
   const sea = existingProfile?.mode === "sea" ? existingProfile : null;
+  const invalid = Boolean(state.error);
+  const describedBy = state.error ? "mode-profile-error" : undefined;
 
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       {mode === "land" ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field id="vehicleRef" label="Vehicle reference" defaultValue={land?.vehicleRef} />
-          <Field id="vendorRef" label="Vendor reference" defaultValue={land?.vendorRef} />
-          <Field id="pickupAddress" label="Pickup address" defaultValue={land?.pickupAddress} />
-          <Field id="deliveryAddress" label="Delivery address" defaultValue={land?.deliveryAddress} />
+          <Field id="vehicleRef" label="Vehicle reference" defaultValue={land?.vehicleRef} invalid={invalid} describedBy={describedBy} />
+          <Field id="vendorRef" label="Vendor reference" defaultValue={land?.vendorRef} invalid={invalid} describedBy={describedBy} />
+          <Field id="pickupAddress" label="Pickup address" defaultValue={land?.pickupAddress} invalid={invalid} describedBy={describedBy} />
+          <Field id="deliveryAddress" label="Delivery address" defaultValue={land?.deliveryAddress} invalid={invalid} describedBy={describedBy} />
         </div>
       ) : null}
 
       {mode === "air" ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field id="awbNumber" label="AWB number" defaultValue={air?.awbNumber} />
-          <Field id="flightNumber" label="Flight number" defaultValue={air?.flightNumber} />
-          <Field id="originAirport" label="Origin airport" defaultValue={air?.originAirport} />
-          <Field id="destinationAirport" label="Destination airport" defaultValue={air?.destinationAirport} />
+          <Field id="awbNumber" label="AWB number" defaultValue={air?.awbNumber} invalid={invalid} describedBy={describedBy} />
+          <Field id="flightNumber" label="Flight number" defaultValue={air?.flightNumber} invalid={invalid} describedBy={describedBy} />
+          <Field id="originAirport" label="Origin airport" defaultValue={air?.originAirport} invalid={invalid} describedBy={describedBy} />
+          <Field id="destinationAirport" label="Destination airport" defaultValue={air?.destinationAirport} invalid={invalid} describedBy={describedBy} />
         </div>
       ) : null}
 
       {mode === "sea" ? (
         <div className="grid grid-cols-2 gap-3">
-          <Field id="blNumber" label="B/L number" defaultValue={sea?.blNumber} />
-          <Field id="bookingNumber" label="Booking number" defaultValue={sea?.bookingNumber} />
-          <Field id="vesselName" label="Vessel name" defaultValue={sea?.vesselName} />
-          <Field id="originPort" label="Origin port" defaultValue={sea?.originPort} />
-          <Field id="destinationPort" label="Destination port" defaultValue={sea?.destinationPort} />
-          <Field id="containerNumber" label="Container number (optional)" defaultValue={sea?.containerNumber ?? undefined} required={false} />
-          <Field id="containerType" label="Container type (optional)" defaultValue={sea?.containerType ?? undefined} required={false} />
+          <Field id="blNumber" label="B/L number" defaultValue={sea?.blNumber} invalid={invalid} describedBy={describedBy} />
+          <Field id="bookingNumber" label="Booking number" defaultValue={sea?.bookingNumber} invalid={invalid} describedBy={describedBy} />
+          <Field id="vesselName" label="Vessel name" defaultValue={sea?.vesselName} invalid={invalid} describedBy={describedBy} />
+          <Field id="originPort" label="Origin port" defaultValue={sea?.originPort} invalid={invalid} describedBy={describedBy} />
+          <Field id="destinationPort" label="Destination port" defaultValue={sea?.destinationPort} invalid={invalid} describedBy={describedBy} />
+          <Field
+            id="containerNumber"
+            label="Container number (optional)"
+            defaultValue={sea?.containerNumber ?? undefined}
+            required={false}
+            invalid={invalid}
+            describedBy={describedBy}
+          />
+          <Field
+            id="containerType"
+            label="Container type (optional)"
+            defaultValue={sea?.containerType ?? undefined}
+            required={false}
+            invalid={invalid}
+            describedBy={describedBy}
+          />
         </div>
       ) : null}
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="mode-profile-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…" className="w-fit">
         {existingProfile ? "Update mode profile" : "Set mode profile"}
@@ -82,13 +97,24 @@ export function ModeProfileForm({
   );
 }
 
-function Field({ id, label, defaultValue, required = true }: { id: string; label: string; defaultValue?: string; required?: boolean }) {
+function Field({
+  id,
+  label,
+  defaultValue,
+  required = true,
+  invalid = false,
+  describedBy,
+}: {
+  id: string;
+  label: string;
+  defaultValue?: string;
+  required?: boolean;
+  invalid?: boolean;
+  describedBy?: string | undefined;
+}) {
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium text-neutral-700">
-        {label}
-      </label>
-      <input id={id} name={id} type="text" required={required} defaultValue={defaultValue} className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-    </div>
+    <FormField id={id} label={label}>
+      <Input id={id} name={id} type="text" required={required} defaultValue={defaultValue} invalid={invalid} aria-describedby={describedBy} />
+    </FormField>
   );
 }
