@@ -7,6 +7,7 @@ import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../../components/ui/status-badge.tsx";
+import { useToastOnSettled } from "../../../../../../components/ui/toast.tsx";
 import { EMPLOYEE_CHANGE_REQUEST_FIELDS, type EmployeeLifecycleStatus, type EmployeeOwnProfile } from "../../../../../../server/contracts/employee/employee.ts";
 import type { MyProfileActionState } from "./actions.ts";
 
@@ -35,6 +36,15 @@ const FIELD_LABELS: Record<string, string> = {
 
 export function MyProfilePanel({ profile, requestChangeAction }: { profile: EmployeeOwnProfile; requestChangeAction: (prevState: MyProfileActionState, formData: FormData) => Promise<MyProfileActionState> }) {
   const [state, formAction, pending] = useActionState(requestChangeAction, INITIAL_STATE);
+
+  // ISS-2026-246: this confirmation used to be a `<p role="status">` inside the form grid, which
+  // meant a successful submission left the (still-populated) form looking untouched apart from
+  // one green line wedged between the fields and the submit button. The message itself is a
+  // single self-contained sentence with no follow-up action, so it is exactly `Toast`'s case.
+  // `requestMyProfileChangeAction` returns one shared module-level `OK` constant on success, so the
+  // trigger has to be the submission edge rather than a change in the state value -- see
+  // `useToastOnSettled`'s own header for why.
+  useToastOnSettled(pending, state.success ? { title: "Correction request submitted for HR review.", tone: "success" } : null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -107,11 +117,6 @@ export function MyProfilePanel({ profile, requestChangeAction }: { profile: Empl
             <div className="col-span-full">
               <ValidationMessage id="profile-change-error">{state.error}</ValidationMessage>
             </div>
-          ) : null}
-          {state.success ? (
-            <p role="status" className="col-span-full text-sm text-success">
-              Correction request submitted for HR review.
-            </p>
           ) : null}
 
           <div className="col-span-full">

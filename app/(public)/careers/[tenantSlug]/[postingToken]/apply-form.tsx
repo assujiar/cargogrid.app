@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { SuccessState } from "../../../../../components/ui/success-state.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
 import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
@@ -15,12 +16,15 @@ export function ApplyForm({ postingToken }: { postingToken: string }) {
   const boundAction = submitPublicJobApplicationAction.bind(null, postingToken);
   const [state, formAction, pending] = useActionState(boundAction, INITIAL_STATE);
 
+  // ISS-2026-246: this branch replaces the whole form with a standalone confirmation -- the
+  // whole-section shape `SuccessState` owns, down to the `role="status"` and the
+  // `border-success/30 bg-success/10` tokens this markup was already hand-writing. Nothing here
+  // can report a non-success outcome -- only `submitStatus === "ok"` reaches it, and every other
+  // result stays on the form with its own `ValidationMessage` -- so the success tone is not
+  // overstating anything, which is what ruled `SuccessState` out for the credit-check readout
+  // that can settle `blocked_*`.
   if (state.result?.submitStatus === "ok") {
-    return (
-      <div role="status" className="rounded-md border border-success/30 bg-success/10 p-4 text-sm text-neutral-900">
-        Thank you for applying -- we&apos;ve received your application and will be in touch.
-      </div>
-    );
+    return <SuccessState title="Thank you for applying" description="We've received your application and will be in touch." />;
   }
 
   // ISS-2026-242: one server-action error covers the whole submission, so every field points at
