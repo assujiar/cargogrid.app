@@ -950,4 +950,164 @@ begin
   raise notice 'PASS (ISS-2026-125 item 1): app.update_customer_portal_account_membership_role and app.set_customer_portal_account_membership_status (suspend/revoke) are both step-up-MFA-gated, strictly opt-in per tenant, with reactivation never gated and app.request_mfa_step_up_challenge now reachable by a customer_user-layer principal';
 end $$;
 
+\echo '>> ISS-2026-125 item 2 (20260902230000): app.set_customer_portal_account_membership_status now composes with the real IAE-027 session/API-key revocation primitives on suspend/revoke -- a membership''s own identity has its live app.user_sessions rows and this-account-scoped active API keys (including one an admin provisioned on the identity''s own behalf) genuinely revoked, an unrelated identity is unaffected, reactivation never touches sessions, and a separate still-active membership for the SAME identity on a DIFFERENT account keeps its own account-scoped API key untouched even though session revocation itself is tenant+identity scoped (app.user_sessions carries no account_id -- a disclosed limitation, not an oversight)'
+do $$
+declare
+  v_tenant uuid;
+  v_company uuid;
+  v_staff uuid := '00000000-0000-0000-0000-000000335001';
+  v_staff_role uuid;
+  v_staff_draft app.role_versions;
+  v_admin uuid := '00000000-0000-0000-0000-000000335010';
+  v_member uuid := '00000000-0000-0000-0000-000000335011';
+  v_other_member uuid := '00000000-0000-0000-0000-000000335012';
+  v_multi uuid := '00000000-0000-0000-0000-000000335013';
+  v_account_one uuid;
+  v_account_two uuid;
+  v_member_row app.customer_portal_account_memberships;
+  v_other_row app.customer_portal_account_memberships;
+  v_multi_row_one app.customer_portal_account_memberships;
+  v_multi_row_two app.customer_portal_account_memberships;
+  v_updated app.customer_portal_account_memberships;
+  v_key record;
+  v_member_session_id uuid;
+  v_other_session_id uuid;
+  v_multi_session_id uuid;
+  v_member_key_id uuid;
+  v_other_key_id uuid;
+  v_multi_key_two_id uuid;
+begin
+  insert into auth.users (id, email) values
+    (v_staff, 'staff@cumsess.test'),
+    (v_admin, 'admin@cumsess.test'),
+    (v_member, 'member@cumsess.test'),
+    (v_other_member, 'other-member@cumsess.test'),
+    (v_multi, 'multi@cumsess.test');
+
+  perform app.provision_tenant('cumsess', 'Customer User Mgmt Session Tenant', 'idem-cumsess', 'tester');
+  v_tenant := (select id from app.tenants where slug = 'cumsess');
+  perform app.transition_tenant_status(v_tenant, 'active', 'setup', 'tester');
+  v_company := (app.create_org_unit(v_tenant, 'company', null, 'CUMSESS-CO', 'CumSess Co', 'tester')).id;
+  perform app.invite_user(v_tenant, v_staff, 'staff@cumsess.test', 'CumSess Staff', v_company, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'staff@cumsess.test'), 'active', 'onboarded', 'tester');
+
+  -- v_staff needs CPT:Create only (app.grant_initial_customer_portal_account_admin's own
+  -- bootstrap gate) -- no MFA policy is set up for this tenant, so the step-up gate
+  -- (ISS-2026-125 item 1) is a no-op throughout this block, isolating this proof to item 2 alone.
+  v_staff_role := (app.create_role(v_tenant, 'CumSess Staff Role', 'CPT Create', 'tester')).id;
+  v_staff_draft := app.create_role_version(v_staff_role, 'tester');
+  perform app.set_role_version_permissions(v_staff_draft.id, array(select id from app.permissions where resource_module_code = 'CPT' and action = 'Create'), 'tester');
+  perform app.publish_role_version(v_staff_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant, (select id from app.role_versions where role_id = v_staff_role and status = 'published'), v_staff, v_staff, 'tester');
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant, 'CumSess Account One', 'cumsess-one-fp', '{}'::jsonb, v_company, 'tester') returning id into v_account_one;
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant, 'CumSess Account Two', 'cumsess-two-fp', '{}'::jsonb, v_company, 'tester') returning id into v_account_two;
+
+  perform app.grant_initial_customer_portal_account_admin(v_tenant, v_account_one, v_admin, v_staff, 'cumsess-staff');
+
+  select * into v_member_row from app.invite_customer_portal_user(v_tenant, v_account_one, v_member, 'member', v_admin, 'admin');
+  perform app.accept_customer_portal_invite(v_member_row.id, v_member_row.record_version, v_member);
+  select * into v_member_row from app.customer_portal_account_memberships where id = v_member_row.id;
+
+  select * into v_other_row from app.invite_customer_portal_user(v_tenant, v_account_one, v_other_member, 'member', v_admin, 'admin');
+  perform app.accept_customer_portal_invite(v_other_row.id, v_other_row.record_version, v_other_member);
+  select * into v_other_row from app.customer_portal_account_memberships where id = v_other_row.id;
+
+  -- v_multi holds an active membership on BOTH accounts of this tenant -- a genuine
+  -- many-to-many case (20260801010000's own table comment: "one row per (tenant, identity,
+  -- account)"), deliberately constructed to exercise design decisions 3-4 of 20260902230000.
+  select * into v_multi_row_one from app.invite_customer_portal_user(v_tenant, v_account_one, v_multi, 'member', v_admin, 'admin');
+  perform app.accept_customer_portal_invite(v_multi_row_one.id, v_multi_row_one.record_version, v_multi);
+  select * into v_multi_row_one from app.customer_portal_account_memberships where id = v_multi_row_one.id;
+
+  perform app.grant_initial_customer_portal_account_admin(v_tenant, v_account_two, v_multi, v_staff, 'cumsess-staff');
+  select * into v_multi_row_two from app.customer_portal_account_memberships
+  where tenant_id = v_tenant and account_id = v_account_two and auth_user_id = v_multi;
+
+  -- Live sessions: app.user_sessions is tenant+identity scoped, no account_id column at all.
+  insert into app.user_sessions (tenant_id, auth_user_id, device_label, status)
+  values (v_tenant, v_member, 'member-laptop', 'active') returning id into v_member_session_id;
+  insert into app.user_sessions (tenant_id, auth_user_id, device_label, status)
+  values (v_tenant, v_other_member, 'other-laptop', 'active') returning id into v_other_session_id;
+  insert into app.user_sessions (tenant_id, auth_user_id, device_label, status)
+  values (v_tenant, v_multi, 'multi-laptop', 'active') returning id into v_multi_session_id;
+
+  -- API keys: app.create_customer_api_key's own authority check requires the ACTOR to already be
+  -- an account_admin (or staff webhook admin) -- a plain member cannot self-provision a key at
+  -- all (live-confirmed: this is exactly what this fixture originally got wrong, catching a real
+  -- authority-model detail before it could hide a false pass). v_admin therefore provisions BOTH
+  -- keys below: one ON BEHALF OF v_member and one ON BEHALF OF v_other_member for Account One
+  -- (IAE-010's own admin-provisioned-on-behalf-of case -- created_by_auth_user_id <>
+  -- customer_actor_auth_user_id, exactly the case app.revoke_all_actor_sessions's own
+  -- created_by_auth_user_id filter would have missed for either). v_multi self-provisions a key
+  -- for Account TWO specifically, since v_multi genuinely IS an account_admin there -- a
+  -- genuinely different account than the one about to be suspended/revoked below.
+  select * into v_key from app.create_customer_api_key(v_tenant, v_account_one, v_member, 'member key', null, null, v_admin, 'admin');
+  v_member_key_id := v_key.id;
+  select * into v_key from app.create_customer_api_key(v_tenant, v_account_one, v_other_member, 'other member key', null, null, v_admin, 'admin');
+  v_other_key_id := v_key.id;
+  select * into v_key from app.create_customer_api_key(v_tenant, v_account_two, v_multi, 'multi account-two key', null, null, v_multi, 'multi');
+  v_multi_key_two_id := v_key.id;
+
+  -- Suspend the member on Account One.
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_member_row.id, v_member_row.record_version, 'suspended', 'session revocation proof', v_admin, 'admin');
+  if v_updated.status <> 'suspended' then
+    raise exception 'assertion failed: expected suspend to succeed, got status=%', v_updated.status;
+  end if;
+
+  if (select status from app.user_sessions where id = v_member_session_id) <> 'revoked' then
+    raise exception 'assertion failed (ISS-2026-125 item 2): expected the suspended member''s own live session to be revoked';
+  end if;
+  if (select status from app.api_keys where id = v_member_key_id) <> 'revoked' then
+    raise exception 'assertion failed (ISS-2026-125 item 2): expected the suspended member''s own active API key to be revoked, including one provisioned on their behalf by the admin';
+  end if;
+
+  -- The unrelated identity is completely untouched.
+  if (select status from app.user_sessions where id = v_other_session_id) <> 'active' then
+    raise exception 'assertion failed: expected an unrelated identity''s own session to remain active';
+  end if;
+  if (select status from app.api_keys where id = v_other_key_id) <> 'active' then
+    raise exception 'assertion failed: expected an unrelated identity''s own API key to remain active';
+  end if;
+
+  -- Reactivate the member -- reactivation never touches sessions (mirrors item 1's own
+  -- established never-gate-on-reactivate precedent). Proved by inserting a FRESH active session
+  -- right before reactivating and confirming it survives untouched.
+  insert into app.user_sessions (tenant_id, auth_user_id, device_label, status)
+  values (v_tenant, v_member, 'member-new-laptop', 'active');
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_updated.id, v_updated.record_version, 'active', 'reactivate mid-proof', v_admin, 'admin');
+  if v_updated.status <> 'active' then
+    raise exception 'assertion failed: expected reactivation to succeed, got status=%', v_updated.status;
+  end if;
+  if (select status from app.user_sessions where tenant_id = v_tenant and auth_user_id = v_member and device_label = 'member-new-laptop') <> 'active' then
+    raise exception 'assertion failed: reactivation must never revoke a session -- the fresh session created just before reactivating should remain active';
+  end if;
+
+  -- Revoke v_multi's Account One membership -- proves (a) revoke composes session/key revocation
+  -- exactly like suspend does; (b) the disclosed session-scoping limitation (design decision 4 of
+  -- 20260902230000): app.user_sessions has no account_id, so this ALSO revokes v_multi's own
+  -- session used for their separate, still-active Account Two membership; (c) the API-key
+  -- scoping IS narrower (design decision 3): the key scoped specifically to Account Two is NOT
+  -- touched by revoking the Account One membership, and Account Two's own membership row is
+  -- untouched entirely.
+  select * into v_updated from app.set_customer_portal_account_membership_status(v_multi_row_one.id, v_multi_row_one.record_version, 'revoked', 'revoke proof', v_admin, 'admin');
+  if v_updated.status <> 'revoked' then
+    raise exception 'assertion failed: expected revoke to succeed, got status=%', v_updated.status;
+  end if;
+
+  if (select status from app.user_sessions where id = v_multi_session_id) <> 'revoked' then
+    raise exception 'assertion failed (ISS-2026-125 item 2): expected the revoked identity''s own live session to be revoked';
+  end if;
+  if (select status from app.api_keys where id = v_multi_key_two_id) <> 'active' then
+    raise exception 'assertion failed (ISS-2026-125 item 2 design decision 3): expected the API key scoped to a DIFFERENT, still-active account membership (Account Two) to remain untouched by revoking the Account One membership';
+  end if;
+  if (select status from app.customer_portal_account_memberships where id = v_multi_row_two.id) <> 'active' then
+    raise exception 'assertion failed: expected the SEPARATE Account Two membership to remain active, unaffected by the Account One revoke';
+  end if;
+
+  raise notice 'PASS (ISS-2026-125 item 2): app.set_customer_portal_account_membership_status suspend/revoke now composes with the real IAE-027 session/API-key revocation primitives -- a suspended/revoked identity''s own live app.user_sessions rows and this-account-scoped active API keys (including one provisioned on their behalf by an admin) are genuinely revoked, an unrelated identity is unaffected, reactivation never touches sessions, and a separate still-active membership for the same identity on a different account keeps its own account-scoped API key untouched even though session revocation is tenant+identity scoped, not account scoped (a disclosed limitation of app.user_sessions itself, not this fix)';
+end $$;
+
 \echo 'customer-user-management.sql: ALL PASSED'

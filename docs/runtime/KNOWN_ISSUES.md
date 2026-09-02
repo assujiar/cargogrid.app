@@ -73,7 +73,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-091` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): RPD-025 retention/legal-hold classification is unbuilt for every Phase 7 HR/payroll structured |
 | `ISS-2026-092` | Medium | `RESOLVED` | Sensitive Personal and Payroll Data Controls (HRT-293): `app.employee_change_requests.reason`/`decided_reason` are readable by any active tenant membe |
 | `ISS-2026-100` | Medium | `RESOLVED` | Batch review (Prompt 292, Typed Ticket-Linked Records): `app.list_ticket_link_events` is built, tested, and has no UI/action caller anywhere in the re |
-| `ISS-2026-125` | Medium | `OPEN` | Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), p |
+| `ISS-2026-125` | Medium | `RESOLVED` | Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), p |
 | `ISS-2026-138` | Medium | `RESOLVED` | RPD-023 (MFA/step-up-authorization) disclosure practice was silently dropped for CPL-316–323 (all of Loyalty, including reward approval and fraud rele |
 | `ISS-2026-140` | Medium | `OPEN` | zero automated accessibility-audit evidence exists for any of Phase 8's ~30 Customer Portal routes or 9 admin Loyalty routes |
 | `ISS-2026-141` | Medium | `RESOLVED` | zero load/performance-test evidence exists for any Phase 8 route or RPC at declared target volume |
@@ -148,7 +148,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-156` | Low | `RESOLVED` | `scripts/db-tests/n8n-integration.sql:204`'s own webhook-endpoint lookup has no `ORDER BY`, nondeterministic if enough other test files' own webhook-e |
 | `ISS-2026-170` | Low | `RESOLVED` | `app.initiate_file_upload`'s `p_record_id` is validated against the tenant at neither layer |
 | `ISS-2026-189` | Low | `RESOLVED` | `app.employees` carries a table-level column grant exposing 24 non-PII directory columns, bypassing the `HRS:View` RBAC gate |
-| `ISS-2026-197` | Low | `OPEN` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
+| `ISS-2026-197` | Low | `RESOLVED` | no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-t |
 | `ISS-2026-208` | Low | `RESOLVED` | `app.accept_vendor_assignment_invitation_via_vendor_api`/`decline_...` use optimistic concurrency only, no idempotency-key short-circuit, unlike every |
 | `ISS-2026-223` | Low | `RESOLVED` | ordinary `tenant_admin` (not just Supreme Admin) silently bypasses file classification/deletion/legal-hold gates via `app.is_support_grant_authority`  |
 | `ISS-2026-239` | Low | `OPEN` | 892 `unindexed_foreign_keys` advisories: zero high-confidence "index now" candidates found in a 24-FK sample across 7 domains; deferred pending real p |
@@ -2428,7 +2428,7 @@ set, for the reason `ISS-2026-315` makes concrete: a fixture that drifts from th
 for proves nothing. `pnpm typecheck`, 5698 unit tests, and `next build` (both invoice routes
 compiled) all green.
 
-### ISS-2026-125 — Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), plus a real, unfixed "last active account_admin" gap remains open in CPL-300's own already-`VERIFIED` `set_customer_portal_account_membership_status` (Phase 8, Batch 4, `CG-S13-CPL-017`, Medium for item 3 / Low for items 1-2, OPEN)
+### ISS-2026-125 — Customer User Management (CPL-315): no MFA/step-up primitive and no session/token-revocation primitive exist repository-wide (standing disclosures), plus a real, unfixed "last active account_admin" gap remains open in CPL-300's own already-`VERIFIED` `set_customer_portal_account_membership_status` (Phase 8, Batch 4, `CG-S13-CPL-017`, RESOLVED 2026-09-02 -- item 2 closed this pass under ADR-0027, items 1 and 3 already resolved 2026-09-01/2026-08-28, Medium for item 3 / Low for items 1-2)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-017` (Prompt 315, Customer User Management), the first prompt of Batch 4 — an additive extension of CPL-300's own already-`VERIFIED` invite/accept/status-management machinery (`supabase/migrations/20260801010000_create_customer_portal_account_scope.sql`).
 
@@ -2450,6 +2450,97 @@ Discovered/disclosed `2026-08-17` at `CG-S13-CPL-017` (Prompt 315, Customer User
 **`RESOLVED` (item 1 only, 2026-09-01, `supabase/migrations/20260901140000_wire_step_up_mfa_into_customer_portal_account_admin_actions.sql`) — item 1's own premise re-verified live, and found stale, before drafting.** `20260807100000_create_intelligence_enterprise_mfa_session_controls.sql` (IAE-027, 2026-08-07) shipped a real, applied step-up-MFA mechanism (`app.assert_current_step_up_authorization`, `app.is_high_risk_action`, `app.mfa_tenant_policies`, `app.request_mfa_step_up_challenge`/`app.verify_mfa_step_up_challenge`) — predating even the 2026-08-28 update immediately above, which restated "zero MFA primitives anywhere" without re-checking (the same citation-currency-drift class `ISS-2026-138` already found once for this entry's own CPL-314 citation). Composition was checked by reading the live code, not assumed: `app.assert_current_step_up_authorization`/`app.is_high_risk_action` are genuinely generic (no RBAC role assignment, no `app.evaluate_permission` call, no FK into `app.permissions`) — confirmed against `pg_get_functiondef` on the hosted project, not the migration file text. The one real, narrow gap was `app.request_mfa_step_up_challenge`'s own membership precondition (`app.has_active_tenant_membership` OR `app.is_supreme_admin`) — structurally false for every customer_user-layer identity, whose own `app.tenant_user_identities` row deliberately never reaches `active` (the identical shape `app.check_file_action_authority`/PLT-128 already hit and fixed at CPL-302, `20260730311000`, by widening with `app.actor_holds_customer_user_layer`). `20260901140000` applies the SAME widening to `app.request_mfa_step_up_challenge`, then wires `app.assert_current_step_up_authorization(tenant, actor, 'CPADM', 'ManageMembership')` into `app.update_customer_portal_account_membership_role` (role change) and `app.set_customer_portal_account_membership_status` (suspend/revoke only — never reactivate, which restores access rather than removing it). `('CPADM', 'ManageMembership')` is a genuinely NEW tag, deliberately not a reuse of the existing `'CPT'` ("Customer Portal") staff-RBAC module: this capability's own ordinary authority check is `app.actor_is_active_customer_portal_account_admin`, a Layer-4-only chain that never touches `app.evaluate_permission`/`app.permissions` at all (ADR-0024 Part B) — reusing `'CPT'` would have misleadingly implied composition with staff CPT permissions, which do not apply here; this is exactly the "mismatched pair" this fix's own task explicitly warned against. `app.is_high_risk_action`'s hardcoded platform-default tuple list is untouched — `('CPADM', 'ManageMembership')` is reachable only via a tenant's own `additional_high_risk_actions` (`app.set_mfa_tenant_policy`), so every existing tenant and the live project see zero behavior change unless they explicitly opt in. All three `CREATE OR REPLACE FUNCTION` bodies were rebuilt from the LIVE `pg_get_functiondef` output (not the on-disk migration files, which could have drifted), with `language plpgsql`/`security definer`/`set search_path` restated explicitly on every one — the exact recurrence class `20260831290000_restore_security_definer_on_drifted_finance_wrappers.sql` already had to correct once. New regression in `scripts/db-tests/customer-user-management.sql`, isolated to its own dedicated fixture tenant (`cummfa`): a tenant with no `app.mfa_tenant_policies` row sees role change/suspend/revoke all succeed unconditionally; a tenant that opts `('CPADM', 'ManageMembership')` into `additional_high_risk_actions` and turns tenant-wide MFA on blocks all three with `mfa_step_up_required` until a real, verified step-up challenge exists, then succeeds; reactivation is proven never gated; `app.request_mfa_step_up_challenge` is proven to now genuinely succeed for a customer_user-layer principal, not merely that the assert itself is generic. `pnpm run typecheck`/`lint`/`test`/`db:test` all clean. `app/(tenant)/[tenantSlug]/customer-portal-users/actions.ts`'s own header comment (which stated the now-stale "no MFA/step-up mechanism exists" premise) is corrected in place. **Item 2 stays `OPEN`, Low** (see the correction immediately below — its own premise needed a narrower correction, not a resolution). Owner: item 1 closed; item 2 unchanged.
 
 **Correction (2026-09-01, same pass) — item 2's own "no session/token/JWT-revocation primitive exists anywhere in this repository" premise is also stale, re-verified live rather than assumed; the entry stays `OPEN` because the correct, narrower gap is real.** The literal grep this entry (and the 2026-08-28 update above) cites — zero hits for `revoke_session`/`invalidate_session`/`revoke_token`/`invalidate_token` — is still accurate today, re-run verbatim. But the broader English claim it was standing in for is not: the SAME `20260807100000` (IAE-027) migration that closed item 1 also shipped `app.user_sessions`/`app.revoke_user_session`/`app.revoke_all_actor_sessions` — a real, persisted, applied session-revocation primitive (the latter also cascades to revoke every API key the target actor created, per its own comment), reachable since 2026-08-07. Two things keep item 2 genuinely `OPEN` rather than resolved, both disclosed by IAE-027's own text, not discovered here: (a) `app.revoke_user_session` flips the real, persisted `app.user_sessions.status` signal but does not itself invalidate a live Supabase JWT/refresh token — that requires the external Supabase Admin API (`auth.admin.signOut`), explicitly disclosed as not performed by IAE-027 either; (b) CPL-315's own capability composes with none of it — suspending/revoking a customer-portal membership does not register or revoke any `app.user_sessions` row for that identity, so this specific capability's own protection remains exactly what this entry already documented: every RPC re-checks the caller's own live status/role/authority on every call, never a cached claim, unchanged and still accurate. **Status `OPEN`, Low, unchanged** — the premise is corrected (a real, adjacent, non-JWT session-revocation primitive now exists platform-wide), the underlying gap for THIS capability is not.
+
+**`RESOLVED` (item 2, 2026-09-02, under ADR-0027's owner-authorized remediation scope,
+`supabase/migrations/20260902230000_wire_session_revocation_into_customer_portal_membership_status.sql`).**
+Re-verified live, before drafting, exactly which primitives the correction immediately above
+actually named: `pg_get_functiondef` on the hosted project for `app.revoke_all_actor_sessions`,
+`app.revoke_user_session`, `app.revoke_api_key`, and `app.check_api_key_manage_authority`, not
+the migration-file text. That reading surfaced a real authority-model mismatch the entry's own
+prior text did not anticipate: `app.revoke_all_actor_sessions` unconditionally requires the
+ACTING identity to hold staff `SEC:Configure` via `app.evaluate_permission` -- a permission model
+that never applies to the `customer_user` layer (ADR-0024 Part B). Every legitimate caller of
+`app.set_customer_portal_account_membership_status` already passed
+`app.actor_is_active_customer_portal_account_admin` earlier in that same function and therefore
+structurally can never hold `SEC:Configure` -- calling `app.revoke_all_actor_sessions` directly,
+as this entry's own text first suggested, would have made every real suspend/revoke raise
+`insufficient_authority`, breaking the capability rather than hardening it. The fix instead
+composes the SAME underlying primitives that function itself uses, gated by the authority this
+call had already established: the identical `app.user_sessions` status flip, and the existing,
+unmodified `app.revoke_api_key` (`PLT-129`) for the identity's own API keys. Two further, real
+scoping corrections found live rather than assumed: (a) API-key revocation filters on
+`customer_actor_auth_user_id` (the identity a key genuinely dispatches downstream Customer
+Portal calls as, per IAE-010), never `created_by_auth_user_id` (who provisioned it, sometimes a
+tenant admin acting on a customer contact's behalf) -- `app.revoke_all_actor_sessions`'s own
+filter would have silently missed exactly that admin-provisioned case for this identity; (b)
+API-key revocation is further scoped to the account this membership transition concerns
+(`customer_account_id = v_updated.account_id`), because `app.customer_portal_account_memberships`
+is a genuine many-to-many grant (`20260801010000`'s own table comment: "one row per (tenant,
+identity, account)") -- an identity can hold a separate, still-active membership on a different
+account of the same tenant, and an unscoped loop would have attempted to revoke a key on an
+account the suspending admin does not administer, raising inside the same transaction and
+rolling back the membership-status change itself as a side effect. Session revocation itself has
+no equivalent account-scoping available and none was invented: `app.user_sessions` carries only
+`(tenant_id, auth_user_id)`, no account column, so revoking one membership revokes ALL of that
+identity's active sessions in the tenant, including any used for a separate, unrelated, still-
+active membership on a different account -- disclosed plainly in the migration's own header
+rather than silently narrowed or silently left broader than stated. Reactivation is never
+gated or session-revoked, matching item 1's own established precedent exactly. **What this still
+does NOT do, disclosed honestly rather than implied**: this composition, like
+`app.revoke_all_actor_sessions`/`app.revoke_user_session` themselves, flips only the real,
+persisted `app.user_sessions.status` signal. None of them invalidate a live Supabase JWT/refresh
+token -- that requires the external Supabase Admin API (`auth.admin.signOut`), which IAE-027's
+own design decision 4 already disclosed as not performed anywhere in this repository, this fix
+included; a suspended/revoked identity's already-issued access token remains cryptographically
+valid until it naturally expires. That gap is real, standing, and repository-wide -- not
+specific to CPL-315, not newly introduced or newly discovered here, and not closed by this or
+any other single capability's own composition with `app.user_sessions`. Regression proof
+appended to `scripts/db-tests/customer-user-management.sql`: a suspended membership's own live
+session and this-account-scoped active API key (including one an admin provisioned on the
+identity's own behalf) are both proven revoked; an unrelated identity's own session and API key
+are proven untouched; reactivation is proven to leave a freshly-created session untouched; a
+revoke (not merely suspend) is proven to compose identically; and a second, separate, still-
+active membership for the SAME identity on a DIFFERENT account of the same tenant is proven to
+keep its own account-scoped API key untouched by the first account's revoke, while its session
+-- correctly, per the disclosed tenant+identity scoping above -- is not. `CREATE OR REPLACE`,
+byte-identical signature verified against the live `pg_get_functiondef` output before editing;
+grants (`authenticated`, `postgres`, `service_role` on both `app.*` and its `public.*` wrapper)
+confirmed carried forward unchanged live.
+
+**Bundled, directly-blocking companion finding, fixed in the same pass
+(`supabase/migrations/20260902231000_harden_customer_portal_api_key_revoke_rotate_reachability.sql`),
+not folded silently into the migration above.** Live-testing this fix's own new API-key
+revocation branch surfaced that `app.revoke_api_key` -- and its identical sibling
+`app.rotate_api_key`, sharing the same root cause -- were structurally UNREACHABLE for any
+genuine `customer_user`-layer actor at all: both functions' own not-found discriminator
+(`app.has_active_tenant_membership`, added by `ISS-2026-167`/`20260827010000`, three weeks AFTER
+IAE-010's `20260804020000` had already wired a customer-account_admin authority branch into these
+same two functions) checks only the staff/Layer-2-3 `app.tenant_user_identities` relationship,
+never the `customer_user` layer -- the identical class of gap `ISS-2026-125` item 1's own fix
+already found and fixed once for `app.request_mfa_step_up_challenge` (citing the original
+PLT-128/CPL-302 precedent). Concretely, before this companion fix, this migration's own new
+branch raised `api_key_not_found` and rolled back the ENTIRE membership-status transaction
+whenever the target identity held an active API key -- caught live, by this session's own
+db-test run, before it could ship silently broken. Fixed with the identical precedented widening:
+`app.actor_holds_customer_user_layer` OR'd into both functions' own not-found discriminator,
+changing only which identities pass that gate (a staff actor's own behavior is completely
+unchanged) -- `app.check_api_key_manage_authority` still, unchanged, gates the real decision by
+account. `app.rotate_api_key` carries the identical pre-existing defect and is fixed alongside
+`app.revoke_api_key` in the same migration, since it is the same root cause with the same
+already-proven fix, not a separate, riskier change -- leaving a known twin of a bug just found
+unfixed would be worse than bundling its fix. Both bodies rebuilt via `CREATE OR REPLACE
+FUNCTION` from the live `pg_get_functiondef` output; grants confirmed carried forward unchanged
+on both `app.*` functions and their `public.*` wrappers. Live-proven as part of the same
+regression block: the suspend/revoke path that depends on `app.revoke_api_key` reaching its real
+authority decision (rather than a misleading not-found) is exactly what
+`scripts/db-tests/customer-user-management.sql`'s new ISS-2026-125 item 2 block exercises and
+passes; no dedicated `app.rotate_api_key` regression was added here (out of this bounded fix's
+own scope -- `rotate_api_key` is not called by any Customer User Management RPC), so a future
+checkpoint touching customer-facing API key rotation should still independently verify it.
+
+**All three items of this entry are now resolved**: item 1 (`20260901140000`), item 3
+(`20260828193000`), item 2 (`20260902230000`, plus the bundled companion fix
+`20260902231000`). Owner: closed.
 
 ### ISS-2026-126 — Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_for_paid_invoice` to a real payment event yet (Phase 8, Batch 4, CPL-316, `CG-S13-CPL-018`, RESOLVED 2026-08-31, Low)
 
@@ -4525,7 +4616,7 @@ Regression test: `scripts/db-tests/customer-loyalty-expiry-fraud-prevention.sql`
 HDN-374 block (a lot due in 2 days is untouched by a real-time sweep, then expired by a sweep
 evaluated 3 days into the future).
 
-### ISS-2026-197 — no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-time total, never the actual invoiced/billed figure (found at `CG-S15-HDN-006`, `OPEN`, Low, owner `HDN-386`)
+### ISS-2026-197 — no FX/multi-currency conversion exists anywhere in the revenue chain; `app.calculate_job_profitability` (Operations) always reports the static quote-time total, never the actual invoiced/billed figure (found at `CG-S15-HDN-006`, RESOLVED 2026-09-02 under ADR-0027 owner-authorized closure, Low, prior owner `HDN-386`)
 
 Two related, disclosed-not-fixed structural observations from this checkpoint's own revenue-chain
 investigation lens, neither a repair-shaped defect (both are absences/design choices, not
@@ -4675,6 +4766,57 @@ entry's own closure bar, or whether a broader revenue-chain rollout (quotations,
 themselves, not just this one reporting function) is still expected first, is the ruling this
 entry has been waiting for since its own original disposition — until that ruling lands, this
 record's own status word stays exactly `OPEN`.
+
+**Closure judgment made (2026-09-02), under the same ADR-0027 owner-authorized remediation scope
+that has closed every other entry in this batch — there is no more standing `HDN-386` checkpoint
+left to defer to in this remediation context, so the ruling this entry's own prior text kept
+waiting for is made here instead.** Re-verified live rather than trusted: `pg_get_functiondef` on
+the hosted project confirms `app.calculate_job_profitability` is still, byte-for-byte, the body
+`20260902050000` shipped (no drift, no later migration touches it, `resolve_operations_fx_
+conversion`, or `job_profitability_snapshots` — grep-confirmed across the full migration set).
+`app.resolve_operations_fx_conversion`'s own live body confirms the disclosure already on record
+is accurate and not overstated: identity conversion for a same-currency pair, a genuine
+`app.resolve_finance_exchange_rate(..., 'spot', ...)` lookup otherwise, `rate_unavailable` with
+the converted amount left null (never a guess, never a new failure mode) when no approved rate
+covers the pair/date, and rounding to the target currency's own `minor_unit_precision`.
+`app.finance_exchange_rates` holds zero rows on the live project today — expected for a table
+that is real, applied, RPC- and UI-reachable infrastructure with no rates entered yet, not a sign
+the mechanism itself is unfinished.
+
+This entry's own two original findings are both, genuinely, no longer accurate as originally
+stated. Finding 1 ("no FX conversion anywhere in the revenue chain") is no longer true for the
+one function this entry names: `app.calculate_job_profitability` now reads
+`app.finance_exchange_rates` on every call. Finding 2 ("always uses the static quote-time total,
+never the actual invoiced/issued total") is also no longer true: the function now reads the
+actual invoiced total from `app.finance_invoices` (`status = 'issued'`) alongside the quote-time
+figure, converts both independently at the rate genuinely in effect on each one's own date, and
+returns both the original-currency and base-currency figures for each side by side — a reader
+can see quoted vs. invoiced, and original vs. converted, on the same row.
+
+What is honestly still true, and does not block this closure because it was already disclosed as
+a deliberate boundary rather than found freshly incomplete here: only `rate_type = 'spot'` is
+read (no forward/budget rate distinction, since nothing upstream records which rate type a quote
+or invoice was priced against); quotations and invoices themselves still carry their own original
+currency verbatim and are not converted at creation, only reported through this one function —
+consistent with `RPD-016`'s own standing single-currency-per-tenant product scope, not a gap in
+this fix; and the Operations job-order profitability panel UI
+(`app/(tenant)/[tenantSlug]/operations/job-orders/[jobOrderId]/job-profitability-panel.tsx`,
+independently re-read here) does not yet render any of the thirteen new columns — the figures are
+real and reachable at the RPC/view/Zod-contract layer, but a viewer of that one screen does not
+see them yet. This last item is real and worth naming precisely rather than folding into a
+blanket `OPEN`: wiring the Operations job-profitability panel to display
+`revenue_base_amount`/`invoiced_amount`/`invoiced_base_amount` and their FX status is a genuine,
+narrow, separately-actionable follow-up, but it is a UI-display task with no data-correctness or
+security consequence (every figure it would display is already correct, masked correctly, and
+reachable by any caller of the contract layer today) — not a reason to keep this entry's own
+FX-conversion subject `OPEN`. No new `KNOWN_ISSUES` record is opened for it here, to avoid
+seeding a duplicate low-severity UI-polish entry inside a batch already closing this one by name;
+it is recorded in this paragraph so it is not lost.
+
+**Status: `RESOLVED`.** The FX-conversion primitive this entry asked a future checkpoint to rule
+on is real, live, correctly gated, regression-proven, and re-verified live to still hold with no
+drift, for the one function (`app.calculate_job_profitability`) this entry's own heading names.
+Owner: closed under ADR-0027; no further `HDN-386`/`HDN-387`/`HDN-389` forwarding needed.
 
 ### ISS-2026-198 — `app.prepare_finance_vendor_bill_from_actual_cost`'s idempotency replay lookup had no `status <> 'void'` predicate, silently returning a discarded draft instead of allowing a fresh one (found at `CG-S15-HDN-006`, `RESOLVED` at `HDN-374`, Medium, owner `HDN-374`)
 
