@@ -2,6 +2,12 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { TicketActionState, TicketEscalationPreviewActionState } from "../actions.ts";
 import { TICKET_PRIORITIES, TICKET_ESCALATION_TRIGGER_TYPES } from "../../../../../server/contracts/ticketing/ticketing.ts";
@@ -28,55 +34,52 @@ type PreviewBoundAction = (prevState: TicketEscalationPreviewActionState, formDa
 // PreviewRoutingForm exactly.
 function PreviewEscalationForm({ categories, queues, previewAction }: { categories: readonly TicketCategoryRow[]; queues: readonly TicketQueueRow[]; previewAction: PreviewBoundAction }) {
   const [state, formAction, pending] = useActionState(previewAction, PREVIEW_INITIAL_STATE);
+  const describedBy = state.error ? "escalation-preview-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Channel
-        <select name="channel" required defaultValue="internal" className="rounded border border-neutral-300 p-1.5 text-sm">
+      <FormField id="escalation-preview-channel" label="Channel">
+        <Select id="escalation-preview-channel" name="channel" required defaultValue="internal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="internal">internal</option>
           <option value="customer">customer</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Category (optional = any)
-        <select name="categoryId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="escalation-preview-category" label="Category (optional = any)">
+        <Select id="escalation-preview-category" name="categoryId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any category</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Priority (optional = any)
-        <select name="priority" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="escalation-preview-priority" label="Priority (optional = any)">
+        <Select id="escalation-preview-priority" name="priority" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any priority</option>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Queue (optional = any)
-        <select name="queueId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="escalation-preview-queue" label="Queue (optional = any)">
+        <Select id="escalation-preview-queue" name="queueId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any queue</option>
           {queues.map((q) => (
             <option key={q.id} value={q.id}>
               {q.name}
             </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Checking…">
         Preview escalation
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="escalation-preview-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
       {state.result ? (
         <p className="w-full text-xs text-neutral-700">
@@ -112,23 +115,22 @@ function PublishVersionButton({ versionId, expectedVersion, publishPolicyVersion
 
 function CreatePolicyForm({ createPolicyAction }: { createPolicyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createPolicyAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-escalation-policy-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Code
-        <input name="code" required placeholder="GEN-ESC" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Name
-        <input name="name" required placeholder="General escalation" className="min-w-[12rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id="escalation-policy-code" label="Code">
+        <Input id="escalation-policy-code" name="code" required placeholder="GEN-ESC" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="escalation-policy-name" label="Name">
+        <Input id="escalation-policy-name" name="name" required placeholder="General escalation" className="min-w-[12rem]" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
         New policy
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="create-escalation-policy-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -144,78 +146,99 @@ function AddLevelForm({
   addLevelAction: (versionId: string) => BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(addLevelAction(versionId), INITIAL_STATE);
+  // One of these per draft version, several per page -- every id is version-scoped.
+  const errorId = `escalation-level-${versionId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Level #
-        <input name="levelNumber" type="number" min={1} required defaultValue={1} className="w-16 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Trigger
-        <select name="triggerType" required defaultValue="inactivity" className="rounded border border-neutral-300 p-1.5 text-sm">
+      <FormField id={`escalation-level-number-${versionId}`} label="Level #">
+        <NumberInput
+          id={`escalation-level-number-${versionId}`}
+          name="levelNumber"
+          min={1}
+          required
+          defaultValue={1}
+          className="w-16"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id={`escalation-level-trigger-${versionId}`} label="Trigger">
+        <Select id={`escalation-level-trigger-${versionId}`} name="triggerType" required defaultValue="inactivity" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           {TICKET_ESCALATION_TRIGGER_TYPES.map((t) => (
             <option key={t} value={t}>
               {t.replace(/_/g, " ")}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Threshold minutes (inactivity/assignment_failure only)
-        <input name="thresholdMinutes" type="number" min={1} placeholder="e.g. 30" className="w-24 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Min priority (required for priority_threshold; optional extra gate otherwise)
-        <select name="minPriority" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`escalation-level-threshold-${versionId}`} label="Threshold minutes (inactivity/assignment_failure only)">
+        <NumberInput
+          id={`escalation-level-threshold-${versionId}`}
+          name="thresholdMinutes"
+          min={1}
+          placeholder="e.g. 30"
+          className="w-24"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id={`escalation-level-min-priority-${versionId}`} label="Min priority (required for priority_threshold; optional extra gate otherwise)">
+        <Select id={`escalation-level-min-priority-${versionId}`} name="minPriority" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">No extra gate</option>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Target type
-        <select name="targetType" required defaultValue="queue" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`escalation-level-target-type-${versionId}`} label="Target type">
+        <Select id={`escalation-level-target-type-${versionId}`} name="targetType" required defaultValue="queue" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="queue">Queue</option>
           <option value="employee">Employee</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Target queue (if target type = queue)
-        <select name="targetQueueId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`escalation-level-target-queue-${versionId}`} label="Target queue (if target type = queue)">
+        <Select id={`escalation-level-target-queue-${versionId}`} name="targetQueueId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Select…</option>
           {queues.map((q) => (
             <option key={q.id} value={q.id}>
               {q.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Target employee id (if target type = employee)
-        <input name="targetEmployeeId" placeholder="employee UUID" className="min-w-[14rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" name="actionNotify" defaultChecked />
-        Notify
-      </label>
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" name="actionReassign" />
-        Reassign (employee target only)
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Cooldown minutes
-        <input name="cooldownMinutes" type="number" min={1} defaultValue={60} className="w-20 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`escalation-level-target-employee-${versionId}`} label="Target employee id (if target type = employee)">
+        <Input
+          id={`escalation-level-target-employee-${versionId}`}
+          name="targetEmployeeId"
+          placeholder="employee UUID"
+          className="min-w-[14rem]"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <Checkbox id={`escalation-level-notify-${versionId}`} name="actionNotify" defaultChecked label="Notify" aria-describedby={describedBy} />
+      <Checkbox id={`escalation-level-reassign-${versionId}`} name="actionReassign" label="Reassign (employee target only)" aria-describedby={describedBy} />
+      <FormField id={`escalation-level-cooldown-${versionId}`} label="Cooldown minutes">
+        <NumberInput
+          id={`escalation-level-cooldown-${versionId}`}
+          name="cooldownMinutes"
+          min={1}
+          defaultValue={60}
+          className="w-20"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Save level
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -250,59 +273,64 @@ function CreatePolicyVersionForm({
   createPolicyVersionAction: (policyId: string) => BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(createPolicyVersionAction(policyId), INITIAL_STATE);
+  // One of these per policy card -- every id is policy-scoped.
+  const errorId = `escalation-policy-version-${policyId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Channel
-        <select name="channel" required defaultValue="internal" className="rounded border border-neutral-300 p-1.5 text-sm">
+      <FormField id={`escalation-version-channel-${policyId}`} label="Channel">
+        <Select id={`escalation-version-channel-${policyId}`} name="channel" required defaultValue="internal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="internal">internal</option>
           <option value="customer">customer</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Category (optional = any)
-        <select name="categoryId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`escalation-version-category-${policyId}`} label="Category (optional = any)">
+        <Select id={`escalation-version-category-${policyId}`} name="categoryId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any category</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Priority (optional = any)
-        <select name="priority" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`escalation-version-priority-${policyId}`} label="Priority (optional = any)">
+        <Select id={`escalation-version-priority-${policyId}`} name="priority" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any priority</option>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Queue (optional = any)
-        <select name="queueId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id={`escalation-version-queue-${policyId}`} label="Queue (optional = any)">
+        <Select id={`escalation-version-queue-${policyId}`} name="queueId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any queue</option>
           {queues.map((q) => (
             <option key={q.id} value={q.id}>
               {q.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Precedence rank
-        <input name="precedenceRank" type="number" defaultValue={0} className="w-20 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+        </Select>
+      </FormField>
+      <FormField id={`escalation-version-precedence-${policyId}`} label="Precedence rank">
+        <NumberInput
+          id={`escalation-version-precedence-${policyId}`}
+          name="precedenceRank"
+          defaultValue={0}
+          className="w-20"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
         New draft version
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );

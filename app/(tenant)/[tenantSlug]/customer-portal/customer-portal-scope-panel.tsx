@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { Select } from "../../../../components/forms/select.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import type { CustomerPortalScopeContextRow } from "../../../../server/contracts/customer-portal-scope/customer-portal-scope.ts";
 
@@ -37,22 +39,21 @@ export function CustomerPortalScopePanel({ memberships }: { memberships: readonl
     <div className="flex flex-col gap-4">
       {memberships.length > 1 ? (
         <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-          <label htmlFor="customer-portal-account-switcher" className="text-xs font-medium text-neutral-500">
-            Viewing as
-          </label>
-          <select
-            id="customer-portal-account-switcher"
-            value={selectedAccountId ?? ""}
-            onChange={(event) => setSelectedAccountId(event.target.value)}
-            className="w-full max-w-sm rounded border border-neutral-300 p-2 text-sm"
-          >
-            {memberships.map((m) => (
-              <option key={m.accountId} value={m.accountId}>
-                {m.accountName}
-                {m.isPrimary ? " (primary)" : ""}
-              </option>
-            ))}
-          </select>
+          <FormField id="customer-portal-account-switcher" label="Viewing as">
+            <Select
+              id="customer-portal-account-switcher"
+              value={selectedAccountId ?? ""}
+              onChange={(event) => setSelectedAccountId(event.target.value)}
+              className="max-w-sm"
+            >
+              {memberships.map((m) => (
+                <option key={m.accountId} value={m.accountId}>
+                  {m.accountName}
+                  {m.isPrimary ? " (primary)" : ""}
+                </option>
+              ))}
+            </Select>
+          </FormField>
         </div>
       ) : null}
 

@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
+import { SearchInput } from "../../../../../../components/forms/search-input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { RecruitmentExportForm, type RecruitmentExportActionState } from "../../../../../../components/domain/recruitment-export-form.tsx";
 import type { CandidateListRow, CandidateStatus } from "../../../../../../server/contracts/recruitment/recruitment.ts";
 
@@ -50,22 +53,26 @@ export function CandidatesPanel({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="search"
-          defaultValue={search}
-          placeholder="Search candidate name…"
-          aria-label="Search candidates"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") applyFilter({ q: (e.target as HTMLInputElement).value });
-          }}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-        <select aria-label="Filter by status" value={statusFilter ?? ""} onChange={(e) => applyFilter({ status: e.target.value })} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="blocked">Blocked</option>
-          <option value="archived">Archived</option>
-        </select>
+        {/* A compact filter bar: the labels stay screen-reader-only so the visible row is
+            unchanged, but each control now has a real <label for> rather than an aria-label. */}
+        <FormField id="candidate-search" label={<span className="sr-only">Search candidates</span>}>
+          <SearchInput
+            id="candidate-search"
+            defaultValue={search}
+            placeholder="Search candidate name…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applyFilter({ q: (e.target as HTMLInputElement).value });
+            }}
+          />
+        </FormField>
+        <FormField id="candidate-status-filter" label={<span className="sr-only">Filter by status</span>}>
+          <Select id="candidate-status-filter" value={statusFilter ?? ""} onChange={(e) => applyFilter({ status: e.target.value })}>
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="blocked">Blocked</option>
+            <option value="archived">Archived</option>
+          </Select>
+        </FormField>
       </div>
 
       <RecruitmentExportForm label="Export candidates" description="Downloads the candidate directory, respecting the status filter above. No email/phone/national ID/date of birth/address column is included." action={exportAction} />

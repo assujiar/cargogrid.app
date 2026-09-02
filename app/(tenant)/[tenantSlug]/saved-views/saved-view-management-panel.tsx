@@ -3,6 +3,11 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import type { SavedReportViewActionState } from "./actions.ts";
@@ -25,6 +30,7 @@ export function SavedViewManagementPanel({
   createAction: (prevState: SavedReportViewActionState, formData: FormData) => Promise<SavedReportViewActionState>;
 }) {
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-saved-view-error" : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -66,57 +72,43 @@ export function SavedViewManagementPanel({
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new saved view</h2>
         <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="reportTypeCode" className="text-xs font-medium text-neutral-600">
-              Report
-            </label>
-            <select id="reportTypeCode" name="reportTypeCode" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+          <FormField id="reportTypeCode" label="Report">
+            <Select id="reportTypeCode" name="reportTypeCode" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
               <option value="">Select a report…</option>
               {reportTypes.map((t) => (
                 <option key={t.code} value={t.code}>
                   {t.name}
                 </option>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="sharingScope" className="text-xs font-medium text-neutral-600">
-              Sharing
-            </label>
-            <select id="sharingScope" name="sharingScope" defaultValue="private" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
+            </Select>
+          </FormField>
+          <FormField id="sharingScope" label="Sharing">
+            <Select id="sharingScope" name="sharingScope" defaultValue="private" invalid={Boolean(state.error)} aria-describedby={describedBy}>
               <option value="private">Private (only me)</option>
               <option value="tenant">Shared with the tenant (requires REP:Configure)</option>
-            </select>
+            </Select>
+          </FormField>
+          <FormField id="name" label="Name">
+            <Input id="name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="columns" label="Columns (comma-separated)">
+            <Input id="columns" name="columns" type="text" placeholder="invoiceNumber, amount, dueDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <div className="col-span-full">
+            <FormField id="filters" label="Filters (JSON object, matches the report's own run parameters)">
+              <Textarea id="filters" name="filters" rows={2} placeholder="{}" className="font-mono" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="name" className="text-xs font-medium text-neutral-600">
-              Name
-            </label>
-            <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="columns" className="text-xs font-medium text-neutral-600">
-              Columns (comma-separated)
-            </label>
-            <input id="columns" name="columns" type="text" placeholder="invoiceNumber, amount, dueDate" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="col-span-full flex flex-col gap-1">
-            <label htmlFor="filters" className="text-xs font-medium text-neutral-600">
-              Filters (JSON object, matches the report&apos;s own run parameters)
-            </label>
-            <textarea id="filters" name="filters" rows={2} placeholder="{}" className="rounded-md border border-neutral-300 px-3 py-1.5 font-mono text-sm" />
-          </div>
-          <div className="col-span-full flex flex-col gap-1">
-            <label htmlFor="description" className="text-xs font-medium text-neutral-600">
-              Description (optional)
-            </label>
-            <textarea id="description" name="description" rows={2} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+          <div className="col-span-full">
+            <FormField id="description" label="Description (optional)">
+              <Textarea id="description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
           </div>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="create-saved-view-error">{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

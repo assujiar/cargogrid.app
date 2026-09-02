@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { HelpdeskActionState } from "../actions.ts";
 import type { HelpdeskTicketDetail, HelpdeskTicketMessageRow, TicketStatus } from "../../../../../server/contracts/ticketing/ticketing.ts";
@@ -48,39 +52,43 @@ function MessageBubble({ message }: { message: HelpdeskTicketMessageRow }) {
 
 function ReplyForm({ replyAction }: { replyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(replyAction, INITIAL_STATE);
+  const describedBy = state.error ? "helpdesk-reply-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-      <label className="text-xs text-neutral-500">
-        Add a reply
-        <textarea name="body" required minLength={1} rows={3} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
+      <FormField id="helpdesk-reply-body" label="Add a reply">
+        <Textarea id="helpdesk-reply-body" name="body" required minLength={1} rows={3} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div>
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Sending…">
           Send
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="helpdesk-reply-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function TransitionForm({ toStatus, label, requiresReason, transitionAction }: { toStatus: TicketStatus; label: string; requiresReason: boolean; transitionAction: (toStatus: TicketStatus) => BoundAction }) {
   const [state, formAction, pending] = useActionState(transitionAction(toStatus), INITIAL_STATE);
+  const reasonId = `helpdesk-transition-reason-${toStatus}`;
+  const errorId = `helpdesk-transition-${toStatus}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      {requiresReason ? <input name="reason" required placeholder="Reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" /> : null}
+      {requiresReason ? (
+        <div className="min-w-[10rem] flex-1">
+          {/* The reason box sits inline beside its own submit button, so its label is
+              screen-reader-only -- the visible affordance stays the placeholder it
+              already was, but the control now has a real accessible name. */}
+          <FormField id={reasonId} label={<span className="sr-only">Reason for {label.toLowerCase()}</span>}>
+            <Input id={reasonId} name="reason" required placeholder="Reason (required)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+      ) : null}
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Updating…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }

@@ -2,6 +2,13 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { DateInput } from "../../../../../components/forms/date-input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { TicketActionState } from "../actions.ts";
 import { TICKET_CHANNELS, TICKET_PRIORITIES } from "../../../../../server/contracts/ticketing/ticketing.ts";
@@ -21,23 +28,22 @@ type BoundAction = (prevState: TicketActionState, formData: FormData) => Promise
 
 function CreateCalendarForm({ createCalendarAction }: { createCalendarAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createCalendarAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-sla-calendar-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Code
-        <input name="code" required placeholder="STD" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Name
-        <input name="name" required placeholder="Standard Business Hours" className="min-w-[12rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id="sla-calendar-code" label="Code">
+        <Input id="sla-calendar-code" name="code" required placeholder="STD" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="sla-calendar-name" label="Name">
+        <Input id="sla-calendar-name" name="name" required placeholder="Standard Business Hours" className="min-w-[12rem]" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
         New calendar
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="create-sla-calendar-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -60,6 +66,9 @@ function CalendarCard({
 }) {
   const [versionState, versionFormAction, versionPending] = useActionState(createCalendarVersionAction(calendar.id), INITIAL_STATE);
   const draftVersion = versions.find((v) => v.status === "draft") ?? null;
+  // One card per calendar on the same page -- every id in this card is calendar-scoped.
+  const versionErrorId = `sla-calendar-version-${calendar.id}-error`;
+  const versionDescribedBy = versionState.error ? versionErrorId : undefined;
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
@@ -89,20 +98,24 @@ function CalendarCard({
         </>
       ) : (
         <form action={versionFormAction} className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Timezone
-            <input name="timezone" required placeholder="Asia/Jakarta" className="rounded border border-neutral-300 p-1.5 text-sm" />
-          </label>
-          <label className="flex items-center gap-1 text-xs text-neutral-600">
-            <input type="checkbox" name="is24x7" /> 24x7
-          </label>
+          <FormField id={`sla-calendar-version-timezone-${calendar.id}`} label="Timezone">
+            <Input
+              id={`sla-calendar-version-timezone-${calendar.id}`}
+              name="timezone"
+              required
+              placeholder="Asia/Jakarta"
+              invalid={Boolean(versionState.error)}
+              aria-describedby={versionDescribedBy}
+            />
+          </FormField>
+          <Checkbox id={`sla-calendar-version-24x7-${calendar.id}`} name="is24x7" label="24x7" aria-describedby={versionDescribedBy} />
           <Button type="submit" variant="secondary" loading={versionPending} loadingLabel="Creating…">
             New draft version
           </Button>
           {versionState.error ? (
-            <p role="alert" className="w-full text-xs text-danger">
-              {versionState.error}
-            </p>
+            <div className="w-full">
+              <ValidationMessage id={versionErrorId}>{versionState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
       )}
@@ -112,27 +125,26 @@ function CalendarCard({
 
 function AddBusinessHoursForm({ calendarVersionId, addBusinessHoursAction }: { calendarVersionId: string; addBusinessHoursAction: (calendarVersionId: string) => BoundAction }) {
   const [state, formAction, pending] = useActionState(addBusinessHoursAction(calendarVersionId), INITIAL_STATE);
+  const errorId = `sla-business-hours-${calendarVersionId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Day (0=Sun…6=Sat)
-        <input name="dayOfWeek" type="number" min={0} max={6} required className="w-20 rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Start
-        <input name="startTime" type="time" required className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        End
-        <input name="endTime" type="time" required className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id={`sla-bh-day-${calendarVersionId}`} label="Day (0=Sun…6=Sat)">
+        <NumberInput id={`sla-bh-day-${calendarVersionId}`} name="dayOfWeek" min={0} max={6} required className="w-20" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`sla-bh-start-${calendarVersionId}`} label="Start">
+        <Input id={`sla-bh-start-${calendarVersionId}`} name="startTime" type="time" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`sla-bh-end-${calendarVersionId}`} label="End">
+        <Input id={`sla-bh-end-${calendarVersionId}`} name="endTime" type="time" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
         Add business hours
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -140,23 +152,23 @@ function AddBusinessHoursForm({ calendarVersionId, addBusinessHoursAction }: { c
 
 function AddHolidayForm({ calendarVersionId, addHolidayAction }: { calendarVersionId: string; addHolidayAction: (calendarVersionId: string) => BoundAction }) {
   const [state, formAction, pending] = useActionState(addHolidayAction(calendarVersionId), INITIAL_STATE);
+  const errorId = `sla-holiday-${calendarVersionId}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Date
-        <input name="holidayDate" type="date" required className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Name
-        <input name="name" required placeholder="New Year" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id={`sla-holiday-date-${calendarVersionId}`} label="Date">
+        <DateInput id={`sla-holiday-date-${calendarVersionId}`} name="holidayDate" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`sla-holiday-name-${calendarVersionId}`} label="Name">
+        <Input id={`sla-holiday-name-${calendarVersionId}`} name="name" required placeholder="New Year" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…">
         Add holiday
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -180,23 +192,22 @@ function PublishCalendarVersionButton({ versionId, expectedVersion, publishCalen
 
 function CreatePolicyForm({ createPolicyAction }: { createPolicyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createPolicyAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-sla-policy-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Code
-        <input name="code" required placeholder="NARROW" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Name
-        <input name="name" required placeholder="General Issue SLA" className="min-w-[12rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id="sla-policy-code" label="Code">
+        <Input id="sla-policy-code" name="code" required placeholder="NARROW" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="sla-policy-name" label="Name">
+        <Input id="sla-policy-name" name="name" required placeholder="General Issue SLA" className="min-w-[12rem]" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
         New policy
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="create-sla-policy-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -218,6 +229,9 @@ function PolicyCard({
   publishPolicyVersionAction: (versionId: string, expectedVersion: number) => BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(createPolicyVersionAction(policy.id), INITIAL_STATE);
+  // One card per policy on the same page -- every id in this form is policy-scoped.
+  const errorId = `sla-policy-version-${policy.id}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <div className="flex items-center gap-2">
@@ -240,41 +254,37 @@ function PolicyCard({
       </ul>
 
       <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Channel
-          <select name="channel" required className="rounded border border-neutral-300 p-1.5 text-sm">
+        <FormField id={`sla-policy-version-channel-${policy.id}`} label="Channel">
+          <Select id={`sla-policy-version-channel-${policy.id}`} name="channel" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
             {TICKET_CHANNELS.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Category (optional = any)
-          <select name="categoryId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`sla-policy-version-category-${policy.id}`} label="Category (optional = any)">
+          <Select id={`sla-policy-version-category-${policy.id}`} name="categoryId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="">Any category</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Priority (optional = any)
-          <select name="priority" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`sla-policy-version-priority-${policy.id}`} label="Priority (optional = any)">
+          <Select id={`sla-policy-version-priority-${policy.id}`} name="priority" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="">Any priority</option>
             {TICKET_PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Calendar
-          <select name="calendarId" required defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`sla-policy-version-calendar-${policy.id}`} label="Calendar">
+          <Select id={`sla-policy-version-calendar-${policy.id}`} name="calendarId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="" disabled>
               Select…
             </option>
@@ -283,27 +293,47 @@ function PolicyCard({
                 {c.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Response target (min)
-          <input name="responseTargetMinutes" type="number" min={1} required className="w-24 rounded border border-neutral-300 p-1.5 text-sm" />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Resolution target (min)
-          <input name="resolutionTargetMinutes" type="number" min={1} required className="w-24 rounded border border-neutral-300 p-1.5 text-sm" />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Precedence rank
-          <input name="precedenceRank" type="number" defaultValue={0} className="w-20 rounded border border-neutral-300 p-1.5 text-sm" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={`sla-policy-version-response-${policy.id}`} label="Response target (min)">
+          <NumberInput
+            id={`sla-policy-version-response-${policy.id}`}
+            name="responseTargetMinutes"
+            min={1}
+            required
+            className="w-24"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+        <FormField id={`sla-policy-version-resolution-${policy.id}`} label="Resolution target (min)">
+          <NumberInput
+            id={`sla-policy-version-resolution-${policy.id}`}
+            name="resolutionTargetMinutes"
+            min={1}
+            required
+            className="w-24"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+        <FormField id={`sla-policy-version-precedence-${policy.id}`} label="Precedence rank">
+          <NumberInput
+            id={`sla-policy-version-precedence-${policy.id}`}
+            name="precedenceRank"
+            defaultValue={0}
+            className="w-20"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
           New draft version
         </Button>
         {state.error ? (
-          <p role="alert" className="w-full text-xs text-danger">
-            {state.error}
-          </p>
+          <div className="w-full">
+            <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     </div>

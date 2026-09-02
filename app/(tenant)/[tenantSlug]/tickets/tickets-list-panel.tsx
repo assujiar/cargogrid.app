@@ -4,6 +4,11 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../components/ui/button.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import type { TicketActionState } from "./actions.ts";
@@ -67,12 +72,12 @@ function TicketRow({
 
 function CreateTicketForm({ categories, queues, createTicketAction }: { categories: readonly TicketCategoryRow[]; queues: readonly TicketQueueRow[]; createTicketAction: (prevState: TicketActionState, formData: FormData) => Promise<TicketActionState> }) {
   const [state, formAction, pending] = useActionState(createTicketAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-ticket-error" : undefined;
   return (
     <form action={formAction} className="grid grid-cols-1 gap-2 rounded-md border border-neutral-200 p-4 sm:grid-cols-2">
       <h2 className="text-sm font-semibold text-neutral-900 sm:col-span-2">New ticket</h2>
-      <label className="text-xs text-neutral-500">
-        Category
-        <select name="categoryId" required defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+      <FormField id="new-ticket-category" label="Category">
+        <Select id="new-ticket-category" name="categoryId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="" disabled>
             Select a category
           </option>
@@ -81,46 +86,55 @@ function CreateTicketForm({ categories, queues, createTicketAction }: { categori
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Queue (optional -- falls back to the category&apos;s default queue)
-        <select name="queueId" defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="new-ticket-queue" label="Queue (optional -- falls back to the category's default queue)">
+        <Select id="new-ticket-queue" name="queueId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Use category default</option>
           {queues.map((q) => (
             <option key={q.id} value={q.id}>
               {q.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500">
-        Priority
-        <select name="priority" defaultValue="normal" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="new-ticket-priority" label="Priority">
+        <Select id="new-ticket-priority" name="priority" defaultValue="normal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Subject
-        <input name="subject" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="text-xs text-neutral-500 sm:col-span-2">
-        Description
-        <textarea name="body" required minLength={1} rows={4} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="Describe the issue or request." />
-      </label>
+        </Select>
+      </FormField>
+      <div className="sm:col-span-2">
+        <FormField id="new-ticket-subject" label="Subject">
+          <Input id="new-ticket-subject" name="subject" required minLength={1} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      <div className="sm:col-span-2">
+        <FormField id="new-ticket-body" label="Description">
+          <Textarea
+            id="new-ticket-body"
+            name="body"
+            required
+            minLength={1}
+            rows={4}
+            placeholder="Describe the issue or request."
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+      </div>
       <div className="sm:col-span-2">
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Submitting…">
           Submit ticket
         </Button>
       </div>
       {state.error ? (
-        <p role="alert" className="text-xs text-danger sm:col-span-2">
-          {state.error}
-        </p>
+        <div className="sm:col-span-2">
+          <ValidationMessage id="create-ticket-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -170,6 +184,9 @@ function AdminCatalogForms({
   const [queueState, queueFormAction, queuePending] = useActionState(createQueueAction, INITIAL_STATE);
   const [categoryState, categoryFormAction, categoryPending] = useActionState(createCategoryAction, INITIAL_STATE);
   const [memberState, memberFormAction, memberPending] = useActionState(addQueueMemberAction, INITIAL_STATE);
+  const queueDescribedBy = queueState.error ? "create-queue-error" : undefined;
+  const categoryDescribedBy = categoryState.error ? "create-category-error" : undefined;
+  const memberDescribedBy = memberState.error ? "add-queue-member-error" : undefined;
 
   return (
     <details className="rounded-md border border-neutral-200 p-4">
@@ -177,9 +194,8 @@ function AdminCatalogForms({
       <div className="mt-4 flex flex-col gap-4">
         <form action={queueFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <h3 className="text-xs font-semibold text-neutral-700 sm:col-span-2">New queue</h3>
-          <label className="text-xs text-neutral-500">
-            Department
-            <select name="orgUnitId" required defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+          <FormField id="new-queue-org-unit" label="Department">
+            <Select id="new-queue-org-unit" name="orgUnitId" required defaultValue="" invalid={Boolean(queueState.error)} aria-describedby={queueDescribedBy}>
               <option value="" disabled>
                 Select a department
               </option>
@@ -188,70 +204,69 @@ function AdminCatalogForms({
                   {o.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="text-xs text-neutral-500">
-            Code
-            <input name="code" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500 sm:col-span-2">
-            Name
-            <input name="name" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500 sm:col-span-2">
-            Description
-            <input name="description" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
+            </Select>
+          </FormField>
+          <FormField id="new-queue-code" label="Code">
+            <Input id="new-queue-code" name="code" required minLength={1} invalid={Boolean(queueState.error)} aria-describedby={queueDescribedBy} />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField id="new-queue-name" label="Name">
+              <Input id="new-queue-name" name="name" required minLength={1} invalid={Boolean(queueState.error)} aria-describedby={queueDescribedBy} />
+            </FormField>
+          </div>
+          <div className="sm:col-span-2">
+            <FormField id="new-queue-description" label="Description">
+              <Input id="new-queue-description" name="description" invalid={Boolean(queueState.error)} aria-describedby={queueDescribedBy} />
+            </FormField>
+          </div>
           <div className="sm:col-span-2">
             <Button type="submit" variant="secondary" loading={queuePending} loadingLabel="Creating…">
               Create queue
             </Button>
           </div>
           {queueState.error ? (
-            <p role="alert" className="text-xs text-danger sm:col-span-2">
-              {queueState.error}
-            </p>
+            <div className="sm:col-span-2">
+              <ValidationMessage id="create-queue-error">{queueState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
 
         <form action={categoryFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <h3 className="text-xs font-semibold text-neutral-700 sm:col-span-2">New category</h3>
-          <label className="text-xs text-neutral-500">
-            Code
-            <input name="code" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500">
-            Name
-            <input name="name" required minLength={1} className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-500 sm:col-span-2">
-            Default queue
-            <select name="defaultQueueId" defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
-              <option value="">No default</option>
-              {queues.map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FormField id="new-category-code" label="Code">
+            <Input id="new-category-code" name="code" required minLength={1} invalid={Boolean(categoryState.error)} aria-describedby={categoryDescribedBy} />
+          </FormField>
+          <FormField id="new-category-name" label="Name">
+            <Input id="new-category-name" name="name" required minLength={1} invalid={Boolean(categoryState.error)} aria-describedby={categoryDescribedBy} />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField id="new-category-default-queue" label="Default queue">
+              <Select id="new-category-default-queue" name="defaultQueueId" defaultValue="" invalid={Boolean(categoryState.error)} aria-describedby={categoryDescribedBy}>
+                <option value="">No default</option>
+                {queues.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          </div>
           <div className="sm:col-span-2">
             <Button type="submit" variant="secondary" loading={categoryPending} loadingLabel="Creating…">
               Create category
             </Button>
           </div>
           {categoryState.error ? (
-            <p role="alert" className="text-xs text-danger sm:col-span-2">
-              {categoryState.error}
-            </p>
+            <div className="sm:col-span-2">
+              <ValidationMessage id="create-category-error">{categoryState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
 
         <form action={memberFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <h3 className="text-xs font-semibold text-neutral-700 sm:col-span-2">Staff a queue</h3>
-          <label className="text-xs text-neutral-500">
-            Queue
-            <select name="queueId" required defaultValue="" className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm">
+          <FormField id="queue-member-queue" label="Queue">
+            <Select id="queue-member-queue" name="queueId" required defaultValue="" invalid={Boolean(memberState.error)} aria-describedby={memberDescribedBy}>
               <option value="" disabled>
                 Select a queue
               </option>
@@ -260,21 +275,20 @@ function AdminCatalogForms({
                   {q.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="text-xs text-neutral-500">
-            Employee (master record id)
-            <input name="employeeId" required className="mt-1 w-full rounded border border-neutral-300 p-2 text-sm" placeholder="employee UUID" />
-          </label>
+            </Select>
+          </FormField>
+          <FormField id="queue-member-employee" label="Employee (master record id)">
+            <Input id="queue-member-employee" name="employeeId" required placeholder="employee UUID" invalid={Boolean(memberState.error)} aria-describedby={memberDescribedBy} />
+          </FormField>
           <div className="sm:col-span-2">
             <Button type="submit" variant="secondary" loading={memberPending} loadingLabel="Adding…">
               Add queue member
             </Button>
           </div>
           {memberState.error ? (
-            <p role="alert" className="text-xs text-danger sm:col-span-2">
-              {memberState.error}
-            </p>
+            <div className="sm:col-span-2">
+              <ValidationMessage id="add-queue-member-error">{memberState.error}</ValidationMessage>
+            </div>
           ) : null}
         </form>
 
@@ -402,19 +416,16 @@ export function TicketsListPanel({
               Queue
             </Button>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="ticket-status" className="text-xs font-medium text-neutral-600">
-              Status
-            </label>
-            <select id="ticket-status" defaultValue={statusFilter ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" onChange={(event) => applyFilter(showQueueView ? "queue" : "", event.currentTarget.value)}>
+          <FormField id="ticket-status" label="Status">
+            <Select id="ticket-status" defaultValue={statusFilter ?? ""} onChange={(event) => applyFilter(showQueueView ? "queue" : "", event.currentTarget.value)}>
               <option value="">All statuses</option>
               {TICKET_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FormField>
         </div>
 
         {rows.length === 0 ? (

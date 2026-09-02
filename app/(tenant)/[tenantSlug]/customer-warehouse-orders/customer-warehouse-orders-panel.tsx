@@ -2,6 +2,7 @@ import { Link } from "../../../../components/ui/link.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import { Select } from "../../../../components/forms/select.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
 import {
   CUSTOMER_WAREHOUSE_ORDER_STATUS_LABELS,
   CUSTOMER_INBOUND_ORDER_STATUS_LABELS,
@@ -90,10 +91,7 @@ export function CustomerWarehouseOrdersPanel({
       </div>
 
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="warehouseId" className="text-xs font-medium text-neutral-600">
-            Warehouse
-          </label>
+        <FormField id="warehouseId" label="Warehouse">
           <Select id="warehouseId" name="warehouseId" defaultValue={warehouseId}>
             <option value="">All eligible warehouses</option>
             {distinctWarehouseIds.map((id) => (
@@ -102,11 +100,8 @@ export function CustomerWarehouseOrdersPanel({
               </option>
             ))}
           </Select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="status" className="text-xs font-medium text-neutral-600">
-            Status
-          </label>
+        </FormField>
+        <FormField id="status" label="Status">
           <Select id="status" name="status" defaultValue={statusFilter}>
             <option value="">Any status</option>
             {statuses.map((status) => (
@@ -116,7 +111,7 @@ export function CustomerWarehouseOrdersPanel({
               </option>
             ))}
           </Select>
-        </div>
+        </FormField>
         <button type="submit" className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-neutral-50">
           Apply filter
         </button>

@@ -8,8 +8,9 @@ import { StatusBadge, type StatusTone } from "../../../../../components/ui/statu
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
-import { Input } from "../../../../../components/forms/input.tsx";
+import { DateInput } from "../../../../../components/forms/date-input.tsx";
 import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { setFinanceAgingBucketConfigAction } from "./actions.ts";
 import { SetFinanceAgingBucketConfigForm } from "./aging-forms.tsx";
 
@@ -91,22 +92,16 @@ export default async function AgingPage({
       </div>
 
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-4">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="aging-filter-entityType" className="text-sm font-medium text-text-primary">
-            Entity type
-          </label>
+        <FormField id="aging-filter-entityType" label="Entity type">
           <Select id="aging-filter-entityType" name="entityType" defaultValue={entityType} className="w-24">
             <option value="ar">ar</option>
             <option value="ap">ap</option>
           </Select>
-        </div>
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="aging-filter-asOfDate" className="text-sm font-medium text-text-primary">
-            As-of date
-          </label>
-          <Input id="aging-filter-asOfDate" name="asOfDate" type="date" defaultValue={asOfDate} className="w-40" />
-        </div>
+        <FormField id="aging-filter-asOfDate" label="As-of date">
+          <DateInput id="aging-filter-asOfDate" name="asOfDate" defaultValue={asOfDate} className="w-40" />
+        </FormField>
 
         <Checkbox id="aging-filter-includeHeld" name="includeHeld" value="true" defaultChecked={includeHeld} label="Include held items" />
 

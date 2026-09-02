@@ -7,6 +7,7 @@ import { DataTable, type DataTableColumn } from "../../../../../components/table
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { calculateFinanceJobProfitabilityAction } from "./actions.ts";
 import { CalculateFinanceJobProfitabilityForm } from "./profitability-forms.tsx";
 
@@ -67,16 +68,13 @@ export default async function ProfitabilityPage({
       </div>
 
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-md border border-neutral-200 p-4">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="profitability-groupBy" className="text-sm font-medium text-text-primary">
-            Group by
-          </label>
+        <FormField id="profitability-groupBy" label="Group by">
           <Select id="profitability-groupBy" name="groupBy" defaultValue={groupBy} className="w-32">
             <option value="customer">Customer</option>
             <option value="branch">Branch</option>
             <option value="service">Service</option>
           </Select>
-        </div>
+        </FormField>
         <button type="submit" className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium">
           Apply
         </button>

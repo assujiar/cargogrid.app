@@ -2,6 +2,13 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { SearchInput } from "../../../../../components/forms/search-input.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { TicketActionState, TicketLinkSearchActionState } from "../actions.ts";
 import type { KbActionState } from "../../knowledge-base/actions.ts";
@@ -132,39 +139,61 @@ function MessageBubble({
       <p className="whitespace-pre-wrap text-sm text-neutral-900">{message.body}</p>
       {isStaffViewer && !message.isRedacted ? (
         <form action={formAction} className="flex items-center gap-2">
-          <input name="reason" required placeholder="Redaction reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+          {/* One bubble per message, so the id is message-scoped; the placeholder is the
+              visible affordance, so the label itself is screen-reader-only. */}
+          <div className="min-w-[10rem] flex-1">
+            <FormField id={`redact-reason-${message.id}`} label={<span className="sr-only">Redaction reason</span>}>
+              <Input
+                id={`redact-reason-${message.id}`}
+                name="reason"
+                required
+                placeholder="Redaction reason (required)"
+                invalid={Boolean(state.error)}
+                aria-describedby={state.error ? `redact-${message.id}-error` : undefined}
+              />
+            </FormField>
+          </div>
           <Button type="submit" variant="destructive" loading={pending} loadingLabel="Redacting…">
             Redact
           </Button>
         </form>
       ) : null}
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={`redact-${message.id}-error`}>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
 
 function ReplyForm({ isStaffViewer, replyAction }: { isStaffViewer: boolean; replyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(replyAction, INITIAL_STATE);
+  const describedBy = state.error ? "ticket-reply-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Post a message</h3>
-      <textarea name="body" required minLength={1} rows={3} className="w-full rounded border border-neutral-300 p-2 text-sm" placeholder="Write a reply…" />
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Attachments (optional)
-        <input name="attachments" type="file" multiple className="mt-1 block w-full text-sm" />
-      </label>
+      <FormField id="ticket-reply-body" label={<span className="sr-only">Message</span>}>
+        <Textarea
+          id="ticket-reply-body"
+          name="body"
+          required
+          minLength={1}
+          rows={3}
+          placeholder="Write a reply…"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      <FormField id="ticket-reply-attachments" label="Attachments (optional)">
+        {/* Left as a native file input rather than the `Input` primitive: the primitive's
+            text-field chrome (border, padding, min-height) is wrong for a file picker, and
+            what this field was missing was the `id`/label association, not styling. */}
+        <input id="ticket-reply-attachments" name="attachments" type="file" multiple className="mt-1 block w-full text-sm" aria-describedby={describedBy} />
+      </FormField>
       {isStaffViewer ? (
-        <label className="flex items-center gap-2 text-xs text-neutral-600">
-          Visibility
-          <select name="visibility" defaultValue="public" className="rounded border border-neutral-300 p-1.5 text-xs">
+        <FormField id="ticket-reply-visibility" label="Visibility">
+          <Select id="ticket-reply-visibility" name="visibility" defaultValue="public" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="public">Reply (visible to requester)</option>
             <option value="internal">Internal note (staff only)</option>
-          </select>
-        </label>
+          </Select>
+        </FormField>
       ) : (
         <input type="hidden" name="visibility" value="public" />
       )}
@@ -173,11 +202,7 @@ function ReplyForm({ isStaffViewer, replyAction }: { isStaffViewer: boolean; rep
           Post
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="ticket-reply-error">{state.error}</ValidationMessage> : null}
       <p className="text-xs text-neutral-500">
         Each attachment is staged through app.initiate_ticket_attachment_upload (PLT-128, requester-or-staff-gated) and clears malware scanning before it can be attached to a reply -- an infected or not-yet-scanned file is rejected. This repository has no Supabase Storage integration anywhere, so the
         file&apos;s bytes themselves are not persisted to an object store yet (disclosed NOT_RUN, see ISS-2026-064 / ISS-2026-087).
@@ -203,17 +228,21 @@ function StatusTransitionControls({ status, transitionAction }: { status: Ticket
 function TransitionForm({ toStatus, requiresReason, transitionAction }: { toStatus: TicketStatus; requiresReason: boolean; transitionAction: (toStatus: TicketStatus) => BoundAction }) {
   const [state, formAction, pending] = useActionState(transitionAction(toStatus), INITIAL_STATE);
   const label = toStatus === "open" ? "Reopen / move to Open" : `Move to ${toStatus.replace(/_/g, " ")}`;
+  const reasonId = `ticket-transition-reason-${toStatus}`;
+  const errorId = `ticket-transition-${toStatus}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      {requiresReason ? <input name="reason" required placeholder="Reason (required)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" /> : null}
+      {requiresReason ? (
+        <div className="min-w-[10rem] flex-1">
+          <FormField id={reasonId} label={<span className="sr-only">Reason for &ldquo;{label}&rdquo;</span>}>
+            <Input id={reasonId} name="reason" required placeholder="Reason (required)" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+          </FormField>
+        </div>
+      ) : null}
       <Button type="submit" variant={toStatus === "cancelled" ? "destructive" : "secondary"} loading={pending} loadingLabel="Updating…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -235,17 +264,24 @@ function WatcherList({ watchers, isStaffViewer, isRequesterViewer, addWatcherAct
       )}
       {canManage ? (
         <form action={addFormAction} className="flex items-center gap-2">
-          <input name="employeeId" required placeholder="Employee UUID" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+          <div className="min-w-[10rem] flex-1">
+            <FormField id="add-watcher-employee" label={<span className="sr-only">Employee UUID to add as a watcher</span>}>
+              <Input
+                id="add-watcher-employee"
+                name="employeeId"
+                required
+                placeholder="Employee UUID"
+                invalid={Boolean(addState.error)}
+                aria-describedby={addState.error ? "add-watcher-error" : undefined}
+              />
+            </FormField>
+          </div>
           <Button type="submit" variant="secondary" loading={addPending} loadingLabel="Adding…">
             Add watcher
           </Button>
         </form>
       ) : null}
-      {addState.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {addState.error}
-        </p>
-      ) : null}
+      {addState.error ? <ValidationMessage id="add-watcher-error">{addState.error}</ValidationMessage> : null}
     </div>
   );
 }
@@ -273,32 +309,35 @@ function WatcherRow({ watcher, canManage, removeWatcherAction }: { watcher: Tick
 
 function AssignForm({ queueMembers, currentAssigneeId, assignAction }: { queueMembers: readonly TicketQueueMemberRow[]; currentAssigneeId: string | null; assignAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(assignAction, INITIAL_STATE);
+  const describedBy = state.error ? "assign-ticket-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Manual assignment (TKT:Assign)</h3>
-      <select name="assigneeEmployeeId" defaultValue={currentAssigneeId ?? ""} className="rounded border border-neutral-300 p-1.5 text-sm">
-        <option value="">Unassigned</option>
-        {queueMembers.map((m) => (
-          <option key={m.employeeId} value={m.employeeId}>
-            {m.employeeName}
-          </option>
-        ))}
-      </select>
-      <input name="reason" placeholder="Reason (optional)" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" name="overrideWorkloadLimit" />
-        Override this employee&apos;s workload cap, if one is configured
-      </label>
+      <FormField id="assign-assignee" label="Assignee">
+        <Select id="assign-assignee" name="assigneeEmployeeId" defaultValue={currentAssigneeId ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="">Unassigned</option>
+          {queueMembers.map((m) => (
+            <option key={m.employeeId} value={m.employeeId}>
+              {m.employeeName}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="assign-reason" label={<span className="sr-only">Reason for this assignment</span>}>
+        <Input id="assign-reason" name="reason" placeholder="Reason (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <Checkbox
+        id="assign-override-workload"
+        name="overrideWorkloadLimit"
+        label="Override this employee's workload cap, if one is configured"
+        aria-describedby={describedBy}
+      />
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Assigning…">
           Update assignment
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="assign-ticket-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -373,16 +412,23 @@ function AssignmentDrawer({
       ) : null}
 
       <form action={declineFormAction} className="flex flex-wrap items-center gap-2">
-        <input name="reason" required placeholder="Decline reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-sm" />
+        <div className="min-w-[12rem] flex-1">
+          <FormField id="decline-assignment-reason" label={<span className="sr-only">Decline reason</span>}>
+            <Input
+              id="decline-assignment-reason"
+              name="reason"
+              required
+              placeholder="Decline reason (required)"
+              invalid={Boolean(declineState.error)}
+              aria-describedby={declineState.error ? "decline-assignment-error" : undefined}
+            />
+          </FormField>
+        </div>
         <Button type="submit" variant="secondary" loading={declinePending} loadingLabel="Declining…" disabled={!currentAssigneeName}>
           Decline (return to backlog)
         </Button>
       </form>
-      {declineState.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {declineState.error}
-        </p>
-      ) : null}
+      {declineState.error ? <ValidationMessage id="decline-assignment-error">{declineState.error}</ValidationMessage> : null}
 
       <div>
         <h4 className="text-xs font-semibold text-neutral-700">Eligible candidates (this queue)</h4>
@@ -438,60 +484,62 @@ function AssignmentDrawer({
 
 function TransferForm({ queues, currentQueueId, transferAction }: { queues: readonly TicketQueueRow[]; currentQueueId: string; transferAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(transferAction, INITIAL_STATE);
+  const describedBy = state.error ? "transfer-ticket-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Transfer to another queue</h3>
-      <select name="newQueueId" defaultValue={currentQueueId} className="rounded border border-neutral-300 p-1.5 text-sm">
-        {queues.map((q) => (
-          <option key={q.id} value={q.id}>
-            {q.name}
-          </option>
-        ))}
-      </select>
-      <input name="reason" required placeholder="Reason (required)" className="rounded border border-neutral-300 p-1.5 text-sm" />
+      <FormField id="transfer-new-queue" label="Destination queue">
+        <Select id="transfer-new-queue" name="newQueueId" defaultValue={currentQueueId} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          {queues.map((q) => (
+            <option key={q.id} value={q.id}>
+              {q.name}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="transfer-reason" label={<span className="sr-only">Reason for this transfer</span>}>
+        <Input id="transfer-reason" name="reason" required placeholder="Reason (required)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Transferring…">
           Transfer
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="transfer-ticket-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function ClassifyForm({ categories, currentCategoryId, currentPriority, classifyAction }: { categories: readonly TicketCategoryRow[]; currentCategoryId: string; currentPriority: string; classifyAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(classifyAction, INITIAL_STATE);
+  const describedBy = state.error ? "classify-ticket-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">Category / priority</h3>
-      <select name="categoryId" defaultValue={currentCategoryId} className="rounded border border-neutral-300 p-1.5 text-sm">
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
-      <select name="priority" defaultValue={currentPriority} className="rounded border border-neutral-300 p-1.5 text-sm">
-        {TICKET_PRIORITIES.map((p) => (
-          <option key={p} value={p}>
-            {p}
-          </option>
-        ))}
-      </select>
+      <FormField id="classify-category" label="Category">
+        <Select id="classify-category" name="categoryId" defaultValue={currentCategoryId} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <FormField id="classify-priority" label="Priority">
+        <Select id="classify-priority" name="priority" defaultValue={currentPriority} invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          {TICKET_PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </Select>
+      </FormField>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Updating…">
           Update classification
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="classify-ticket-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -576,27 +624,30 @@ function SlaSection({
 
 function PauseClockForm({ expectedVersion, pauseSlaClockAction }: { expectedVersion: number; pauseSlaClockAction: (expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(pauseSlaClockAction(expectedVersion), INITIAL_STATE);
+  const describedBy = state.error ? "pause-sla-clock-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      <select name="pauseReasonCode" required defaultValue="" className="rounded border border-neutral-300 p-1.5 text-xs">
-        <option value="" disabled>
-          Pause reason…
-        </option>
-        {SLA_PAUSE_REASON_CODES.map((code) => (
-          <option key={code} value={code}>
-            {code.replace(/_/g, " ")}
+      <FormField id="pause-sla-reason-code" label={<span className="sr-only">Pause reason</span>}>
+        <Select id="pause-sla-reason-code" name="pauseReasonCode" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+          <option value="" disabled>
+            Pause reason…
           </option>
-        ))}
-      </select>
-      <input name="reason" placeholder="Note (optional)" className="min-w-[8rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+          {SLA_PAUSE_REASON_CODES.map((code) => (
+            <option key={code} value={code}>
+              {code.replace(/_/g, " ")}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+      <div className="min-w-[8rem] flex-1">
+        <FormField id="pause-sla-note" label={<span className="sr-only">Note for pausing the clock</span>}>
+          <Input id="pause-sla-note" name="reason" placeholder="Note (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Pausing…">
         Pause clock
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="pause-sla-clock-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -693,27 +744,30 @@ function KbLinkRow({ link, unlinkArticleAction }: { link: KbTicketArticleLinkRow
 
 function LinkArticleForm({ linkArticleAction }: { linkArticleAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(linkArticleAction, INITIAL_STATE);
+  const describedBy = state.error ? "link-kb-article-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Article id
-        <input name="articleId" required placeholder="UUID" className="min-w-[16rem] rounded border border-neutral-300 p-1.5 text-xs" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Visibility
-        <select name="visibility" defaultValue="internal" className="rounded border border-neutral-300 p-1.5 text-xs">
+      <FormField id="link-article-id" label="Article id">
+        <Input id="link-article-id" name="articleId" required placeholder="UUID" className="min-w-[16rem]" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="link-article-visibility" label="Visibility">
+        <Select id="link-article-visibility" name="visibility" defaultValue="internal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="internal">Internal (staff-only reference)</option>
           <option value="public">Public (visible to requester)</option>
-        </select>
-      </label>
-      <input name="note" placeholder="Note (optional)" className="min-w-[10rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+        </Select>
+      </FormField>
+      <div className="min-w-[10rem] flex-1">
+        <FormField id="link-article-note" label={<span className="sr-only">Note for this article link</span>}>
+          <Input id="link-article-note" name="note" placeholder="Note (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Linking…">
         Link article
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="link-kb-article-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -756,6 +810,8 @@ function EscalationSection({
 }) {
   const [escalateState, escalateFormAction, escalatePending] = useActionState(escalateAction, INITIAL_STATE);
   const [suppressState, suppressFormAction, suppressPending] = useActionState(suppressAction, INITIAL_STATE);
+  const escalateDescribedBy = escalateState.error ? "escalate-ticket-error" : undefined;
+  const suppressDescribedBy = suppressState.error ? "suppress-escalation-error" : undefined;
 
   if (!isStaffViewer) {
     if (!escalationStatusForRequester) return null;
@@ -799,44 +855,43 @@ function EscalationSection({
       <form action={escalateFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
         <h3 className="text-xs font-semibold text-neutral-700">Manually escalate</h3>
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Target type
-            <select name="targetType" required defaultValue="employee" className="rounded border border-neutral-300 p-1.5 text-xs">
+          <FormField id="escalate-target-type" label="Target type">
+            <Select id="escalate-target-type" name="targetType" required defaultValue="employee" invalid={Boolean(escalateState.error)} aria-describedby={escalateDescribedBy}>
               <option value="employee">Employee</option>
               <option value="queue">Queue</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Target queue (if target type = queue)
-            <select name="targetQueueId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-xs">
+            </Select>
+          </FormField>
+          <FormField id="escalate-target-queue" label="Target queue (if target type = queue)">
+            <Select id="escalate-target-queue" name="targetQueueId" defaultValue="" invalid={Boolean(escalateState.error)} aria-describedby={escalateDescribedBy}>
               <option value="">Select…</option>
               {queues.map((q) => (
                 <option key={q.id} value={q.id}>
                   {q.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-neutral-600">
-            Target employee id (if target type = employee)
-            <input name="targetEmployeeId" placeholder="employee UUID" className="min-w-[14rem] rounded border border-neutral-300 p-1.5 text-xs" />
-          </label>
-          <label className="flex items-center gap-2 text-xs text-neutral-600">
-            <input type="checkbox" name="reassign" />
-            Also reassign to this employee
-          </label>
+            </Select>
+          </FormField>
+          <FormField id="escalate-target-employee" label="Target employee id (if target type = employee)">
+            <Input
+              id="escalate-target-employee"
+              name="targetEmployeeId"
+              placeholder="employee UUID"
+              className="min-w-[14rem]"
+              invalid={Boolean(escalateState.error)}
+              aria-describedby={escalateDescribedBy}
+            />
+          </FormField>
+          <Checkbox id="escalate-reassign" name="reassign" label="Also reassign to this employee" aria-describedby={escalateDescribedBy} />
         </div>
-        <input name="reason" required placeholder="Reason (required)" className="rounded border border-neutral-300 p-1.5 text-xs" />
+        <FormField id="escalate-reason" label={<span className="sr-only">Reason for escalating</span>}>
+          <Input id="escalate-reason" name="reason" required placeholder="Reason (required)" invalid={Boolean(escalateState.error)} aria-describedby={escalateDescribedBy} />
+        </FormField>
         <div>
           <Button type="submit" variant="secondary" loading={escalatePending} loadingLabel="Escalating…">
             Escalate
           </Button>
         </div>
-        {escalateState.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {escalateState.error}
-          </p>
-        ) : null}
+        {escalateState.error ? <ValidationMessage id="escalate-ticket-error">{escalateState.error}</ValidationMessage> : null}
       </form>
 
       <div className="flex flex-col gap-2">
@@ -849,21 +904,29 @@ function EscalationSection({
           </div>
         ) : (
           <form action={suppressFormAction} className="flex flex-wrap items-end gap-2">
-            <input name="reason" required placeholder="Suppression reason (required)" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
-            <label className="flex flex-col gap-1 text-xs text-neutral-600">
-              Suppress until
-              <input name="expiresAt" type="datetime-local" required className="rounded border border-neutral-300 p-1.5 text-xs" />
-            </label>
+            <div className="min-w-[12rem] flex-1">
+              <FormField id="suppress-reason" label={<span className="sr-only">Suppression reason</span>}>
+                <Input
+                  id="suppress-reason"
+                  name="reason"
+                  required
+                  placeholder="Suppression reason (required)"
+                  invalid={Boolean(suppressState.error)}
+                  aria-describedby={suppressDescribedBy}
+                />
+              </FormField>
+            </div>
+            {/* `datetime-local`, not `date`: a suppression expires at an instant, so
+                `DateInput` (which pins `type="date"`) would drop the time half. */}
+            <FormField id="suppress-expires-at" label="Suppress until">
+              <Input id="suppress-expires-at" name="expiresAt" type="datetime-local" required invalid={Boolean(suppressState.error)} aria-describedby={suppressDescribedBy} />
+            </FormField>
             <Button type="submit" variant="secondary" loading={suppressPending} loadingLabel="Suppressing…">
               Suppress escalation
             </Button>
           </form>
         )}
-        {suppressState.error ? (
-          <p role="alert" className="text-xs text-danger">
-            {suppressState.error}
-          </p>
-        ) : null}
+        {suppressState.error ? <ValidationMessage id="suppress-escalation-error">{suppressState.error}</ValidationMessage> : null}
       </div>
 
       <div>
@@ -906,15 +969,20 @@ function ResolveEscalationForm({ expectedVersion, resolveAction }: { expectedVer
   const [state, formAction, pending] = useActionState(resolveAction(expectedVersion), INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
-      <input name="reason" placeholder="Note (optional)" className="min-w-[8rem] rounded border border-neutral-300 p-1.5 text-xs" />
+      <FormField id="resolve-escalation-note" label={<span className="sr-only">Note for resolving this escalation</span>}>
+        <Input
+          id="resolve-escalation-note"
+          name="reason"
+          placeholder="Note (optional)"
+          className="min-w-[8rem]"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "resolve-escalation-error" : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Resolving…">
         Resolve / de-escalate
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="resolve-escalation-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -1011,6 +1079,7 @@ function LinkedRecordsSection({
 }) {
   const [searchState, searchFormAction, searchPending] = useActionState(searchAction, { error: null, entityType: null, relationship: "related", results: [] } as TicketLinkSearchActionState);
   const linkedEntityIds = new Set(links.filter((l) => l.entityType === searchState.entityType).map((l) => l.entityId));
+  const searchDescribedBy = searchState.error ? "link-search-error" : undefined;
 
   return (
     <section aria-label="Linked records" className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
@@ -1031,9 +1100,15 @@ function LinkedRecordsSection({
         <form action={searchFormAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2">
           <h3 className="text-xs font-semibold text-neutral-700">Find a record to link</h3>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-xs text-neutral-600">
-              Record type
-              <select name="entityType" required defaultValue={searchState.entityType ?? ""} className="rounded border border-neutral-300 p-1.5 text-xs">
+            <FormField id="link-search-entity-type" label="Record type">
+              <Select
+                id="link-search-entity-type"
+                name="entityType"
+                required
+                defaultValue={searchState.entityType ?? ""}
+                invalid={Boolean(searchState.error)}
+                aria-describedby={searchDescribedBy}
+              >
                 <option value="" disabled>
                   Select…
                 </option>
@@ -1042,28 +1117,40 @@ function LinkedRecordsSection({
                     {TICKET_LINK_ENTITY_TYPE_LABELS[t]}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1 text-xs text-neutral-600">
-              Relationship
-              <select name="relationship" defaultValue={searchState.relationship} className="rounded border border-neutral-300 p-1.5 text-xs">
+              </Select>
+            </FormField>
+            <FormField id="link-search-relationship" label="Relationship">
+              <Select
+                id="link-search-relationship"
+                name="relationship"
+                defaultValue={searchState.relationship}
+                invalid={Boolean(searchState.error)}
+                aria-describedby={searchDescribedBy}
+              >
                 {TICKET_LINK_RELATIONSHIPS.map((r) => (
                   <option key={r} value={r}>
                     {TICKET_LINK_RELATIONSHIP_LABELS[r]}
                   </option>
                 ))}
-              </select>
-            </label>
-            <input name="searchText" placeholder="Search by number/name…" defaultValue="" className="min-w-[12rem] flex-1 rounded border border-neutral-300 p-1.5 text-xs" />
+              </Select>
+            </FormField>
+            <div className="min-w-[12rem] flex-1">
+              <FormField id="link-search-text" label={<span className="sr-only">Search by number or name</span>}>
+                <SearchInput
+                  id="link-search-text"
+                  name="searchText"
+                  placeholder="Search by number/name…"
+                  defaultValue=""
+                  invalid={Boolean(searchState.error)}
+                  aria-describedby={searchDescribedBy}
+                />
+              </FormField>
+            </div>
             <Button type="submit" variant="secondary" loading={searchPending} loadingLabel="Searching…">
               Search
             </Button>
           </div>
-          {searchState.error ? (
-            <p role="alert" className="text-xs text-danger">
-              {searchState.error}
-            </p>
-          ) : null}
+          {searchState.error ? <ValidationMessage id="link-search-error">{searchState.error}</ValidationMessage> : null}
           {searchState.entityType ? (
             searchState.results.length === 0 ? (
               <p className="text-xs text-neutral-500">No matching, authorized {TICKET_LINK_ENTITY_TYPE_LABELS[searchState.entityType].toLowerCase()} records found.</p>
@@ -1126,18 +1213,25 @@ function LinkedRecordRow({
         ) : null}
         {canManage ? (
           <form action={unlinkFormAction} className="flex items-center gap-2">
-            <input name="reason" required placeholder="Unlink reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1 text-xs" />
+            {/* One row per link, so the id is link-scoped. */}
+            <FormField id={`unlink-reason-${link.id}`} label={<span className="sr-only">Reason for unlinking this record</span>}>
+              <Input
+                id={`unlink-reason-${link.id}`}
+                name="reason"
+                required
+                placeholder="Unlink reason (required)"
+                className="min-w-[10rem]"
+                invalid={Boolean(unlinkState.error)}
+                aria-describedby={unlinkState.error ? `unlink-${link.id}-error` : undefined}
+              />
+            </FormField>
             <Button type="submit" variant="destructive" loading={unlinkPending} loadingLabel="Unlinking…">
               Unlink
             </Button>
           </form>
         ) : null}
       </div>
-      {unlinkState.error ? (
-        <p role="alert" className="text-danger">
-          {unlinkState.error}
-        </p>
-      ) : null}
+      {unlinkState.error ? <ValidationMessage id={`unlink-${link.id}-error`}>{unlinkState.error}</ValidationMessage> : null}
       {viewedState.error ? (
         <p role="alert" className="text-danger">
           {viewedState.error}

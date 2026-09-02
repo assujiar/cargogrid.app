@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import NextLink from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { SearchInput } from "../../../../components/forms/search-input.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import type { KbActionState } from "./actions.ts";
 import type { KbArticleRow, KbArticleSearchRow, KbArticleStatus } from "../../../../server/contracts/knowledge-base/knowledge-base.ts";
@@ -21,17 +25,25 @@ function CreateArticleForm({ createArticleAction }: { createArticleAction: (prev
   const [state, formAction, pending] = useActionState(createArticleAction, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Code (lowercase-with-dashes)
-        <input name="code" required pattern="[a-z0-9-]{2,80}" placeholder="printer-offline" className="min-w-[14rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id="kb-new-article-code" label="Code (lowercase-with-dashes)">
+        <Input
+          id="kb-new-article-code"
+          name="code"
+          required
+          pattern="[a-z0-9-]{2,80}"
+          placeholder="printer-offline"
+          className="min-w-[14rem]"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "kb-create-article-error" : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">
         New article
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="kb-create-article-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -53,7 +65,11 @@ export function KbListPanel({
   return (
     <div className="flex flex-col gap-4">
       <form method="get" className="flex items-center gap-2">
-        <input name="q" defaultValue={query} placeholder="Search published articles…" className="min-w-[16rem] flex-1 rounded border border-neutral-300 p-1.5 text-sm" />
+        <div className="min-w-[16rem] flex-1">
+          <FormField id="kb-search" label={<span className="sr-only">Search published articles</span>}>
+            <SearchInput id="kb-search" name="q" defaultValue={query} placeholder="Search published articles…" />
+          </FormField>
+        </div>
         <Button type="submit" variant="secondary">
           Search
         </Button>

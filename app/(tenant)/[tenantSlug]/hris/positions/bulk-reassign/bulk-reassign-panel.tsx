@@ -3,6 +3,11 @@
 import { useActionState, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "../../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { DateInput } from "../../../../../../components/forms/date-input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { BulkReassignActionState } from "./actions.ts";
 import { ASSIGNMENT_TYPES, CHANGE_REASONS, type AssignmentType, type ChangeReason, type PositionGrade, type PositionListRow } from "../../../../../../server/contracts/position/position.ts";
@@ -84,6 +89,9 @@ export function BulkReassignPanel({
   );
   const missingPositionCount = selectedEmployees.length - readyItems.length;
   const canSubmit = readyItems.length > 0 && effectiveStartDate.length > 0 && !pending;
+  // One server-action error covers the whole batch, so every batch-detail field points at it
+  // rather than fabricating a per-field attribution the action does not return.
+  const describedBy = state.error ? "bulk-reassign-error" : undefined;
 
   function onDepartmentChange(id: string) {
     setSelected({});
@@ -96,20 +104,25 @@ export function BulkReassignPanel({
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
-        <label htmlFor="department-select" className="text-xs font-medium text-neutral-600">
-          Department
-        </label>
+        {/* ISS-2026-242: the "Department" text used to be a <label htmlFor="department-select">
+            rendered even in the no-departments branch, where no such control exists -- a label
+            pointing at nothing. It is only a real label when there is a real control. */}
         {departments.length === 0 ? (
-          <p className="text-xs text-neutral-500">No active departments exist yet in the organization tree.</p>
+          <>
+            <p className="text-xs font-medium text-neutral-600">Department</p>
+            <p className="text-xs text-neutral-500">No active departments exist yet in the organization tree.</p>
+          </>
         ) : (
-          <select id="department-select" defaultValue={selectedDepartmentId ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm sm:max-w-sm" onChange={(e) => onDepartmentChange(e.currentTarget.value)}>
-            <option value="">Select a department…</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
+          <FormField id="department-select" label="Department">
+            <Select id="department-select" defaultValue={selectedDepartmentId ?? ""} className="sm:max-w-sm" onChange={(e) => onDepartmentChange(e.currentTarget.value)}>
+              <option value="">Select a department…</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
         )}
       </section>
 
@@ -128,17 +141,16 @@ export function BulkReassignPanel({
           <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
             <h2 className="text-sm font-semibold text-neutral-900">Apply to all selected</h2>
             <div className="flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-                Target position
-                <select value={bulkPositionId} onChange={(e) => setBulkPositionId(e.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+              <FormField id="bulk-target-position" label="Target position">
+                <Select id="bulk-target-position" value={bulkPositionId} onChange={(e) => setBulkPositionId(e.currentTarget.value)}>
                   <option value="">Select…</option>
                   {positions.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.code} — {p.title} ({p.currentHeadcount}/{p.capacity})
                     </option>
                   ))}
-                </select>
-              </label>
+                </Select>
+              </FormField>
               <Button type="button" variant="secondary" onClick={applyPositionToSelected} disabled={!bulkPositionId}>
                 Apply to selected rows
               </Button>
@@ -191,43 +203,71 @@ export function BulkReassignPanel({
                         </td>
                         <td className="py-1 text-xs">{employee.positionTitle ?? "—"}</td>
                         <td className="py-1">
-                          <select disabled={!isSelected} value={row.positionId} onChange={(e) => updateRow(employee.masterRecordId, { positionId: e.currentTarget.value })} className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-                            <option value="">Select…</option>
-                            {positions.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.code} — {p.title}
-                              </option>
-                            ))}
-                          </select>
+                          {/* One row per employee, so every id is row-scoped -- a static id here
+                              would repeat across every row. The visible column header carries the
+                              field name, so each row's own label is screen-reader-only and names
+                              the employee it belongs to. */}
+                          <FormField id={`row-position-${employee.masterRecordId}`} label={<span className="sr-only">Target position for {employee.fullName}</span>}>
+                            <Select
+                              id={`row-position-${employee.masterRecordId}`}
+                              disabled={!isSelected}
+                              value={row.positionId}
+                              onChange={(e) => updateRow(employee.masterRecordId, { positionId: e.currentTarget.value })}
+                            >
+                              <option value="">Select…</option>
+                              {positions.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.code} — {p.title}
+                                </option>
+                              ))}
+                            </Select>
+                          </FormField>
                         </td>
                         <td className="py-1">
-                          <select disabled={!isSelected} value={row.gradeId} onChange={(e) => updateRow(employee.masterRecordId, { gradeId: e.currentTarget.value })} className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-                            <option value="">Position default</option>
-                            {grades.map((g) => (
-                              <option key={g.id} value={g.id}>
-                                {g.code}
-                              </option>
-                            ))}
-                          </select>
+                          <FormField id={`row-grade-${employee.masterRecordId}`} label={<span className="sr-only">Grade for {employee.fullName}</span>}>
+                            <Select
+                              id={`row-grade-${employee.masterRecordId}`}
+                              disabled={!isSelected}
+                              value={row.gradeId}
+                              onChange={(e) => updateRow(employee.masterRecordId, { gradeId: e.currentTarget.value })}
+                            >
+                              <option value="">Position default</option>
+                              {grades.map((g) => (
+                                <option key={g.id} value={g.id}>
+                                  {g.code}
+                                </option>
+                              ))}
+                            </Select>
+                          </FormField>
                         </td>
                         <td className="py-1">
-                          <input
-                            type="text"
-                            disabled={!isSelected}
-                            value={row.managerEmployeeId}
-                            onChange={(e) => updateRow(employee.masterRecordId, { managerEmployeeId: e.currentTarget.value })}
-                            placeholder="uuid, optional"
-                            className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-xs"
-                          />
+                          <FormField id={`row-manager-${employee.masterRecordId}`} label={<span className="sr-only">Manager for {employee.fullName}</span>}>
+                            <Input
+                              id={`row-manager-${employee.masterRecordId}`}
+                              type="text"
+                              disabled={!isSelected}
+                              value={row.managerEmployeeId}
+                              onChange={(e) => updateRow(employee.masterRecordId, { managerEmployeeId: e.currentTarget.value })}
+                              placeholder="uuid, optional"
+                              className="w-32"
+                            />
+                          </FormField>
                         </td>
                         <td className="py-1">
-                          <select disabled={!isSelected} value={row.assignmentType} onChange={(e) => updateRow(employee.masterRecordId, { assignmentType: e.currentTarget.value as AssignmentType })} className="rounded-md border border-neutral-300 px-2 py-1 text-xs">
-                            {ASSIGNMENT_TYPES.map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
+                          <FormField id={`row-assignment-type-${employee.masterRecordId}`} label={<span className="sr-only">Assignment type for {employee.fullName}</span>}>
+                            <Select
+                              id={`row-assignment-type-${employee.masterRecordId}`}
+                              disabled={!isSelected}
+                              value={row.assignmentType}
+                              onChange={(e) => updateRow(employee.masterRecordId, { assignmentType: e.currentTarget.value as AssignmentType })}
+                            >
+                              {ASSIGNMENT_TYPES.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </Select>
+                          </FormField>
                         </td>
                       </tr>
                     );
@@ -240,28 +280,52 @@ export function BulkReassignPanel({
           <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
             <h2 className="text-sm font-semibold text-neutral-900">Batch details</h2>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-                Change reason
-                <select value={changeReason} onChange={(e) => setChangeReason(e.currentTarget.value as ChangeReason)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+              <FormField id="batch-change-reason" label="Change reason">
+                <Select
+                  id="batch-change-reason"
+                  value={changeReason}
+                  onChange={(e) => setChangeReason(e.currentTarget.value as ChangeReason)}
+                  invalid={Boolean(state.error)}
+                  aria-describedby={describedBy}
+                >
                   {CHANGE_REASONS.map((r) => (
                     <option key={r} value={r}>
                       {r.replace(/_/g, " ")}
                     </option>
                   ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-                Effective start date
-                <input type="date" required value={effectiveStartDate} onChange={(e) => setEffectiveStartDate(e.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600">
-                Effective end date (optional)
-                <input type="date" value={effectiveEndDate} onChange={(e) => setEffectiveEndDate(e.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-neutral-600 sm:col-span-3">
-                Reason note (optional)
-                <input type="text" value={reasonNote} onChange={(e) => setReasonNote(e.currentTarget.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-              </label>
+                </Select>
+              </FormField>
+              <FormField id="batch-effective-start-date" label="Effective start date">
+                <DateInput
+                  id="batch-effective-start-date"
+                  required
+                  value={effectiveStartDate}
+                  onChange={(e) => setEffectiveStartDate(e.currentTarget.value)}
+                  invalid={Boolean(state.error)}
+                  aria-describedby={describedBy}
+                />
+              </FormField>
+              <FormField id="batch-effective-end-date" label="Effective end date (optional)">
+                <DateInput
+                  id="batch-effective-end-date"
+                  value={effectiveEndDate}
+                  onChange={(e) => setEffectiveEndDate(e.currentTarget.value)}
+                  invalid={Boolean(state.error)}
+                  aria-describedby={describedBy}
+                />
+              </FormField>
+              <div className="sm:col-span-3">
+                <FormField id="batch-reason-note" label="Reason note (optional)">
+                  <Input
+                    id="batch-reason-note"
+                    type="text"
+                    value={reasonNote}
+                    onChange={(e) => setReasonNote(e.currentTarget.value)}
+                    invalid={Boolean(state.error)}
+                    aria-describedby={describedBy}
+                  />
+                </FormField>
+              </div>
             </div>
 
             <p className="text-xs text-neutral-500">
@@ -276,11 +340,7 @@ export function BulkReassignPanel({
               </Button>
             </div>
 
-            {state.error ? (
-              <p role="alert" className="text-sm text-danger">
-                {state.error}
-              </p>
-            ) : null}
+            {state.error ? <ValidationMessage id="bulk-reassign-error">{state.error}</ValidationMessage> : null}
             {state.createdCount !== null ? (
               <p role="status" className="text-sm text-success">
                 {state.createdCount} pending-approval proposal(s) created. Review and decide each from the affected employee&apos;s own position page.
