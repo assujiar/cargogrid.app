@@ -3466,7 +3466,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (item 1 a genuine non-gap; item 3's theoretically-loggable branch found logically
   // unreachable for this caller -- a draft fix against it was built, found dead, and
   // reverted before committing).
-  migrationSetSha256: "4d31bb05a7c787ac40e42b06513659f22ec8ceb4c31992c8d6ac2b295a88558e",
+  // NINETY-EIGHTH PASS (2026-09-03, ISS-2026-070 item 1): 480 files (+1). One new file,
+  // 20260903140000_wire_onboarding_notification_engine_remaining_points.sql, closing the three
+  // PLT-127 wiring points 20260902043000 explicitly left open -- task assignment,
+  // provisioning/revocation completion, and finalize-approval routing -- via a shared
+  // app._queue_onboarding_case_notification helper plus an approver fan-out helper, and
+  // `create or replace`-ing the four consuming RPCs with their live bodies otherwise verbatim
+  // (each diffed against pg_get_functiondef on the hosted project before commit).
+  migrationSetSha256: "ab38d1bb191f83ca6e65c3c69a1d176bd89d2efaee4d8a1e4553eb9b02ba1272",
+  // History: 4d31bb05a7c787ac40e42b06513659f22ec8ceb4c31992c8d6ac2b295a88558e
+  // (479 files, ISS-2026-129/132/134 item 1's loyalty issuance/notification/reconciliation work).
   // History: b9eeee0431f072f74ba4fd491dae102ba92a0c952772f17d26bb34d2b190bfc3
   // (475 files, ISS-2026-066's bulk reorg wizard + ISS-2026-070's preview/export wiring).
   // History: 1997d977bc354df83a3bd28823edab5620e5182166a3354e0c59e06d86f43e05
@@ -4165,7 +4174,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // redemption.sql: notification/retry/DLQ; customer-loyalty-liability-reconciliation.sql:
   // cross-currency rollup), plus task-scheduler.sql/background-job.sql catalogue-count
   // assertions updated for the new scheduler task and job type.
-  dbTestSetSha256: "865ecccb290a594792b9e198fc8d8d07b21d4be9394a83a6ae17b0f11a1d0dcd",
+  // NINETY-EIGHTH PASS (2026-09-03, ISS-2026-070 item 1): 247 files, unchanged in count -- one
+  // extended (hris-onboarding-offboarding.sql: two new blocks, one driving all three notification
+  // wiring points end to end, one driving app._queue_onboarding_case_notification against the two
+  // failure modes app.queue_notification genuinely has at those call sites plus the no-recipient
+  // case, proving a refused send never rolls back the governed business write it accompanies).
+  dbTestSetSha256: "f039b0b7f3026dbafb24371dc1d23328d3c13fa06bd666441514d994a2cd5fe9",
+  // History: 865ecccb290a594792b9e198fc8d8d07b21d4be9394a83a6ae17b0f11a1d0dcd
+  // (247 files, ISS-2026-129/132/134's loyalty regressions).
   // History: 7bf961dbacd384d5168d455ca8f75d97145f493256cdc2cd1c4e07cb747bbe77
   // (247 files, ISS-2026-066/070's bulk-reassignment/preview-export regression).
   // History: fb9ddf8c14a3c7aecc6e5cc614c3e4d692c543daf46004ee239de632387730cf

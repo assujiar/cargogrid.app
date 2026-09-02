@@ -6,6 +6,7 @@ import { Input } from "../../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
+import { useUnsavedFormGuard } from "../../../../../../components/forms/use-unsaved-change-guard.ts";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../components/ui/empty-state.tsx";
 import type { TemplateActionState } from "./actions.ts";
@@ -26,6 +27,8 @@ export function TemplateListPanel({
   openDraftAction: (templateId: string) => BoundAction;
 }) {
   const [createState, createFormAction, createPending] = useActionState(createAction, INITIAL_STATE);
+  // ISS-2026-070 item 5: unsaved-change protection on the template-authoring forms.
+  const { dirty: createDirty, formProps: createFormProps } = useUnsavedFormGuard(createPending, createState.error);
 
   return (
     <div className="flex flex-col gap-6">
@@ -56,7 +59,7 @@ export function TemplateListPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new template</h2>
-        <form action={createFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4" noValidate>
+        <form action={createFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-4" noValidate {...createFormProps}>
           <label htmlFor="template-code" className="sr-only">
             Code
           </label>
@@ -80,6 +83,7 @@ export function TemplateListPanel({
               <ValidationMessage id="template-create-error">{createState.error}</ValidationMessage>
             </div>
           ) : null}
+          {createDirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={createPending} loadingLabel="Creating…">
               Create template

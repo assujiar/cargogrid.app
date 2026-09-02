@@ -7,6 +7,7 @@ import { Select } from "../../../../../../../../components/forms/select.tsx";
 import { Checkbox } from "../../../../../../../../components/forms/checkbox.tsx";
 import { FormField } from "../../../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../../../components/forms/validation-message.tsx";
+import { useUnsavedFormGuard } from "../../../../../../../../components/forms/use-unsaved-change-guard.ts";
 import { StatusBadge } from "../../../../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../../../../components/ui/empty-state.tsx";
 import type { TemplateActionState } from "../../actions.ts";
@@ -38,6 +39,10 @@ export function TemplateVersionPanel({
   const [addDepState, addDepFormAction, addDepPending] = useActionState(addDependencyAction, INITIAL_STATE);
   const boundPublish = versionHeader ? publishAction(versionHeader.versionRecordVersion) : null;
   const [publishState, publishFormAction, publishPending] = useActionState(boundPublish ?? (async (_s: TemplateActionState) => INITIAL_STATE), INITIAL_STATE);
+  // ISS-2026-070 item 5: unsaved-change protection on the two multi-field authoring forms.
+  // The publish form carries no user input at all, so it needs no guard.
+  const { dirty: addTaskDirty, formProps: addTaskFormProps } = useUnsavedFormGuard(addTaskPending, addTaskState.error);
+  const { dirty: addDepDirty, formProps: addDepFormProps } = useUnsavedFormGuard(addDepPending, addDepState.error);
 
   return (
     <div className="flex flex-col gap-6">
@@ -98,7 +103,7 @@ export function TemplateVersionPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Add a task</h2>
-        <form action={addTaskFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate>
+        <form action={addTaskFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate {...addTaskFormProps}>
           <label htmlFor="task-key" className="sr-only">
             Task key
           </label>
@@ -152,6 +157,7 @@ export function TemplateVersionPanel({
               <ValidationMessage id="add-task-error">{addTaskState.error}</ValidationMessage>
             </div>
           ) : null}
+          {addTaskDirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={addTaskPending} loadingLabel="Adding…">
               Add task
@@ -162,7 +168,7 @@ export function TemplateVersionPanel({
 
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Add a dependency</h2>
-        <form action={addDepFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate>
+        <form action={addDepFormAction} className="grid grid-cols-1 gap-2 sm:grid-cols-3" noValidate {...addDepFormProps}>
           <label htmlFor="dep-task-key" className="sr-only">
             Task key
           </label>
@@ -176,6 +182,7 @@ export function TemplateVersionPanel({
               <ValidationMessage id="add-dep-error">{addDepState.error}</ValidationMessage>
             </div>
           ) : null}
+          {addDepDirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
           <div className="col-span-full">
             <Button type="submit" variant="secondary" loading={addDepPending} loadingLabel="Adding…">
               Add dependency

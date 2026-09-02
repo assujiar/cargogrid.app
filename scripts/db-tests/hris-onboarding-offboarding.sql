@@ -2276,4 +2276,349 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-070 item 1, the three PLT-127 wiring points 20260902043000 explicitly left OPEN: task ASSIGNMENT notifies the new owner (and never a self-assigner), provisioning/revocation COMPLETION notifies the task owner, and finalize-approval ROUTING notifies the active step''s eligible approvers on submission and the original requester on the decision -- each through the real app.queue_notification engine, each recording a discriminated app.onboarding_case_events row'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_staff uuid := '00000000-0000-0000-0000-000000027702';
+  v_approver uuid := '00000000-0000-0000-0000-000000027703';
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department' limit 1);
+  v_interviewer_id uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Interviewer One');
+  v_existing_id uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Existing Employee One');
+  v_case app.onboarding_offboarding_cases;
+  v_ofb_case app.onboarding_offboarding_cases;
+  v_trf_case app.onboarding_offboarding_cases;
+  v_welcome app.onboarding_case_tasks;
+  v_asset app.onboarding_case_tasks;
+  v_revoke app.onboarding_case_tasks;
+  v_org_task app.onboarding_case_tasks;
+  v_revoke_request_id uuid;
+  v_request_id uuid;
+  v_active_step app.approval_request_steps;
+  v_notification app.notifications;
+  v_count integer;
+begin
+  -- =========================================================================
+  -- Wiring point 1: TASK ASSIGNMENT
+  -- =========================================================================
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'ISS070 Notification Subject', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-iss070-notify-onb', v_staff, 'tester'
+  );
+
+  select * into v_welcome from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'welcome-doc';
+  select * into v_asset from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'asset-issue';
+
+  -- Premise, asserted rather than assumed: nothing has notified anyone about either task yet.
+  select count(*) into v_count from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_assigned'
+    and dedupe_key like 'onboarding-task-assigned:' || v_welcome.id::text || ':%';
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero onboarding_task_assigned notifications for this brand-new task, found %', v_count;
+  end if;
+
+  select * into v_welcome from app.assign_onboarding_task(v_case.id, v_welcome.id, v_welcome.record_version, v_approver, v_staff, 'tester');
+  if v_welcome.owner_auth_user_id <> v_approver then
+    raise exception 'assertion failed: expected the assignment itself to still work, owner is %', v_welcome.owner_auth_user_id;
+  end if;
+
+  -- The real PLT-127 row, keyed per (task, post-assignment record_version) so a genuine
+  -- re-assignment notifies again while a replay of the same assignment does not.
+  select * into v_notification from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_assigned'
+    and dedupe_key = 'onboarding-task-assigned:' || v_welcome.id::text || ':' || v_welcome.record_version::text;
+  if v_notification.id is null then
+    raise exception 'assertion failed: expected a real onboarding_task_assigned notification keyed by (task, record_version) after assigning the task to another identity';
+  end if;
+  if v_notification.recipient_auth_user_id <> v_approver then
+    raise exception 'assertion failed: expected the NEW OWNER to be the recipient, got %', v_notification.recipient_auth_user_id;
+  end if;
+  if v_notification.effective_channel <> 'in_app' or v_notification.status <> 'sent' then
+    raise exception 'assertion failed: expected a sent in_app notification, got channel % status %', v_notification.effective_channel, v_notification.status;
+  end if;
+  -- Rendered through the real template, not stored as a raw placeholder string.
+  if v_notification.subject not like '%' || v_welcome.title || '%' then
+    raise exception 'assertion failed: expected the task title rendered into the notification subject, got %', v_notification.subject;
+  end if;
+  if not exists (
+    select 1 from app.onboarding_case_events
+    where case_id = v_case.id and event_type = 'onboarding_task_assigned_notified'
+  ) then
+    raise exception 'assertion failed: expected a discriminated onboarding_task_assigned_notified app.onboarding_case_events row';
+  end if;
+
+  -- Self-assignment is deliberately silent: the actor already knows. This is the behaviour
+  -- that keeps the wiring from turning every bulk self-triage into a notification storm.
+  select * into v_asset from app.assign_onboarding_task(v_case.id, v_asset.id, v_asset.record_version, v_staff, v_staff, 'tester');
+  if v_asset.owner_auth_user_id <> v_staff then
+    raise exception 'assertion failed: expected the self-assignment itself to still work';
+  end if;
+  select count(*) into v_count from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_task_assigned'
+    and dedupe_key like 'onboarding-task-assigned:' || v_asset.id::text || ':%';
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected a self-assignment to notify nobody, found % notification(s)', v_count;
+  end if;
+
+  -- =========================================================================
+  -- Wiring point 2: PROVISIONING / REVOCATION COMPLETION
+  -- =========================================================================
+  select * into v_ofb_case from app.start_onboarding_case(
+    v_tenant1, 'offboarding', 'existing_employee', null, v_interviewer_id, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-iss070-notify-ofb', v_staff, 'tester'
+  );
+  select * into v_revoke from app.onboarding_case_tasks where case_id = v_ofb_case.id and template_task_key = 'revoke-access';
+
+  -- Self-assigned on purpose: it keeps this half's assertion about the COMPLETION
+  -- notification uncontaminated by an assignment notification for the same task.
+  select * into v_revoke from app.assign_onboarding_task(v_ofb_case.id, v_revoke.id, v_revoke.record_version, v_staff, v_staff, 'tester');
+
+  -- app.request_onboarding_access_revocation is HRS:Override-gated, so the ACTOR must be the
+  -- approver while the task OWNER is staff -- exactly the shape that proves the notification
+  -- goes to the accountable owner rather than back to whoever happened to run the RPC.
+  select * into v_revoke from app.request_onboarding_access_revocation(
+    v_ofb_case.id, v_revoke.id, v_revoke.record_version, 'ISS-2026-070 notification regression', v_approver, 'tester'
+  );
+  if v_revoke.status <> 'completed' then
+    raise exception 'assertion failed: expected the revocation task completed, got %', v_revoke.status;
+  end if;
+
+  select id into v_revoke_request_id from app.onboarding_task_provisioning_requests
+  where task_id = v_revoke.id and request_type = 'revoke_access';
+  if v_revoke_request_id is null then
+    raise exception 'assertion failed: expected a real revoke_access provisioning request row';
+  end if;
+
+  select * into v_notification from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_access_provisioning_completed'
+    and dedupe_key = 'onboarding-revocation-completed:' || v_revoke_request_id::text;
+  if v_notification.id is null then
+    raise exception 'assertion failed: expected a real onboarding_access_provisioning_completed notification keyed by the provisioning request id';
+  end if;
+  if v_notification.recipient_auth_user_id <> v_staff then
+    raise exception 'assertion failed: expected the TASK OWNER (staff) to be notified of the completion, not the acting approver -- got %', v_notification.recipient_auth_user_id;
+  end if;
+  if v_notification.context ->> 'request_type' <> 'revoked' then
+    raise exception 'assertion failed: expected context.request_type=revoked, got %', v_notification.context ->> 'request_type';
+  end if;
+  if not exists (
+    select 1 from app.onboarding_case_events
+    where case_id = v_ofb_case.id and event_type = 'onboarding_access_provisioning_completed_notified'
+  ) then
+    raise exception 'assertion failed: expected a discriminated onboarding_access_provisioning_completed_notified event row';
+  end if;
+
+  -- =========================================================================
+  -- Wiring point 3: FINALIZE-APPROVAL ROUTING
+  -- =========================================================================
+  -- A second transfer case for the same still-active employee the item-4 block already drove
+  -- to finalized -- a real, repeatable path, not a fixture contrivance.
+  select * into v_trf_case from app.start_onboarding_case(
+    v_tenant1, 'transfer', 'existing_employee', null, v_existing_id, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-iss070-notify-trf', v_staff, 'tester'
+  );
+  select * into v_org_task from app.onboarding_case_tasks where case_id = v_trf_case.id and template_task_key = 'update-org-assignment';
+  select * into v_org_task from app.complete_onboarding_task(v_trf_case.id, v_org_task.id, v_org_task.record_version, 'org unit updated', null, v_staff, 'tester');
+
+  select * into v_trf_case from app.submit_onboarding_case_for_finalize_approval(v_trf_case.id, v_trf_case.record_version, null, v_staff, 'tester');
+  if v_trf_case.status <> 'pending_finalize_approval' then
+    raise exception 'assertion failed: expected pending_finalize_approval, got %', v_trf_case.status;
+  end if;
+  v_request_id := v_trf_case.finalize_approval_request_id;
+
+  select s.* into v_active_step from app.approval_request_steps s where s.request_id = v_request_id and s.status = 'active';
+  if v_active_step.id is null then
+    raise exception 'assertion failed: expected exactly one active approval step';
+  end if;
+
+  -- The tenant's own published routing definition uses approver_type='role', so this
+  -- exercises the role -> published role_version -> active role_assignment resolution path
+  -- specifically, not the easier specific_user one.
+  select count(*) into v_count from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_finalize_approval_requested'
+    and dedupe_key like 'onboarding-finalize-requested:' || v_active_step.id::text || ':%';
+  if v_count = 0 then
+    raise exception 'assertion failed: expected the active step''s eligible approver(s) to be notified that a decision is waiting on them';
+  end if;
+  if not exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_finalize_approval_requested'
+      and dedupe_key = 'onboarding-finalize-requested:' || v_active_step.id::text || ':' || v_approver::text
+      and recipient_auth_user_id = v_approver
+  ) then
+    raise exception 'assertion failed: expected the role-eligible approver specifically to be notified, keyed per (step, recipient)';
+  end if;
+  -- The submitter is excluded: they just did this, telling them is noise, not signal.
+  if exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_finalize_approval_requested'
+      and dedupe_key like 'onboarding-finalize-requested:' || v_active_step.id::text || ':%'
+      and recipient_auth_user_id = v_staff
+  ) then
+    raise exception 'assertion failed: expected the submitting actor NOT to be notified of their own submission';
+  end if;
+
+  select * into v_trf_case from app.decide_onboarding_case_finalize_approval(v_active_step.id, 'approved', null, v_approver, 'tester');
+  if v_trf_case.status <> 'finalized' then
+    raise exception 'assertion failed: expected the case finalized, got %', v_trf_case.status;
+  end if;
+
+  select * into v_notification from app.notifications
+  where tenant_id = v_tenant1 and notification_type_code = 'onboarding_finalize_approval_decided'
+    and dedupe_key = 'onboarding-finalize-decided:' || v_request_id::text || ':approved';
+  if v_notification.id is null then
+    raise exception 'assertion failed: expected the terminal decision to notify whoever submitted the case, keyed by (request, outcome)';
+  end if;
+  if v_notification.recipient_auth_user_id <> v_staff then
+    raise exception 'assertion failed: expected the SUBMITTER to be told the outcome, got %', v_notification.recipient_auth_user_id;
+  end if;
+  if v_notification.context ->> 'decision' <> 'approved' then
+    raise exception 'assertion failed: expected context.decision=approved, got %', v_notification.context ->> 'decision';
+  end if;
+  -- The deciding approver is not told their own decision.
+  if exists (
+    select 1 from app.notifications
+    where tenant_id = v_tenant1 and notification_type_code = 'onboarding_finalize_approval_decided'
+      and dedupe_key = 'onboarding-finalize-decided:' || v_request_id::text || ':approved'
+      and recipient_auth_user_id = v_approver
+  ) then
+    raise exception 'assertion failed: expected the deciding approver NOT to be notified of their own decision';
+  end if;
+  if not exists (
+    select 1 from app.onboarding_case_events
+    where case_id = v_trf_case.id and event_type = 'onboarding_finalize_approval_decided_notified'
+  ) then
+    raise exception 'assertion failed: expected a discriminated onboarding_finalize_approval_decided_notified event row';
+  end if;
+end;
+$$;
+
+
+\echo '>> ISS-2026-070 item 1: app._queue_onboarding_case_notification NEVER raises -- the guard that keeps a notification problem from rolling back the governed business write it accompanies. Driven against the two failure modes app.queue_notification genuinely has at these call sites (a recipient who is not an active member of the tenant, a context value the template renderer refuses) plus the no-recipient case, each reproduced live rather than asserted from the migration comments.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_staff uuid := '00000000-0000-0000-0000-000000027702';
+  v_approver uuid := '00000000-0000-0000-0000-000000027703';
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department' limit 1);
+  -- A real identity that belongs to a DIFFERENT tenant and is not a supreme admin, so
+  -- app.queue_notification's own has_active_tenant_membership guard genuinely refuses it
+  -- ('notification_recipient_unauthorized'). Resolved from live fixture data, never invented.
+  v_foreign uuid := (
+    select pm.auth_user_id from app.principal_memberships pm
+    where pm.status = 'active' and pm.tenant_id is not null and pm.tenant_id <> v_tenant1
+      and not exists (select 1 from app.principal_memberships x
+                      where x.auth_user_id = pm.auth_user_id and x.tenant_id = v_tenant1 and x.status = 'active')
+      and not exists (select 1 from app.principal_memberships s
+                      where s.auth_user_id = pm.auth_user_id and s.layer = 'supreme_admin' and s.status = 'active')
+    limit 1
+  );
+  v_case app.onboarding_offboarding_cases;
+  v_queued boolean;
+  v_count integer;
+begin
+  if v_foreign is null then
+    raise exception 'assertion failed: this fixture no longer contains a foreign-tenant identity to drive the refusal path with -- the test premise needs updating, not the code';
+  end if;
+
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'ISS070 Notification Guard Subject', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-iss070-notify-guard', v_staff, 'tester'
+  );
+
+  -- Premise: app.queue_notification really does raise for a foreign-tenant recipient. If this
+  -- ever stops being true the helper's guard becomes untested-by-accident, so it is asserted
+  -- directly rather than taken on trust.
+  begin
+    perform app.queue_notification(
+      (select v.id from app.config_versions v join app.config_objects o on o.id = v.config_object_id
+       where o.config_type_code = 'notification:onboarding_task_assigned' and v.status = 'published' limit 1),
+      v_tenant1, 'onboarding_task_assigned', v_foreign, 'in_app', 'en',
+      jsonb_build_object('task_title', 'premise probe', 'due_at', 'no due date set'),
+      'iss070-guard-premise-probe', v_staff, 'tester'
+    );
+    raise exception 'assertion failed: test premise wrong -- app.queue_notification accepted a foreign-tenant recipient';
+  exception when insufficient_privilege then null;
+  end;
+
+  -- Failure mode 1, the refused recipient: the helper swallows it, returns false, and leaves a
+  -- discriminated failure event in the case timeline instead of a silent drop.
+  v_queued := app._queue_onboarding_case_notification(
+    v_tenant1, v_case.id, 'onboarding_task_assigned', v_foreign,
+    jsonb_build_object('task_title', 'guard probe', 'due_at', 'no due date set'),
+    'iss070-guard-foreign-recipient', v_staff, 'tester'
+  );
+  if v_queued then
+    raise exception 'assertion failed: expected the helper to report a refused recipient as not-queued';
+  end if;
+  select count(*) into v_count from app.onboarding_case_events
+  where case_id = v_case.id and event_type = 'onboarding_task_assigned_notification_failed';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly one onboarding_task_assigned_notification_failed event recording the refusal, found %', v_count;
+  end if;
+  if not exists (
+    select 1 from app.onboarding_case_events
+    where case_id = v_case.id and event_type = 'onboarding_task_assigned_notification_failed'
+      and notes like '%notification_recipient_unauthorized%'
+  ) then
+    raise exception 'assertion failed: expected the recorded failure to carry the REAL underlying error text, not a generic placeholder';
+  end if;
+
+  -- Failure mode 2, the refused context value: app.render_notification_template rejects an
+  -- angle bracket outright (its own injection guard). A real task title can contain one, so
+  -- this is a live call-site risk, not a theoretical one -- and it must not be able to abort
+  -- an assignment either.
+  v_queued := app._queue_onboarding_case_notification(
+    v_tenant1, v_case.id, 'onboarding_task_assigned', v_approver,
+    jsonb_build_object('task_title', 'Sign <b>welcome</b> document', 'due_at', 'no due date set'),
+    'iss070-guard-unsafe-context', v_staff, 'tester'
+  );
+  if v_queued then
+    raise exception 'assertion failed: expected the helper to report an unrenderable context as not-queued';
+  end if;
+  select count(*) into v_count from app.onboarding_case_events
+  where case_id = v_case.id and event_type = 'onboarding_task_assigned_notification_failed'
+    and notes like '%notification_unsafe_context_value%';
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected the unsafe-context refusal recorded as its own failure event, found %', v_count;
+  end if;
+
+  -- No recipient at all (an unassigned, category-only task owner). Not a failure -- there was
+  -- never an identity to address -- so it must NOT manufacture a failure event.
+  select count(*) into v_count from app.onboarding_case_events
+  where case_id = v_case.id and event_type like '%_notification_failed';
+  v_queued := app._queue_onboarding_case_notification(
+    v_tenant1, v_case.id, 'onboarding_task_assigned', null,
+    jsonb_build_object('task_title', 'nobody owns this', 'due_at', 'no due date set'),
+    'iss070-guard-null-recipient', v_staff, 'tester'
+  );
+  if v_queued then
+    raise exception 'assertion failed: expected a null recipient to report not-queued';
+  end if;
+  if (select count(*) from app.onboarding_case_events where case_id = v_case.id and event_type like '%_notification_failed') <> v_count then
+    raise exception 'assertion failed: a null recipient must not record a failure event -- there was no identity to address, which is a structural fact rather than an error';
+  end if;
+
+  -- The point of the whole guard: after three refused sends the case is untouched and still
+  -- fully usable. Nothing was rolled back, nothing was half-written.
+  select * into v_case from app.onboarding_offboarding_cases where id = v_case.id;
+  if v_case.status <> 'active' then
+    raise exception 'assertion failed: expected the case still active after three refused notification sends, got %', v_case.status;
+  end if;
+  if (select count(*) from app.onboarding_case_tasks where case_id = v_case.id) = 0 then
+    raise exception 'assertion failed: expected the case to still carry its materialized checklist tasks';
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-277 db-test assertions passed.'

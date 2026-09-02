@@ -8,6 +8,7 @@ import { Input } from "../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
+import { useUnsavedFormGuard } from "../../../../../components/forms/use-unsaved-change-guard.ts";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import { OnboardingExportForm, type OnboardingExportActionState } from "../../../../../components/domain/onboarding-export-form.tsx";
@@ -54,6 +55,12 @@ export function OnboardingCaseListPanel({
   const [caseType, setCaseType] = useState<string>("onboarding");
   const [sourceJobOfferId, setSourceJobOfferId] = useState<string>("");
   const [employeeMasterRecordId, setEmployeeMasterRecordId] = useState<string>("");
+  // ISS-2026-070 item 5: unsaved-change protection on the multi-field case-start form.
+  // The form-level (uncontrolled) guard rather than the controlled-values one, deliberately:
+  // only four of this form's fields are React state, and the rest -- full name, employment
+  // type, the org-unit ids -- are read straight out of FormData. Guarding just the four would
+  // warn about the smallest fields and stay silent about a half-typed new hire.
+  const { dirty: startCaseDirty, formProps: startCaseFormProps } = useUnsavedFormGuard(pending, state.error);
 
   function applyFilter(nextCaseType: string, nextStatus: string, nextSearch: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -163,7 +170,7 @@ export function OnboardingCaseListPanel({
         {publishedTemplateCount === 0 ? (
           <p className="text-xs text-warning">No published checklist template exists yet for any case type -- publish one under Checklist templates first, or starting will fail with no_published_checklist_template.</p>
         ) : null}
-        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate>
+        <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate {...startCaseFormProps}>
           <FormField id="caseType" label="Case type">
             <Select id="caseType" name="caseType" required value={caseType} onChange={(e) => setCaseType(e.currentTarget.value)} invalid={Boolean(state.error)} aria-describedby={state.error ? "start-case-error" : undefined}>
               {CASE_TYPES.map((t) => (
@@ -255,6 +262,8 @@ export function OnboardingCaseListPanel({
               <ValidationMessage id="start-case-error">{state.error}</ValidationMessage>
             </div>
           ) : null}
+
+          {startCaseDirty ? <p className="col-span-full text-xs text-warning">You have unsaved changes.</p> : null}
 
           <div className="col-span-full flex flex-wrap gap-2">
             <Button type="submit" loading={pending} loadingLabel="Starting…">
