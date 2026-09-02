@@ -147,6 +147,7 @@ test("ATW-031 (ISS-2026-012): GENERIC_JOB_TYPES matches app.generic_job_types() 
       "loyalty_earning_evaluation_sweep",
       "loyalty_tier_recalculation_sweep",
       "loyalty_points_posting_sweep",
+      "loyalty_benefit_issuance_sweep",
     ],
   );
 });

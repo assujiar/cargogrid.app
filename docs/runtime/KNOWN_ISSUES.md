@@ -137,9 +137,9 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-126` | Low | `RESOLVED` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
 | `ISS-2026-127` | Low | `RESOLVED` | Membership Tier (CPL-317): recalculation is on-demand/staff-triggered only, a program without a base tier raises a real error rather than defaulting,  |
 | `ISS-2026-128` | Low | `RESOLVED` | Points Ledger (CPL-318): earning-event-to-lot conversion and lot expiry are on-demand/staff-triggered only; lot expiry window is a caller-supplied par |
-| `ISS-2026-129` | Low | `OPEN` | Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expir |
+| `ISS-2026-129` | Low | `RESOLVED` | Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expir |
 | `ISS-2026-131` | Low | `RESOLVED` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
-| `ISS-2026-132` | Low | `OPEN` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
+| `ISS-2026-132` | Low | `RESOLVED` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
 | `ISS-2026-133` | Low | `RESOLVED` | Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level |
 | `ISS-2026-134` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects c |
 | `ISS-2026-136` | Low | `RESOLVED` | Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, caus |
@@ -2321,6 +2321,64 @@ would extend that function the same way. **Status now: items 2 and 4 `RESOLVED`;
 stay `OPEN`, Low** — both remain the same genuinely correct, deliberate structural decisions
 this entry's own original reasoning already established, untouched by this pass.
 
+**Items 1 and 3 re-verified live, `2026-09-02` — both correctly stay `OPEN`; item 3's own
+reasoning corrected and sharpened, not merely re-confirmed.**
+
+**Item 1 — re-verified, unchanged.** `scripts/db-tests/ticketing-linked-records.sql:280`'s own
+six-value registry assertion and `server/contracts/ticketing/ticketing.test.ts:635`'s own
+`TICKET_LINK_ENTITY_TYPES` assertion both still enforce exactly the original six values,
+grep-confirmed live. No unrelated reason to widen the registry has arisen. This entry's own
+text already named the correct disposition — "no fix needed unless a future, unrelated reason
+to widen the original six-value registry arises" — and that condition has not occurred. Not
+re-litigated further; a documented non-gap, not a to-do.
+
+**Item 3 — re-verified live, and the investigation went deeper than the original disclosure,
+finding a real structural fact worth recording precisely.** This entry's own text framed the
+gap as "the tenant-view gate is deny-by-default and returns nothing... but nowhere to durably
+log it," implicitly modeling `app.search_customer_ticket_link_candidates_precreate`'s own
+`app._ticket_link_actor_may_view_tenant_data` check on `app.search_ticket_link_candidates`'s
+own identical-shaped gate (HRT-292, which DOES durably log a `search_denied`
+`app.ticket_link_events` row on denial, live-confirmed at `20260901130000:204`). A first attempt
+at mirroring that exact shape into a new, separate table (never touching
+`app.ticket_link_events`'s own `NOT NULL ticket_id`) was drafted and, before any regression
+evidence was written against it, checked for whether the new ledger row could ever actually be
+written — live, via `pg_get_functiondef`, not assumed:
+
+- `app.actor_holds_customer_user_layer(p_tenant_id, p_actor_auth_user_id)` — the check this
+  precreate function ALREADY performs, raising `insufficient_privilege` if it fails, before ever
+  reaching the tenant-view gate — resolves to `exists (select 1 from app.principal_memberships
+  pm where pm.auth_user_id = p_actor_auth_user_id and pm.tenant_id = p_tenant_id and pm.layer =
+  'customer_user' and pm.status = 'active')`.
+- `app._ticket_link_actor_may_view_tenant_data(p_tenant_id, p_actor_auth_user_id)`'s own third
+  OR-branch is the BYTE-IDENTICAL predicate against the same table/columns/tenant/actor.
+
+Whenever the first check passes, the third branch of the second check's OR-expression is
+therefore unconditionally true by construction, regardless of the other two branches — the
+tenant-view gate can never actually return `false` for a caller who has already cleared this
+function's own earlier customer_user-layer requirement. It is dead code for this specific call
+site today, not a live, reachable denial. This is a real, previously-undisclosed structural fact
+about a Phase 8, already-`VERIFIED` migration, found only because this pass checked reachability
+before writing a regression test against the planned fix, rather than after. A draft table +
+list RPC + trigger-adjacent insert built against this unreachable branch was therefore reverted
+in full before commit (never left as inert dead code carrying ongoing schema/wrapper/grant
+maintenance cost for a mechanism that can never fire) — grep/`pg_proc`-confirmed live: no trace
+of `app.ticket_portal_link_precreation_search_denials` or
+`app.list_ticket_portal_link_precreation_search_denials` remains, and
+`app.search_customer_ticket_link_candidates_precreate`'s own body is confirmed
+byte-identical to its pre-this-pass text.
+
+The two ACTUALLY reachable denial points in this function both `RAISE` (a non-customer_user
+caller; an unsupported `p_entity_type`) rather than returning normally — and a raised exception
+rolls back everything in the same statement, including any insert placed before it, so neither
+can durably log without an autonomous-transaction mechanism (e.g. `dblink`) this repository has
+never used anywhere; building one purely to log these two denials would be a genuinely new,
+capability-sized primitive, not a bounded, additive fix. **Item 3 therefore stays correctly
+`OPEN`, Low, for a more precise reason than originally disclosed**: not merely "nowhere to log
+a denial," but "the one theoretically loggable denial point is unreachable for this caller, and
+the two reachable ones cannot be durably logged without a new class of primitive this repository
+has never built." **Status now: items 1 and 3 both remain `OPEN`, Low — unchanged in disposition,
+item 3's own reasoning corrected.**
+
 ### ISS-2026-123 — legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path (Phase 8, CPL-314 deliberate scope decisions, RESOLVED, Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-016` (Prompt 314, Customer Profile) — two deliberate scope decisions made while authoring this checkpoint's own migration, not defects found afterward. The source prompt's own text requires exactly this kind of disclosed call: "Billing, tax/legal and credit fields require configured authorization/approval," which this checkpoint reads as excluding legal identity fields from self-service change entirely (no configured authorization/approval workflow for a legal-name/tax-id change exists anywhere in this repository, and building one — likely involving real KYC/compliance review, not merely a staff click-to-approve — is a genuinely new, capability-sized addition, not a bounded extension of this prompt's own charter).
@@ -2935,7 +2993,7 @@ decision for the operator, exactly as `ISS-2026-066`'s own scheduler note disclo
 here is that these three tasks are now *schedulable* — before, no schedule could have expressed
 them at all.
 
-### ISS-2026-129 — Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expiry are on-demand/staff-triggered only; entitlement value is a currency amount only, no percentage-based voucher model (Phase 8, Batch 4, `CG-S13-CPL-021`, OPEN, Low)
+### ISS-2026-129 — Cashback Discount Voucher (CPL-319): no Finance liability-handoff/reconciliation mechanism yet (explicitly CPL-323's own future scope); issuance/expiry are on-demand/staff-triggered only; entitlement value is a currency amount only, no percentage-based voucher model (Phase 8, Batch 4, `CG-S13-CPL-021`, `RESOLVED` in full 2026-09-02 — items 1 and 3 resolved 2026-09-02, item 2's expiry half resolved 2026-08-31, item 2's issuance half resolved 2026-09-02, Low)
 
 Discovered/disclosed `2026-08-17` at `CG-S13-CPL-021` (Prompt 319, Cashback Discount Voucher, the fifth and final prompt of Batch 4) — deliberate scope decisions made while authoring `supabase/migrations/20260801210000_create_customer_portal_cashback_discount_voucher.sql`, not defects found afterward.
 
@@ -3017,6 +3075,54 @@ reward can ever be published against it.
 **Item 2's issuance half stays genuinely open, untouched by this pass** — this task's own scope
 was items 1 and 3 only. **Status now: items 1, 3, and the expiry half of item 2 `RESOLVED`; the
 issuance half of item 2 stays `OPEN`, Low.**
+
+**Item 2's issuance half `RESOLVED` in full — `2026-09-02`.** The 2026-08-31 update above gave
+the precise reason issuance could not simply mirror `ISS-2026-126`/`127`/`128`'s own sweep
+shape: those three each find a real, pre-existing BACKLOG (an unevaluated invoice, an
+un-recalculated tier, an unposted earning event); issuance has none — "this customer is owed a
+voucher and has not been given one" is a staff DECISION, not a fact waiting to be discovered,
+and wiring an automatic trigger off a real business event (a paid invoice, a completed shipment)
+remains a genuinely new, undirected rules-engine capability this fix does not attempt.
+
+What closes the issuance half instead is narrower and real: a new, tenant-configured RECURRING
+issuance RULE — `app.loyalty_benefit_issuance_rules`
+(`supabase/migrations/20260902221000_close_iss2026129_item2_loyalty_benefit_issuance_scheduling.sql`)
+— where staff explicitly configure what to issue (benefit_type/value_amount/value_cap/currency,
+the exact shape `app.issue_loyalty_benefit_entitlement` itself already requires), how often
+(`recurrence_interval_days`), and to whom (every ACTIVE enrolled account in the rule's own
+program, optionally tier-gated via the same tier-rank check `app.submit_loyalty_redemption`
+already uses). Once a rule is CONFIGURED, "every eligible account this rule has not yet issued
+to within its own recurrence window" genuinely is a real, discoverable backlog — the missing
+fact this issue's own 2026-08-31 update named is what the rule itself supplies. A new
+`app.run_loyalty_benefit_issuance_rule_sweep` mirrors `app.run_loyalty_earning_evaluation_sweep`/
+`app.run_loyalty_tier_recalculation_sweep`/`app.run_loyalty_points_posting_sweep`
+(`20260831230000`) exactly — `app.enqueue_job` wrapping, per-record subtransaction isolation (a
+misconfigured rule or ineligible account is a counted skip, never an aborted run), a capped
+20-reason skip list, `(tenant, run_label)` idempotency — and calls the existing, unmodified
+`app.issue_loyalty_benefit_entitlement` for every actual issuance, reimplementing none of its
+own validation/idempotency/audit trail. Registered in the scheduler catalogue as
+`loyalty_benefit_issuance_sweep` (tenant-admin-configurable, mirroring its three siblings), with
+one new dispatch branch in `app._run_scheduled_task_once` — rebuilt from the LIVE definition
+(`pg_get_functiondef`, not the creating migration) after confirming it already carried two
+branches (`loyalty_liability_reconciliation`, `onboarding_offboarding_overdue_task_sweep`) added
+by later migrations that do not appear in `20260831230000`'s own on-disk text — the exact
+"reading the migration that created a function is not reading the function" trap that
+migration's own header already names, caught before it could silently delete either branch.
+`app.generic_job_types()`/the `app.jobs` `job_type` CHECK constraint, and their own TypeScript
+mirror (`server/contracts/background-job/background-job.ts`'s `GENERIC_JOB_TYPES`,
+`background-job.test.ts`'s literal, and `scripts/db-tests/background-job.sql`'s own
+`v_ts_mirror`) are all widened together — the ATW-031 drift gate caught the TypeScript/db-test
+mirrors being missed on the first `db:test` run, exactly as it is designed to.
+
+Regression proof appended to `scripts/db-tests/customer-loyalty-benefits.sql`: a fresh rule
+issues to all 3 eligible enrolled accounts on its first sweep; a second, genuinely distinct
+sweep the same instant issues to 0 (every account is inside its own just-issued recurrence
+window — the load-bearing proof this does not re-issue on every run); the NULL-bypass and
+stale-version guards on `app.update_loyalty_benefit_issuance_rule` are proven; deactivating the
+rule blocks issuance even once the recurrence window elapses, and reactivating it 31 days later
+correctly issues again to all 3 accounts (proving the earlier skip was the inactive-rule gate,
+not a stuck idempotency key or an exhausted candidate set); the catalogue registration itself is
+asserted live. **Status now: ALL items of this entry are `RESOLVED`.**
 
 ### ISS-2026-130 — no Supreme-Admin-exception override mechanism (RPD-022) exists yet for any of the four Loyalty ledger tables (Phase 8, Batch 4 Tier C review, `CG-S13-CPL-018/019/020/021`, `RESOLVED` 2026-08-20 at CPL-325, was Medium)
 
@@ -3110,7 +3216,7 @@ passed, 0 failed, including the new `loyalty-reward-media.test.ts`), `pnpm run d
 live/hosted project for the orchestrating session's own review, per this task's own charter.
 **Status `RESOLVED`** in full.
 
-### ISS-2026-132 — Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardless of reward_type; discount_voucher entitlement value is sourced from the reward's own staff-only internal_cost; no notification/retry/DLQ mechanism exists yet (Phase 8, Batch 5, `CG-S13-CPL-023`, OPEN, Low)
+### ISS-2026-132 — Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardless of reward_type; discount_voucher entitlement value is sourced from the reward's own staff-only internal_cost; no notification/retry/DLQ mechanism exists yet (Phase 8, Batch 5, `CG-S13-CPL-023`, `RESOLVED` in full 2026-09-02 — items 1 and 2 resolved 2026-09-02, item 3 resolved 2026-09-02, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-023` (Prompt 321, Redemption Approval and Fulfillment, the second prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801230000_create_customer_portal_loyalty_redemption_approval_fulfillment.sql`, not defects found afterward.
 
@@ -3197,6 +3303,55 @@ _compose_loyalty_redemption_decision`'s own failure paths, mirroring an existing
 pattern (PLT-132), is a real, separate, capability-sized addition this pass's own time budget
 did not reach once items 1 and 2 were built solidly. Recommended fix unchanged from this
 entry's own original text. **Status now: items 1 and 2 `RESOLVED`; item 3 stays `OPEN`, Low.**
+
+**Item 3 `RESOLVED` in full — `2026-09-02`.** Wires the real PLT-127 `app.queue_notification`
+primitive — the same one HRT-291's own `app._queue_ticket_escalation_notification` already
+established a precedent for — to every loyalty redemption decision event, with a genuine
+retry-count column and a dead-letter status after repeated failures, mirroring PLT-131/132's own
+`app.jobs`/`app.webhook_deliveries` DLQ shape (`attempts`/`max_attempts`/`status='dead_letter'`,
+exponential backoff via `power(2, attempts)`) rather than inventing new vocabulary.
+`supabase/migrations/20260902222000_close_iss2026132_item3_redemption_notification_retry_dlq.sql`.
+
+**Design: one AFTER INSERT trigger on `app.loyalty_redemption_events`, not five separate edits.**
+Every one of `app.submit_loyalty_redemption`/`app.decide_loyalty_redemption`/`app.cancel_
+loyalty_redemption`/`app.mark_loyalty_redemption_fulfilled`/`app.mark_loyalty_redemption_
+fulfillment_failed` already inserts into this ONE append-only table for every real state
+transition — a trigger fires uniformly across all five with zero edits to any of them and zero
+risk of re-deriving or drifting from their own already-hardened business logic. The trigger
+(`app._notify_on_loyalty_redemption_event`) catches every exception of its own internally — an
+uncaught error inside an AFTER trigger would otherwise roll back the very event row it fired on.
+A new, nullable `app.loyalty_redemptions.submitted_by_auth_user_id` column (captured going
+forward only by `app.submit_loyalty_redemption`, mirroring `ISS-2026-130`'s own "captured going
+forward only" precedent for a pre-existing-row limitation) resolves the real notification
+recipient — the redemption's own submitter, staff or customer alike — since `app.loyalty_
+redemptions` otherwise carries only a `customer_account_id`, which can have several `customer_
+user` members. The `submitted` event itself is never notified (the submitting customer already
+knows).
+
+**Retry/DLQ:** `app.loyalty_redemption_notification_deliveries` is one MUTABLE row per notified
+event (never append-only — this is delivery-tracking machinery, the same shape as `app.jobs`,
+not a compliance ledger), attempted via one shared internal helper (`app._attempt_loyalty_
+redemption_notification_delivery`) that both the trigger's own first attempt and two new staff
+RPCs — `app.retry_loyalty_redemption_notification_delivery` (for `status='failed'`) and `app.
+requeue_loyalty_redemption_notification_delivery` (for `status='dead_letter'`, resets attempts
+to 0 first) — all share, mirroring `app.record_job_failure`/`app.requeue_dead_letter_job`'s own
+split exactly, adapted for a domain with no background worker: both are staff-triggered, the
+identical "on-demand/staff-triggered only" precedent this whole Loyalty domain has consistently
+disclosed. A new `app.list_loyalty_redemption_notification_deliveries` (LYL:View, keyset-paginated,
+status-filterable) closes the disclosed gap this entry's own text named precisely — "a staff
+member must notice a `pending_approval`/`fulfilling` queue item manually" becomes a real,
+queryable, retryable failed-notification queue instead.
+
+Regression proof appended to `scripts/db-tests/customer-loyalty-redemption.sql`: the `submitted`
+event produces no delivery row; a real decision event (Epsilon still an active tenant member)
+produces a genuine `sent` delivery backed by a real `app.notifications` row; Plain User is denied
+reading the queue; a decision event against a since-revoked recipient records a real `failed`
+delivery (`notification_recipient_unauthorized`, attempts=1) — Plain User cannot retry it, a
+`dead_letter` delivery cannot be "requeued" while merely `failed` and vice versa; 4 further staff
+retries (Epsilon still revoked) reach `dead_letter` at EXACTLY `attempts=max_attempts` (5), never
+earlier or later; a `dead_letter` delivery cannot be retried (only requeued); restoring Epsilon's
+membership and requeuing resets attempts to 0 and immediately succeeds. **Status now: ALL items
+of this entry are `RESOLVED`.**
 ### ISS-2026-133 — Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level fraud hold not built; expiry sweep is on-demand/staff-triggered only (Phase 8, Batch 5, `CG-S13-CPL-024`, `RESOLVED` in full 2026-08-31 — item 1 Track B Batch 4, item 3 satisfied by the scheduler, item 2 ruled an accepted variant with an executable pin, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-024` (Prompt 322, Expiry and Fraud Prevention, the third prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801240000_create_customer_portal_loyalty_expiry_fraud_prevention.sql`, not defects found afterward.
@@ -3246,7 +3401,7 @@ than a written-out argument list, since the two do not share a signature.
 `npx next build` green. Both primitives and their grants verified live against the hosted project
 before the ruling was written. Freeze db-test digest amended (sixty-eighth pass).
 
-### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — item 1 and item 4's engagement-metrics half only; items 2 and 5 `RESOLVED` 2026-09-02, item 4's schedulable half RESOLVED 2026-08-31, item 3 `RESOLVED` Track B Batch 4, Low)
+### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — item 4's engagement-metrics half only; items 1, 2 and 5 `RESOLVED` 2026-09-02, item 4's schedulable half RESOLVED 2026-08-31, item 3 `RESOLVED` Track B Batch 4, Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-025` (Prompt 323, Liability Reconciliation Analytics, the fourth and final prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801250000_create_customer_portal_loyalty_liability_reconciliation_analytics.sql`, not defects found afterward.
 
@@ -3334,6 +3489,66 @@ spent solidly on items 2 and 5, did not reach. Left open rather than rushed. **S
 3 stays `RESOLVED` (unchanged), items 2 and 5 are newly `RESOLVED` — item 1 stays `OPEN`, and
 item 4's engagement-metrics half stays `OPEN` too, unchanged from the 2026-08-31 update above,
 Low.**
+
+**Item 1 `RESOLVED` — `2026-09-02`.** Checked live before writing anything, per this entry's own
+2026-09-02 update: `ISS-2026-197`'s own FX-conversion work HAS now landed on this branch —
+`20260902050000_wire_fx_conversion_into_operations_job_profitability.sql` built a real, reusable
+internal helper, `app.resolve_operations_fx_conversion(p_tenant_id, p_amount, p_source_currency,
+p_target_currency, p_as_of)`, reading the same already-shipped, versioned/dated `app.finance_
+exchange_rates` (FIN-193/194) this repository's Finance module already maintains — the "real,
+configured currency-conversion source this repository does not have" this entry's own text named
+as the blocker now exists.
+
+`supabase/migrations/20260902223000_close_iss2026134_item1_cross_currency_liability_reconciliation.sql`
+(same-day correction `20260902223500`, found while authoring this same fix's own db-test
+evidence, before any wrong-shape assertion was written against it — see below) builds a new,
+read-only ROLLUP, `app.execute_loyalty_liability_reconciliation_run_all_currencies`, that drives
+the existing, unmodified `app.execute_loyalty_liability_reconciliation_run` once per currency the
+tenant actually has entitlements in (idempotent per currency, so a manually-run leg is reused,
+never duplicated), then converts each currency-scoped cashback/discount/voucher total into the
+tenant's own base/reporting currency via the FX helper above and sums them into one true
+consolidated total — the number a staff member manually summing raw per-currency figures could
+never correctly produce (summing 100 USD + 50 EUR as "150" is meaningless; only a converted sum
+is). This does NOT collapse the per-currency architecture item 1's own original text established
+as correct: certification (`app.certify_loyalty_liability_reconciliation_run`) still happens
+per-currency, on the underlying member runs, exactly as before — the consolidated row is a
+rollup convenience for reporting, never a second certification surface.
+
+Two lines are NOT currency-scoped at all, and are handled correctly rather than naively summed:
+`points_liability_total` carries no currency (design decision 1) — every per-currency run of the
+same `as_of` already reports the IDENTICAL raw figure, so it is taken from exactly one member run
+and reported once, explicitly labeled raw/dimensionless, never summed or converted.
+`reward_fulfillment_liability_total` is ALREADY correctly currency-scoped to the tenant's own
+default currency only (`ISS-2026-136` item 1) — every non-default-currency run already reports 0
+for this line, so a plain sum across every member run is safe and already correct.
+
+**Never fabricate, disclose the gap:** a currency pair with no approved `app.finance_exchange_
+rates` row is EXCLUDED from the relevant total (never treated as zero, which would silently
+understate a real liability) and recorded in a new `unconverted_lines` jsonb column naming the
+exact (line, currency, raw_amount) triple; the consolidated run's own `status` becomes
+`partial_rate_unavailable` rather than `complete`.
+
+**Same-day correction, `20260902223500`**, found while authoring this same fix's own db-test
+evidence, before any wrong-shape assertion was written against it: the first draft attempted FX
+conversion for EVERY line unconditionally, including a line whose own per-currency total was
+genuinely 0 (no entitlements of that benefit_type exist in that currency at all — the
+overwhelmingly common case for any tenant with more than one currency). A currency with no
+approved rate then produced up to three `unconverted_lines` entries (cashback/discount/voucher)
+instead of however many were actually nonzero — pure noise for the two already, correctly,
+contributing 0 regardless of rate availability. The identical "detection broader than what
+actually feeds the total" shape `ISS-2026-136` item 2 already named and fixed once in this exact
+function family. Fixed: a genuinely zero raw total is never sent through the FX helper and never
+flagged — there is nothing to disclose a gap about.
+
+Regression proof appended to `scripts/db-tests/customer-loyalty-liability-reconciliation.sql`
+(a new, isolated tenant `lra6`): a real approved EUR->USD spot rate (1.10); a run across both
+currencies converts and sums to exactly `100 + (50 * 1.10) = 155.00`; the same explicit
+idempotency key replays the identical row without duplicating either member run; a THIRD
+currency (JPY) with no approved rate leaves the USD+EUR total unchanged at 155.00, is excluded
+(never zeroed) and named exactly once in `unconverted_lines`, and the run reports
+`status=partial_rate_unavailable`; LYL:View read RPCs and raw-function-grant defense-in-depth are
+proven. **Status now: items 1, 2, 3 and 5 are `RESOLVED` — only item 4's engagement-metrics half
+stays `OPEN`, Low.**
 
 ### ISS-2026-135 — a third `scripts/db-tests/*.sql` file (`hris-shift-roster-scheduling.sql`) confirmed to belong to the already-registered day-of-week/wall-clock-dependent fixture-flakiness class (`ISS-2026-077`/`103`/`115`) — encountered while re-running the FULL `pnpm run db:test` harness during Batch 5's own Tier C review (Phase 8, Batch 5 Tier C review, `CG-S13-CPL-022..025`, `RESOLVED` 2026-08-23 at `CG-S15-HDN-002`, was Low — pre-existing, unrelated to Batch 5, not fixed there)
 

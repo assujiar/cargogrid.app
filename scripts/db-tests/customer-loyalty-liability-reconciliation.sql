@@ -1604,4 +1604,191 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-134 item 1 (2026-09-02, cross-currency reconciliation) fixture: tenant lra6 (own, fully isolated tenant), one actor holding full LYL + full FIN (View/Edit/Approve), a published USD-base locale, a program, one customer account enrolled; a real approved EUR->USD spot rate (1.10)'
+do $$
+declare
+  v_tenant6 uuid;
+  v_company6 uuid;
+  v_manager6 uuid := '00000000-0000-0000-0000-000000346801';
+  v_account6 uuid;
+  v_role6 uuid; v_draft6 app.role_versions;
+  v_locale_draft6 app.tenant_locale_versions;
+  v_program6_id uuid;
+  v_rate app.finance_exchange_rates;
+begin
+  insert into auth.users (id, email) values (v_manager6, 'manager6@lra6.test');
+
+  perform app.provision_tenant('lra6', 'Liability Recon Test Tenant Six (cross-currency)', 'idem-lra6', 'tester');
+  v_tenant6 := (select id from app.tenants where slug = 'lra6');
+  perform app.transition_tenant_status(v_tenant6, 'active', 'setup', 'tester');
+  perform app.create_org_unit(v_tenant6, 'company', null, 'LRA6-CO', 'Lra6 Co', 'tester');
+  v_company6 := (select id from app.org_units where tenant_id = v_tenant6 and code = 'LRA6-CO');
+
+  perform app.invite_user(v_tenant6, v_manager6, 'manager6@lra6.test', 'Lra6 Manager', v_company6, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'manager6@lra6.test'), 'active', 'onboarded', 'tester');
+  v_role6 := (app.create_role(v_tenant6, 'Full LYL+FIN', 'full LYL and FIN authority, one actor for test simplicity', 'tester')).id;
+  v_draft6 := app.create_role_version(v_role6, 'tester');
+  perform app.set_role_version_permissions(v_draft6.id, array(select id from app.permissions where (resource_module_code = 'LYL' and action in ('View', 'Create', 'Edit', 'Configure')) or (resource_module_code = 'FIN' and action in ('View', 'Edit', 'Approve'))), 'tester');
+  perform app.publish_role_version(v_draft6.id, now(), 'tester');
+  perform app.assign_role(v_tenant6, (select id from app.role_versions where role_id = v_role6 and status = 'published'), v_manager6, v_manager6, 'tester');
+  perform app.grant_principal_membership(v_manager6, 'tenant_admin', v_tenant6, null, 'tester');
+
+  v_locale_draft6 := app.create_tenant_locale_draft(v_tenant6, v_manager6, 'tester');
+  perform app.set_tenant_locale_config(v_locale_draft6.id, v_manager6, 'en', 'Asia/Jakarta', 'USD', '{}'::jsonb, 'tester');
+  perform app.publish_tenant_locale_version(v_locale_draft6.id, v_manager6, clock_timestamp(), 'tester');
+
+  insert into app.accounts (tenant_id, legal_name, duplicate_fingerprint, billing_address, org_unit_id, created_by)
+  values (v_tenant6, 'Lra6 Account', 'lra6-account-fp', '{}'::jsonb, v_company6, 'tester') returning id into v_account6;
+
+  perform app.create_loyalty_program(v_tenant6, 'Lra6 Program', 'Program used ONLY by the ISS-2026-134 item 1 cross-currency regression.', v_manager6, 'manager6');
+  v_program6_id := (select id from app.loyalty_programs where tenant_id = v_tenant6 and name = 'Lra6 Program');
+  perform app.update_loyalty_program_status(v_tenant6, v_program6_id, 1, 'active', v_manager6, 'manager6');
+  perform app.enroll_customer_loyalty_account(v_tenant6, v_account6, v_program6_id, v_manager6, 'manager6');
+
+  v_rate := app.create_finance_exchange_rate_draft(v_tenant6, 'spot', 'EUR', 'USD', 1.10, 'manual', clock_timestamp() - interval '30 days', null, v_manager6, 'manager6');
+  perform app.approve_finance_exchange_rate(v_rate.id, v_rate.record_version, v_manager6, 'manager6');
+end $$;
+
+\echo '>> ISS-2026-134 item 1: a run across ALL of a tenant''s currencies, in one call, converts each currency-scoped entitlement total into the tenant''s own base_currency (via app.resolve_operations_fx_conversion, ISS-2026-197) and sums them into one true consolidated total -- something no staff member manually summing raw per-currency figures could ever do correctly'
+do $$
+declare
+  v_tenant6 uuid := (select id from app.tenants where slug = 'lra6');
+  v_manager6 uuid := '00000000-0000-0000-0000-000000346801';
+  v_account6 uuid := (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'lra6') and legal_name = 'Lra6 Account');
+  v_loyalty_account6 uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'lra6') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'lra6') and legal_name = 'Lra6 Account'));
+  v_consolidated app.loyalty_liability_reconciliation_consolidated_runs;
+  v_as_of timestamptz;
+begin
+  perform app.issue_loyalty_benefit_entitlement(v_tenant6, v_loyalty_account6, 'cashback', 100, null, 'USD', 'manual', null, null, 'lra6-usd-cashback', v_manager6, 'manager6');
+  perform app.issue_loyalty_benefit_entitlement(v_tenant6, v_loyalty_account6, 'cashback', 50, null, 'EUR', 'manual', null, null, 'lra6-eur-cashback', v_manager6, 'manager6');
+
+  -- Captured AFTER both entitlements are issued (a DECLARE-time default
+  -- evaluates at block entry, BEFORE any statement in the body runs, which
+  -- would exclude both entitlements from the currency-scope query below).
+  v_as_of := clock_timestamp();
+
+  -- Plain (no-LYL) authority is denied outright -- same gate as the
+  -- underlying per-currency RPC, re-checked here too.
+  begin
+    perform app.execute_loyalty_liability_reconciliation_run_all_currencies(v_tenant6, v_as_of, '00000000-0000-0000-0000-000000000099', 'nobody', 'lra6-denied');
+    raise exception 'assertion failed: expected insufficient_authority for an unrecognized/unauthorized actor';
+  exception when others then if sqlerrm not like 'insufficient_authority%' and sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
+  v_consolidated := app.execute_loyalty_liability_reconciliation_run_all_currencies(v_tenant6, v_as_of, v_manager6, 'manager6', 'lra6-consolidated-1');
+  if v_consolidated.base_currency <> 'USD' then
+    raise exception 'assertion failed: expected base_currency=USD (the tenant''s own resolved default), got %', v_consolidated.base_currency;
+  end if;
+  if not (v_consolidated.member_currencies @> array['USD', 'EUR'] and array_length(v_consolidated.member_currencies, 1) = 2) then
+    raise exception 'assertion failed: expected exactly the two currencies this tenant has entitlements in (USD, EUR), got %', v_consolidated.member_currencies;
+  end if;
+  if array_length(v_consolidated.member_run_ids, 1) <> 2 then
+    raise exception 'assertion failed: expected exactly 2 member runs (one per currency), got %', array_length(v_consolidated.member_run_ids, 1);
+  end if;
+  -- 100 (USD, identity) + 50*1.10 (EUR->USD, the real approved rate) = 155.00 --
+  -- a number no plain sum of the two raw per-currency figures (100 + 50 = 150)
+  -- would ever produce, and no staff member manually summing raw per-currency
+  -- runs could compute without first knowing to convert.
+  if v_consolidated.cashback_liability_base_amount <> 155.00 then
+    raise exception 'assertion failed: expected cashback_liability_base_amount = 100 + (50 * 1.10) = 155.00, got %', v_consolidated.cashback_liability_base_amount;
+  end if;
+  if v_consolidated.status <> 'complete' or jsonb_array_length(v_consolidated.unconverted_lines) <> 0 then
+    raise exception 'assertion failed: expected status=complete with zero unconverted lines (a real rate covers both currencies), got status=% unconverted=%', v_consolidated.status, v_consolidated.unconverted_lines;
+  end if;
+
+  -- Idempotent: the SAME explicit key returns the IDENTICAL row, never
+  -- recomputes, never duplicates the two per-currency member runs it drove.
+  declare
+    v_replay app.loyalty_liability_reconciliation_consolidated_runs;
+  begin
+    v_replay := app.execute_loyalty_liability_reconciliation_run_all_currencies(v_tenant6, v_as_of, v_manager6, 'manager6', 'lra6-consolidated-1');
+    if v_replay.id <> v_consolidated.id or v_replay.cashback_liability_base_amount <> v_consolidated.cashback_liability_base_amount then
+      raise exception 'assertion failed: expected an explicit-key replay to return the IDENTICAL consolidated row, got id % vs %', v_replay.id, v_consolidated.id;
+    end if;
+  end;
+  if (select count(*) from app.loyalty_liability_reconciliation_runs where tenant_id = v_tenant6) <> 2 then
+    raise exception 'assertion failed: expected the replay to still leave exactly 2 member runs (USD, EUR), never a duplicate';
+  end if;
+
+  -- A staff member who ALREADY ran the USD leg manually today gets that
+  -- SAME run reused here, never duplicated -- the consolidated call composes
+  -- the existing per-currency RPC, it does not fork a parallel path.
+  if (select count(*) from app.loyalty_liability_reconciliation_runs where tenant_id = v_tenant6 and currency = 'USD') <> 1 then
+    raise exception 'assertion failed: expected exactly 1 USD member run to exist, reused rather than duplicated';
+  end if;
+end $$;
+
+\echo '>> ISS-2026-134 item 1: a currency with NO approved exchange rate is EXCLUDED from the consolidated total (never treated as zero, which would silently understate a real liability) and disclosed in unconverted_lines, status=partial_rate_unavailable -- never fabricate, disclose the gap'
+do $$
+declare
+  v_tenant6 uuid := (select id from app.tenants where slug = 'lra6');
+  v_manager6 uuid := '00000000-0000-0000-0000-000000346801';
+  v_loyalty_account6 uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'lra6') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'lra6') and legal_name = 'Lra6 Account'));
+  v_consolidated app.loyalty_liability_reconciliation_consolidated_runs;
+  v_as_of timestamptz;
+  v_unconverted jsonb;
+begin
+  -- JPY: a real, structurally valid ISO currency with NO app.finance_
+  -- exchange_rates row of any kind configured for this tenant.
+  perform app.issue_loyalty_benefit_entitlement(v_tenant6, v_loyalty_account6, 'cashback', 1000, null, 'JPY', 'manual', null, null, 'lra6-jpy-cashback', v_manager6, 'manager6');
+
+  -- Captured AFTER issuing (see the prior block's own identical note).
+  v_as_of := clock_timestamp();
+
+  v_consolidated := app.execute_loyalty_liability_reconciliation_run_all_currencies(v_tenant6, v_as_of, v_manager6, 'manager6', 'lra6-consolidated-2-partial');
+  if v_consolidated.status <> 'partial_rate_unavailable' then
+    raise exception 'assertion failed: expected status=partial_rate_unavailable once a currency has no approved rate, got %', v_consolidated.status;
+  end if;
+  if not (v_consolidated.member_currencies @> array['USD', 'EUR', 'JPY'] and array_length(v_consolidated.member_currencies, 1) = 3) then
+    raise exception 'assertion failed: expected exactly 3 member currencies (USD, EUR, JPY), got %', v_consolidated.member_currencies;
+  end if;
+  -- The JPY cashback line is EXCLUDED, not zeroed -- the USD+EUR total is
+  -- UNCHANGED from the prior (complete) run.
+  if v_consolidated.cashback_liability_base_amount <> 155.00 then
+    raise exception 'assertion failed: expected the USD+EUR total to stay exactly 155.00 (JPY excluded, never silently zeroed or fabricated), got %', v_consolidated.cashback_liability_base_amount;
+  end if;
+
+  select jsonb_agg(elem) into v_unconverted from jsonb_array_elements(v_consolidated.unconverted_lines) elem where elem ->> 'currency' = 'JPY';
+  if v_unconverted is null or jsonb_array_length(v_unconverted) <> 1 or (v_unconverted -> 0 ->> 'line') <> 'cashback' or ((v_unconverted -> 0 ->> 'raw_amount')::numeric) <> 1000 then
+    raise exception 'assertion failed: expected exactly one unconverted_lines entry naming (line=cashback, currency=JPY, raw_amount=1000), got %', v_consolidated.unconverted_lines;
+  end if;
+end $$;
+
+\echo '>> ISS-2026-134 item 1: LYL:View read RPCs (get/list) work and are authority-gated the same way as every other reconciliation read surface; raw-function-grant defense-in-depth (anon holds zero EXECUTE on any of the 3 new functions)'
+do $$
+declare
+  v_tenant6 uuid := (select id from app.tenants where slug = 'lra6');
+  v_manager6 uuid := '00000000-0000-0000-0000-000000346801';
+  v_consolidated_id uuid := (select id from app.loyalty_liability_reconciliation_consolidated_runs where tenant_id = (select id from app.tenants where slug = 'lra6') and idempotency_key = 'lra6-consolidated-2-partial');
+  v_row app.loyalty_liability_reconciliation_consolidated_runs;
+  v_list_count integer;
+  v_anon_count integer;
+begin
+  v_row := app.get_loyalty_liability_reconciliation_consolidated_run(v_tenant6, v_consolidated_id, v_manager6);
+  if v_row.id <> v_consolidated_id then
+    raise exception 'assertion failed: expected get to return the same consolidated run by id';
+  end if;
+
+  select count(*) into v_list_count from app.list_loyalty_liability_reconciliation_consolidated_runs(v_tenant6, v_manager6, null, null, 200);
+  if v_list_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 consolidated runs listed for lra6 (the complete run and the partial_rate_unavailable run), got %', v_list_count;
+  end if;
+
+  begin
+    perform app.get_loyalty_liability_reconciliation_consolidated_run(v_tenant6, v_consolidated_id, '00000000-0000-0000-0000-000000344004');
+    raise exception 'assertion failed: expected insufficient_authority for a no-LYL-grant actor';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  select count(*) into v_anon_count from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'app' and p.proname in (
+      'execute_loyalty_liability_reconciliation_run_all_currencies',
+      'get_loyalty_liability_reconciliation_consolidated_run',
+      'list_loyalty_liability_reconciliation_consolidated_runs'
+    ) and has_function_privilege('anon', p.oid, 'EXECUTE');
+  if v_anon_count <> 0 then
+    raise exception 'assertion failed: expected anon to hold zero EXECUTE on any of the 3 new functions, got %', v_anon_count;
+  end if;
+end $$;
+
 \echo '>> ALL PASSED: CPL-323 Liability Reconciliation Analytics'

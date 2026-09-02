@@ -1234,4 +1234,159 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-132 item 3 (2026-09-02): a real notification (app.queue_notification, PLT-127) is queued on every redemption decision event -- never on submitted -- delivered to the redemption''s own captured submitter; a genuinely unauthorized recipient (revoked tenant membership) records a real, retryable failure, not a silent drop; 4 further staff retries reach dead_letter at exactly attempts=max_attempts; a staff requeue, once the recipient is active again, succeeds'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'rdm1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000344001';
+  v_plain1 uuid := '00000000-0000-0000-0000-000000344004';
+  v_customer_epsilon uuid := '00000000-0000-0000-0000-000000344040';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'rdm1') and name = 'Redemption Program');
+  v_loyalty_account_epsilon uuid := (select id from app.loyalty_accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and customer_account_id = (select id from app.accounts where tenant_id = (select id from app.tenants where slug = 'rdm1') and legal_name = 'Rdm Account Epsilon'));
+  v_reward app.loyalty_rewards;
+  v_redemption app.loyalty_redemptions;
+  v_redemption_1_id uuid;
+  v_redemption_2_id uuid;
+  v_delivery record;
+  v_delivery_id uuid;
+  v_delivery_count integer;
+  v_notification_count integer;
+  i integer;
+begin
+  v_reward := app.create_loyalty_reward_draft(v_tenant1, v_program_id, 'Notify Fixture Reward', 'physical_item', 'Notification fixture.', 'Terms.', null, 0, 10, null, null, null, v_manager1, 'manager1');
+  v_reward := app.publish_loyalty_reward(v_tenant1, v_reward.id, v_reward.record_version, null, v_manager1, 'manager1');
+
+  -- Epsilon submits herself -- her REAL identity is captured on the row
+  -- (submitted_by_auth_user_id), and the 'submitted' event itself is never
+  -- notified (she already knows she just submitted).
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_epsilon, v_reward.id, 'notify-fixture-1', v_customer_epsilon, 'epsilon');
+  if v_redemption.status <> 'pending_approval' or v_redemption.submitted_by_auth_user_id <> v_customer_epsilon then
+    raise exception 'assertion failed: expected a pending_approval redemption with submitted_by_auth_user_id=epsilon, got %', v_redemption;
+  end if;
+  if exists (
+    select 1 from app.loyalty_redemption_notification_deliveries d
+    join app.loyalty_redemption_events e on e.id = d.redemption_event_id
+    where e.redemption_id = v_redemption.id and e.event_type = 'submitted'
+  ) then
+    raise exception 'assertion failed: expected NO notification delivery row for the submitted event itself';
+  end if;
+
+  -- Manager rejects it (a real, decided event) -- Epsilon is STILL a genuine,
+  -- active tenant member here, so the notification succeeds for real.
+  v_redemption := app.decide_loyalty_redemption(v_tenant1, v_redemption.id, v_redemption.record_version, 'reject', 'notify-fixture reject', v_manager1, 'manager1');
+  if v_redemption.status <> 'rejected' then
+    raise exception 'assertion failed: expected rejected, got %', v_redemption.status;
+  end if;
+  v_redemption_1_id := v_redemption.id;
+
+  select * into v_delivery from app.loyalty_redemption_notification_deliveries d
+    join app.loyalty_redemption_events e on e.id = d.redemption_event_id
+    where e.redemption_id = v_redemption.id and e.event_type = 'rejected';
+  if v_delivery.status <> 'sent' or v_delivery.attempts <> 1 or v_delivery.notification_id is null or v_delivery.recipient_auth_user_id <> v_customer_epsilon then
+    raise exception 'assertion failed: expected a real, sent notification delivery to Epsilon on the rejected event, got %', to_jsonb(v_delivery);
+  end if;
+  if not exists (select 1 from app.notifications where id = v_delivery.notification_id and notification_type_code = 'loyalty_redemption_decided' and recipient_auth_user_id = v_customer_epsilon) then
+    raise exception 'assertion failed: expected a real app.notifications row (PLT-127) backing this delivery';
+  end if;
+
+  -- Plain User cannot even read the delivery queue.
+  begin
+    perform app.list_loyalty_redemption_notification_deliveries(v_tenant1, null, v_plain1, null, null, 10);
+    raise exception 'assertion failed: expected insufficient_authority for Plain User listing notification deliveries';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A genuinely unauthorized recipient (revoked tenant membership) records a
+  -- real, retryable FAILURE -- never a silent drop, never a raised exception
+  -- that would roll back the decision this trigger fires on. Epsilon submits
+  -- FIRST, while genuinely active (so submitted_by_auth_user_id captures HER
+  -- real identity), and is revoked only AFTERWARD -- the decision/notification
+  -- that follows targets a recipient who was legitimate at submit time but is
+  -- not anymore, exactly the real-world sequence this failure mode models.
+  v_redemption := app.submit_loyalty_redemption(v_tenant1, v_loyalty_account_epsilon, v_reward.id, 'notify-fixture-2', v_customer_epsilon, 'epsilon');
+  perform app.revoke_auth_identity(v_customer_epsilon, v_tenant1, 'notification-failure-fixture', 'tester');
+  v_redemption := app.decide_loyalty_redemption(v_tenant1, v_redemption.id, v_redemption.record_version, 'reject', 'notify-fixture reject 2', v_manager1, 'manager1');
+  v_redemption_2_id := v_redemption.id;
+
+  select * into v_delivery from app.loyalty_redemption_notification_deliveries d
+    join app.loyalty_redemption_events e on e.id = d.redemption_event_id
+    where e.redemption_id = v_redemption.id and e.event_type = 'rejected';
+  v_delivery_id := v_delivery.id;
+  if v_delivery.status <> 'failed' or v_delivery.attempts <> 1 or v_delivery.last_error not like 'notification_recipient_unauthorized%' then
+    raise exception 'assertion failed: expected a real, retryable failure (attempts=1) with notification_recipient_unauthorized, got %', to_jsonb(v_delivery);
+  end if;
+
+  -- Plain User cannot retry.
+  begin
+    perform app.retry_loyalty_redemption_notification_delivery(v_tenant1, v_delivery_id, v_plain1, 'plain1');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User retrying a delivery';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- A dead_letter delivery cannot be "retried" (only requeued) -- and vice
+  -- versa, a merely-failed one cannot be "requeued".
+  begin
+    perform app.requeue_loyalty_redemption_notification_delivery(v_tenant1, v_delivery_id, v_manager1, 'manager1');
+    raise exception 'assertion failed: expected loyalty_redemption_notification_not_dead_letter for a merely-failed delivery';
+  exception when others then if sqlerrm not like 'loyalty_redemption_notification_not_dead_letter%' then raise; end if;
+  end;
+
+  -- Four more staff-triggered retries (attempts 2,3,4,5) -- Epsilon is STILL
+  -- revoked, so every one genuinely fails again -- reaching dead_letter at
+  -- EXACTLY attempts = max_attempts (5), never earlier, never later.
+  for i in 2..5 loop
+    v_delivery := app.retry_loyalty_redemption_notification_delivery(v_tenant1, v_delivery_id, v_manager1, 'manager1');
+    if v_delivery.attempts <> i then
+      raise exception 'assertion failed: expected attempts=% after retry #%, got %', i, i - 1, v_delivery.attempts;
+    end if;
+    if i < 5 and v_delivery.status <> 'failed' then
+      raise exception 'assertion failed: expected status=failed before reaching max_attempts, got % at attempts=%', v_delivery.status, i;
+    end if;
+  end loop;
+  if v_delivery.status <> 'dead_letter' or v_delivery.attempts <> v_delivery.max_attempts then
+    raise exception 'assertion failed: expected dead_letter at attempts=max_attempts(5), got status=% attempts=%', v_delivery.status, v_delivery.attempts;
+  end if;
+
+  -- A dead_letter delivery cannot be "retried" (that RPC is for 'failed' only).
+  begin
+    perform app.retry_loyalty_redemption_notification_delivery(v_tenant1, v_delivery_id, v_manager1, 'manager1');
+    raise exception 'assertion failed: expected loyalty_redemption_notification_not_retryable for an already-dead_letter delivery';
+  exception when others then if sqlerrm not like 'loyalty_redemption_notification_not_retryable%' then raise; end if;
+  end;
+
+  -- Restore Epsilon's real membership (direct fixture repair -- the RPC
+  -- surface under test here is the requeue path, not identity restoration)
+  -- and requeue: resets attempts to 0 and immediately re-attempts, which now
+  -- genuinely succeeds.
+  update app.tenant_user_identities set status = 'active', revoked_at = null, revoked_reason = null
+    where tenant_id = v_tenant1 and auth_user_id = v_customer_epsilon;
+
+  v_delivery := app.requeue_loyalty_redemption_notification_delivery(v_tenant1, v_delivery_id, v_manager1, 'manager1');
+  if v_delivery.status <> 'sent' or v_delivery.attempts <> 1 or v_delivery.notification_id is null then
+    raise exception 'assertion failed: expected requeue to reset attempts to 0 then immediately succeed (attempts=1, status=sent), got %', to_jsonb(v_delivery);
+  end if;
+
+  -- The staff-facing queue is genuinely queryable and filterable -- the
+  -- disclosed gap this entry named ("a staff member must notice manually")
+  -- is closed by a real, retryable, listable surface. Scoped to THIS test's
+  -- own two redemptions specifically (redemption_id in (...)) rather than a
+  -- whole-file count -- this fixture file's own earlier sections (main flow
+  -- B, ISS-2026-132 item 1) also submit/decide real redemptions for Epsilon,
+  -- each of which this same migration's trigger also notifies; a global
+  -- count would be fragile to those unrelated, earlier sections.
+  select count(*) into v_delivery_count from app.list_loyalty_redemption_notification_deliveries(v_tenant1, 'sent', v_manager1, null, null, 200) d
+    where d.redemption_id in (v_redemption_1_id, v_redemption_2_id);
+  if v_delivery_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 sent deliveries for this test''s own two redemptions, got %', v_delivery_count;
+  end if;
+
+  select count(*) into v_notification_count
+    from app.notifications n
+    join app.loyalty_redemption_notification_deliveries d on d.notification_id = n.id
+    where d.redemption_id in (v_redemption_1_id, v_redemption_2_id);
+  if v_notification_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 real app.notifications rows for this test''s own two redemptions (each rejection''s own eventual successful send, not any of the 5 failed attempts in between, which never reach app.notifications at all), got %', v_notification_count;
+  end if;
+end $$;
+
 \echo 'ALL PASSED: CPL-321 Redemption Approval and Fulfillment'

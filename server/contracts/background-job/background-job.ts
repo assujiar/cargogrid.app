@@ -78,6 +78,8 @@ export const GENERIC_JOB_TYPES = [
   "loyalty_earning_evaluation_sweep",
   "loyalty_tier_recalculation_sweep",
   "loyalty_points_posting_sweep",
+  // ISS-2026-129 item 2: the tenant-configured recurring benefit-issuance sweep.
+  "loyalty_benefit_issuance_sweep",
 ] as const;
 export const GenericJobTypeSchema = z.enum(GENERIC_JOB_TYPES);
 export type GenericJobType = z.infer<typeof GenericJobTypeSchema>;

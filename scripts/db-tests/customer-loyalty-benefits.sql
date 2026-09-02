@@ -907,4 +907,105 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-129 item 2: app.loyalty_benefit_issuance_rules + app.run_loyalty_benefit_issuance_rule_sweep -- a tenant-configured recurring rule issues to every active enrolled account exactly once per its own recurrence window, never re-issues early, and respects inactive/authority boundaries'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cbv1');
+  v_manager1a uuid := '00000000-0000-0000-0000-000000342001';
+  v_plain1 uuid := '00000000-0000-0000-0000-000000342004';
+  v_program_id uuid := (select id from app.loyalty_programs where tenant_id = (select id from app.tenants where slug = 'cbv1') and name = 'Cashback Rewards');
+  v_rule app.loyalty_benefit_issuance_rules;
+  v_updated app.loyalty_benefit_issuance_rules;
+  v_sweep record;
+  v_issued_count integer;
+begin
+  -- Plain User denied.
+  begin
+    perform app.create_loyalty_benefit_issuance_rule(v_tenant1, v_program_id, 'cashback', 15, null, 'USD', null, null, 30, v_plain1, 'plain1');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User creating an issuance rule';
+  exception when others then if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  v_rule := app.create_loyalty_benefit_issuance_rule(v_tenant1, v_program_id, 'cashback', 15, null, 'USD', null, null, 30, v_manager1a, 'manager1a');
+  if v_rule.status <> 'active' or v_rule.value_amount <> 15 or v_rule.recurrence_interval_days <> 30 then
+    raise exception 'assertion failed: expected a real, active issuance rule, got %', v_rule;
+  end if;
+
+  -- First sweep: Alpha/Beta/Gamma are all active enrolled accounts on this program
+  -- with no prior issuance from this rule -- all three are due.
+  select * into v_sweep from app.run_loyalty_benefit_issuance_rule_sweep(v_tenant1, clock_timestamp(), v_manager1a, 'manager1a', 'iss2026129-rule-run-1');
+  if v_sweep.processed_count <> 3 or v_sweep.skipped_count <> 0 then
+    raise exception 'assertion failed: expected the first sweep to issue to exactly 3 accounts with 0 skips, got processed=% skipped=%', v_sweep.processed_count, v_sweep.skipped_count;
+  end if;
+
+  select count(*) into v_issued_count from app.loyalty_benefit_entitlements
+  where tenant_id = v_tenant1 and source_type = 'loyalty_benefit_issuance_rule' and source_id = v_rule.id;
+  if v_issued_count <> 3 then
+    raise exception 'assertion failed: expected exactly 3 entitlements attributed to this rule, got %', v_issued_count;
+  end if;
+
+  -- Second sweep, same instant, a genuinely distinct run (own run_label, so
+  -- app.enqueue_job''s own idempotency does not merely replay run 1''s cached
+  -- counts): every account was just issued to, so every one is inside its own
+  -- 30-day recurrence window -- none are due yet. This is the load-bearing proof
+  -- that the sweep does not re-issue on every run.
+  select * into v_sweep from app.run_loyalty_benefit_issuance_rule_sweep(v_tenant1, clock_timestamp(), v_manager1a, 'manager1a', 'iss2026129-rule-run-2');
+  if v_sweep.processed_count <> 0 then
+    raise exception 'assertion failed: expected the second (same-window) sweep to issue to 0 accounts, got processed=%', v_sweep.processed_count;
+  end if;
+
+  select count(*) into v_issued_count from app.loyalty_benefit_entitlements
+  where tenant_id = v_tenant1 and source_type = 'loyalty_benefit_issuance_rule' and source_id = v_rule.id;
+  if v_issued_count <> 3 then
+    raise exception 'assertion failed: expected still exactly 3 entitlements after the second (not-yet-due) sweep, got %', v_issued_count;
+  end if;
+
+  -- NULL-bypass hardening on update: a null p_expected_version is rejected outright.
+  begin
+    perform app.update_loyalty_benefit_issuance_rule(v_tenant1, v_rule.id, null, 15, null, 'USD', null, null, 30, 'active', v_manager1a, 'manager1a');
+    raise exception 'assertion failed: expected expected_version_required for a null p_expected_version';
+  exception when others then if sqlerrm not like 'expected_version_required%' then raise; end if;
+  end;
+
+  -- A stale version is rejected.
+  begin
+    perform app.update_loyalty_benefit_issuance_rule(v_tenant1, v_rule.id, v_rule.record_version + 1, 15, null, 'USD', null, null, 30, 'active', v_manager1a, 'manager1a');
+    raise exception 'assertion failed: expected stale_version for a wrong p_expected_version';
+  exception when others then if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  -- Deactivating the rule via the real, versioned update RPC stops the sweep from
+  -- issuing to it, even once accounts are otherwise due again.
+  v_updated := app.update_loyalty_benefit_issuance_rule(v_tenant1, v_rule.id, v_rule.record_version, 15, null, 'USD', null, null, 30, 'inactive', v_manager1a, 'manager1a');
+  if v_updated.status <> 'inactive' or v_updated.record_version <> v_rule.record_version + 1 then
+    raise exception 'assertion failed: expected the rule to be inactive at record_version %, got %', v_rule.record_version + 1, v_updated;
+  end if;
+
+  select * into v_sweep from app.run_loyalty_benefit_issuance_rule_sweep(v_tenant1, clock_timestamp() + interval '31 days', v_manager1a, 'manager1a', 'iss2026129-rule-run-3-inactive');
+  if v_sweep.processed_count <> 0 then
+    raise exception 'assertion failed: expected an inactive rule to issue to 0 accounts even after its own recurrence window elapsed, got processed=%', v_sweep.processed_count;
+  end if;
+
+  -- Genuinely reactivating and advancing past the recurrence window DOES issue
+  -- again -- proves the skip above was the inactive-rule gate, not a stuck
+  -- idempotency key or a permanently-exhausted candidate set.
+  perform app.update_loyalty_benefit_issuance_rule(v_tenant1, v_rule.id, v_updated.record_version, 15, null, 'USD', null, null, 30, 'active', v_manager1a, 'manager1a');
+  select * into v_sweep from app.run_loyalty_benefit_issuance_rule_sweep(v_tenant1, clock_timestamp() + interval '31 days', v_manager1a, 'manager1a', 'iss2026129-rule-run-4-reactivated');
+  if v_sweep.processed_count <> 3 then
+    raise exception 'assertion failed: expected a reactivated rule, 31 days later, to issue to all 3 due accounts again, got processed=%', v_sweep.processed_count;
+  end if;
+
+  select count(*) into v_issued_count from app.loyalty_benefit_entitlements
+  where tenant_id = v_tenant1 and source_type = 'loyalty_benefit_issuance_rule' and source_id = v_rule.id;
+  if v_issued_count <> 6 then
+    raise exception 'assertion failed: expected 3 (first window) + 3 (second window) = 6 entitlements attributed to this rule, got %', v_issued_count;
+  end if;
+
+  -- The scheduler catalogue actually carries this task, and the dispatcher has a
+  -- real branch for it -- not merely a function that exists in isolation.
+  if not exists (select 1 from app.scheduled_task_definitions where task_code = 'loyalty_benefit_issuance_sweep') then
+    raise exception 'assertion failed: expected loyalty_benefit_issuance_sweep to be a real scheduler catalogue task';
+  end if;
+end $$;
+
 \echo 'ALL PASSED: CPL-319 Cashback Discount Voucher'
