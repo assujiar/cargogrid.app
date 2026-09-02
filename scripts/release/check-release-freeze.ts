@@ -3418,7 +3418,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pre-check into the existing not-found branch so a zero-relationship caller gets a generic
   // not-found instead of a tenant_id-bearing insufficient_authority. 441 of 561 remain open,
   // precisely disclosed as a continuation of this same pass using the same classifier.
-  migrationSetSha256: "b39666ed041ced11ce0b8536eb2b590332e192e777d0ddce742d76068d0d6370",
+  // NINETY-FOURTH PASS (2026-09-02, ISS-2026-125 item 2 + ISS-2026-197 finalization): 471
+  // files (+2). ISS-2026-125 item 2: app.revoke_all_actor_sessions turned out unreachable
+  // from app.set_customer_portal_account_membership_status (it requires staff SEC:Configure,
+  // which no customer_user-layer caller of this function can ever hold), so the fix composes
+  // the underlying app.user_sessions status flip + app.revoke_api_key directly instead, scoped
+  // to the specific customer actor and account. Along the way found and fixed a real,
+  // unrelated bundled bug: app.revoke_api_key/app.rotate_api_key were structurally
+  // unreachable for any customer_user-layer actor at all, a regression ISS-2026-167 (Aug 27)
+  // introduced weeks after IAE-010 wired customer-admin authority into the same functions --
+  // fixed with the identical precedented app.actor_holds_customer_user_layer widening.
+  // ISS-2026-197: closure judgment finalized under ADR-0027 (no more HDN-386 checkpoint to
+  // defer to) after re-verifying live that app.calculate_job_profitability's body matches
+  // 20260902050000 byte-for-byte with no drift.
+  migrationSetSha256: "d76771837af955a8b43d8cbfbda04d06c38a34cbaaa3ef87e8f6e22ae2918f2b",
+  // History: b39666ed041ced11ce0b8536eb2b590332e192e777d0ddce742d76068d0d6370
+  // (469 files, ISS-2026-146's first tenant_id-disclosure fix pass, 120 of 561 functions).
   // History: 1d295d99d0acb36b226e1c6d592c03deed37cbcba5c7996a3bfc88ab0c85902f
   // (463 files, ISS-2026-197's FX conversion wired into Operations job profitability).
   // History: 535448e97215618d9ed978e54d0464d243305ca2de8a35dfda4a158cc658e216
@@ -4092,7 +4107,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // the Platform Core function this entry's own live reproduction named) plus 11 pre-existing
   // files updated where their own fixtures asserted the now-superseded insufficient_authority
   // shape for a zero-membership caller against one of the 120 newly-fixed functions.
-  dbTestSetSha256: "5662e5b47a4cbda10a35e24c9085857ebdc8b96e92d2e829c980eb0641e0f7b1",
+  // NINETY-FOURTH PASS (2026-09-02, ISS-2026-125 item 2): 246 files, unchanged in count --
+  // customer-user-management.sql extended: a membership with live sessions/API keys
+  // transitions to suspended/revoked and both are proven revoked afterward; reactivation
+  // leaves sessions untouched; an unrelated identity's own sessions are unaffected.
+  dbTestSetSha256: "a774f7d11ac575c28b9e1e9f5c9bc311aaf42ae94ca3cde222b4d2ae90a0b1ae",
+  // History: 5662e5b47a4cbda10a35e24c9085857ebdc8b96e92d2e829c980eb0641e0f7b1
+  // (246 files, ISS-2026-146's tenant-id-error-message-redaction.sql regression).
   // History: 95a06a4c28504d3bfd36777f99c3be50909d38254d9e100d099f8a4353a5abea
   // (245 files, ISS-2026-197's job-profitability FX-conversion regression).
   // History: 7671e70d0ba9bb43d0c79af8e20c03684f9e437060e5f2793e480aa9c4e7092f
