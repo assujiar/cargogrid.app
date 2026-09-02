@@ -6,7 +6,7 @@ import { assignCostingRequestAction, submitCostingResponseAction, reviseCostingR
 import type { CostingResponseSourceType } from "../../../../../../server/contracts/costing/costing.ts";
 import type { CostingRequestComponent } from "../../../../../../server/contracts/costing/costing.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { CurrencyInput } from "../../../../../../components/forms/currency-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
@@ -101,13 +101,20 @@ export function CostingRequestActionsPanel({
               <label htmlFor={`costing-amount-${component.id}`} className="w-40 text-sm text-neutral-700">
                 {component.componentCode}
               </label>
-              <div className="w-32">
-                <NumberInput
+              <div className="w-36">
+                {/*
+                  ISS-2026-246: these are priced cost lines -- money. `NumberInput`'s own header
+                  forbids exactly this use ("any money field must use CurrencyInput instead, never
+                  this component with a currency value"), so it is replaced here with the primitive
+                  that enforces the rule: a numeric-shaped string, at most 2 decimals, shown against
+                  the response currency this panel already holds in state above.
+                */}
+                <CurrencyInput
                   id={`costing-amount-${component.id}`}
-                  min={0}
+                  currencyCode={currency}
                   placeholder="Amount"
                   value={amounts[component.id] ?? ""}
-                  onChange={(e) => setAmounts((prev) => ({ ...prev, [component.id]: e.target.value }))}
+                  onValueChange={(next) => setAmounts((prev) => ({ ...prev, [component.id]: next }))}
                   disabled={isClosed}
                   aria-describedby={describedBy}
                 />

@@ -10,6 +10,7 @@ import {
 } from "../actions.ts";
 import { OPPORTUNITY_STAGES, type OpportunityStage, type OpportunityRequirements } from "../../../../../../server/contracts/opportunity/opportunity.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { CurrencyInput } from "../../../../../../components/forms/currency-input.tsx";
 import { DateInput } from "../../../../../../components/forms/date-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
@@ -107,7 +108,8 @@ export function OpportunityActionsPanel({
           <div className="flex gap-2">
             <div className="w-32">
               <FormField id="opportunity-value-amount" label={<span className="sr-only">Amount</span>}>
-                <Input type="number" inputMode="decimal" id="opportunity-value-amount" min={0} placeholder="Amount" value={valueAmount} onChange={(e) => setValueAmount(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
+                {/* ISS-2026-246: an opportunity value is money, so `CurrencyInput` bound to the value currency this form already holds beside it -- never `Input type="number"` (AGENTS.md's money rule). */}
+                <CurrencyInput id="opportunity-value-amount" currencyCode={valueCurrency} placeholder="Amount" value={valueAmount} onValueChange={setValueAmount} disabled={isClosed} aria-describedby={describedBy} />
               </FormField>
             </div>
             <div className="w-32">

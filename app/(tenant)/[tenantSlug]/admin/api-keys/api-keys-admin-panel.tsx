@@ -6,10 +6,11 @@
  * uses (e.g. `admin/loyalty/loyalty-admin-panel.tsx`).
  */
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { MultiSelect } from "../../../../../components/forms/multi-select.tsx";
 import { NumberInput } from "../../../../../components/forms/number-input.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
@@ -465,15 +466,49 @@ export function WebhookDeliveryList({ tenantSlug, deliveries }: { tenantSlug: st
 export function CreateN8nConnectorForm({ tenantSlug, allowlist }: { tenantSlug: string; allowlist: readonly N8nAllowlistedAction[] }) {
   const [state, formAction, pending] = useActionState(createN8nConnectorAction.bind(null, tenantSlug), N8N_INITIAL_STATE);
   const describedBy = state.error ? "n8n-create-error" : undefined;
+  // ISS-2026-246: the scope field is a pick-several-from-a-known-set, hand-rolled until
+  // now as a comma-separated free-text box whose valid values were printed as prose
+  // underneath it. The set is the allowlist this component is already handed, and
+  // app.create_n8n_connector rejects (n8n_scope_not_allowlisted) anything outside it --
+  // so picking from it removes only inputs the database would refuse, never a valid one.
+  const [scopes, setScopes] = useState<readonly string[]>([]);
+  const [scopesResetKey, setScopesResetKey] = useState(0);
+  const scopeOptions = useMemo(() => allowlist.map((action) => ({ value: action.scope, label: action.scope })), [allowlist]);
+  // React 19 clears uncontrolled fields once the action succeeds, which is how the old
+  // free-text scope box emptied itself. This keeps that: on the form's own reset, drop the
+  // picked scopes and remount the picker so its typed query cannot outlive them.
+  const scopesFieldRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const form = scopesFieldRef.current?.form;
+    if (!form) return;
+    function handleReset() {
+      setScopes([]);
+      setScopesResetKey((key) => key + 1);
+    }
+    form.addEventListener("reset", handleReset);
+    return () => form.removeEventListener("reset", handleReset);
+  }, []);
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-text-primary">Register an n8n connector</h2>
       <FormField id="n8n-name" label="Connector name">
         <Input id="n8n-name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>
-      <FormField id="n8n-scopes" label="Scopes (comma-separated) -- must be on the n8n safe-action allowlist below, and cannot exceed your own currently-held permissions">
-        <Input id="n8n-scopes" name="scopes" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      <FormField id="n8n-scopes" label="Scopes" helpText="Pick from the n8n safe-action allowlist below -- these still cannot exceed your own currently-held permissions.">
+        <MultiSelect
+          key={scopesResetKey}
+          id="n8n-scopes"
+          label="Scopes"
+          options={scopeOptions}
+          values={scopes}
+          onChange={setScopes}
+          required
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? "n8n-scopes-help n8n-create-error" : "n8n-scopes-help"}
+        />
       </FormField>
+      {/* The action parses this field with a comma split (parseScopes), so the wire format is unchanged -- one field named `scopes`, comma-separated. */}
+      <input ref={scopesFieldRef} type="hidden" name="scopes" value={scopes.join(",")} />
       <FormField id="n8n-webhook-endpoint" label="Linked webhook endpoint id (optional -- the endpoint you registered above, pointed at your n8n workflow's own webhook URL)">
         <Input id="n8n-webhook-endpoint" name="webhookEndpointId" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
       </FormField>

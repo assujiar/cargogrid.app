@@ -5,6 +5,12 @@
  * drawn in pure CSS via the `peer` pattern -- zero client JS, works in a server-rendered
  * form. `label` is required (never optional), same non-color-alone discipline as
  * Checkbox.
+ *
+ * `ISS-2026-246` (first real consumer, the customer "Notify me" alert toggles): the
+ * clickable label row carries `min-h-11`, HDN-381's 44px touch-target floor -- the exact
+ * fix `Checkbox` already has for the same shape (its 20px track is otherwise the whole
+ * target). This primitive was skipped by that sweep because it had no consumer to
+ * measure; its first consumer replaces a `Button`, which does carry the floor.
  */
 
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from "react";
@@ -15,7 +21,7 @@ export interface SwitchProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
 
 export const Switch = forwardRef<HTMLInputElement, SwitchProps>(function Switch({ label, id, className, ...rest }, ref) {
   return (
-    <label htmlFor={id} className="flex items-center gap-2 text-sm text-text-primary">
+    <label htmlFor={id} className="flex min-h-11 items-center gap-2 text-sm text-text-primary">
       <span className="relative inline-flex h-5 w-9 flex-shrink-0 items-center">
         <input
           ref={ref}

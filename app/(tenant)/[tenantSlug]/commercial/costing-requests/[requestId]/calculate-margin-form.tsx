@@ -6,6 +6,7 @@ import { calculateMarginAction, overrideMarginThresholdAction } from "./actions.
 import type { MarginCalculation } from "../../../../../../server/contracts/margin/margin.ts";
 import type { RateSelection } from "../../../../../../server/contracts/rate/rate.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { CurrencyInput } from "../../../../../../components/forms/currency-input.tsx";
 import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
@@ -66,7 +67,8 @@ export function CalculateMarginForm({
           <div className="flex gap-2">
             <div className="w-40">
               <FormField id="margin-sell-amount" label={<span className="sr-only">Sell amount</span>}>
-                <Input type="number" inputMode="decimal" id="margin-sell-amount" min={0} placeholder="Sell amount" value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} aria-describedby={describedBy} />
+                {/* ISS-2026-246: the sell amount is money, so `CurrencyInput` bound to the sell currency this form already holds beside it -- never `Input type="number"` (AGENTS.md's money rule). The discount percentage next to it is not money and stays a NumberInput. */}
+                <CurrencyInput id="margin-sell-amount" currencyCode={sellCurrency} placeholder="Sell amount" value={sellAmount} onValueChange={setSellAmount} aria-describedby={describedBy} />
               </FormField>
             </div>
             <div className="w-32">
