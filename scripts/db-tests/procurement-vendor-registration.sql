@@ -692,19 +692,31 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: vndreg2''s staff, holding zero membership in vndreg1, is rejected on every RPC against vndreg1''s real vendor, and raw RLS denies a direct select'
+\echo '>> cross-tenant isolation: vndreg2''s staff, holding zero membership in vndreg1, is rejected on every RPC against vndreg1''s real vendor (by-id reads as a generic vendor_profile_not_found per ISS-2026-146, by-tenant writes as insufficient_authority), and raw RLS denies a direct select'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'vndreg1');
   v_t2_staff uuid := '00000000-0000-0000-0000-000000025202';
   v_target_master_record_id uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and idempotency_key = 'idem-lifecycle-1');
 begin
+  -- ISS-2026-146: v_t2_staff (vndreg2's staff, '00000000-0000-0000-0000-000000025202')
+  -- holds ZERO app.principal_memberships / tenant_user_identities row in vndreg1 -- it was
+  -- only ever invited to vndreg2. app.get_vendor_profile looks the profile up by its bare
+  -- master_record_id (it has no p_tenant_id parameter to scope by), so before the fix its
+  -- insufficient_authority denial interpolated vndreg1's REAL tenant_id into the message
+  -- text, disclosing it to an actor with no relationship to that tenant. The fix folds
+  -- app.has_active_tenant_membership into the SAME not-found branch the row-miss case
+  -- already raises, so this caller now gets exactly the generic vendor_profile_not_found a
+  -- nonexistent id would produce. The denial itself is unchanged -- only its shape, and
+  -- only for a zero-membership foreigner. This matches the identical, already-established
+  -- expectation the "Prompt 269 (ISS-2026-054 C-05)" block below already asserts for the
+  -- same actor against app.suspend_vendor_profile and its siblings.
   begin
     perform app.get_vendor_profile(v_target_master_record_id, v_t2_staff);
-    raise exception 'assertion failed: expected insufficient_authority for a vndreg2 actor reading a vndreg1 vendor profile';
+    raise exception 'assertion failed: expected vendor_profile_not_found for a vndreg2 actor reading a vndreg1 vendor profile (never insufficient_authority, which would disclose the real tenant_id)';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
   end;
 
   begin

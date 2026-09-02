@@ -1097,12 +1097,23 @@ begin
       if sqlerrm not like 'vendor_compliance_requirement_not_found%' then raise; end if;
   end;
 
+  -- ISS-2026-146: v_t2_staff (pcmp2's staff, '00000000-0000-0000-0000-000000091202') holds
+  -- ZERO app.principal_memberships / tenant_user_identities row in pcmp1 -- it was only ever
+  -- invited to pcmp2. app.request_vendor_compliance_waiver resolves the vendor by its bare
+  -- master_record_id (no p_tenant_id parameter to scope by), so before the fix its
+  -- insufficient_authority denial interpolated pcmp1's REAL tenant_id into the message text
+  -- for an actor with no relationship to that tenant. The fix folds
+  -- app.has_active_tenant_membership into the SAME not-found branch the row-miss case already
+  -- raises, so this caller now gets exactly the generic vendor_profile_not_found a nonexistent
+  -- vendor id would produce -- the same expectation the sibling block immediately above
+  -- already asserts for app.get_vendor_compliance_requirement (ISS-2026-054). The write is
+  -- still fully blocked; only the disclosure shape changed.
   begin
     perform app.request_vendor_compliance_waiver(v_target_req_id, v_target_vendor_id, 'cross-tenant attempt', current_date, current_date + 1, 'idem-pcmp-cross-attack', v_t2_staff, 'attacker');
-    raise exception 'assertion failed: expected the pcmp1 vendor lookup to reject on pcmp2 authority';
+    raise exception 'assertion failed: expected the pcmp1 vendor lookup to reject a pcmp2 actor with a generic vendor_profile_not_found (never insufficient_authority, which would disclose the real tenant_id)';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
   end;
 
   set local role authenticated;
