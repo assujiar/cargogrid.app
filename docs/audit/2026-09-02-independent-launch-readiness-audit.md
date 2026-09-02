@@ -25,10 +25,9 @@ as evidence; where a document and the code disagreed, the code decided.
 
 The database and service layer are, in places, stronger than most commercial ERPs. The product layer
 above them cannot yet be operated: a tenant cannot be created, a user cannot be invited, a role cannot
-be assigned, master data cannot be entered, nothing can be imported, no document can be printed, no
-uploaded file is actually stored, no background job ever runs, a customer invoice cannot be issued at
-all, and there is no navigation to reach most of what does work. Each of those independently prevents a
-first customer from going live.
+be assigned, nothing can be imported, no document can be printed, no uploaded file is actually stored,
+no background job ever runs, a customer invoice cannot be issued at all, and there is no navigation to
+reach most of what does work. Each of those independently prevents a first customer from going live.
 
 ---
 
@@ -45,7 +44,13 @@ first customer from going live.
 | 13 governance gates | **PASS** | paths, standards, docs, package, issues, secrets, ui, data-classification, threat-model, freeze, env-facts, dependency audit, migration collision |
 | `pnpm run preflight` | fails | `CARGOGRID_ENV` unset in the audit sandbox; not a product defect |
 
-Two gate-level observations:
+Three gate-level observations:
+
+- **Those green gates do not cover the code that talks to the hardware.** The always-on GPS listener at
+  `services/gps-gateway` is a separate package with its own `typecheck` and `test` scripts. The root
+  `tsconfig.json` sets `"exclude": [… "services/**"]`; the root test glob covers only `scripts`,
+  `server`, `lib` and `tests`; and CI never invokes the package's own scripts. The one component that
+  speaks to real trucks has never been checked by any gate anyone runs.
 
 - **The E2E suite is green and tests no business flow.** Its 66 specs assert static render,
   accessibility of public pages, and that guards redirect when the backend is unreachable.
@@ -106,6 +111,13 @@ codes, and `createRole` / `assignRole` / `revokeRoleAssignment` have no caller. 
 calls `admin.createUser`, `inviteUserByEmail`, `generateLink` or `signUp()`, so a login cannot be
 created in-product at all. `app/(tenant)/[tenantSlug]/admin/users/page.tsx` states the gap in its own
 header.
+
+Master data is a partial exception, stated precisely: vehicles and drivers **can** be registered from
+`operations/fleet`, because `app.register_vehicle_operational_profile` and
+`app.register_driver_operational_profile` call `app.create_master_record` internally and are wired to a
+real form. That page is nonetheless one of the 81 with no inbound link; the generic
+`createMasterRecord` wrapper has no caller and its RPC is granted to `postgres`/`service_role` only;
+and `mergeMasterRecords` — the only deduplication path in the system — has no caller at all.
 
 **A3 · Publishing a role version silently revokes it from everyone holding it.**
 `app.role_assignments.role_version_id` binds an assignment to one version; `app.evaluate_permission`
@@ -241,7 +253,17 @@ vehicle maintenance, fuel, tyres, budget and cost centre, container and depot, d
 manifest, bill of lading, air waybill, customs declaration, insurance policy, surcharge and accessorial,
 BOM, production order, material requisition. No chargeable or volumetric weight anywhere.
 
-**E5 · Outbound webhooks have no publisher.** `app.queue_webhook_delivery` is referenced by 0 other
+**E5 · The telematics story does not survive contact with a truck.** An independently verified lens
+established that a GPS device can never reach `installed` — the sole route demands a scan-clean
+evidence file of a document type the product cannot produce (see A6) — and `active` is reachable only
+from `installed`, so both hardware channels are closed. Route planning and ETA are straight-line
+distance divided by a hard-coded 40 km/h, with stops never re-sequenced. Driver licence expiry and
+vehicle serviceability are checked at neither assignment nor dispatch. No fleet or telematics work is
+registered as a job type at all, so overdue-arrival detection is not merely unscheduled but
+unenqueueable. "Multi-provider" third-party GPS accepts exactly one proprietary payload shape and
+CargoGrid's own HMAC scheme.
+
+**E6 · Outbound webhooks have no publisher.** `app.queue_webhook_delivery` is referenced by 0 other
 database functions and nothing outside its own module. No GraphQL surface and no OpenAPI document
 exist, against a ratified baseline requiring both.
 
@@ -315,10 +337,17 @@ The live hosted project's behaviour; load and capacity at real volume; a browser
 interface; Safari and Firefox; and a review of the roughly 40,000 lines of SQL no lens reached. Absence
 of a finding in those areas is not evidence of correctness.
 
-A 27-lens agent sweep was run alongside this audit. Its adversarial verification stage did not complete,
-so its output was treated as unverified leads and every CRITICAL claim was re-checked by hand. Several
-were refuted — most importantly the claim that 1,128 internet-reachable RPCs permit impersonation
-through a caller-supplied actor id, which is wrong (the guard sits one call level below where the scan
-looked and covers 1,872 of 1,873 exposed functions), plus the claims that `anon` retains Supabase's
-default grants and that a customer API key's account binding is unenforced. **Nothing in this report
-rests on an unverified agent finding.**
+A 27-lens agent sweep ran alongside this audit; 20 lenses produced findings and, for all but one, the
+adversarial verification stage did not complete. Their output was treated as unverified leads and every
+CRITICAL claim was re-checked by hand. Several were refuted — most importantly the claim that 1,128
+internet-reachable RPCs permit impersonation through a caller-supplied actor id, which is wrong (the
+guard sits one call level below where the scan looked, and a transitive call-graph analysis over all
+2,860 `app` functions shows it covers 1,872 of 1,873 exposed functions), plus the claims that `anon`
+retains Supabase's default grants, that a customer API key's account binding is unenforced, and that
+the tax console's rate error runs the other way. **Nothing in this report rests on an unverified agent
+finding.**
+
+The traffic went both ways. The one lens whose verification did complete caught an error in an earlier
+draft of this document: it had reported that no vehicle or driver could be registered, on the evidence
+that `createMasterRecord` has no caller. It does not, but `register_vehicle_operational_profile` calls
+it internally and is wired to a real form. §4 A2 carries the corrected, narrower claim.
