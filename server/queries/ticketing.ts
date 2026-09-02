@@ -9,6 +9,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { observeAuthorityDenial } from "../policies/authority-denial-recorder.ts";
 import {
   parseTicketQueueRow,
   parseTicketCategoryRow,
@@ -688,6 +689,18 @@ export async function searchTicketPortalLinkCandidates(
 // (warehouse_order/document) in one call -- see that function's own comment
 // for why a single search surface is correct even though the eventual link
 // call routes to two structurally different tables underneath.
+//
+// ISS-2026-122 item 3: this is also the one place a pre-creation search denial CAN be recorded.
+// That entry spent three passes concluding it could not be: the search runs before any ticket
+// exists, so there is no `ticket_id` to scope an `app.ticket_link_events` row to, and the one
+// reachable authorization refusal inside
+// `app.search_customer_ticket_link_candidates_precreate` is a `raise`, which rolls back any
+// INSERT sharing its transaction. Both facts are still true. What changed is that
+// `ISS-2026-249` built the general answer to exactly that problem on 2026-08-31 —
+// `app.authority_denials` plus `app.record_authority_denial`, written from OUTSIDE the refused
+// transaction by the boundary that catches the error. Item 3's own final reasoning ("cannot be
+// durably logged without a new class of primitive this repository has never built") was written
+// after that primitive already existed and simply had not noticed it.
 export async function searchCustomerTicketLinkCandidatesPrecreate(
   client: TicketQueryClient,
   tenantId: string,
@@ -703,7 +716,19 @@ export async function searchCustomerTicketLinkCandidatesPrecreate(
     p_actor_auth_user_id: actorAuthUserId,
     p_limit: limit ?? 20,
   });
-  if (error) throw new TicketQueryError(error.message);
+  if (error) {
+    // `observeAuthorityDenial` records only genuine refusals. That is the correct boundary here,
+    // not an omission: the function's OTHER reachable raise is an unsupported `p_entity_type`,
+    // which is a malformed request rather than a denied one, and filing it in the denial ledger
+    // would corrupt the burst signal `app.run_authority_denial_anomaly_sweep` reads. It never
+    // throws, so a failure to record cannot turn a clean refusal into a 500.
+    await observeAuthorityDenial(
+      client,
+      { tenantId, actorAuthUserId, moduleCode: "TKT", action: "search_customer_ticket_link_candidates_precreate" },
+      new Error(error.message),
+    );
+    throw new TicketQueryError(error.message);
+  }
   return rows(data).map(parseTicketPortalLinkCandidateRow);
 }
 

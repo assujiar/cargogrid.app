@@ -534,6 +534,73 @@ describe("CPL-313 (CG-S13-CPL-015): Portal Ticket-Linked Records (warehouse_orde
     assert.equal(calls[0]?.args.p_entity_type, "warehouse_order");
   });
 
+  // ISS-2026-122 item 3. A per-fn fake, because the shared `fakeClient` returns one response to
+  // every call and cannot tell the search apart from the denial recording that follows it.
+  function precreateDenialClient(searchError: { message: string } | null): {
+    client: TicketQueryClient;
+    calls: { fn: string; args: Record<string, unknown> }[];
+  } {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = {
+      async rpc(fn: string, args: Record<string, unknown>) {
+        calls.push({ fn, args });
+        if (fn === "record_authority_denial") return { data: { id: ID_1 }, error: null };
+        return { data: searchError ? null : [], error: searchError };
+      },
+    } as unknown as TicketQueryClient;
+    return { client, calls };
+  }
+
+  test("searchCustomerTicketLinkCandidatesPrecreate records a real authorization refusal in app.authority_denials, from outside the transaction that was refused", async () => {
+    const { client, calls } = precreateDenialClient({ message: "insufficient_privilege: identity is not a customer_user for this tenant" });
+    await assert.rejects(
+      () => searchCustomerTicketLinkCandidatesPrecreate(client, TENANT_ID, "warehouse_order", null, ACTOR_ID),
+      TicketQueryError,
+    );
+    const denial = calls.find((c) => c.fn === "record_authority_denial");
+    assert.ok(denial, "expected the boundary to record the refusal -- there is no ticket_id yet to scope a ticket_link_events row to, which is the whole of ISS-2026-122 item 3");
+    assert.equal(denial?.args.p_tenant_id, TENANT_ID);
+    assert.equal(denial?.args.p_actor_auth_user_id, ACTOR_ID);
+    assert.equal(denial?.args.p_denial_kind, "rbac");
+    assert.equal(denial?.args.p_module_code, "TKT");
+    assert.equal(denial?.args.p_action, "search_customer_ticket_link_candidates_precreate");
+  });
+
+  test("searchCustomerTicketLinkCandidatesPrecreate does NOT file a malformed request in the denial ledger -- an unsupported entity type is refused, not denied", async () => {
+    const { client, calls } = precreateDenialClient({ message: "unsupported_entity_type: not_a_real_type" });
+    await assert.rejects(
+      () => searchCustomerTicketLinkCandidatesPrecreate(client, TENANT_ID, "warehouse_order", null, ACTOR_ID),
+      TicketQueryError,
+    );
+    assert.equal(
+      calls.find((c) => c.fn === "record_authority_denial"),
+      undefined,
+      "a validation error in the denial ledger would corrupt the burst signal app.run_authority_denial_anomaly_sweep reads",
+    );
+  });
+
+  test("searchCustomerTicketLinkCandidatesPrecreate records nothing on success", async () => {
+    const { client, calls } = precreateDenialClient(null);
+    await searchCustomerTicketLinkCandidatesPrecreate(client, TENANT_ID, "shipment", null, ACTOR_ID);
+    assert.equal(calls.find((c) => c.fn === "record_authority_denial"), undefined);
+  });
+
+  test("a failure to record the denial still surfaces the original refusal, never a 500", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = {
+      async rpc(fn: string, args: Record<string, unknown>) {
+        calls.push({ fn, args });
+        if (fn === "record_authority_denial") throw new Error("observability sink unreachable");
+        return { data: null, error: { message: "insufficient_privilege: denied" } };
+      },
+    } as unknown as TicketQueryClient;
+    await assert.rejects(
+      () => searchCustomerTicketLinkCandidatesPrecreate(client, TENANT_ID, "document", null, ACTOR_ID),
+      TicketQueryError,
+    );
+    assert.ok(calls.some((c) => c.fn === "record_authority_denial"));
+  });
+
   test("listTicketPortalLinks calls the SEPARATE app.list_ticket_portal_links RPC and parses a live-available and an unavailable row", async () => {
     const { client, calls } = fakeClient({
       data: [

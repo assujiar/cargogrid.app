@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 15 — 4 High, 4 Medium, 7 Low |
+| `OPEN` | 14 — 4 High, 4 Medium, 6 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 10 — formally ruled, not pending work |
-| `RESOLVED` | 252 |
+| `RESOLVED` | 253 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -131,7 +131,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-119` | Low | `ACCEPTED_EXCEPTION` | movement-summary/lot/serial identity drill-down and export RPCs were not mirrored onto the CPL-300 widened resolver |
 | `ISS-2026-120` | Low | `RESOLVED` | no customer-facing inbound-order RPC exists to mirror; this checkpoint's own visibility is outbound-only |
 | `ISS-2026-121` | Low | `ACCEPTED_EXCEPTION` | "finance scope" is the same undifferentiated Layer 4 account scope every other Phase 8 domain already uses -- no per-domain sub-permission exists to n |
-| `ISS-2026-122` | Low | `OPEN` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
+| `ISS-2026-122` | Low | `RESOLVED` | the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-cre |
 | `ISS-2026-123` | Low | `RESOLVED` | legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path |
 | `ISS-2026-124` | Low | `RESOLVED` | `app.get_customer_portal_invoice`/`app.list_customer_portal_invoices` omit `customer_account_id` from their own projection, unlike every sibling capab |
 | `ISS-2026-126` | Low | `RESOLVED` | Loyalty earning evaluation is on-demand/staff-triggered only; no automatic job or Finance-side trigger wires `app.evaluate_customer_loyalty_earning_fo |
@@ -2232,7 +2232,7 @@ ever requires narrower in-account granularity, this entry's own original recomme
 stands: a new, additive per-module delegation mechanism composed by ALL Phase 8 domain gates
 uniformly, not invented for Finance alone.
 
-### ISS-2026-122 — the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-creation search has no per-attempt audit ledger, and the three PRE-EXISTING app.ticket_links entity types remain on the legacy scope resolver (Phase 8, CPL-313 deliberate scope decisions, OPEN, Low)
+### ISS-2026-122 — the new warehouse_order/document ticket-link surface is a genuinely separate table from app.ticket_links, document has no staff predicate yet, pre-creation search has no per-attempt audit ledger, and the three PRE-EXISTING app.ticket_links entity types remain on the legacy scope resolver (Phase 8, CPL-313 deliberate scope decisions, RESOLVED 2026-09-03 — items 2/3/4 fixed, item 1 a standing design decision requiring no work, was Low)
 
 Discovered `2026-08-17` at `CG-S13-CPL-015` (Prompt 313, Complaint and Ticket) — four deliberate scope decisions made while authoring this checkpoint's own migration, not defects found afterward. Item 4 below was added `2026-08-17` at this same batch's own Tier C review close, correcting this checkpoint's own migration header (design decision 5) and build log (`docs/build-log/phase-08/CPL-313.md` §2 decision 6), both of which cited this entry as already recording the item before it had actually been written in here — a real citation-accuracy gap the spec-compliance review lens caught; the underlying design decision itself was genuine and correctly disclosed at authoring time, only the citation's target was incomplete.
 
@@ -2392,6 +2392,59 @@ a denial," but "the one theoretically loggable denial point is unreachable for t
 the two reachable ones cannot be durably logged without a new class of primitive this repository
 has never built." **Status now: items 1 and 3 both remain `OPEN`, Low — unchanged in disposition,
 item 3's own reasoning corrected.**
+
+**Item 3 `RESOLVED` — `2026-09-03`, and the correction is that its own blocker had already been
+built** (`server/queries/ticketing.ts`, `server/policies/authority-denial-recorder.ts`).
+
+The `2026-09-01` reasoning above is right about the mechanics and wrong about the conclusion. Both
+mechanical facts still hold exactly as stated: the pre-creation search runs before any ticket
+exists, so there is no `ticket_id` to scope an `app.ticket_link_events` row to; and the one
+reachable authorization refusal inside `app.search_customer_ticket_link_candidates_precreate` is a
+`raise`, which rolls back any INSERT sharing its transaction. What was wrong is "cannot be durably
+logged without a new class of primitive this repository has never built" — because
+`ISS-2026-249` built precisely that primitive on `2026-08-31`
+(`20260831100000_close_authority_denial_alerting_and_scheduler_catalogue_gap.sql`):
+`app.authority_denials` plus `app.record_authority_denial`, whose own table comment states the
+identical reasoning this entry independently re-derived — *"a function that raises cannot record
+the denial it raises on, because the raise rolls the record back. So the boundary that catches the
+error records it here in a fresh statement."* That migration predates this entry's own correction
+by a day, and the correction simply had not noticed it. Recorded as a re-derivation failure rather
+than quietly fixed: the pass re-verified the constraint honestly and never checked whether the
+repository had since grown an answer to it.
+
+The fix is therefore app-layer only — **no migration, no new table, no new primitive**.
+`searchCustomerTicketLinkCandidatesPrecreate` now routes its error through the existing
+`observeAuthorityDenial` boundary recorder before rethrowing, so a genuine refusal lands in
+`app.authority_denials` (kind `rbac`, module `TKT`, action named) and feeds
+`app.run_authority_denial_anomaly_sweep`'s existing burst detection.
+
+*A deliberate narrowing, stated because this entry's own text says "the two reachable ones".* Only
+ONE of those two is recorded. The other — an unsupported `p_entity_type` — is a malformed request,
+not a denied one; filing it in the denial ledger would corrupt the burst signal that sweep reads.
+Item 3's own framing counted both as denial points; on inspection only one is.
+
+**Found while wiring this, and disclosed rather than absorbed: `observeAuthorityDenial` had ZERO
+production callers.** See the dated correction appended to `ISS-2026-249` for the full finding and
+its root cause; this pass is that recorder's first real caller.
+
+*Regression.* Four new unit tests in `server/queries/ticketing.test.ts`: a real refusal is recorded
+with the right tenant/actor/kind/module/action; a malformed-request error is NOT recorded; a
+successful search records nothing; and a recorder that throws still surfaces the original refusal
+rather than a 500. `pnpm run test`: 5927/5927.
+
+**Item 1 needs no work, by its own standing ruling, and the entry closes.** Item 1 was never a
+defect — this entry's own opening sentence calls all four items "deliberate scope decisions made
+while authoring this checkpoint's own migration, not defects found afterward" — and its own
+recommended fix says so outright: *"no fix needed unless a future, unrelated reason to widen the
+original six-value registry arises, at which point the split could be reconciled in one additive
+migration."* The two protected regression tests that foreclosed the widening path
+(`scripts/db-tests/ticketing-linked-records.sql`, `server/contracts/ticketing/ticketing.test.ts`)
+both still enforce the six-value registry, re-confirmed this pass. Leaving the entry `OPEN` for an
+item whose own disposition is "no work required" overstates the backlog, which is exactly the
+drift the `2026-08-30` reconciliation existed to remove.
+
+**Status now: items 2, 3 and 4 `RESOLVED` by real fixes; item 1 closes as a standing design
+decision requiring no work. Entry `RESOLVED`.**
 
 ### ISS-2026-123 — legal_name/tax_id are excluded from the customer-writable field set, and contacts are read-only with no change-request path (Phase 8, CPL-314 deliberate scope decisions, RESOLVED, Low)
 
@@ -7544,6 +7597,12 @@ mirrors. This entry stays `OPEN` for those two.
 **Wired to run**: `authority_denial_anomaly_sweep` is a catalogue task on the scheduler built the same day (`20260831090000`), Supreme-Admin-only, minimum 15 minutes, default hourly, with `window_minutes` and `threshold` as tenant-set parameters. As with every other task, nothing runs until an operator attaches a trigger.
 
 Regressions in `scripts/db-tests/task-scheduler.sql`: one refusal raises **nothing**; twelve raise exactly one incident at `medium`; a second identity bursting across four modules raises its own at `high`; a repeated sweep does not open a second incident; a window containing no denials raises nothing; a step-up refusal records under its own kind; an unknown tenant is refused; and the ledger is `service_role`-write, RLS-read, closed to `anon`. Plus 13 unit tests on the boundary recorder. Full `db:test` `ALL PASSED` (399 migrations, 237 runner files); applied live and object-verified.
+
+**Correction (`2026-09-03`), found while `ISS-2026-122` item 3 wired the first real caller: this entry's authority-denial half shipped a mechanism with ZERO production callers, and the text above reads as though it were in use.** The paragraph above says `app.authority_denials` "is written from **outside** the refused transaction, by the application boundary that catches the error — `server/policies/authority-denial-recorder.ts`". Every word of that describes the design correctly. What it does not say, and what a reader would reasonably assume, is that some boundary actually called it. None did: a grep for `record_authority_denial`/`recordAuthorityDenial` across `server/`, `lib/` and `app/` returned only the recorder module's own definitions and its unit tests. Until `2026-09-03` no real authorization refusal anywhere in this application produced an `app.authority_denials` row, so `app.run_authority_denial_anomaly_sweep` had nothing to detect a burst in.
+
+**The root cause is a type, and it is worth naming because it is the reason 13 unit tests passed over a gap this size.** `AuthorityDenialRecorderRpcClient.rpc` was declared to return `Promise<...>`. A real `SupabaseClient.rpc(...)` returns a `PostgrestFilterBuilder` — thenable, but not a `Promise` (no `catch`, no `finally`, no `Symbol.toStringTag`). So the interface accepted every hand-written test double and **no real client**: passing one is a compile error, which is exactly what happened the moment `ISS-2026-122` item 3 tried. The declaration is now `PromiseLike<...>`, which both the doubles and a real client satisfy. A mechanism whose only possible caller is its own test is not wired, however complete it looks, and the type was quietly guaranteeing that.
+
+**Disposition unchanged, `RESOLVED`** — the gap this entry names is now genuinely closed rather than merely buildable, and the closure is real from `2026-09-03` rather than from `2026-08-31` as the text above implies. The remaining producers this entry's own body lists (webhook signature verification, AI governed-action failure, integration health-check auto-disable) are separately dispositioned in their own paragraphs above and are not affected by this correction.
 
 ### ISS-2026-250 — no monitoring/incident dashboard UI exists anywhere in the application — IAE-030's own real, well-built alerting backend has zero consumer (found at `HDN-382` Observability Audit, coverage-mapping lens + runbook/dashboard review lens, `RESOLVED`, High, owner a dedicated future task)
 

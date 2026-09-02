@@ -20,7 +20,13 @@
  */
 
 export interface AuthorityDenialRecorderRpcClient {
-  rpc(fn: "record_authority_denial", args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>;
+  // `PromiseLike`, not `Promise`, and that is load-bearing rather than pedantic: a real
+  // `SupabaseClient.rpc(...)` returns a `PostgrestFilterBuilder`, which is thenable but is not a
+  // `Promise` (no `catch`, no `finally`, no `Symbol.toStringTag`). Declared as `Promise` this
+  // interface accepted every hand-written test double and no real client, which is how this
+  // recorder reached three passes of ISS-2026-249 with unit tests passing and zero production
+  // callers. Widened when ISS-2026-122 item 3 wired the first real one.
+  rpc(fn: "record_authority_denial", args: Record<string, unknown>): PromiseLike<{ data: unknown; error: { message: string } | null }>;
 }
 
 export type AuthorityDenialKind = "rbac" | "step_up" | "ip";
