@@ -17,6 +17,7 @@ import {
   DecideEmployeePositionAssignmentInputSchema,
   CancelEmployeePositionAssignmentInputSchema,
   ActivateDueEmployeePositionAssignmentsInputSchema,
+  ProposeBulkEmployeePositionAssignmentInputSchema,
   parsePositionGrade,
   parsePosition,
   parseEmployeePositionAssignment,
@@ -30,6 +31,7 @@ import {
   type DecideEmployeePositionAssignmentInput,
   type CancelEmployeePositionAssignmentInput,
   type ActivateDueEmployeePositionAssignmentsInput,
+  type ProposeBulkEmployeePositionAssignmentInput,
   type PositionGrade,
   type Position,
   type EmployeePositionAssignment,
@@ -68,6 +70,10 @@ export const POSITION_KNOWN_MUTATION_ERROR_CODES = [
   "assignment_overlap",
   "position_over_capacity",
   "invalid_response",
+  "invalid_items",
+  "invalid_item",
+  "too_many_items",
+  "duplicate_employee",
 ] as const;
 type KnownPositionMutationErrorCode = (typeof POSITION_KNOWN_MUTATION_ERROR_CODES)[number];
 export type PositionMutationErrorCode = KnownPositionMutationErrorCode | "mutation_failed";
@@ -271,4 +277,35 @@ export async function activateDueEmployeePositionAssignments(client: PositionMut
   if (error) throw new PositionMutationError(classifyError(error.message), error.message);
   if (typeof data !== "number") throw new PositionMutationError("invalid_response", "activate_due_employee_position_assignments returned a non-numeric result");
   return data;
+}
+
+/**
+ * Bulk/multi-employee reorganization (ISS-2026-066 item 1). Creates status=pending_approval
+ * proposals for every item, in a list of employee/position pairs, in ONE transaction --
+ * app.propose_bulk_employee_position_assignment either creates every row or none (an
+ * uncaught exception on any item rolls back the whole batch). Every row lands in the SAME
+ * queue a single proposeEmployeePositionAssignment call would, reviewed through the
+ * existing /hris/employees/[masterRecordId]/positions wizard -- this never auto-approves.
+ */
+export async function proposeBulkEmployeePositionAssignment(client: PositionMutationRpcClient, input: ProposeBulkEmployeePositionAssignmentInput): Promise<EmployeePositionAssignment[]> {
+  const parsed = ProposeBulkEmployeePositionAssignmentInputSchema.parse(input);
+  const { data, error } = await client.rpc("propose_bulk_employee_position_assignment", {
+    p_tenant_id: parsed.tenantId,
+    p_items: parsed.items.map((item) => ({
+      master_record_id: item.masterRecordId,
+      expected_version: item.expectedVersion,
+      position_id: item.positionId,
+      grade_id: item.gradeId ?? null,
+      manager_employee_id: item.managerEmployeeId ?? null,
+      assignment_type: item.assignmentType,
+    })),
+    p_change_reason: parsed.changeReason,
+    p_reason_note: parsed.reasonNote ?? null,
+    p_effective_start_date: parsed.effectiveStartDate,
+    p_effective_end_date: parsed.effectiveEndDate ?? null,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new PositionMutationError(classifyError(error.message), error.message);
+  return (data as Record<string, unknown>[] | null ?? []).map(parseEmployeePositionAssignment);
 }

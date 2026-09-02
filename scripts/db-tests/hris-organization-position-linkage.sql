@@ -1169,4 +1169,122 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-066 item 1 regression: bulk/multi-employee reorganization -- creates a real pending_approval proposal per employee/position pair, in ONE transaction (any one item''s failure rolls back the whole batch, never a partial commit), never auto-decided, rejects a duplicate employee within the same batch, rejects an employee outside the given tenant, and genuinely requires HRS:Edit'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrpos1');
+  v_staff uuid := '00000000-0000-0000-0000-000000027512';
+  v_viewer uuid := '00000000-0000-0000-0000-000000027514';
+  v_manager_id uuid;
+  v_manager_version integer;
+  v_report_id uuid;
+  v_report_version integer;
+  v_position_duo_id uuid := (select id from app.positions where tenant_id = v_tenant1 and code = 'POS-DUO');
+  v_before_count integer;
+  v_created_count integer;
+begin
+  select master_record_id, record_version into v_manager_id, v_manager_version from app.employees where tenant_id = v_tenant1 and full_name = 'Hrpos1 Manager Person';
+  select master_record_id, record_version into v_report_id, v_report_version from app.employees where tenant_id = v_tenant1 and full_name = 'Hrpos1 Report Person';
+
+  select count(*) into v_before_count from app.employee_position_assignments where master_record_id in (v_manager_id, v_report_id) and status = 'pending_approval';
+
+  -- Authority: the same HRS:Edit bar app.propose_employee_position_assignment
+  -- itself already enforces -- an HRS:View-only viewer is genuinely denied.
+  begin
+    perform app.propose_bulk_employee_position_assignment(
+      v_tenant1,
+      jsonb_build_array(jsonb_build_object('master_record_id', v_manager_id, 'expected_version', v_manager_version, 'position_id', v_position_duo_id)),
+      'reorganization', 'department consolidation', current_date, null, v_viewer, 'viewer'
+    );
+    raise exception 'assertion failed: expected the HRS-View-only viewer to be denied HRS:Edit';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%HRS:Edit%' then raise; end if;
+  end;
+
+  -- A duplicate employee within the SAME batch is rejected outright, before
+  -- either row is created.
+  begin
+    perform app.propose_bulk_employee_position_assignment(
+      v_tenant1,
+      jsonb_build_array(
+        jsonb_build_object('master_record_id', v_manager_id, 'expected_version', v_manager_version, 'position_id', v_position_duo_id),
+        jsonb_build_object('master_record_id', v_manager_id, 'expected_version', v_manager_version, 'position_id', v_position_duo_id)
+      ),
+      'reorganization', null, current_date, null, v_staff, 'staff'
+    );
+    raise exception 'assertion failed: expected duplicate_employee for the same employee appearing twice in one batch';
+  exception
+    when others then
+      if sqlerrm not like 'duplicate_employee%' then raise; end if;
+  end;
+
+  -- An employee genuinely outside this tenant (a fabricated master_record_id
+  -- that resolves to no employee of tenant hrpos1 at all) is rejected as
+  -- not-found -- tenant-boundary defense in depth, never a real disclosure of
+  -- whether that id exists somewhere else.
+  begin
+    perform app.propose_bulk_employee_position_assignment(
+      v_tenant1,
+      jsonb_build_array(jsonb_build_object('master_record_id', gen_random_uuid(), 'expected_version', 1, 'position_id', v_position_duo_id)),
+      'reorganization', null, current_date, null, v_staff, 'staff'
+    );
+    raise exception 'assertion failed: expected employee_not_found for a master_record_id outside this tenant';
+  exception
+    when others then
+      if sqlerrm not like 'employee_not_found%' then raise; end if;
+  end;
+
+  -- Atomicity ("in one transaction", this item's own filing text): item 1 is
+  -- well-formed, item 2 carries a deliberately stale expected_version -- the
+  -- WHOLE batch must roll back, including item 1's own would-be proposal.
+  begin
+    perform app.propose_bulk_employee_position_assignment(
+      v_tenant1,
+      jsonb_build_array(
+        jsonb_build_object('master_record_id', v_manager_id, 'expected_version', v_manager_version, 'position_id', v_position_duo_id),
+        jsonb_build_object('master_record_id', v_report_id, 'expected_version', v_report_version + 999, 'position_id', v_position_duo_id)
+      ),
+      'reorganization', null, current_date, null, v_staff, 'staff'
+    );
+    raise exception 'assertion failed: expected stale_version to abort the whole batch';
+  exception
+    when others then
+      if sqlerrm not like 'stale_version%' then raise; end if;
+  end;
+
+  select count(*) into v_created_count from app.employee_position_assignments where master_record_id in (v_manager_id, v_report_id) and status = 'pending_approval';
+  if v_created_count <> v_before_count then
+    raise exception 'assertion failed: expected ZERO proposals created from the aborted batch (one bad item must roll back every good one too) -- had %, now %', v_before_count, v_created_count;
+  end if;
+
+  -- The real, well-formed batch: both employees move to the SAME new position in
+  -- one call -- both proposals are created, both status=pending_approval (never
+  -- auto-approved -- this RPC never calls app.decide_employee_position_assignment).
+  perform app.propose_bulk_employee_position_assignment(
+    v_tenant1,
+    jsonb_build_array(
+      jsonb_build_object('master_record_id', v_manager_id, 'expected_version', v_manager_version, 'position_id', v_position_duo_id),
+      jsonb_build_object('master_record_id', v_report_id, 'expected_version', v_report_version, 'position_id', v_position_duo_id)
+    ),
+    'reorganization', 'Q3 department consolidation into POS-DUO', current_date + 30, null, v_staff, 'staff'
+  );
+
+  select count(*) into v_created_count
+  from app.employee_position_assignments
+  where master_record_id in (v_manager_id, v_report_id)
+    and position_id = v_position_duo_id
+    and status = 'pending_approval'
+    and change_reason = 'reorganization'
+    and reason_note = 'Q3 department consolidation into POS-DUO';
+  if v_created_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 real pending_approval proposals from the well-formed bulk batch, found %', v_created_count;
+  end if;
+
+  if not exists (select 1 from app.audit_logs where tenant_id = v_tenant1 and action = 'propose_bulk_employee_position_assignment' and resource_id is null) then
+    raise exception 'assertion failed: expected a batch-level propose_bulk_employee_position_assignment audit_logs row (resource_id null -- it describes the whole batch, not one row)';
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-275 db-test assertions passed.'

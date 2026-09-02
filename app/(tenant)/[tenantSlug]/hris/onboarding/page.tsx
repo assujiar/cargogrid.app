@@ -7,7 +7,7 @@ import type { CaseStatus, CaseType } from "../../../../../server/contracts/onboa
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../components/ui/permission-state.tsx";
 import { OnboardingCaseListPanel } from "./onboarding-case-list-panel.tsx";
-import { startOnboardingCaseAction } from "./actions.ts";
+import { startOnboardingCaseAction, previewOnboardingCaseStartAction, exportOnboardingCasesAction } from "./actions.ts";
 
 /**
  * Onboarding/offboarding case workspace (HRT-277, CG-S12-HRT-005) -- role-based
@@ -80,6 +80,8 @@ export default async function OnboardingCasesPage({
         statusFilter={statusFilter}
         search={q ?? ""}
         startCaseAction={startOnboardingCaseAction.bind(null, tenantSlug)}
+        previewCaseAction={previewOnboardingCaseStartAction.bind(null, tenantSlug)}
+        exportCasesAction={exportOnboardingCasesAction.bind(null, tenantSlug, statusFilter)}
       />
     </div>
   );

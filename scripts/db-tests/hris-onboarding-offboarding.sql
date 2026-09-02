@@ -2104,4 +2104,176 @@ begin
 end;
 $$;
 
+\echo '>> ISS-2026-070 item 4: a dedicated case_type=transfer scenario -- the CHECK constraint and every RPC already treat transfer identically to onboarding/offboarding, but until now this file only ever exercised the other two. source_type=existing_employee: no new hire is created, no employment is terminated, and the SAME already-active employee is what the case links throughout.'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'hrt2771');
+  v_staff uuid := '00000000-0000-0000-0000-000000027702';
+  v_approver uuid := '00000000-0000-0000-0000-000000027703';
+  v_company uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'CO-HRT2771');
+  v_branch uuid := (select id from app.org_units where tenant_id = v_tenant1 and code = 'BR-HRT2771');
+  v_department uuid := (select id from app.org_units where tenant_id = v_tenant1 and unit_type = 'department' limit 1);
+  v_trf_template app.onboarding_checklist_templates;
+  v_trf_version app.onboarding_checklist_template_versions;
+  v_active_employee_id uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and full_name = 'Existing Employee One');
+  v_employee_before app.employees;
+  v_employee_after app.employees;
+  v_employee_count_before integer;
+  v_employee_count_after integer;
+  v_draft_case app.onboarding_offboarding_cases;
+  v_draft_employee_id uuid;
+  v_case app.onboarding_offboarding_cases;
+  v_replay_case_id uuid;
+  v_task_count integer;
+  v_org_task app.onboarding_case_tasks;
+  v_notify_task app.onboarding_case_tasks;
+  v_pending_step app.approval_request_steps;
+begin
+  -- This block's own premise: Existing Employee One is still active (untouched by
+  -- every block since the earlier rehire-negative-case block asserted the same
+  -- thing) -- re-asserted here rather than assumed, since this block runs last.
+  select * into v_employee_before from app.employees where master_record_id = v_active_employee_id;
+  if v_employee_before.lifecycle_status <> 'active' then
+    raise exception 'assertion failed: expected Existing Employee One to still be active going into the transfer scenario, got %', v_employee_before.lifecycle_status;
+  end if;
+
+  -- No published transfer checklist template existed anywhere in this fixture
+  -- before now -- item 4's own gap was never merely "no test", the case_type was
+  -- genuinely never driven end to end against a real template.
+  select * into v_trf_template from app.create_onboarding_checklist_template(v_tenant1, 'TRF-STD', 'Standard Transfer', 'transfer', v_staff, 'tester');
+  select * into v_trf_version from app.create_onboarding_checklist_template_version(v_trf_template.id, v_staff, 'tester');
+  perform app.add_onboarding_checklist_template_task(v_trf_version.id, 'update-org-assignment', 'Update org unit/position assignment', null, 'document', null, 'hr', true, 3, 1, v_staff, 'tester');
+  perform app.add_onboarding_checklist_template_task(v_trf_version.id, 'notify-new-manager', 'Notify the new manager', null, 'document', null, 'manager', false, 2, 2, v_staff, 'tester');
+  perform app.publish_onboarding_checklist_template_version(v_trf_version.id, v_trf_version.record_version, v_approver, 'tester');
+
+  -- Negative: source_type=existing_employee against an employee who is not yet
+  -- active/on_leave is rejected. A fresh direct_hire case's own new employee
+  -- starts life at lifecycle_status='draft' (never onboarded/finalized here) --
+  -- a real, not-yet-active employee, not a fabricated one.
+  select * into v_draft_case from app.start_onboarding_case(
+    v_tenant1, 'onboarding', 'direct_hire', null, null, null, current_date,
+    'Transfer Precondition Subject', 'full_time', null, null, null, null, null, null,
+    v_company, v_branch, v_department, null, null,
+    'idem-hrt2771-iss070-transfer-draft', v_staff, 'tester'
+  );
+  v_draft_employee_id := v_draft_case.employee_master_record_id;
+  if (select lifecycle_status from app.employees where master_record_id = v_draft_employee_id) = 'active' then
+    raise exception 'assertion failed: test premise wrong -- a freshly direct_hire-started employee must not already be active';
+  end if;
+  begin
+    perform app.start_onboarding_case(
+      v_tenant1, 'transfer', 'existing_employee', null, v_draft_employee_id, null, current_date,
+      null, null, null, null, null, null, null, null, null, null, null, null, null,
+      'idem-hrt2771-iss070-transfer-bad', v_staff, 'tester'
+    );
+    raise exception 'assertion failed: expected invalid_transition for a transfer case against a non-active/on_leave employee';
+  exception when check_violation then
+    if sqlerrm not like 'invalid_transition%' then raise; end if;
+  end;
+
+  -- Negative: transfer never accepts source_type=direct_hire -- only
+  -- existing_employee resolves the (already-existing) employee a transfer moves.
+  begin
+    perform app.start_onboarding_case(
+      v_tenant1, 'transfer', 'direct_hire', null, null, null, current_date,
+      'Should Never Be Created', 'full_time', null, null, null, null, null, null, null, null, null, null, null,
+      'idem-hrt2771-iss070-transfer-badsource', v_staff, 'tester'
+    );
+    raise exception 'assertion failed: expected invalid_case_type_for_source for transfer+direct_hire';
+  exception when check_violation then
+    if sqlerrm not like 'invalid_case_type_for_source%' then raise; end if;
+  end;
+  if exists (select 1 from app.employees where tenant_id = v_tenant1 and full_name = 'Should Never Be Created') then
+    raise exception 'assertion failed: the rejected transfer+direct_hire attempt must never have created an employee row';
+  end if;
+
+  -- Captured HERE, after the negative-case setup above has already created its own
+  -- (deliberate, disclosed) draft employee -- this is the baseline the REAL transfer
+  -- scenario below must not move, not a baseline from before this block even started.
+  select count(*) into v_employee_count_before from app.employees where tenant_id = v_tenant1;
+
+  -- The real scenario: a transfer case against an ALREADY-active employee -- no
+  -- new hire, no employment termination, the same employee throughout.
+  select * into v_case from app.start_onboarding_case(
+    v_tenant1, 'transfer', 'existing_employee', null, v_active_employee_id, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-iss070-transfer-1', v_staff, 'tester'
+  );
+  if v_case.status <> 'active' then raise exception 'assertion failed: expected an active transfer case, got %', v_case.status; end if;
+  if v_case.employee_master_record_id <> v_active_employee_id then
+    raise exception 'assertion failed: expected the transfer case to link the SAME existing employee, never a new one';
+  end if;
+
+  select count(*) into v_task_count from app.onboarding_case_tasks where case_id = v_case.id;
+  if v_task_count <> 2 then raise exception 'assertion failed: expected 2 tasks instantiated from the transfer template, got %', v_task_count; end if;
+
+  select count(*) into v_employee_count_after from app.employees where tenant_id = v_tenant1;
+  if v_employee_count_after <> v_employee_count_before then
+    raise exception 'assertion failed: starting a transfer case must never change the tenant''s own employee row count -- expected %, got %', v_employee_count_before, v_employee_count_after;
+  end if;
+
+  -- Idempotent replay by idempotency_key, exactly like every other source path.
+  select id into v_replay_case_id from app.start_onboarding_case(
+    v_tenant1, 'transfer', 'existing_employee', null, v_active_employee_id, null, current_date,
+    null, null, null, null, null, null, null, null, null, null, null, null, null,
+    'idem-hrt2771-iss070-transfer-1', v_staff, 'tester'
+  );
+  if v_replay_case_id <> v_case.id then
+    raise exception 'assertion failed: expected an identical-key replay to return the SAME transfer case';
+  end if;
+
+  -- Drive it through the same checklist/finalize-approval pipeline onboarding/
+  -- offboarding cases already use -- transfer is not a second, lesser pipeline.
+  select * into v_org_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'update-org-assignment';
+  select * into v_notify_task from app.onboarding_case_tasks where case_id = v_case.id and template_task_key = 'notify-new-manager';
+
+  -- Mandatory checklist gate applies here too: finalize submission is blocked
+  -- while update-org-assignment (mandatory) is still open, even though
+  -- notify-new-manager (optional) has not been touched at all.
+  begin
+    perform app.submit_onboarding_case_for_finalize_approval(v_case.id, v_case.record_version, null, v_staff, 'tester');
+    raise exception 'assertion failed: expected finalize submission to be blocked while a mandatory task is incomplete';
+  exception when check_violation then null;
+  end;
+
+  select * into v_org_task from app.complete_onboarding_task(v_case.id, v_org_task.id, v_org_task.record_version, 'org unit/position updated in the HRIS', null, v_staff, 'tester');
+  if v_org_task.status <> 'completed' then raise exception 'assertion failed: expected update-org-assignment completed'; end if;
+
+  -- Existing Employee One is already active (HRT-274's own governed lifecycle
+  -- precondition, decision 1 -- see the earlier "case finalize approval" block),
+  -- so finalize submission succeeds immediately, unlike a fresh onboarding case.
+  select * into v_case from app.submit_onboarding_case_for_finalize_approval(v_case.id, v_case.record_version, null, v_staff, 'tester');
+  if v_case.status <> 'pending_finalize_approval' then raise exception 'assertion failed: expected pending_finalize_approval, got %', v_case.status; end if;
+
+  select s.* into v_pending_step from app.approval_request_steps s where s.request_id = v_case.finalize_approval_request_id and s.status = 'active';
+  select * into v_case from app.decide_onboarding_case_finalize_approval(v_pending_step.id, 'approved', null, v_approver, 'tester');
+  if v_case.status <> 'finalized' or v_case.finalized_at is null then
+    raise exception 'assertion failed: expected the transfer case finalized, got %', v_case.status;
+  end if;
+
+  -- The optional notify-new-manager task was never touched -- finalize never
+  -- auto-completes a non-mandatory task on a caller's behalf.
+  select * into v_notify_task from app.onboarding_case_tasks where id = v_notify_task.id;
+  if v_notify_task.status = 'completed' then
+    raise exception 'assertion failed: expected the untouched optional task to remain un-completed after finalize, not silently auto-completed';
+  end if;
+
+  -- The whole point of item 4: the employee that came out the other end is the
+  -- SAME row, completely unaffected -- no hire, no termination, no lifecycle
+  -- change of any kind.
+  select * into v_employee_after from app.employees where master_record_id = v_active_employee_id;
+  if v_employee_after.lifecycle_status <> 'active' then
+    raise exception 'assertion failed: expected Existing Employee One to remain active after a finalized transfer case, got %', v_employee_after.lifecycle_status;
+  end if;
+  if v_employee_after.full_name <> v_employee_before.full_name or v_employee_after.employment_type <> v_employee_before.employment_type then
+    raise exception 'assertion failed: expected a finalized transfer case to leave the employee''s own core fields byte-identical -- this pipeline moves a checklist, never the employee record itself';
+  end if;
+
+  select count(*) into v_employee_count_after from app.employees where tenant_id = v_tenant1;
+  if v_employee_count_after <> v_employee_count_before then
+    raise exception 'assertion failed: a finalized transfer case must never change the tenant''s own employee row count -- expected %, got %', v_employee_count_before, v_employee_count_after;
+  end if;
+end;
+$$;
+
 \echo 'ALL HRT-277 db-test assertions passed.'

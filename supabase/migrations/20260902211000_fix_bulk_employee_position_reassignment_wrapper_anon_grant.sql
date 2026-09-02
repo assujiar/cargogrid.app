@@ -1,0 +1,32 @@
+-- Self-found bug, caught live by this checkpoint's own `bash scripts/db-tests/run.sh`
+-- run against a freshly-replayed local database (never against the already-applied live
+-- hosted project, where `20260902210000` was applied by directly running its own
+-- `revoke ... from public` / `grant ... to authenticated, service_role` statements one
+-- time -- those statements are correct in isolation; what was missing is the ordering
+-- relative to schema `public`'s own default ACL).
+--
+-- `scripts/db-tests/public-api-wrapper-regression.sql` failed immediately the first time
+-- this checkpoint's new function was replayed through a from-scratch migration sequence:
+-- "1 public.* wrapper(s) have a grant set that does not exactly match their app.*
+-- counterpart -- propose_bulk_employee_position_assignment".
+--
+-- The cause: schema `public` (unlike schema `app`, confirmed to carry no such override)
+-- has an `ALTER DEFAULT PRIVILEGES` entry that auto-grants EXECUTE to `anon` (and
+-- `authenticated`/`service_role`) on every newly `CREATE FUNCTION`'d object in that
+-- schema, before any statement in the migration body runs. `20260902210000`'s own
+-- `revoke execute on function public.propose_bulk_employee_position_assignment(...) from
+-- public;` revokes only the PUBLIC pseudo-role's own blanket grant -- it does nothing to
+-- `anon`'s SEPARATE, already-materialized default-ACL grant. The result: `anon` retained
+-- real EXECUTE on the public.* wrapper the whole time, while `app.propose_bulk_employee_
+-- position_assignment` (schema `app`, no such default ACL) never had it -- a real,
+-- accidental privilege widening, not merely a cosmetic parity mismatch.
+--
+-- This is the EXACT hazard `app.commit_position_crosswalk_import_job`'s own migration
+-- (`20260902040000`) already defended against, in its own STEP 5: `revoke execute on
+-- function public.X from anon, authenticated, service_role, public;` -- explicitly naming
+-- every role, not merely PUBLIC. This function's own migration should have matched that
+-- established convention from the start and did not; fixed here by re-issuing the
+-- identical explicit multi-role revoke, then re-granting only what belongs.
+
+revoke execute on function public.propose_bulk_employee_position_assignment(uuid, jsonb, text, text, date, date, uuid, text) from anon, authenticated, service_role, public;
+grant execute on function public.propose_bulk_employee_position_assignment(uuid, jsonb, text, text, date, date, uuid, text) to authenticated, service_role;
