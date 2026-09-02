@@ -6,7 +6,10 @@ import { assignCostingRequestAction, submitCostingResponseAction, reviseCostingR
 import type { CostingResponseSourceType } from "../../../../../../server/contracts/costing/costing.ts";
 import type { CostingRequestComponent } from "../../../../../../server/contracts/costing/costing.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 /** Assign/respond/revise/cancel action panel (COM-148) -- mirrors every prior Commercial capability's own `*-actions-panel.tsx` pattern (bound Server Actions called directly via `useTransition`). */
 export function CostingRequestActionsPanel({
@@ -32,21 +35,24 @@ export function CostingRequestActionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Four independent actions (assign / submit / revise / cancel) share this one `error`
+  // slot, so there is no honest per-field attribution: every control points at the shared
+  // message via `aria-describedby` and none of them claims `aria-invalid`.
+  const describedBy = error ? "costing-actions-error" : undefined;
+
   const isClosed = status === "cancelled" || status === "superseded";
 
   return (
     <div className="flex flex-col gap-6 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Actions</h2>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="costing-actions-error">{error}</ValidationMessage> : null}
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Assign</h3>
-        <Input placeholder="Assignee user ID" value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)} disabled={isClosed} />
+        <FormField id="costing-assignee" label={<span className="sr-only">Assignee user ID</span>}>
+          <Input id="costing-assignee" placeholder="Assignee user ID" value={assigneeUserId} onChange={(e) => setAssigneeUserId(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
+        </FormField>
         <Button
           type="button"
           variant="secondary"
@@ -66,30 +72,46 @@ export function CostingRequestActionsPanel({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Submit response</h3>
-        <Select value={sourceType} onChange={(e) => setSourceType(e.target.value as CostingResponseSourceType)} disabled={isClosed}>
-          <option value="internal">Internal</option>
-          <option value="vendor">Vendor</option>
-        </Select>
+        <FormField id="costing-source-type" label={<span className="sr-only">Response source</span>}>
+          <Select id="costing-source-type" value={sourceType} onChange={(e) => setSourceType(e.target.value as CostingResponseSourceType)} disabled={isClosed} aria-describedby={describedBy}>
+            <option value="internal">Internal</option>
+            <option value="vendor">Vendor</option>
+          </Select>
+        </FormField>
         {sourceType === "vendor" ? (
-          <Input placeholder="Vendor reference" value={vendorRef} onChange={(e) => setVendorRef(e.target.value)} disabled={isClosed} />
+          <FormField id="costing-vendor-ref" label={<span className="sr-only">Vendor reference</span>}>
+            <Input id="costing-vendor-ref" placeholder="Vendor reference" value={vendorRef} onChange={(e) => setVendorRef(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
+          </FormField>
         ) : null}
-        <input placeholder="Currency (e.g. IDR)" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} disabled={isClosed} className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <Input type="datetime-local" placeholder="Expiry (optional)" value={expiryAt} onChange={(e) => setExpiryAt(e.target.value)} disabled={isClosed} />
+        <div className="w-32">
+          <FormField id="costing-currency" label={<span className="sr-only">Currency</span>}>
+            <Input id="costing-currency" placeholder="Currency (e.g. IDR)" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} disabled={isClosed} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+        <FormField id="costing-expiry" label={<span className="sr-only">Expiry (optional)</span>}>
+          <Input id="costing-expiry" type="datetime-local" placeholder="Expiry (optional)" value={expiryAt} onChange={(e) => setExpiryAt(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
+        </FormField>
         {requestComponents.length === 0 ? (
           <p className="text-xs text-neutral-500">This request has no line items to price.</p>
         ) : (
           requestComponents.map((component) => (
             <div key={component.id} className="flex items-center gap-2">
-              <span className="w-40 text-sm text-neutral-700">{component.componentCode}</span>
-              <input
-                type="number"
-                min={0}
-                placeholder="Amount"
-                value={amounts[component.id] ?? ""}
-                onChange={(e) => setAmounts((prev) => ({ ...prev, [component.id]: e.target.value }))}
-                disabled={isClosed}
-                className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-sm"
-              />
+              {/* The component code was already the visual label for this row's amount --
+                  it is now a real `<label htmlFor>`, so the association is programmatic too. */}
+              <label htmlFor={`costing-amount-${component.id}`} className="w-40 text-sm text-neutral-700">
+                {component.componentCode}
+              </label>
+              <div className="w-32">
+                <NumberInput
+                  id={`costing-amount-${component.id}`}
+                  min={0}
+                  placeholder="Amount"
+                  value={amounts[component.id] ?? ""}
+                  onChange={(e) => setAmounts((prev) => ({ ...prev, [component.id]: e.target.value }))}
+                  disabled={isClosed}
+                  aria-describedby={describedBy}
+                />
+              </div>
             </div>
           ))
         )}
@@ -142,7 +164,9 @@ export function CostingRequestActionsPanel({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-medium text-neutral-900">Cancel</h3>
-        <Input placeholder="Cancel reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} disabled={isClosed} />
+        <FormField id="costing-cancel-reason" label={<span className="sr-only">Cancel reason</span>}>
+          <Input id="costing-cancel-reason" placeholder="Cancel reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} disabled={isClosed} aria-describedby={describedBy} />
+        </FormField>
         <Button
           type="button"
           variant="destructive"

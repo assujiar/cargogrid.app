@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { checkCustomerCreditAction, type CheckCreditFormState } from "./credit-actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 const INITIAL_STATE: CheckCreditFormState = { error: null, result: null };
 
@@ -17,19 +21,25 @@ export function CreditCheckForm({ tenantSlug, accountId }: { tenantSlug: string;
     INITIAL_STATE,
   );
 
+  const describedBy = state.error ? "credit-check-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       <h3 className="text-sm font-semibold text-neutral-900">Check eligibility</h3>
       <div className="flex gap-2">
-        <input name="currency" defaultValue="IDR" maxLength={3} className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <input name="requestedAmount" type="number" min={0} placeholder="Transaction amount" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-24">
+          <FormField id="credit-check-currency" label={<span className="sr-only">Currency</span>}>
+            <Input id="credit-check-currency" name="currency" type="text" defaultValue="IDR" maxLength={3} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+        <div className="w-48">
+          <FormField id="credit-check-amount" label={<span className="sr-only">Transaction amount</span>}>
+            <NumberInput id="credit-check-amount" name="requestedAmount" min={0} placeholder="Transaction amount" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="credit-check-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Checking…" className="w-fit">
         Run check

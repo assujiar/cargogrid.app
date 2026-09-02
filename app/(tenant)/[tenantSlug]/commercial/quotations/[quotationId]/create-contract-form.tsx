@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { createContractFromQuotationAction, type CreateContractFromQuotationState } from "./actions.ts";
+import { DateInput } from "../../../../../../components/forms/date-input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 const INITIAL_STATE: CreateContractFromQuotationState = { error: null };
 
@@ -18,18 +21,13 @@ export function CreateContractForm({ tenantSlug, quotationId }: { tenantSlug: st
 
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="effectiveFrom" className="text-sm font-medium text-neutral-700">
-          Effective from
-        </label>
-        <input id="effectiveFrom" name="effectiveFrom" type="date" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-      </div>
+      <FormField id="effectiveFrom" label="Effective from">
+        <div className="w-48">
+          <DateInput id="effectiveFrom" name="effectiveFrom" invalid={Boolean(state.error)} aria-describedby={state.error ? "create-contract-error" : undefined} />
+        </div>
+      </FormField>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="create-contract-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Creating…" className="w-fit">
         Create contract

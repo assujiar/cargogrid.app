@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { sendQuotationForAcceptanceAction, type SendQuotationForAcceptanceState } from "./actions.ts";
+import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 const INITIAL_STATE: SendQuotationForAcceptanceState = { error: null, rawToken: null };
 
@@ -27,42 +30,38 @@ export function SendAcceptanceForm({
     INITIAL_STATE,
   );
 
+  const describedBy = state.error ? "send-acceptance-error" : undefined;
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">{hasActiveToken ? "Resend for acceptance" : "Send for acceptance"}</h2>
       <p className="text-xs text-neutral-500">Generates a secure, single-use link the customer can use to accept or reject this exact quotation version -- no customer login required.</p>
 
       <form action={formAction} className="flex flex-col gap-3" noValidate>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="recipientContactId" className="text-sm font-medium text-neutral-700">
-            Recipient contact (optional)
-          </label>
-          <select id="recipientContactId" name="recipientContactId" defaultValue="" className="w-64 rounded-md border border-neutral-300 px-3 py-2 text-sm">
-            <option value="">— None —</option>
-            {contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.fullName}
-                {contact.email ? ` (${contact.email})` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
+        <FormField id="recipientContactId" label="Recipient contact (optional)">
+          <div className="w-64">
+            <Select id="recipientContactId" name="recipientContactId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+              <option value="">— None —</option>
+              {contacts.map((contact) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.fullName}
+                  {contact.email ? ` (${contact.email})` : ""}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="channel" className="text-sm font-medium text-neutral-700">
-            Channel
-          </label>
-          <select id="channel" name="channel" defaultValue="email" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm">
-            <option value="email">Email</option>
-            <option value="manual_link">Manual link</option>
-          </select>
-        </div>
+        <FormField id="channel" label="Channel">
+          <div className="w-48">
+            <Select id="channel" name="channel" defaultValue="email" invalid={Boolean(state.error)} aria-describedby={describedBy}>
+              <option value="email">Email</option>
+              <option value="manual_link">Manual link</option>
+            </Select>
+          </div>
+        </FormField>
 
-        {state.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage id="send-acceptance-error">{state.error}</ValidationMessage> : null}
 
         <Button type="submit" loading={pending} loadingLabel="Sending…">
           {hasActiveToken ? "Resend (revokes the current link)" : "Send"}

@@ -4,6 +4,9 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { createContractRenewalAction } from "./actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { DateInput } from "../../../../../../components/forms/date-input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 /** Renewal/amendment trigger (COM-156, Prompt 156's own alternative flow) -- copies this version's own price components into a new future-dated draft under the same root_contract_id; the mandatory reason and effective window are server-enforced (reason_required / customer_contracts_validity_check). */
 export function RenewalForm({ tenantSlug, sourceContractId }: { tenantSlug: string; sourceContractId: string }) {
@@ -13,23 +16,28 @@ export function RenewalForm({ tenantSlug, sourceContractId }: { tenantSlug: stri
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const describedBy = error ? "renewal-error" : undefined;
+  const invalid = Boolean(error);
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Create renewal / amendment</h2>
       <p className="text-xs text-neutral-500">Copies this version&apos;s own price components into a new draft under the same contract -- edit the copy, then publish it once its effective window does not overlap another published version.</p>
 
       <div className="flex gap-2">
-        <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
-        <Input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} placeholder="Effective to (optional)" />
+        <FormField id="renewal-effective-from" label={<span className="sr-only">Effective from</span>}>
+          <DateInput id="renewal-effective-from" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="renewal-effective-to" label={<span className="sr-only">Effective to (optional)</span>}>
+          <DateInput id="renewal-effective-to" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} placeholder="Effective to (optional)" invalid={invalid} aria-describedby={describedBy} />
+        </FormField>
       </div>
 
-      <Input placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <FormField id="renewal-reason" label={<span className="sr-only">Reason (required)</span>}>
+        <Input id="renewal-reason" placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+      </FormField>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="renewal-error">{error}</ValidationMessage> : null}
 
       <Button
         type="button"

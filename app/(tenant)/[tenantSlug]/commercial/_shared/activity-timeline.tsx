@@ -5,6 +5,9 @@ import { Button } from "../../../../../components/ui/button.tsx";
 import { logActivityAction, completeActivityAction, cancelActivityAction } from "./activity-actions.ts";
 import type { Activity, ActivityType, RelatedType } from "../../../../../server/contracts/contact/contact.ts";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 
 const ACTIVITY_TYPES: ActivityType[] = ["call", "email", "meeting", "visit", "follow_up", "task"];
 
@@ -32,34 +35,44 @@ export function ActivityTimeline({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // One `error` slot is shared by the log form and by every row's own complete/cancel
+  // action, so there is no honest per-field attribution to make here (ISS-2026-242's own
+  // documented multi-action case): every control is wired to the shared message via
+  // `aria-describedby`, and none of them claims `aria-invalid`.
+  const describedBy = error ? "activity-error" : undefined;
+
   return (
     <div className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Activity timeline</h2>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="activity-error">{error}</ValidationMessage> : null}
 
       <div className="flex flex-col gap-2">
         <div className="flex gap-2">
-          <select value={type} onChange={(event) => setType(event.target.value as ActivityType)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
-            {ACTIVITY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select value={status} onChange={(event) => setStatus(event.target.value as "scheduled" | "completed")} className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
-            <option value="completed">Completed now</option>
-            <option value="scheduled">Scheduled</option>
-          </select>
+          <FormField id="activity-type" label={<span className="sr-only">Activity type</span>}>
+            <Select id="activity-type" value={type} onChange={(event) => setType(event.target.value as ActivityType)} aria-describedby={describedBy}>
+              {ACTIVITY_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField id="activity-status" label={<span className="sr-only">Activity status</span>}>
+            <Select id="activity-status" value={status} onChange={(event) => setStatus(event.target.value as "scheduled" | "completed")} aria-describedby={describedBy}>
+              <option value="completed">Completed now</option>
+              <option value="scheduled">Scheduled</option>
+            </Select>
+          </FormField>
           {status === "scheduled" ? (
-            <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            <FormField id="activity-due-at" label={<span className="sr-only">Due at</span>}>
+              <Input id="activity-due-at" type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} aria-describedby={describedBy} />
+            </FormField>
           ) : null}
         </div>
-        <Input type="text" placeholder="Subject" value={subject} onChange={(event) => setSubject(event.target.value)} />
+        <FormField id="activity-subject" label={<span className="sr-only">Subject</span>}>
+          <Input id="activity-subject" type="text" placeholder="Subject" value={subject} onChange={(event) => setSubject(event.target.value)} aria-describedby={describedBy} />
+        </FormField>
         <Button
           type="button"
           disabled={!subject.trim()}
