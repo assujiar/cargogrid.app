@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "../../../../components/ui/button.tsx";
+import { ButtonGroup } from "../../../../components/ui/button-group.tsx";
 import { Input } from "../../../../components/forms/input.tsx";
 import { Select } from "../../../../components/forms/select.tsx";
 import { Textarea } from "../../../../components/forms/textarea.tsx";
@@ -408,14 +409,22 @@ export function TicketsListPanel({
     <div className="flex flex-col gap-4">
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex gap-1" role="tablist" aria-label="Ticket views">
+          {/* ISS-2026-246: the shared `ButtonGroup` primitive replaces this hand-rolled wrapper.
+              Both buttons keep their exact variant, `onClick` and `aria-pressed`; the only
+              attribute that changes is the wrapper's role, deliberately. `role="tablist"` was
+              wrong here and had been since it was written: ARIA requires a tablist's children to
+              be `role="tab"` controlling `role="tabpanel"` regions, and these are plain toggle
+              buttons that re-run a server query via the URL -- there is no tab or panel anywhere.
+              `ButtonGroup`'s `role="group"` is the accurate semantic, and it carries the same
+              "Ticket views" accessible name the tablist did. */}
+          <ButtonGroup label="Ticket views">
             <Button type="button" variant={showQueueView ? "secondary" : "primary"} onClick={() => applyFilter("", statusFilter ?? "")} aria-pressed={!showQueueView}>
               My Tickets
             </Button>
             <Button type="button" variant={showQueueView ? "primary" : "secondary"} onClick={() => applyFilter("queue", statusFilter ?? "")} aria-pressed={showQueueView}>
               Queue
             </Button>
-          </div>
+          </ButtonGroup>
           <FormField id="ticket-status" label="Status">
             <Select id="ticket-status" defaultValue={statusFilter ?? ""} onChange={(event) => applyFilter(showQueueView ? "queue" : "", event.currentTarget.value)}>
               <option value="">All statuses</option>
