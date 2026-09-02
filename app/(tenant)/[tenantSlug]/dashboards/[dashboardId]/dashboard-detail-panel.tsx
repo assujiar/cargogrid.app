@@ -1,7 +1,11 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { TenantDashboardActionState } from "../actions.ts";
@@ -20,13 +24,11 @@ type BoundFormAction = (prevState: TenantDashboardActionState, formData: FormDat
 
 function ActionForm({
   action,
-  children,
   submitLabel,
   loadingLabel,
   variant = "primary",
 }: {
   action: BoundFormAction;
-  children?: ReactNode;
   submitLabel: string;
   loadingLabel?: string;
   variant?: "primary" | "secondary" | "destructive";
@@ -34,7 +36,6 @@ function ActionForm({
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
       {state.error ? (
         <p role="alert" className="text-sm text-danger">
           {state.error}
@@ -42,6 +43,43 @@ function ActionForm({
       ) : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * ISS-2026-242: the one `ActionForm` caller that carried real fields is its own
+ * form now -- a generic wrapper cannot wire `aria-describedby` from a field it
+ * only receives as opaque `children` to the error text it renders itself.
+ * Same action, same submit label/variant, same error text; the two controls
+ * simply gain a programmatic label and an error association.
+ */
+function AddWidgetForm({ action, reportTypes }: { action: BoundFormAction; reportTypes: readonly ReportType[] }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "add-widget-error" : undefined;
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="sm:col-span-2">
+          <FormField id="add-widget-report-type" label="Report">
+            <Select id="add-widget-report-type" name="reportTypeCode" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
+              <option value="">Select a report…</option>
+              {reportTypes.map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        </div>
+        <FormField id="add-widget-title" label="Widget title">
+          <Input id="add-widget-title" name="title" placeholder="Widget title" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+      </div>
+      {state.error ? <ValidationMessage id="add-widget-error">{state.error}</ValidationMessage> : null}
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…" className="w-fit">
+        Add widget
       </Button>
     </form>
   );
@@ -110,21 +148,7 @@ export function DashboardDetailPanel({
         <h2 className="text-sm font-semibold text-neutral-900">Draft widgets</h2>
         <WidgetList widgets={draftWidgets} removeActionFor={removeWidgetActionFor} />
 
-        {addWidgetAction ? (
-          <ActionForm action={addWidgetAction} submitLabel="Add widget" loadingLabel="Adding…" variant="secondary">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <select name="reportTypeCode" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm sm:col-span-2">
-                <option value="">Select a report…</option>
-                {reportTypes.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <input name="title" placeholder="Widget title" required className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-            </div>
-          </ActionForm>
-        ) : null}
+        {addWidgetAction ? <AddWidgetForm action={addWidgetAction} reportTypes={reportTypes} /> : null}
       </section>
 
       <section className="rounded-md border border-neutral-200 p-4">

@@ -1,7 +1,10 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { ScheduledReportActionState } from "../actions.ts";
@@ -23,11 +26,10 @@ const RUN_STATUS_TONE: Record<ScheduledReportRun["status"], StatusTone> = {
 
 type BoundFormAction = (prevState: ScheduledReportActionState, formData: FormData) => Promise<ScheduledReportActionState>;
 
-function ActionForm({ action, children, submitLabel, loadingLabel, variant = "primary" }: { action: BoundFormAction; children?: ReactNode; submitLabel: string; loadingLabel?: string; variant?: "primary" | "secondary" | "destructive" }) {
+function ActionForm({ action, submitLabel, loadingLabel, variant = "primary" }: { action: BoundFormAction; submitLabel: string; loadingLabel?: string; variant?: "primary" | "secondary" | "destructive" }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
     <form action={formAction} className="flex flex-col gap-2">
-      {children}
       {state.error ? (
         <p role="alert" className="text-sm text-danger">
           {state.error}
@@ -35,6 +37,36 @@ function ActionForm({ action, children, submitLabel, loadingLabel, variant = "pr
       ) : null}
       <Button type="submit" variant={variant} loading={pending} loadingLabel={loadingLabel ?? "Working…"} className="w-fit">
         {submitLabel}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * ISS-2026-242: the one `ActionForm` caller that carried a real field is its own form
+ * now -- a generic wrapper cannot wire `aria-describedby` from a field it only receives
+ * as opaque `children` to the error text it renders itself. Same action, same submit
+ * label/variant, same error text.
+ */
+function AddRecipientForm({ action }: { action: BoundFormAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const describedBy = state.error ? "add-scheduled-report-recipient-error" : undefined;
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <FormField id="recipientAuthUserId" label="Recipient's auth user id (must be an active tenant member)">
+        <Input
+          id="recipientAuthUserId"
+          name="recipientAuthUserId"
+          placeholder="Recipient's auth user id (must be an active tenant member)"
+          required
+          className="font-mono"
+          invalid={Boolean(state.error)}
+          aria-describedby={describedBy}
+        />
+      </FormField>
+      {state.error ? <ValidationMessage id="add-scheduled-report-recipient-error">{state.error}</ValidationMessage> : null}
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Adding…" className="w-fit">
+        Add recipient
       </Button>
     </form>
   );
@@ -97,9 +129,7 @@ export function ScheduledReportDetailPanel({
             ))}
           </ul>
         )}
-        <ActionForm action={addRecipientAction} submitLabel="Add recipient" loadingLabel="Adding…" variant="secondary">
-          <input name="recipientAuthUserId" placeholder="Recipient's auth user id (must be an active tenant member)" required className="rounded-md border border-neutral-300 px-2 py-1 font-mono text-xs" />
-        </ActionForm>
+        <AddRecipientForm action={addRecipientAction} />
       </section>
 
       <section className="flex flex-col gap-2">

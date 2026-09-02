@@ -2,6 +2,10 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { AutomationRuleActionState, DryRunActionState } from "../actions.ts";
@@ -25,43 +29,48 @@ const DRY_RUN_OK: DryRunActionState = { error: null, result: null };
 
 function DefinitionEditor({ draft, setDefinitionAction }: { draft: AutomationRuleVersion | undefined; setDefinitionAction: (prevState: AutomationRuleActionState, formData: FormData) => Promise<AutomationRuleActionState> }) {
   const [state, formAction, pending] = useActionState(setDefinitionAction, OK);
+  const describedBy = state.error ? "automation-rule-definition-error" : undefined;
 
   return (
     <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Draft definition (version {draft?.versionNumber ?? "—"})</h2>
       <form action={formAction} className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="triggerEventType" className="text-xs font-medium text-neutral-600">
-            Trigger event type
-          </label>
-          <input
+        <FormField id="triggerEventType" label="Trigger event type">
+          <Input
             id="triggerEventType"
             name="triggerEventType"
             type="text"
             placeholder="ticket.created"
             defaultValue={draft?.triggerEventType ?? ""}
             required
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
           />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="conditions" className="text-xs font-medium text-neutral-600">
-            Conditions (JSON array of {"{field,operator,value}"}, AND-combined; empty array = always matches)
-          </label>
-          <textarea id="conditions" name="conditions" rows={3} defaultValue={JSON.stringify(draft?.conditions ?? [], null, 2)} className="rounded-md border border-neutral-300 px-3 py-1.5 font-mono text-sm" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="actions" className="text-xs font-medium text-neutral-600">
-            Actions (JSON array, 1-10 entries, each action_type in notify/transition_workflow/enqueue_job)
-          </label>
-          <textarea id="actions" name="actions" rows={5} defaultValue={JSON.stringify(draft?.actions ?? [], null, 2)} className="rounded-md border border-neutral-300 px-3 py-1.5 font-mono text-sm" />
-        </div>
+        </FormField>
+        <FormField id="conditions" label={<>Conditions (JSON array of {"{field,operator,value}"}, AND-combined; empty array = always matches)</>}>
+          <Textarea
+            id="conditions"
+            name="conditions"
+            rows={3}
+            defaultValue={JSON.stringify(draft?.conditions ?? [], null, 2)}
+            className="font-mono"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+        <FormField id="actions" label="Actions (JSON array, 1-10 entries, each action_type in notify/transition_workflow/enqueue_job)">
+          <Textarea
+            id="actions"
+            name="actions"
+            rows={5}
+            defaultValue={JSON.stringify(draft?.actions ?? [], null, 2)}
+            className="font-mono"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
 
-        {state.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage id="automation-rule-definition-error">{state.error}</ValidationMessage> : null}
 
         <div>
           <Button type="submit" loading={pending} loadingLabel="Saving…">
@@ -75,24 +84,26 @@ function DefinitionEditor({ draft, setDefinitionAction }: { draft: AutomationRul
 
 function DryRunTester({ dryRunAction }: { dryRunAction: (prevState: DryRunActionState, formData: FormData) => Promise<DryRunActionState> }) {
   const [state, formAction, pending] = useActionState(dryRunAction, DRY_RUN_OK);
+  const describedBy = state.error ? "automation-rule-dry-run-error" : undefined;
 
   return (
     <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Dry run</h2>
       <p className="text-xs text-neutral-500">Pure simulation against the current draft -- never sends a real notification, enqueues a real job, or transitions a real workflow instance.</p>
       <form action={formAction} className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="sampleEventPayload" className="text-xs font-medium text-neutral-600">
-            Sample event payload (JSON object)
-          </label>
-          <textarea id="sampleEventPayload" name="sampleEventPayload" rows={3} placeholder="{}" className="rounded-md border border-neutral-300 px-3 py-1.5 font-mono text-sm" />
-        </div>
+        <FormField id="sampleEventPayload" label="Sample event payload (JSON object)">
+          <Textarea
+            id="sampleEventPayload"
+            name="sampleEventPayload"
+            rows={3}
+            placeholder="{}"
+            className="font-mono"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
 
-        {state.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage id="automation-rule-dry-run-error">{state.error}</ValidationMessage> : null}
         {state.result ? (
           <div className="rounded-md bg-neutral-50 p-3 text-xs">
             <p>

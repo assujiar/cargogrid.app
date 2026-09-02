@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { TicketActionState, TicketRoutingPreviewActionState } from "../actions.ts";
 import { TICKET_PRIORITIES, TICKET_ROUTING_ASSIGNMENT_MODES } from "../../../../../server/contracts/ticketing/ticketing.ts";
@@ -21,44 +26,42 @@ type PreviewBoundAction = (prevState: TicketRoutingPreviewActionState, formData:
 // capability (taxonomy C-20).
 function PreviewRoutingForm({ categories, previewAction }: { categories: readonly TicketCategoryRow[]; previewAction: PreviewBoundAction }) {
   const [state, formAction, pending] = useActionState(previewAction, PREVIEW_INITIAL_STATE);
+  const describedBy = state.error ? "routing-preview-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Channel
-        <select name="channel" required defaultValue="internal" className="rounded border border-neutral-300 p-1.5 text-sm">
+      <FormField id="routing-preview-channel" label="Channel">
+        <Select id="routing-preview-channel" name="channel" required defaultValue="internal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="internal">internal</option>
           <option value="customer">customer</option>
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Category (optional = any)
-        <select name="categoryId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="routing-preview-category" label="Category (optional = any)">
+        <Select id="routing-preview-category" name="categoryId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any category</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Priority (optional = any)
-        <select name="priority" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+        </Select>
+      </FormField>
+      <FormField id="routing-preview-priority" label="Priority (optional = any)">
+        <Select id="routing-preview-priority" name="priority" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
           <option value="">Any priority</option>
           {TICKET_PRIORITIES.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
-      </label>
+        </Select>
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Checking…">
         Preview routing
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="routing-preview-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
       {state.result ? (
         <p className="w-full text-xs text-neutral-700">
@@ -105,23 +108,22 @@ function PublishRuleVersionButton({ versionId, expectedVersion, publishRuleVersi
 
 function CreateRuleForm({ createRuleAction }: { createRuleAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createRuleAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-routing-rule-error" : undefined;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-200 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Code
-        <input name="code" required placeholder="GEN-ROUTE" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Name
-        <input name="name" required placeholder="General routing" className="min-w-[12rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id="routing-rule-code" label="Code">
+        <Input id="routing-rule-code" name="code" required placeholder="GEN-ROUTE" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="routing-rule-name" label="Name">
+        <Input id="routing-rule-name" name="name" required placeholder="General routing" className="min-w-[12rem]" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
         New rule
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id="create-routing-rule-error">{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -143,6 +145,9 @@ function RuleCard({
   publishRuleVersionAction: (versionId: string, expectedVersion: number) => BoundAction;
 }) {
   const [state, formAction, pending] = useActionState(createRuleVersionAction(rule.id), INITIAL_STATE);
+  // One card per rule, all on the same page -- every id in this form is rule-scoped.
+  const errorId = `routing-rule-version-${rule.id}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <div className="flex items-center gap-2">
@@ -166,38 +171,34 @@ function RuleCard({
       </ul>
 
       <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Channel
-          <select name="channel" required defaultValue="internal" className="rounded border border-neutral-300 p-1.5 text-sm">
+        <FormField id={`routing-version-channel-${rule.id}`} label="Channel">
+          <Select id={`routing-version-channel-${rule.id}`} name="channel" required defaultValue="internal" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="internal">internal</option>
             <option value="customer">customer</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Category (optional = any)
-          <select name="categoryId" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`routing-version-category-${rule.id}`} label="Category (optional = any)">
+          <Select id={`routing-version-category-${rule.id}`} name="categoryId" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="">Any category</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Priority (optional = any)
-          <select name="priority" defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`routing-version-priority-${rule.id}`} label="Priority (optional = any)">
+          <Select id={`routing-version-priority-${rule.id}`} name="priority" defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="">Any priority</option>
             {TICKET_PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Target queue
-          <select name="targetQueueId" required defaultValue="" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`routing-version-target-queue-${rule.id}`} label="Target queue">
+          <Select id={`routing-version-target-queue-${rule.id}`} name="targetQueueId" required defaultValue="" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             <option value="" disabled>
               Select…
             </option>
@@ -206,33 +207,45 @@ function RuleCard({
                 {q.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Assignment mode
-          <select name="assignmentMode" defaultValue="manual" className="rounded border border-neutral-300 p-1.5 text-sm">
+          </Select>
+        </FormField>
+        <FormField id={`routing-version-assignment-mode-${rule.id}`} label="Assignment mode">
+          <Select id={`routing-version-assignment-mode-${rule.id}`} name="assignmentMode" defaultValue="manual" invalid={Boolean(state.error)} aria-describedby={describedBy}>
             {TICKET_ROUTING_ASSIGNMENT_MODES.map((m) => (
               <option key={m} value={m}>
                 {m.replace(/_/g, " ")}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Workload cap (optional)
-          <input name="maxActiveAssignmentsPerMember" type="number" min={1} placeholder="No cap" className="w-24 rounded border border-neutral-300 p-1.5 text-sm" />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-neutral-600">
-          Precedence rank
-          <input name="precedenceRank" type="number" defaultValue={0} className="w-20 rounded border border-neutral-300 p-1.5 text-sm" />
-        </label>
+          </Select>
+        </FormField>
+        <FormField id={`routing-version-workload-cap-${rule.id}`} label="Workload cap (optional)">
+          <NumberInput
+            id={`routing-version-workload-cap-${rule.id}`}
+            name="maxActiveAssignmentsPerMember"
+            min={1}
+            placeholder="No cap"
+            className="w-24"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
+        <FormField id={`routing-version-precedence-${rule.id}`} label="Precedence rank">
+          <NumberInput
+            id={`routing-version-precedence-${rule.id}`}
+            name="precedenceRank"
+            defaultValue={0}
+            className="w-20"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </FormField>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating…">
           New draft version
         </Button>
         {state.error ? (
-          <p role="alert" className="w-full text-xs text-danger">
-            {state.error}
-          </p>
+          <div className="w-full">
+            <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+          </div>
         ) : null}
       </form>
     </div>

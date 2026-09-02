@@ -3,6 +3,12 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../components/forms/number-input.tsx";
+import { Select } from "../../../../components/forms/select.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import type { ScheduledReportActionState } from "./actions.ts";
@@ -29,6 +35,7 @@ export function ScheduledReportManagementPanel({
   createAction: (prevState: ScheduledReportActionState, formData: FormData) => Promise<ScheduledReportActionState>;
 }) {
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-scheduled-report-error" : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,72 +77,51 @@ export function ScheduledReportManagementPanel({
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new scheduled report</h2>
         <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="reportTypeCode" className="text-xs font-medium text-neutral-600">
-              Report
-            </label>
-            <select id="reportTypeCode" name="reportTypeCode" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm">
-              <option value="">Select a report…</option>
-              {reportTypes.map((t) => (
-                <option key={t.code} value={t.code}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+          <div className="sm:col-span-2">
+            <FormField id="reportTypeCode" label="Report">
+              <Select id="reportTypeCode" name="reportTypeCode" required invalid={Boolean(state.error)} aria-describedby={describedBy}>
+                <option value="">Select a report…</option>
+                {reportTypes.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="name" className="text-xs font-medium text-neutral-600">
-              Name
-            </label>
-            <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+          <FormField id="name" label="Name">
+            <Input id="name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="cronHour" label="Hour (0-23)">
+            <NumberInput id="cronHour" name="cronHour" min={0} max={23} defaultValue={9} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="cronMinute" label="Minute (0-59)">
+            <NumberInput id="cronMinute" name="cronMinute" min={0} max={59} defaultValue={0} required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="timezone" label="Timezone (IANA)">
+            <Input id="timezone" name="timezone" type="text" placeholder="Asia/Jakarta" defaultValue="Asia/Jakarta" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="cronDayOfWeek" label="Day of week (0=Sun, blank=daily)">
+            <NumberInput id="cronDayOfWeek" name="cronDayOfWeek" min={0} max={6} placeholder="blank = daily" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <FormField id="cronDayOfMonth" label="Day of month (1-28, blank=daily/weekly)">
+            <NumberInput id="cronDayOfMonth" name="cronDayOfMonth" min={1} max={28} placeholder="blank = daily/weekly" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <div className="col-span-full">
+            <FormField id="filters" label="Filters (JSON object, matches the report's own run parameters)">
+              <Textarea id="filters" name="filters" rows={2} placeholder="{}" className="font-mono" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="cronHour" className="text-xs font-medium text-neutral-600">
-              Hour (0-23)
-            </label>
-            <input id="cronHour" name="cronHour" type="number" min={0} max={23} defaultValue={9} required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="cronMinute" className="text-xs font-medium text-neutral-600">
-              Minute (0-59)
-            </label>
-            <input id="cronMinute" name="cronMinute" type="number" min={0} max={59} defaultValue={0} required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="timezone" className="text-xs font-medium text-neutral-600">
-              Timezone (IANA)
-            </label>
-            <input id="timezone" name="timezone" type="text" placeholder="Asia/Jakarta" defaultValue="Asia/Jakarta" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="cronDayOfWeek" className="text-xs font-medium text-neutral-600">
-              Day of week (0=Sun, blank=daily)
-            </label>
-            <input id="cronDayOfWeek" name="cronDayOfWeek" type="number" min={0} max={6} placeholder="blank = daily" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="cronDayOfMonth" className="text-xs font-medium text-neutral-600">
-              Day of month (1-28, blank=daily/weekly)
-            </label>
-            <input id="cronDayOfMonth" name="cronDayOfMonth" type="number" min={1} max={28} placeholder="blank = daily/weekly" className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="col-span-full flex flex-col gap-1">
-            <label htmlFor="filters" className="text-xs font-medium text-neutral-600">
-              Filters (JSON object, matches the report&apos;s own run parameters)
-            </label>
-            <textarea id="filters" name="filters" rows={2} placeholder="{}" className="rounded-md border border-neutral-300 px-3 py-1.5 font-mono text-sm" />
-          </div>
-          <div className="col-span-full flex flex-col gap-1">
-            <label htmlFor="description" className="text-xs font-medium text-neutral-600">
-              Description (optional)
-            </label>
-            <textarea id="description" name="description" rows={2} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+          <div className="col-span-full">
+            <FormField id="description" label="Description (optional)">
+              <Textarea id="description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
           </div>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="create-scheduled-report-error">{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

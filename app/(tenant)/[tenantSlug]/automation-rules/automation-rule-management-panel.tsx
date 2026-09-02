@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Button } from "../../../../components/ui/button.tsx";
+import { Input } from "../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../components/forms/textarea.tsx";
+import { FormField } from "../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import type { AutomationRuleActionState } from "./actions.ts";
@@ -26,6 +30,7 @@ export function AutomationRuleManagementPanel({
   createAction: (prevState: AutomationRuleActionState, formData: FormData) => Promise<AutomationRuleActionState>;
 }) {
   const [state, formAction, pending] = useActionState(createAction, INITIAL_STATE);
+  const describedBy = state.error ? "create-automation-rule-error" : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -67,23 +72,19 @@ export function AutomationRuleManagementPanel({
       <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
         <h2 className="text-sm font-semibold text-neutral-900">Create a new automation rule</h2>
         <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label htmlFor="name" className="text-xs font-medium text-neutral-600">
-              Name
-            </label>
-            <input id="name" name="name" type="text" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-          </div>
-          <div className="flex flex-col gap-1 sm:col-span-2">
-            <label htmlFor="description" className="text-xs font-medium text-neutral-600">
-              Description (optional)
-            </label>
-            <textarea id="description" name="description" rows={2} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+          <FormField id="name" label="Name">
+            <Input id="name" name="name" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+          <div className="sm:col-span-2">
+            <FormField id="description" label="Description (optional)">
+              <Textarea id="description" name="description" rows={2} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+            </FormField>
           </div>
 
           {state.error ? (
-            <p role="alert" className="col-span-full text-sm text-danger">
-              {state.error}
-            </p>
+            <div className="col-span-full">
+              <ValidationMessage id="create-automation-rule-error">{state.error}</ValidationMessage>
+            </div>
           ) : null}
 
           <div className="col-span-full">

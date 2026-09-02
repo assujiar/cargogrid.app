@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import type { KbActionState } from "../actions.ts";
 import type { KbArticleVersionSummaryRow, KbArticleVersionRow, KbArticleStatus, KbReviewDecision } from "../../../../../server/contracts/knowledge-base/knowledge-base.ts";
@@ -20,64 +25,62 @@ type BoundAction = (prevState: KbActionState, formData: FormData) => Promise<KbA
 
 function VersionEditor({ full, updateVersionAction }: { full: KbArticleVersionRow; updateVersionAction: (versionId: string, expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(updateVersionAction(full.id, full.recordVersion), INITIAL_STATE);
+  // One editor per version card, all on the same page -- every id is version-scoped.
+  const errorId = `kb-version-editor-${full.id}-error`;
+  const describedBy = state.error ? errorId : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-3">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Title
-        <input name="title" required defaultValue={full.title} className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Summary
-        <input name="summary" defaultValue={full.summary ?? ""} className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Body
-        <textarea name="body" required rows={6} defaultValue={full.body} className="rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Tags (comma-separated)
-        <input name="tags" defaultValue={full.tags.join(", ")} className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id={`kb-edit-title-${full.id}`} label="Title">
+        <Input id={`kb-edit-title-${full.id}`} name="title" required defaultValue={full.title} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`kb-edit-summary-${full.id}`} label="Summary">
+        <Input id={`kb-edit-summary-${full.id}`} name="summary" defaultValue={full.summary ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`kb-edit-body-${full.id}`} label="Body">
+        <Textarea id={`kb-edit-body-${full.id}`} name="body" required rows={6} defaultValue={full.body} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id={`kb-edit-tags-${full.id}`} label="Tags (comma-separated)">
+        <Input id={`kb-edit-tags-${full.id}`} name="tags" defaultValue={full.tags.join(", ")} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div className="flex flex-wrap gap-3 text-xs text-neutral-600">
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="audienceInternal" defaultChecked={full.audienceInternal} /> Internal
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="audienceCustomer" defaultChecked={full.audienceCustomer} /> Customer
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="audienceHelpdesk" defaultChecked={full.audienceHelpdesk} /> Helpdesk
-        </label>
+        <Checkbox id={`kb-edit-audience-internal-${full.id}`} name="audienceInternal" defaultChecked={full.audienceInternal} label="Internal" aria-describedby={describedBy} />
+        <Checkbox id={`kb-edit-audience-customer-${full.id}`} name="audienceCustomer" defaultChecked={full.audienceCustomer} label="Customer" aria-describedby={describedBy} />
+        <Checkbox id={`kb-edit-audience-helpdesk-${full.id}`} name="audienceHelpdesk" defaultChecked={full.audienceHelpdesk} label="Helpdesk" aria-describedby={describedBy} />
       </div>
       <div>
         <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
           Save draft
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function SubmitForReviewForm({ versionId, expectedVersion, submitForReviewAction }: { versionId: string; expectedVersion: number; submitForReviewAction: (versionId: string, expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(submitForReviewAction(versionId, expectedVersion), INITIAL_STATE);
+  const fieldId = `kb-reviewer-${versionId}`;
+  const errorId = `kb-submit-review-${versionId}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Reviewer (auth user id -- not the author)
-        <input name="reviewerAuthUserId" required placeholder="UUID" className="min-w-[16rem] rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id={fieldId} label="Reviewer (auth user id -- not the author)">
+        <Input
+          id={fieldId}
+          name="reviewerAuthUserId"
+          required
+          placeholder="UUID"
+          className="min-w-[16rem]"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Submitting…">
         Submit for review
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -85,36 +88,47 @@ function SubmitForReviewForm({ versionId, expectedVersion, submitForReviewAction
 
 function ReviewForm({ versionId, expectedVersion, decision, label, variant, reviewAction }: { versionId: string; expectedVersion: number; decision: KbReviewDecision; label: string; variant: "primary" | "destructive"; reviewAction: (versionId: string, expectedVersion: number, decision: KbReviewDecision) => BoundAction }) {
   const [state, formAction, pending] = useActionState(reviewAction(versionId, expectedVersion, decision), INITIAL_STATE);
+  // Two review forms per in-review version, so the id carries both the version and the decision.
+  const fieldId = `kb-review-notes-${versionId}-${decision}`;
+  const errorId = `kb-review-${versionId}-${decision}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <input name="notes" placeholder="Notes (optional)" className="min-w-[10rem] rounded border border-neutral-300 p-1.5 text-xs" />
+      <FormField id={fieldId} label={<span className="sr-only">Notes for &ldquo;{label}&rdquo;</span>}>
+        <Input
+          id={fieldId}
+          name="notes"
+          placeholder="Notes (optional)"
+          className="min-w-[10rem]"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        />
+      </FormField>
       <Button type="submit" variant={variant} loading={pending} loadingLabel="Recording…">
         {label}
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
 
 function SetExpiryForm({ versionId, expectedVersion, setExpiryAction }: { versionId: string; expectedVersion: number; setExpiryAction: (versionId: string, expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(setExpiryAction(versionId, expectedVersion), INITIAL_STATE);
+  const fieldId = `kb-expires-at-${versionId}`;
+  const errorId = `kb-set-expiry-${versionId}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2 rounded bg-neutral-50 p-2">
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Expires at (blank = never)
-        <input name="expiresAt" type="datetime-local" className="rounded border border-neutral-300 p-1.5 text-xs" />
-      </label>
+      {/* `datetime-local`, not `date` -- an expiry is a real instant, so `DateInput`
+          (which pins `type="date"`) would drop the time half of this value. */}
+      <FormField id={fieldId} label="Expires at (blank = never)">
+        <Input id={fieldId} name="expiresAt" type="datetime-local" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+      </FormField>
       <Button type="submit" variant="secondary" loading={pending} loadingLabel="Saving…">
         Set expiry
       </Button>
       {state.error ? (
-        <p role="alert" className="w-full text-xs text-danger">
-          {state.error}
-        </p>
+        <div className="w-full">
+          <ValidationMessage id={errorId}>{state.error}</ValidationMessage>
+        </div>
       ) : null}
     </form>
   );
@@ -138,17 +152,25 @@ function PublishForm({ versionId, expectedVersion, publishAction }: { versionId:
 
 function ArchiveForm({ versionId, expectedVersion, archiveAction }: { versionId: string; expectedVersion: number; archiveAction: (versionId: string, expectedVersion: number) => BoundAction }) {
   const [state, formAction, pending] = useActionState(archiveAction(versionId, expectedVersion), INITIAL_STATE);
+  const fieldId = `kb-archive-reason-${versionId}`;
+  const errorId = `kb-archive-${versionId}-error`;
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
-      <input name="reason" required placeholder="Reason (required)" className="min-w-[10rem] rounded border border-neutral-300 p-1.5 text-xs" />
+      <FormField id={fieldId} label={<span className="sr-only">Reason for archiving this version</span>}>
+        <Input
+          id={fieldId}
+          name="reason"
+          required
+          placeholder="Reason (required)"
+          className="min-w-[10rem]"
+          invalid={Boolean(state.error)}
+          aria-describedby={state.error ? errorId : undefined}
+        />
+      </FormField>
       <Button type="submit" variant="destructive" loading={pending} loadingLabel="Archiving…">
         Archive
       </Button>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -218,46 +240,33 @@ function VersionCard({
 
 function NewVersionForm({ createVersionAction }: { createVersionAction: BoundAction }) {
   const [state, formAction, pending] = useActionState(createVersionAction, INITIAL_STATE);
+  const describedBy = state.error ? "kb-new-version-error" : undefined;
   return (
     <form action={formAction} className="flex flex-col gap-2 rounded-md border border-neutral-200 p-4">
       <h3 className="text-sm font-semibold text-neutral-900">New draft version</h3>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Title
-        <input name="title" required className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Summary
-        <input name="summary" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Body
-        <textarea name="body" required rows={6} className="rounded border border-neutral-300 p-2 text-sm" />
-      </label>
-      <label className="flex flex-col gap-1 text-xs text-neutral-600">
-        Tags (comma-separated)
-        <input name="tags" className="rounded border border-neutral-300 p-1.5 text-sm" />
-      </label>
+      <FormField id="kb-new-title" label="Title">
+        <Input id="kb-new-title" name="title" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="kb-new-summary" label="Summary">
+        <Input id="kb-new-summary" name="summary" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="kb-new-body" label="Body">
+        <Textarea id="kb-new-body" name="body" required rows={6} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
+      <FormField id="kb-new-tags" label="Tags (comma-separated)">
+        <Input id="kb-new-tags" name="tags" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
       <div className="flex flex-wrap gap-3 text-xs text-neutral-600">
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="audienceInternal" /> Internal
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="audienceCustomer" /> Customer
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="checkbox" name="audienceHelpdesk" /> Helpdesk
-        </label>
+        <Checkbox id="kb-new-audience-internal" name="audienceInternal" label="Internal" aria-describedby={describedBy} />
+        <Checkbox id="kb-new-audience-customer" name="audienceCustomer" label="Customer" aria-describedby={describedBy} />
+        <Checkbox id="kb-new-audience-helpdesk" name="audienceHelpdesk" label="Helpdesk" aria-describedby={describedBy} />
       </div>
       <div>
         <Button type="submit" variant="primary" loading={pending} loadingLabel="Creating…">
           Create draft version
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="kb-new-version-error">{state.error}</ValidationMessage> : null}
     </form>
   );
 }

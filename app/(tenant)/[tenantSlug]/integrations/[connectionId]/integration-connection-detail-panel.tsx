@@ -2,6 +2,11 @@
 
 import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
+import { Input } from "../../../../../components/forms/input.tsx";
+import { Textarea } from "../../../../../components/forms/textarea.tsx";
+import { PasswordInput } from "../../../../../components/forms/password-input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
 import type { IntegrationHubActionState } from "../actions.ts";
@@ -22,40 +27,41 @@ const HEALTH_TONE: Record<IntegrationHealthStatus, StatusTone> = {
 
 function ConfigEditor({ connection, updateConfigAction }: { connection: IntegrationConnection; updateConfigAction: (prevState: IntegrationHubActionState, formData: FormData) => Promise<IntegrationHubActionState> }) {
   const [state, formAction, pending] = useActionState(updateConfigAction, OK);
+  const describedBy = state.error ? "integration-config-error" : undefined;
 
   return (
     <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Configuration</h2>
       <form action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="ownerTeam" className="text-xs font-medium text-neutral-600">
-            Owner team
-          </label>
-          <input id="ownerTeam" name="ownerTeam" type="text" defaultValue={connection.ownerTeam ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
+        <FormField id="ownerTeam" label="Owner team">
+          <Input id="ownerTeam" name="ownerTeam" type="text" defaultValue={connection.ownerTeam ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <FormField id="ownerEmail" label="Owner email">
+          <Input id="ownerEmail" name="ownerEmail" type="email" defaultValue={connection.ownerEmail ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <div className="col-span-full">
+          <FormField id="runbookUrl" label="Runbook URL">
+            <Input id="runbookUrl" name="runbookUrl" type="url" defaultValue={connection.runbookUrl ?? ""} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
         </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor="ownerEmail" className="text-xs font-medium text-neutral-600">
-            Owner email
-          </label>
-          <input id="ownerEmail" name="ownerEmail" type="email" defaultValue={connection.ownerEmail ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-        </div>
-        <div className="col-span-full flex flex-col gap-1">
-          <label htmlFor="runbookUrl" className="text-xs font-medium text-neutral-600">
-            Runbook URL
-          </label>
-          <input id="runbookUrl" name="runbookUrl" type="url" defaultValue={connection.runbookUrl ?? ""} className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-        </div>
-        <div className="col-span-full flex flex-col gap-1">
-          <label htmlFor="config" className="text-xs font-medium text-neutral-600">
-            Non-secret config (JSON object)
-          </label>
-          <textarea id="config" name="config" rows={3} defaultValue={JSON.stringify(connection.config, null, 2)} className="rounded-md border border-neutral-300 px-3 py-1.5 font-mono text-sm" />
+        <div className="col-span-full">
+          <FormField id="config" label="Non-secret config (JSON object)">
+            <Textarea
+              id="config"
+              name="config"
+              rows={3}
+              defaultValue={JSON.stringify(connection.config, null, 2)}
+              className="font-mono"
+              invalid={Boolean(state.error)}
+              aria-describedby={describedBy}
+            />
+          </FormField>
         </div>
 
         {state.error ? (
-          <p role="alert" className="col-span-full text-sm text-danger">
-            {state.error}
-          </p>
+          <div className="col-span-full">
+            <ValidationMessage id="integration-config-error">{state.error}</ValidationMessage>
+          </div>
         ) : null}
 
         <div className="col-span-full">
@@ -76,18 +82,18 @@ function CredentialRotation({ rotateCredentialAction }: { rotateCredentialAction
       <h2 className="text-sm font-semibold text-neutral-900">Credential</h2>
       <p className="text-xs text-neutral-500">The current credential value is never displayed here or anywhere -- it lives in a fully isolated table no session can read directly. Rotating replaces it with a new value you supply.</p>
       <form action={formAction} className="flex flex-col gap-2">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="newCredentialValue" className="text-xs font-medium text-neutral-600">
-            New credential value
-          </label>
-          <input id="newCredentialValue" name="newCredentialValue" type="password" autoComplete="off" required className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm" />
-        </div>
+        <FormField id="newCredentialValue" label="New credential value">
+          <PasswordInput
+            id="newCredentialValue"
+            name="newCredentialValue"
+            autoComplete="off"
+            required
+            invalid={Boolean(state.error)}
+            aria-describedby={state.error ? "integration-credential-error" : undefined}
+          />
+        </FormField>
 
-        {state.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {state.error}
-          </p>
-        ) : null}
+        {state.error ? <ValidationMessage id="integration-credential-error">{state.error}</ValidationMessage> : null}
 
         <div>
           <Button type="submit" variant="secondary" loading={pending} loadingLabel="Rotating…">
@@ -101,20 +107,22 @@ function CredentialRotation({ rotateCredentialAction }: { rotateCredentialAction
 
 function HealthCheckAction({ status, recordHealthCheckActionFor }: { status: IntegrationHealthStatus; recordHealthCheckActionFor: (status: IntegrationHealthStatus) => (prevState: IntegrationHubActionState, formData: FormData) => Promise<IntegrationHubActionState> }) {
   const [state, formAction, pending] = useActionState(recordHealthCheckActionFor(status), OK);
+  const detailId = `health-check-detail-${status}`;
+  const errorId = `health-check-${status}-error`;
 
   return (
     <form action={formAction} className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <input name="detail" type="text" placeholder="Detail (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+        {/* Two of these forms sit side by side, so the id is status-scoped; the label is
+            screen-reader-only because the inline placeholder is the visible affordance. */}
+        <FormField id={detailId} label={<span className="sr-only">Detail for the {status} health check</span>}>
+          <Input id={detailId} name="detail" type="text" placeholder="Detail (optional)" invalid={Boolean(state.error)} aria-describedby={state.error ? errorId : undefined} />
+        </FormField>
         <Button type="submit" variant={status === "healthy" ? "primary" : "destructive"} loading={pending} loadingLabel="Recording…">
           Record {status}
         </Button>
       </div>
-      {state.error ? (
-        <p role="alert" className="text-xs text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
     </form>
   );
 }
@@ -134,7 +142,16 @@ function StatusControls({ connection, setStatusActionFor }: { connection: Integr
           </Button>
         </form>
         <form action={disabledFormAction} className="flex items-center gap-2">
-          <input name="reason" type="text" placeholder="Reason (optional)" className="rounded-md border border-neutral-300 px-2 py-1 text-xs" />
+          <FormField id="integration-disable-reason" label={<span className="sr-only">Reason for disabling this connection</span>}>
+            <Input
+              id="integration-disable-reason"
+              name="reason"
+              type="text"
+              placeholder="Reason (optional)"
+              invalid={Boolean(disabledState.error)}
+              aria-describedby={disabledState.error ? "integration-disable-error" : undefined}
+            />
+          </FormField>
           <Button type="submit" variant="destructive" loading={disabledPending} loadingLabel="Disabling…" disabled={connection.status === "disabled"}>
             Disable
           </Button>
@@ -145,11 +162,7 @@ function StatusControls({ connection, setStatusActionFor }: { connection: Integr
           {activeState.error}
         </p>
       ) : null}
-      {disabledState.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {disabledState.error}
-        </p>
-      ) : null}
+      {disabledState.error ? <ValidationMessage id="integration-disable-error">{disabledState.error}</ValidationMessage> : null}
     </section>
   );
 }
