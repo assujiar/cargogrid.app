@@ -141,7 +141,7 @@ begin
 end;
 $$;
 
-\echo '>> app.approve_dedicated_deployment_qualification: viewer1 (View only) rejected; admin1 (Configure, not Approve) rejected -- DEPLOY:Approve is a real, separate authority tier, self-approval by the requester is impossible without it; admin2 (tenant2''s own DEPLOY:Approve, wrong tenant) rejected while the record is still genuinely pending_qualification; approver1 (Approve) succeeds; a second approval on the now-qualified record is rejected (deployment_record_not_pending_qualification)'
+\echo '>> app.approve_dedicated_deployment_qualification: viewer1 (View only) rejected; admin1 (Configure, not Approve) rejected -- DEPLOY:Approve is a real, separate authority tier, self-approval by the requester is impossible without it; admin2 (tenant2''s own DEPLOY:Approve, wrong tenant, and -- ISS-2026-146 fix -- zero real membership in tenant1 at all) now gets the SAME generic deployment_record_not_pending_qualification a nonexistent/wrong-status record would, never an insufficient_authority that would disclose tenant1''s real tenant_id to a caller with no relationship to it; approver1 (Approve) succeeds; a second approval on the now-qualified record is rejected (deployment_record_not_pending_qualification)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaedep');
@@ -169,9 +169,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: admin2 holds DEPLOY:Approve only in tenant2, and has ZERO
+    -- app.principal_memberships row for tenant1 at all -- the exact "caller with no
+    -- relationship to the record's real tenant" class this fix closes. Before the fix
+    -- this raised insufficient_authority with tenant1's real tenant_id embedded in the
+    -- message; now it raises the identical generic not-found a wrong-status/nonexistent
+    -- record would, proven directly below by comparing SQLERRM to the errcode='no_data_found'
+    -- (line 189-190) case's own text.
     perform app.approve_dedicated_deployment_qualification(v_record_id, v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 (tenant2''s own DEPLOY:Approve does not reach tenant1''s own record), the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected deployment_record_not_pending_qualification for admin2 (zero relationship to tenant1), the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 
@@ -397,7 +404,7 @@ begin
 end;
 $$;
 
-\echo '>> cross-tenant isolation: admin2 (tenant iaedep2, its own DEPLOY:Configure/View/Approve) cannot request/set status/set env ref/read tenant1''s own deployment record (approve''s own cross-tenant rejection was already proven above, against a genuinely pending_qualification record)'
+\echo '>> cross-tenant isolation: admin2 (tenant iaedep2, its own DEPLOY:Configure/View/Approve, and -- ISS-2026-146 fix -- zero real membership in tenant1) cannot request/set status/set env ref/read/list tenant1''s own deployment record. request_dedicated_deployment_qualification and get_tenant_deployment_record (both caller-supplied-p_tenant_id, never lookup-derived) still raise the original insufficient_authority; set_deployment_provisioning_status/set_deployment_environment_ref/list_deployment_environment_refs (all bare-id lookups) now raise the SAME generic deployment_record_not_found a nonexistent record would, never one that discloses tenant1''s real tenant_id to a caller with no relationship to it (approve''s own cross-tenant rejection was already proven above, against a genuinely pending_qualification record)'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'iaedep');
@@ -414,20 +421,27 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: bare-id lookup, no p_tenant_id argument -- admin2's zero
+    -- membership in tenant1 now surfaces as the same generic not-found a
+    -- nonexistent record id would, before tenant1's real tenant_id is ever
+    -- interpolated into a message.
     perform app.set_deployment_provisioning_status(v_record_id, 'provisioning', v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 changing tenant1''s own provisioning status, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected deployment_record_not_found for admin2 changing tenant1''s own provisioning status, the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 
   begin
     perform app.set_deployment_environment_ref(v_record_id, 'database', 'hijacked', v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 setting an env ref on tenant1''s own record, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected deployment_record_not_found for admin2 setting an env ref on tenant1''s own record, the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 
   begin
+    -- Unchanged by ISS-2026-146: p_tenant_id is caller-supplied here, so no
+    -- lookup-derived tenant_id is ever at risk -- still the original
+    -- insufficient_authority.
     perform app.get_tenant_deployment_record(v_tenant1, v_admin2);
     raise exception 'assertion failed: expected insufficient_authority for admin2 reading tenant1''s own deployment record, the call unexpectedly succeeded';
   exception when insufficient_privilege then
@@ -436,8 +450,8 @@ begin
 
   begin
     perform count(*) from app.list_deployment_environment_refs(v_record_id, v_admin2);
-    raise exception 'assertion failed: expected insufficient_authority for admin2 listing tenant1''s own environment refs, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected deployment_record_not_found for admin2 listing tenant1''s own environment refs, the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 end;

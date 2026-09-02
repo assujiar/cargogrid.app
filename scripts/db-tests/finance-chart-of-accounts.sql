@@ -352,10 +352,16 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: financefullb has zero app.principal_memberships row in tenant A at
+    -- all -- the exact "caller with no relationship to the record's real tenant" class
+    -- this fix closes. Before the fix this raised insufficient_authority with tenant
+    -- A's real tenant_id embedded in the message; now it raises the identical generic
+    -- not-found a nonexistent account id would, before that tenant_id is ever
+    -- interpolated.
     perform app.deactivate_finance_account(v_ar.id, v_ar.record_version, 'tenant B trying to touch tenant A''s account', '00000000-0000-0000-0000-000000024304', 'financefullb');
-    raise exception 'assertion failed: expected insufficient_authority for cross-tenant deactivation';
+    raise exception 'assertion failed: expected finance_account_not_found for cross-tenant deactivation, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 end;

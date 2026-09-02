@@ -537,16 +537,21 @@ begin
   select id into v_assignment_id from app.tenant_region_assignments where tenant_id = v_tenant1;
 
   begin
+    -- ISS-2026-146: admin2 has zero app.principal_memberships row in tenant1 at all,
+    -- so app.set_region_assignment_status's tenant-membership pre-check now refuses
+    -- with the same generic not-found a nonexistent assignment id would, rather than
+    -- disclosing tenant1's real tenant_id via insufficient_authority.
     perform app.set_region_assignment_status(v_assignment_id, 'active', null, v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 changing tenant1''s own region assignment status, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected region_assignment_not_found for admin2 changing tenant1''s own region assignment status, the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 
   begin
+    -- ISS-2026-146: same fix shape for app.register_region_capability_exception.
     perform app.register_region_capability_exception(v_assignment_id, 'database', 'hijacked exception', v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_authority for admin2 registering an exception on tenant1''s own assignment, the call unexpectedly succeeded';
-  exception when insufficient_privilege then
+    raise exception 'assertion failed: expected region_assignment_not_found for admin2 registering an exception on tenant1''s own assignment, the call unexpectedly succeeded';
+  exception when no_data_found then
     null;
   end;
 

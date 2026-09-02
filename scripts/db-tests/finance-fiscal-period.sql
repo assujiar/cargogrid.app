@@ -351,10 +351,14 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: financemanagerb has zero app.principal_memberships row in tenant A
+    -- at all, so app.soft_close_finance_period's tenant-membership pre-check now
+    -- refuses with the same generic not-found a nonexistent period id would, rather
+    -- than disclosing tenant A's real tenant_id via insufficient_authority.
     perform app.soft_close_finance_period(v_period.id, v_period.record_version, '00000000-0000-0000-0000-000000024405', 'financemanagerb');
-    raise exception 'assertion failed: expected insufficient_authority for cross-tenant soft-close';
+    raise exception 'assertion failed: expected finance_period_not_found for cross-tenant soft-close, the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 end;
