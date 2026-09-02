@@ -364,7 +364,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: app.transition_shipment_order/app.get_shipment_status_history fail closed for an identity with no membership in the Shipment Order''s own tenant'
+\echo '>> cross-tenant isolation: app.transition_shipment_order/app.get_shipment_status_history fail closed for an identity with no membership in the Shipment Order''s own tenant -- ISS-2026-146 fix: app.transition_shipment_order (a bare-id lookup) now raises a generic shipment_order_not_found for this zero-membership caller, never a tenant_id-disclosing insufficient_authority; app.get_shipment_status_history (not part of this fix) is unaffected'
 do $$
 declare
   v_tenant2 uuid;
@@ -381,11 +381,16 @@ begin
   select * into v_shipment from app.shipment_orders where idempotency_key = 'idem-life-walk';
 
   begin
+    -- ISS-2026-146: admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (granted tenant_admin only in tenant2 above) -- before the fix this raised
+    -- insufficient_authority with tenant1's real tenant_id embedded in the message;
+    -- now it raises the identical generic shipment_order_not_found a nonexistent
+    -- shipment id would.
     perform app.transition_shipment_order(v_shipment.id, 'epod', v_shipment.record_version, null, 'EPOD-0003', 'idem-cross-tenant', '00000000-0000-0000-0000-000000009985', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Edit in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.transition_shipment_order, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;

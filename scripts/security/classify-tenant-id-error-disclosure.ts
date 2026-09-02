@@ -127,7 +127,13 @@ export function parseFunctionBlocks(content: string): FunctionBlock[] {
     if (closeParenIndex === -1) continue;
     // Find the `as $tag$` opening the body, within a bounded lookahead so an
     // unrelated later function's own body is never mistaken for this one's.
-    const asMatch = /as\s+(\$[a-zA-Z_]*\$)/i.exec(content.slice(closeParenIndex, closeParenIndex + 400));
+    // 1000 (not the original 400) -- a long `RETURNS TABLE(...)` column list can push
+    // `AS $tag$` well past a short window (confirmed live: app.get_shipment_document_
+    // checklist's own RETURNS TABLE clause alone is 405 chars, silently dropping its
+    // block from every scan and making an already-fixed function look permanently
+    // unfixed to `scanRepositoryLatestDefinitionOnly` -- the live function body was
+    // correct throughout, only this script's own accounting was wrong).
+    const asMatch = /as\s+(\$[a-zA-Z_]*\$)/i.exec(content.slice(closeParenIndex, closeParenIndex + 1000));
     if (!asMatch || asMatch.index === undefined) continue;
     const tag = asMatch[1] ?? "$$";
     const bodyStartIndex = closeParenIndex + asMatch.index + asMatch[0].length;

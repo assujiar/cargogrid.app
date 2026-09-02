@@ -385,7 +385,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: app.dispatch_shipment_order/app.get_dispatch_readiness fail closed for an identity with no membership in the shipment''s own tenant'
+\echo '>> cross-tenant isolation: app.dispatch_shipment_order/app.get_dispatch_readiness fail closed for an identity with no membership in the shipment''s own tenant -- ISS-2026-146 fix: both are bare-id lookups, so this zero-membership caller now gets the SAME generic shipment_order_not_found a nonexistent shipment id would, never an insufficient_authority that would disclose tenant1''s real tenant_id'
 do $$
 declare
   v_tenant2 uuid;
@@ -402,21 +402,26 @@ begin
   select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-dispatch-blocked';
 
   begin
+    -- ISS-2026-146: admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (granted tenant_admin only in tenant2 above) -- before the fix this raised
+    -- insufficient_authority with tenant1's real tenant_id embedded in the message;
+    -- now it raises the identical generic shipment_order_not_found a nonexistent
+    -- shipment id would.
     perform app.get_dispatch_readiness(v_shipment_id, '00000000-0000-0000-0000-000000009834');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:View in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.get_dispatch_readiness, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;
 
   begin
     perform app.dispatch_shipment_order(v_shipment_id, 1, 'idem-disp-tenant2', '00000000-0000-0000-0000-000000009834', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Edit in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.dispatch_shipment_order, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;

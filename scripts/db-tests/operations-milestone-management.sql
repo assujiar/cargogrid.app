@@ -516,7 +516,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: app.ingest_milestone_event/app.create_milestone_template_draft fail closed for an identity with no membership in the shipment/tenant''s own tenant'
+\echo '>> cross-tenant isolation: app.ingest_milestone_event/app.create_milestone_template_draft fail closed for an identity with no membership in the shipment/tenant''s own tenant -- ISS-2026-146 fix: app.ingest_milestone_event (a bare-id lookup) now raises a generic shipment_order_not_found for this zero-membership caller, never a tenant_id-disclosing insufficient_authority; app.create_milestone_template_draft (caller-supplied p_tenant_id) is unaffected'
 do $$
 declare
   v_tenant2 uuid;
@@ -535,14 +535,19 @@ begin
   select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-mile-walk';
 
   begin
+    -- ISS-2026-146: admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (granted tenant_admin only in tenant2 above) -- app.ingest_milestone_event is a
+    -- bare-id lookup, so before the fix this raised insufficient_authority with
+    -- tenant1's real tenant_id embedded in the message; now it raises the identical
+    -- generic shipment_order_not_found a nonexistent shipment id would.
     perform app.ingest_milestone_event(
       v_shipment_id, 'delivered', now(), null, null, 'manual', null, null, 'idem-evt-tenant2',
       '00000000-0000-0000-0000-000000009815', 'tenant2-admin'
     );
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Create in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.ingest_milestone_event, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;

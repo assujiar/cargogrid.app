@@ -451,7 +451,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: app.report_exception/app.create_exception_sla_policy_draft fail closed for an identity with no membership in the shipment/tenant''s own tenant'
+\echo '>> cross-tenant isolation: app.report_exception/app.create_exception_sla_policy_draft fail closed for an identity with no membership in the shipment/tenant''s own tenant -- ISS-2026-146 fix: app.report_exception (a bare-id lookup) now raises a generic shipment_order_not_found for this zero-membership caller, never a tenant_id-disclosing insufficient_authority; app.create_exception_sla_policy_draft (caller-supplied p_tenant_id) is unaffected'
 do $$
 declare
   v_tenant2 uuid;
@@ -470,11 +470,16 @@ begin
   select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-exc-walk';
 
   begin
+    -- ISS-2026-146: admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (granted tenant_admin only in tenant2 above) -- app.report_exception is a
+    -- bare-id lookup, so before the fix this raised insufficient_authority with
+    -- tenant1's real tenant_id embedded in the message; now it raises the identical
+    -- generic shipment_order_not_found a nonexistent shipment id would.
     perform app.report_exception(v_shipment_id, null, 'hold', 'medium', 'tenant2 attempt', 'manual', null, '00000000-0000-0000-0000-000000009825', 'tenant2-admin');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant 2''s admin holds no OPS:Create in tenant 1';
+    raise exception 'assertion failed: expected shipment_order_not_found for tenant 2''s admin (zero relationship to tenant1) on app.report_exception, the call unexpectedly succeeded';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then
+      if sqlerrm not like 'shipment_order_not_found%' then
         raise;
       end if;
   end;

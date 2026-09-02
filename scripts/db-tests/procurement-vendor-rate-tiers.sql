@@ -651,7 +651,7 @@ begin
   end if;
 end $$;
 
-\echo '>> cross-tenant isolation: tenant2''s actor cannot approve/tier a tenant1 rate; a tenant2-scoped vendor_master_code never resolves against tenant1''s import rows'
+\echo '>> cross-tenant isolation: tenant2''s actor cannot approve/tier a tenant1 rate; a tenant2-scoped vendor_master_code never resolves against tenant1''s import rows -- ISS-2026-146 fix: app.approve_rate_version (a bare-id lookup) now raises the SAME generic not-found a nonexistent rate version would for this zero-membership caller, never an insufficient_authority that would disclose tenant1''s real tenant_id'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'ratetier1');
@@ -662,18 +662,29 @@ begin
   select * into v_rate from app.vendor_rate_versions where tenant_id = v_tenant1 and origin_lane = 'Jakarta' and destination_lane = 'Bekasi' limit 1;
 
   begin
+    -- ISS-2026-146: v_admin2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (it was granted tenant_admin only in tenant2, line 57 above) -- before the fix
+    -- this raised insufficient_authority with tenant1's real tenant_id embedded in the
+    -- message; now it raises the identical generic rate_version_not_found a
+    -- nonexistent rate version id would.
     perform app.approve_rate_version(v_rate.id, v_rate.record_version, v_admin2, 'admin2');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant2''s admin has no is_support_grant_authority over tenant1';
+    raise exception 'assertion failed: expected rate_version_not_found for v_admin2 (zero relationship to tenant1), the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 
   begin
+    -- ISS-2026-146: v_staff2 has ZERO app.principal_memberships row in tenant1 at all
+    -- (tenant2 staff only) -- app.add_vendor_rate_tier delegates its own tenant/actor
+    -- gate to app.assert_vendor_rate_version_tier_editable (a bare-id lookup, also
+    -- fixed by this pass), so before the fix this raised insufficient_authority with
+    -- tenant1's real tenant_id embedded in the message; now it raises the identical
+    -- generic vendor_rate_version_not_found a nonexistent rate version id would.
     perform app.add_vendor_rate_tier(v_rate.id, 1, 0, 100, null, null, 1, null, null, v_staff2, 'staff2');
-    raise exception 'assertion failed: expected insufficient_privilege -- tenant2''s staff has no PRC:Edit over tenant1''s rate';
+    raise exception 'assertion failed: expected vendor_rate_version_not_found for tenant2''s staff (zero relationship to tenant1), the call unexpectedly succeeded';
   exception
-    when insufficient_privilege then
+    when no_data_found then
       null;
   end;
 end $$;

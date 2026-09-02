@@ -460,7 +460,7 @@ begin
   exception when insufficient_privilege then null; end;
 end $$;
 
-\echo '>> cross-tenant isolation: an identity with membership only in a second tenant is denied on the same eleven entry points against tenant1''s data'
+\echo '>> cross-tenant isolation: an identity with membership only in a second tenant is denied on the same eleven entry points against tenant1''s data -- ISS-2026-146 fix: app.dispatch_shipment_order/app.evaluate_billing_readiness (bare-id lookups) now raise the SAME generic not-found a nonexistent record would for this zero-membership caller, never an insufficient_authority that would disclose tenant1''s real tenant_id; app.get_transaction_lineage (not part of this fix) is unaffected and still raises insufficient_privilege'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'acmeopsverify');
@@ -469,9 +469,14 @@ declare
   v_cross uuid := '00000000-0000-0000-0000-000000024007';
 begin
   begin
+    -- ISS-2026-146: v_cross has ZERO app.principal_memberships row in tenant1 at all (it
+    -- was invited only into tenant2, line 68 above) -- before the fix this raised
+    -- insufficient_authority with tenant1's real tenant_id embedded in the message; now
+    -- it raises the identical generic shipment_order_not_found a nonexistent shipment
+    -- id would.
     perform app.dispatch_shipment_order(v_shipment_id, 1, 'idem-verify-cross-dispatch', v_cross, 'cross');
-    raise exception 'assertion failed: expected the cross-tenant identity denied on app.dispatch_shipment_order';
-  exception when insufficient_privilege then null; end;
+    raise exception 'assertion failed: expected shipment_order_not_found for v_cross (zero relationship to tenant1) on app.dispatch_shipment_order, the call unexpectedly succeeded';
+  exception when no_data_found then null; end;
 
   begin
     perform app.get_transaction_lineage(v_job_order_id, v_cross);
@@ -479,9 +484,12 @@ begin
   exception when insufficient_privilege then null; end;
 
   begin
+    -- ISS-2026-146: same zero-membership class as above -- now raises the generic
+    -- job_order_not_found instead of an insufficient_authority disclosing tenant1's
+    -- real tenant_id.
     perform app.evaluate_billing_readiness(v_job_order_id, 'cross-tenant retry', v_cross, 'cross');
-    raise exception 'assertion failed: expected the cross-tenant identity denied on app.evaluate_billing_readiness';
-  exception when insufficient_privilege then null; end;
+    raise exception 'assertion failed: expected job_order_not_found for v_cross (zero relationship to tenant1) on app.evaluate_billing_readiness, the call unexpectedly succeeded';
+  exception when no_data_found then null; end;
 end $$;
 
 \echo '>> schema-privilege defense in depth, end to end: anon holds zero EXECUTE across every Operations function registered since OPS-168 (ERR-2026-004 regression guard, checked once across the whole phase rather than once per capability)'
