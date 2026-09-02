@@ -3441,7 +3441,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // established fix shape as the first pass. Cumulative: 219 of 654 fixed, 436 remain
   // (Advanced TMS/WMS 196, Procurement 103, Finance 34, Other/Platform 30, Intelligence/AI
   // 28, HRIS 22, Ticketing 17, Commercial 5, Operations core 1).
-  migrationSetSha256: "1997d977bc354df83a3bd28823edab5620e5182166a3354e0c59e06d86f43e05",
+  // NINETY-SIXTH PASS (2026-09-02, ISS-2026-066 + ISS-2026-070 items 3/4): 475 files (+2).
+  // ISS-2026-066 fully closed: a new app.propose_bulk_employee_position_assignment (delegates
+  // to the existing app.propose_employee_position_assignment per item, atomic, HRS:Edit-gated,
+  // capped at 200 items) plus a new /hris/positions/bulk-reassign UI and E2E coverage. A
+  // second migration fixes a self-found bug: the public.* wrapper's revoke never touched
+  // anon's separate default-ACL grant on schema public, leaving anon with EXECUTE despite
+  // app.* never granting it -- fixed to the established revoke ... from anon, authenticated,
+  // service_role, public convention. ISS-2026-070 items 3/4: wires
+  // app.preview_onboarding_case_start/app.export_onboarding_cases (zero prior callers) into
+  // the onboarding case-list UI; items 1, 2's remaining half, and 5 stay open, disclosed.
+  migrationSetSha256: "b9eeee0431f072f74ba4fd491dae102ba92a0c952772f17d26bb34d2b190bfc3",
+  // History: 1997d977bc354df83a3bd28823edab5620e5182166a3354e0c59e06d86f43e05
+  // (473 files, ISS-2026-146 batch 2's Commercial+Operations tenant_id-disclosure fixes).
   // History: d76771837af955a8b43d8cbfbda04d06c38a34cbaaa3ef87e8f6e22ae2918f2b
   // (471 files, ISS-2026-125 item 2's session/API-key revocation on portal suspend/revoke).
   // History: b39666ed041ced11ce0b8536eb2b590332e192e777d0ddce742d76068d0d6370
@@ -4127,7 +4139,13 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // tenant-id-error-message-redaction-batch2.sql plus 11 pre-existing files updated where
   // their own fixtures asserted the now-superseded insufficient_authority shape for a
   // zero-membership caller against one of the 99 newly-fixed functions.
-  dbTestSetSha256: "fb9ddf8c14a3c7aecc6e5cc614c3e4d692c543daf46004ee239de632387730cf",
+  // NINETY-SIXTH PASS (2026-09-02, ISS-2026-066/070): 247 files, unchanged in count -- 2
+  // extended (hris-organization-position-linkage.sql: bulk-reassignment authority/rollback
+  // regression; hris-onboarding-offboarding.sql: preview/export wiring plus a new
+  // case_type='transfer' fixture scenario).
+  dbTestSetSha256: "7bf961dbacd384d5168d455ca8f75d97145f493256cdc2cd1c4e07cb747bbe77",
+  // History: fb9ddf8c14a3c7aecc6e5cc614c3e4d692c543daf46004ee239de632387730cf
+  // (247 files, ISS-2026-146 batch 2's tenant-id-error-message-redaction-batch2.sql).
   // History: a774f7d11ac575c28b9e1e9f5c9bc311aaf42ae94ca3cde222b4d2ae90a0b1ae
   // (246 files, ISS-2026-125 item 2's session/API-key revocation regression).
   // History: 5662e5b47a4cbda10a35e24c9085857ebdc8b96e92d2e829c980eb0641e0f7b1
