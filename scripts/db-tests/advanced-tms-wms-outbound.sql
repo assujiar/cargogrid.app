@@ -962,11 +962,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmsoutx2) holds no membership in wmsoutx1, so app.get_wms_outbound_shipment
+    -- now collapses that zero-membership case into its own generic
+    -- shipment_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_wms_outbound_shipment(v_ship_a_id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 shipment';
+    raise exception 'assertion failed: expected shipment_not_found for a tenant2 actor reading a tenant1 shipment';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'shipment_not_found%' then raise; end if;
   end;
 end $$;
 

@@ -1108,11 +1108,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (labelops2) holds no membership in labelops1, so app.get_label_instance
+    -- now collapses that zero-membership case into its own generic
+    -- label_instance_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_label_instance(v_item_label.id, v_tenant2_rep);
-    raise exception 'assertion failed: expected insufficient_authority for a tenant2 actor reading a tenant1 label instance directly by id';
+    raise exception 'assertion failed: expected label_instance_not_found for a tenant2 actor reading a tenant1 label instance directly by id';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'label_instance_not_found%' then raise; end if;
   end;
 end $$;
 

@@ -728,10 +728,16 @@ begin
   returning id into v_dummy_candidate_id;
 
   begin
+    -- ISS-2026-146: the foreign actor belongs to acmegeofencetwo only and holds no membership in tenant1, so app.confirm_milestone_candidate
+    -- now collapses that zero-membership case into its own generic
+    -- milestone_candidate_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.confirm_milestone_candidate(v_dummy_candidate_id, v_foreign_actor, 'foreign');
   exception
     when others then
-      if sqlerrm like 'insufficient_authority%' then
+      if sqlerrm like 'milestone_candidate_not_found%' then
         v_rejected := true;
       else
         raise;

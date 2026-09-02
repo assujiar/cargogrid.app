@@ -465,11 +465,17 @@ declare
   v_serial_id uuid := (select id from app.item_masters where tenant_id = v_tenant1 and code = 'SKU-LBS-SERIAL');
 begin
   begin
+    -- ISS-2026-146: tenant2's rep (lbs2) holds no membership in lbs1, so app.register_lot_identity
+    -- now collapses that zero-membership case into its own generic
+    -- item_master_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.register_lot_identity(v_lot_id, 'LOT-DEFAULT-HOLD', null, null, 'receipt', null, null, '00000000-0000-0000-0000-000000160107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach app.register_lot_identity''s own idempotent replay short-circuit on tenant1''s real lot';
+    raise exception 'assertion failed: expected item_master_not_found -- tenant2''s rep must not reach app.register_lot_identity''s own idempotent replay short-circuit on tenant1''s real lot';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'item_master_not_found%' then raise; end if;
   end;
 
   begin
@@ -584,19 +590,31 @@ begin
   select * into v_serial from app.serial_identities where tenant_id = v_tenant1 and item_master_id = v_serial_id and serial_number = 'SN-DEFAULT-HOLD';
 
   begin
+    -- ISS-2026-146: tenant2's rep (lbs2) holds no membership in lbs1, so app.set_lot_identity_status
+    -- now collapses that zero-membership case into its own generic
+    -- lot_identity_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.set_lot_identity_status(v_lot.id, v_lot.status, null, v_lot.record_version, '00000000-0000-0000-0000-000000160107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach app.set_lot_identity_status''s own no-op short-circuit on tenant1''s real lot';
+    raise exception 'assertion failed: expected lot_identity_not_found -- tenant2''s rep must not reach app.set_lot_identity_status''s own no-op short-circuit on tenant1''s real lot';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'lot_identity_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (lbs2) holds no membership in lbs1, so app.set_serial_identity_status
+    -- now collapses that zero-membership case into its own generic
+    -- serial_identity_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.set_serial_identity_status(v_serial.id, v_serial.status, null, v_serial.record_version, '00000000-0000-0000-0000-000000160107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach app.set_serial_identity_status''s own no-op short-circuit on tenant1''s real serial';
+    raise exception 'assertion failed: expected serial_identity_not_found -- tenant2''s rep must not reach app.set_serial_identity_status''s own no-op short-circuit on tenant1''s real serial';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'serial_identity_not_found%' then raise; end if;
   end;
 end $$;
 
@@ -770,11 +788,17 @@ begin
   end if;
 
   begin
+    -- ISS-2026-146: tenant2's rep (lbs2) holds no membership in lbs1, so app.get_lot_trace
+    -- now collapses that zero-membership case into its own generic
+    -- lot_identity_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_lot_trace(v_lot_a.id, '00000000-0000-0000-0000-000000160107');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep has no membership in tenant1';
+    raise exception 'assertion failed: expected lot_identity_not_found -- tenant2''s rep has no membership in tenant1';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'lot_identity_not_found%' then raise; end if;
   end;
 end $$;
 

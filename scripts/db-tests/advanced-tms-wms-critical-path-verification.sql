@@ -1495,13 +1495,19 @@ declare
 begin
   v_rejected := false;
   begin
+    -- ISS-2026-146: OPS1 belongs to tenant wmsiv1 and holds zero membership in tenant wmsiv2, so app.get_warehouse_billing_event
+    -- now collapses that zero-membership case into its own generic
+    -- warehouse_billing_event_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_warehouse_billing_event(v_gamma_billing_event_id, ops1);
   exception
     when others then
-      if sqlerrm like 'insufficient_authority%' then v_rejected := true; else raise; end if;
+      if sqlerrm like 'warehouse_billing_event_not_found%' then v_rejected := true; else raise; end if;
   end;
   if not v_rejected then
-    raise exception 'assertion failed: expected OPS1 (zero membership in tenant wmsiv2) to be denied insufficient_authority reading Gamma''s own real billing event';
+    raise exception 'assertion failed: expected OPS1 (zero membership in tenant wmsiv2) to be denied warehouse_billing_event_not_found reading Gamma''s own real billing event';
   end if;
 
   -- The identical real encoded_value, looked up under tenant wmsiv1's own tenant_id

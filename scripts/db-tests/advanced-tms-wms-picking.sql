@@ -1708,19 +1708,31 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmspick2) holds no membership in wmspick1, so app.claim_wms_pick_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.claim_wms_pick_task(v_task_l1.id, v_task_l1.record_version, '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not claim tenant1''s real task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not claim tenant1''s real task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmspick2) holds no membership in wmspick1, so app.get_wms_pick_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_wms_pick_task(v_task_l1.id, '00000000-0000-0000-0000-000000180107');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not read tenant1''s real task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not read tenant1''s real task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   if exists (select 1 from app.list_wms_pick_tasks((select id from app.tenants where slug = 'wmspick2'), '00000000-0000-0000-0000-000000180107', null, null, null, null, null, null, null, 200)) then
@@ -1747,11 +1759,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmspick2) holds no membership in wmspick1, so app.claim_wms_pick_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.claim_wms_pick_task(v_task_l1.id, 999999, '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the claim short-circuit on tenant1''s already-claimed task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not reach the claim short-circuit on tenant1''s already-claimed task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin
@@ -1763,19 +1781,31 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmspick2) holds no membership in wmspick1, so app.mark_wms_pick_task_exception
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.mark_wms_pick_task_exception(v_task_l16.id, 'malicious-probe-reason', 999999, '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the exception short-circuit on tenant1''s task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not reach the exception short-circuit on tenant1''s task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmspick2) holds no membership in wmspick1, so app.cancel_wms_pick_task
+    -- now collapses that zero-membership case into its own generic
+    -- task_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.cancel_wms_pick_task(v_task_l1.id, 'malicious-probe-reason', 999999, '00000000-0000-0000-0000-000000180107', 'rep2b-attacker');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not reach the cancel short-circuit on tenant1''s already-picked task';
+    raise exception 'assertion failed: expected task_not_found -- tenant2''s rep must not reach the cancel short-circuit on tenant1''s already-picked task';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'task_not_found%' then raise; end if;
   end;
 
   begin

@@ -1161,11 +1161,17 @@ begin
   end;
 
   begin
+    -- ISS-2026-146: tenant2's rep (wmspack2) holds no membership in wmspack1, so app.get_wms_package
+    -- now collapses that zero-membership case into its own generic
+    -- package_not_found / no_data_found branch -- byte-identical to what a
+    -- nonexistent id already produced, so the real tenant_id is never disclosed to an
+    -- outsider. A genuine same-tenant member lacking the role still gets
+    -- insufficient_authority, unchanged (asserted elsewhere in this file).
     perform app.get_wms_package(v_p1.id, '00000000-0000-0000-0000-000000190209');
-    raise exception 'assertion failed: expected insufficient_authority -- tenant2''s rep must not read tenant1''s real package';
+    raise exception 'assertion failed: expected package_not_found -- tenant2''s rep must not read tenant1''s real package';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'package_not_found%' then raise; end if;
   end;
 
   if exists (select 1 from app.list_wms_packages((select id from app.tenants where slug = 'wmspack2'), '00000000-0000-0000-0000-000000190209', null, null, null, null, null, 200)) then
