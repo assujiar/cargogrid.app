@@ -2573,6 +2573,27 @@ import { readFileSync } from "node:fs";
  * plus this pass's own, were remapped to their filename versions under an
  * in-transaction assertion requiring exactly 5 remapped rows; ledger and repo now agree
  * again, so `supabase db push` cannot re-run any of them.
+ *
+ * AMENDED 2026-09-02 (fifty-fifth pass), lockfileSha256 ONLY -- migrationSetSha256 and
+ * dbTestSetSha256 are unchanged; no supabase/migrations/ or scripts/db-tests/ file was
+ * touched. Ruling: docs/build-log/release-go-live/RGL-415.md. Owner instruction to finish
+ * the remaining Step 17 batch, which includes re-verifying the branch as a deploy
+ * candidate (GO_NO_GO_REPORT.md §7 item 5) before any new go decision is considered.
+ *
+ * security:audit failed for the first time this session: two newly-published high-severity
+ * advisories against browserslist 4.28.6 (GHSA-c83g-rgw3-j3cx, unbounded memory growth;
+ * GHSA-73wf-gq98-2v4g, uncaught crash / prototype write), pulled in transitively by next
+ * and eslint-config-next -- not a direct dependency, not a regression this session
+ * introduced. Fixed the same way six prior transitive-package advisories were fixed in this
+ * same package.json: a version-range pnpm.overrides entry, "browserslist@<4.28.7":
+ * ">=4.28.7". `pnpm why browserslist` confirms a single resolved version both before and
+ * after, so there is no split copy left unpatched.
+ *
+ * This is the first amendment to lockfileSha256 since the original freeze -- every prior
+ * pass here changed only the migration and/or db-test digests. Re-verified via a fresh full
+ * local db-test run (ALL PASSED, unaffected by this change) plus typecheck, the 5,939-test
+ * unit suite, `next build`, and the complete Tier A gate suite, all clean, before this
+ * digest was changed. See RGL-415.md §4 for the full gate table.
  */
 export interface FrozenCandidate {
   readonly id: string;
@@ -4307,7 +4328,11 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (239 files, ISS-2026-303's inventory and leave opening-balance import regression blocks).
   // History: 55a5e1b2c54be399c7768a9a7b66ff3187c968fb891146654423b6f409a79184
   // (239 files, ISS-2026-069 plus the wall-clock fix to hris-leave-permit-business-trip.sql).
-  lockfileSha256: "feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7",
+  // History: feafbf67d7d3b98f1612b770c42775dd41b4aa2943f8849f19a2d3e2b450ade7
+  // (original freeze value, unchanged since RGL-392, first amended 2026-09-02
+  // (fifty-fifth pass) by the browserslist@<4.28.7 pnpm.overrides fix. See the
+  // class-level doc comment above and RGL-415.md.
+  lockfileSha256: "39bf980f84a6775a0e8d4448820772659cfa2612dfc885720f025b4460052b02",
 };
 
 export type DriftKind = "MIGRATION_SET" | "DB_TEST_SET" | "LOCKFILE";
