@@ -1230,7 +1230,7 @@ begin
   end;
 end $$;
 
-\echo '>> cross-tenant isolation: a vasm2 actor cannot read or start an assessment against a vasm1 vendor/template (insufficient_authority via evaluate_permission, never leaked as a different error); a reused REAL vasm1 idempotency key does not silently short-circuit under the attacker''s own identity; raw RLS denies direct row selection'
+\echo '>> cross-tenant isolation: a vasm2 actor cannot read or start an assessment against a vasm1 vendor/template (a generic by-id not-found per ISS-2026-146, never a tenant_id-bearing insufficient_authority, and never leaked as any other error); a reused REAL vasm1 idempotency key does not silently short-circuit under the attacker''s own identity; raw RLS denies direct row selection'
 do $$
 declare
   v_tenant1 uuid := (select id from app.tenants where slug = 'vasm1');
@@ -1239,20 +1239,33 @@ declare
   v_template_id uuid := (select id from app.vendor_assessment_templates where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-template-1');
   v_target_assessment_id uuid := (select id from app.vendor_assessments where tenant_id = v_tenant1 and idempotency_key = 'idem-vasm-assessment-1');
 begin
+  -- ISS-2026-146: v_t2_staff (vasm2's staff, '00000000-0000-0000-0000-000000026202') holds
+  -- ZERO app.principal_memberships / tenant_user_identities row in vasm1 -- it was only ever
+  -- invited to vasm2. Both app.get_vendor_assessment (by bare assessment id) and
+  -- app.start_vendor_assessment (by bare vendor master_record_id) look their row up with no
+  -- tenant scoping available, so before the fix their insufficient_authority denial
+  -- interpolated vasm1's REAL tenant_id into the message text for an actor with no
+  -- relationship to that tenant. The fix folds app.has_active_tenant_membership into the SAME
+  -- not-found branch the row-miss case already raises, so this caller now gets exactly the
+  -- generic not-found a nonexistent id would produce. Identical, already-established
+  -- expectation to the "Prompt 269 (ISS-2026-054, C-05)" block immediately below. The
+  -- idempotency-key point this block also makes is unchanged and still proven: the reused
+  -- REAL vasm1 key is still rejected outright under the attacker's identity, never
+  -- short-circuited into vasm1's real row.
   begin
     perform app.get_vendor_assessment(v_target_assessment_id, v_t2_staff);
-    raise exception 'assertion failed: expected insufficient_authority for a vasm2 actor reading a vasm1 assessment';
+    raise exception 'assertion failed: expected vendor_assessment_not_found for a vasm2 actor reading a vasm1 assessment (never insufficient_authority, which would disclose the real tenant_id)';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_assessment_not_found%' then raise; end if;
   end;
 
   begin
     perform app.start_vendor_assessment(v_vendor_id, v_template_id, null, 'idem-vasm-assessment-1', v_t2_staff, 'attacker');
-    raise exception 'assertion failed: expected the vasm1 vendor lookup to reject on vasm2 authority, never silently reusing the real key';
+    raise exception 'assertion failed: expected the vasm1 vendor lookup to reject a vasm2 actor with a generic vendor_profile_not_found, never silently reusing the real key';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
   end;
 
   set local role authenticated;

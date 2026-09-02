@@ -601,21 +601,32 @@ begin
   select * into v_account from app.vendor_bank_accounts where vendor_master_record_id = v_vendor_id and status = 'active' limit 1;
 
   -- RPC-level: a pfin2 staff member cannot act on a pfin1 vendor's own bank account.
+  -- ISS-2026-146: v_t2_staff (pfin2's staff, '00000000-0000-0000-0000-000000092202') holds
+  -- ZERO app.principal_memberships / tenant_user_identities row in pfin1 -- it was only ever
+  -- invited to pfin2. app.create_vendor_bank_account_draft resolves the owning vendor by its
+  -- bare master_record_id (no p_tenant_id parameter to scope by), so before the fix its
+  -- insufficient_authority denial interpolated pfin1's REAL tenant_id into the message text
+  -- for an actor with no relationship to that tenant. The fix folds
+  -- app.has_active_tenant_membership into the SAME not-found branch the row-miss case already
+  -- raises, so this caller now gets exactly the generic vendor_profile_not_found a nonexistent
+  -- vendor id would produce. The refusal itself is unchanged -- no draft is created either
+  -- way, as the post-conditions below still assert.
   begin
     perform app.create_vendor_bank_account_draft(v_vendor_id, 'Foreign Attempt', 'Foreign Bank', '1111222233334', 'IDR', 'primary', null, null, 'idem-pfin-crosstenant-reuse', v_t2_staff, 'staff2');
-    raise exception 'assertion failed: expected insufficient_authority for a foreign-tenant staff member';
+    raise exception 'assertion failed: expected vendor_profile_not_found for a foreign-tenant staff member (never insufficient_authority, which would disclose the real tenant_id)';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
   end;
   -- reused-real-idempotency-key attack: same key as an existing tenant1 row, from a
-  -- tenant2 actor -- must still fail on authority, never silently reuse tenant1's row.
+  -- tenant2 actor -- must still be rejected outright (ISS-2026-146: as the same generic
+  -- vendor_profile_not_found), never silently reuse tenant1's row.
   begin
     perform app.create_vendor_bank_account_draft(v_vendor_id, 'Foreign Attempt', 'Foreign Bank', '1111222233334', 'IDR', 'primary', null, null, 'idem-pfin-acct-1', v_t2_staff, 'staff2');
-    raise exception 'assertion failed: expected insufficient_authority for a foreign-tenant staff member reusing a real idempotency key';
+    raise exception 'assertion failed: expected vendor_profile_not_found for a foreign-tenant staff member reusing a real idempotency key';
   exception
     when others then
-      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+      if sqlerrm not like 'vendor_profile_not_found%' then raise; end if;
   end;
 
   -- raw-RLS-level: a pfin2 staff session sees ZERO rows on app.vendor_bank_accounts,
