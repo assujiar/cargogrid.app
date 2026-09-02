@@ -4,6 +4,10 @@ import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { convertQuotationToAccountAction, type ConvertQuotationToAccountState } from "./actions.ts";
 import type { Account } from "../../../../../../server/contracts/account/account.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { Radio } from "../../../../../../components/forms/radio.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 const INITIAL_STATE: ConvertQuotationToAccountState = { error: null, accountId: null };
 
@@ -26,6 +30,8 @@ export function ConvertAccountForm({
     INITIAL_STATE,
   );
 
+  const describedBy = state.error ? "convert-account-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       {duplicateCandidates.length > 0 ? (
@@ -33,39 +39,34 @@ export function ConvertAccountForm({
           <span className="text-sm font-medium text-neutral-700">Possible existing match</span>
           <p className="text-xs text-neutral-500">This customer&apos;s legal identity may already exist. Choose one to link instead of creating a duplicate, or leave unselected to create a new account.</p>
           <div className="flex flex-col gap-1">
-            <label className="flex items-center gap-2 text-sm text-neutral-900">
-              <input type="radio" name="targetAccountId" value="" defaultChecked />
-              Create a new account
-            </label>
+            <Radio name="targetAccountId" value="" defaultChecked label="Create a new account" aria-describedby={describedBy} />
             {duplicateCandidates.map((candidate) => (
-              <label key={candidate.id} className="flex items-center gap-2 text-sm text-neutral-900">
-                <input type="radio" name="targetAccountId" value={candidate.id} />
-                {candidate.legalName}
-                {candidate.taxId ? ` (${candidate.taxId})` : ""}
-              </label>
+              <Radio
+                key={candidate.id}
+                name="targetAccountId"
+                value={candidate.id}
+                label={`${candidate.legalName}${candidate.taxId ? ` (${candidate.taxId})` : ""}`}
+                aria-describedby={describedBy}
+              />
             ))}
           </div>
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="parentAccountId" className="text-sm font-medium text-neutral-700">
-          Parent account ID (optional)
-        </label>
-        <input
-          id="parentAccountId"
-          name="parentAccountId"
-          type="text"
-          placeholder="Only used when creating a new account"
-          className="w-96 rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
+      <FormField id="parentAccountId" label="Parent account ID (optional)">
+        <div className="w-96">
+          <Input
+            id="parentAccountId"
+            name="parentAccountId"
+            type="text"
+            placeholder="Only used when creating a new account"
+            invalid={Boolean(state.error)}
+            aria-describedby={describedBy}
+          />
+        </div>
+      </FormField>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="convert-account-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Converting…" className="w-fit">
         Convert to account

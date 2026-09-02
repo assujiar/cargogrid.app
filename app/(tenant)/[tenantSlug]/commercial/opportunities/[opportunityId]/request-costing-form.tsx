@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { requestCostingAction } from "../actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 interface ComponentRow {
   code: string;
@@ -19,6 +21,9 @@ export function RequestCostingForm({ tenantSlug, opportunityId, disabled }: { te
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const describedBy = error ? "request-costing-error" : undefined;
+  const invalid = Boolean(error);
+
   function updateRow(index: number, field: keyof ComponentRow, value: string) {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
   }
@@ -30,35 +35,47 @@ export function RequestCostingForm({ tenantSlug, opportunityId, disabled }: { te
 
       {rows.map((row, index) => (
         <div key={index} className="flex gap-2">
-          <input
-            placeholder="Component code (e.g. ocean_freight)"
-            value={row.code}
-            onChange={(e) => updateRow(index, "code", e.target.value)}
-            disabled={disabled}
-            className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Description"
-            value={row.description}
-            onChange={(e) => updateRow(index, "description", e.target.value)}
-            disabled={disabled}
-            className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+          <div className="w-48">
+            <FormField id={`request-costing-code-${index}`} label={<span className="sr-only">{`Component ${index + 1} code`}</span>}>
+              <Input
+                id={`request-costing-code-${index}`}
+                placeholder="Component code (e.g. ocean_freight)"
+                value={row.code}
+                onChange={(e) => updateRow(index, "code", e.target.value)}
+                disabled={disabled}
+                invalid={invalid}
+                aria-describedby={describedBy}
+              />
+            </FormField>
+          </div>
+          <div className="flex-1">
+            <FormField id={`request-costing-description-${index}`} label={<span className="sr-only">{`Component ${index + 1} description`}</span>}>
+              <Input
+                id={`request-costing-description-${index}`}
+                placeholder="Description"
+                value={row.description}
+                onChange={(e) => updateRow(index, "description", e.target.value)}
+                disabled={disabled}
+                invalid={invalid}
+                aria-describedby={describedBy}
+              />
+            </FormField>
+          </div>
         </div>
       ))}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="due-at" className="text-sm font-medium text-neutral-700">
-          Due date <span className="font-normal text-neutral-500">(optional)</span>
-        </label>
-        <Input id="due-at" type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} disabled={disabled} />
-      </div>
+      <FormField
+        id="due-at"
+        label={
+          <>
+            Due date <span className="font-normal text-neutral-500">(optional)</span>
+          </>
+        }
+      >
+        <Input id="due-at" type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} disabled={disabled} invalid={invalid} aria-describedby={describedBy} />
+      </FormField>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="request-costing-error">{error}</ValidationMessage> : null}
 
       <Button
         type="button"

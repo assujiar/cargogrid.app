@@ -5,7 +5,16 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { selectVendorRateAction } from "./actions.ts";
 import type { RateVersion } from "../../../../../../server/contracts/rate/rate.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
+import { RadioGroup } from "../../../../../../components/forms/radio.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
+
+const MODE_OPTIONS = [
+  { value: "catalog", label: "From catalog" },
+  { value: "adhoc", label: "Ad-hoc quote" },
+] as const;
 
 /**
  * Select-rate trigger (COM-149) -- pick from the tenant's approved, currently-effective
@@ -25,46 +34,63 @@ export function SelectRateForm({ tenantSlug, requestId, candidateRates }: { tena
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const describedBy = error ? "select-rate-error" : undefined;
+  const invalid = Boolean(error);
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Select a rate</h2>
 
-      <div className="flex gap-4 text-sm">
-        <label className="flex items-center gap-1">
-          <input type="radio" name="mode" checked={mode === "catalog"} onChange={() => setMode("catalog")} /> From catalog
-        </label>
-        <label className="flex items-center gap-1">
-          <input type="radio" name="mode" checked={mode === "adhoc"} onChange={() => setMode("adhoc")} /> Ad-hoc quote
-        </label>
-      </div>
+      <RadioGroup
+        legend="Rate source"
+        name="mode"
+        options={MODE_OPTIONS}
+        value={mode}
+        onChange={(value) => setMode(value as "catalog" | "adhoc")}
+      />
 
       {mode === "catalog" ? (
         candidateRates.length === 0 ? (
           <p className="text-sm text-neutral-600">No approved, currently-effective rates for this tenant yet.</p>
         ) : (
-          <Select value={rateVersionId} onChange={(e) => setRateVersionId(e.target.value)}>
-            {candidateRates.map((rate) => (
-              <option key={rate.rateVersionId} value={rate.rateVersionId}>
-                {rate.vendorName} — {rate.originLane} → {rate.destinationLane} ({rate.serviceType}
-                {rate.costMasked ? "" : `, ${rate.baseAmount} ${rate.currency}`})
-              </option>
-            ))}
-          </Select>
+          <FormField id="select-rate-version" label={<span className="sr-only">Approved rate</span>}>
+            <Select id="select-rate-version" value={rateVersionId} onChange={(e) => setRateVersionId(e.target.value)} invalid={invalid} aria-describedby={describedBy}>
+              {candidateRates.map((rate) => (
+                <option key={rate.rateVersionId} value={rate.rateVersionId}>
+                  {rate.vendorName} — {rate.originLane} → {rate.destinationLane} ({rate.serviceType}
+                  {rate.costMasked ? "" : `, ${rate.baseAmount} ${rate.currency}`})
+                </option>
+              ))}
+            </Select>
+          </FormField>
         )
       ) : (
         <div className="flex gap-2">
-          <input placeholder="Currency (e.g. IDR)" value={adhocCurrency} onChange={(e) => setAdhocCurrency(e.target.value.toUpperCase())} className="w-32 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-          <input type="number" min={0} placeholder="Amount" value={adhocAmount} onChange={(e) => setAdhocAmount(e.target.value)} className="w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+          <div className="w-32">
+            <FormField id="select-rate-adhoc-currency" label={<span className="sr-only">Currency</span>}>
+              <Input id="select-rate-adhoc-currency" placeholder="Currency (e.g. IDR)" value={adhocCurrency} onChange={(e) => setAdhocCurrency(e.target.value.toUpperCase())} invalid={invalid} aria-describedby={describedBy} />
+            </FormField>
+          </div>
+          <div className="w-40">
+            <FormField id="select-rate-adhoc-amount" label={<span className="sr-only">Amount</span>}>
+              <NumberInput id="select-rate-adhoc-amount" min={0} placeholder="Amount" value={adhocAmount} onChange={(e) => setAdhocAmount(e.target.value)} invalid={invalid} aria-describedby={describedBy} />
+            </FormField>
+          </div>
         </div>
       )}
 
-      <Input placeholder={mode === "adhoc" ? "Override reason (required)" : "Override reason (required for a non-approved rate)"} value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
+      <FormField id="select-rate-override-reason" label={<span className="sr-only">Override reason</span>}>
+        <Input
+          id="select-rate-override-reason"
+          placeholder={mode === "adhoc" ? "Override reason (required)" : "Override reason (required for a non-approved rate)"}
+          value={overrideReason}
+          onChange={(e) => setOverrideReason(e.target.value)}
+          invalid={invalid}
+          aria-describedby={describedBy}
+        />
+      </FormField>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="select-rate-error">{error}</ValidationMessage> : null}
 
       <Button
         type="button"

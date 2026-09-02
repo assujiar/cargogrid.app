@@ -5,7 +5,10 @@ import { Button } from "../../../../../../components/ui/button.tsx";
 import { publishSalesPlanAction, archiveSalesPlanAction, createSalesTargetAction } from "../actions.ts";
 import { SALES_TARGET_METRIC_TYPES, type SalesTargetMetricType } from "../../../../../../server/contracts/pipeline/pipeline.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
 import { Select } from "../../../../../../components/forms/select.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 /** Publish/archive/add-target action panel (COM-146) -- mirrors COM-143/144's own `*-actions-panel.tsx` pattern (bound Server Actions called directly via `useTransition`, not `useActionState`, since each takes explicit args rather than `FormData`). */
 export function PlanActionsPanel({
@@ -26,6 +29,11 @@ export function PlanActionsPanel({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Publish, archive and add-target share this one `error` slot, so no field can honestly
+  // claim `aria-invalid`; every control instead points at the shared message
+  // (ISS-2026-242's own documented multi-action case).
+  const describedBy = error ? "plan-actions-error" : undefined;
+
   const canPublish = status === "draft";
   const canArchive = status !== "archived";
   const canAddTarget = status === "draft";
@@ -34,18 +42,18 @@ export function PlanActionsPanel({
     <div className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Plan actions</h2>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="plan-actions-error">{error}</ValidationMessage> : null}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="supersedes-plan-id" className="text-sm font-medium text-neutral-700">
-          Supersedes plan ID <span className="font-normal text-neutral-500">(optional -- archives that published plan on publish)</span>
-        </label>
-        <Input id="supersedes-plan-id" type="text" value={supersedesPlanId} onChange={(event) => setSupersedesPlanId(event.target.value)} />
-      </div>
+      <FormField
+        id="supersedes-plan-id"
+        label={
+          <>
+            Supersedes plan ID <span className="font-normal text-neutral-500">(optional -- archives that published plan on publish)</span>
+          </>
+        }
+      >
+        <Input id="supersedes-plan-id" type="text" value={supersedesPlanId} onChange={(event) => setSupersedesPlanId(event.target.value)} aria-describedby={describedBy} />
+      </FormField>
       <Button
         type="button"
         disabled={!canPublish}
@@ -82,32 +90,30 @@ export function PlanActionsPanel({
       <h3 className="text-sm font-semibold text-neutral-900">Add target</h3>
       <p className="text-xs text-neutral-500">Targets can only be added while the plan is draft.</p>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="metric-type" className="text-sm font-medium text-neutral-700">
-          Metric
-        </label>
-        <Select id="metric-type" value={metricType} onChange={(event) => setMetricType(event.target.value as SalesTargetMetricType)} disabled={!canAddTarget}>
+      <FormField id="metric-type" label="Metric">
+        <Select id="metric-type" value={metricType} onChange={(event) => setMetricType(event.target.value as SalesTargetMetricType)} disabled={!canAddTarget} aria-describedby={describedBy}>
           {SALES_TARGET_METRIC_TYPES.map((metric) => (
             <option key={metric} value={metric}>
               {metric.replace(/_/g, " ")}
             </option>
           ))}
         </Select>
-      </div>
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="target-org-unit-id" className="text-sm font-medium text-neutral-700">
-          Organization unit ID <span className="font-normal text-neutral-500">(optional -- defaults to the plan&apos;s own scope)</span>
-        </label>
-        <Input id="target-org-unit-id" type="text" value={orgUnitId} onChange={(event) => setOrgUnitId(event.target.value)} disabled={!canAddTarget} />
-      </div>
+      <FormField
+        id="target-org-unit-id"
+        label={
+          <>
+            Organization unit ID <span className="font-normal text-neutral-500">(optional -- defaults to the plan&apos;s own scope)</span>
+          </>
+        }
+      >
+        <Input id="target-org-unit-id" type="text" value={orgUnitId} onChange={(event) => setOrgUnitId(event.target.value)} disabled={!canAddTarget} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="target-value" className="text-sm font-medium text-neutral-700">
-          Target value
-        </label>
-        <Input id="target-value" type="number" min={0} value={targetValue} onChange={(event) => setTargetValue(event.target.value)} disabled={!canAddTarget} />
-      </div>
+      <FormField id="target-value" label="Target value">
+        <NumberInput id="target-value" min={0} value={targetValue} onChange={(event) => setTargetValue(event.target.value)} disabled={!canAddTarget} aria-describedby={describedBy} />
+      </FormField>
 
       <Button
         type="button"

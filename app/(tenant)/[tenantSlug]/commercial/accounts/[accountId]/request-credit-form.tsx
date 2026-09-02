@@ -3,6 +3,10 @@
 import { useActionState } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { requestCreditProfileAction, type CreditFormState } from "./credit-actions.ts";
+import { Input } from "../../../../../../components/forms/input.tsx";
+import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 const INITIAL_STATE: CreditFormState = { error: null };
 
@@ -17,19 +21,25 @@ export function RequestCreditForm({ tenantSlug, accountId }: { tenantSlug: strin
     INITIAL_STATE,
   );
 
+  const describedBy = state.error ? "request-credit-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3" noValidate>
       <h2 className="text-sm font-semibold text-neutral-900">Request a credit profile</h2>
       <div className="flex gap-2">
-        <input name="currency" defaultValue="IDR" maxLength={3} className="w-24 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
-        <input name="requestedLimitAmount" type="number" min={0} placeholder="Requested limit" className="w-48 rounded-md border border-neutral-300 px-3 py-2 text-sm" />
+        <div className="w-24">
+          <FormField id="request-credit-currency" label={<span className="sr-only">Currency</span>}>
+            <Input id="request-credit-currency" name="currency" type="text" defaultValue="IDR" maxLength={3} invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+        <div className="w-48">
+          <FormField id="request-credit-limit" label={<span className="sr-only">Requested limit</span>}>
+            <NumberInput id="request-credit-limit" name="requestedLimitAmount" min={0} placeholder="Requested limit" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
       </div>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="request-credit-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Requesting…" className="w-fit">
         Request credit profile

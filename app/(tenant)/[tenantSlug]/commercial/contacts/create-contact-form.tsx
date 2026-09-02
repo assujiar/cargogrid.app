@@ -4,6 +4,8 @@ import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import type { ContactFormState } from "./actions.ts";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 
 const INITIAL_STATE: ContactFormState = { error: null };
 
@@ -11,43 +13,36 @@ const INITIAL_STATE: ContactFormState = { error: null };
 export function CreateContactForm({ action }: { action: (prevState: ContactFormState, formData: FormData) => Promise<ContactFormState> }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
 
+  const describedBy = state.error ? "create-contact-error" : undefined;
+
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
       <h2 className="text-sm font-semibold text-neutral-900">Add a contact</h2>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="fullName" className="text-sm font-medium text-neutral-700">
-          Full name
-        </label>
-        <Input id="fullName" name="fullName" type="text" required />
-      </div>
+      <FormField id="fullName" label="Full name">
+        <Input id="fullName" name="fullName" type="text" required invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="title" className="text-sm font-medium text-neutral-700">
-          Title <span className="font-normal text-neutral-500">(optional)</span>
-        </label>
-        <Input id="title" name="title" type="text" />
-      </div>
+      <FormField
+        id="title"
+        label={
+          <>
+            Title <span className="font-normal text-neutral-500">(optional)</span>
+          </>
+        }
+      >
+        <Input id="title" name="title" type="text" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="email" className="text-sm font-medium text-neutral-700">
-          Email
-        </label>
-        <Input id="email" name="email" type="email" />
-      </div>
+      <FormField id="email" label="Email">
+        <Input id="email" name="email" type="email" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="phone" className="text-sm font-medium text-neutral-700">
-          Phone
-        </label>
-        <Input id="phone" name="phone" type="tel" />
-      </div>
+      <FormField id="phone" label="Phone">
+        <Input id="phone" name="phone" type="tel" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+      </FormField>
 
-      {state.error ? (
-        <p role="alert" className="text-sm text-danger">
-          {state.error}
-        </p>
-      ) : null}
+      {state.error ? <ValidationMessage id="create-contact-error">{state.error}</ValidationMessage> : null}
 
       <Button type="submit" loading={pending} loadingLabel="Adding…">
         Add contact

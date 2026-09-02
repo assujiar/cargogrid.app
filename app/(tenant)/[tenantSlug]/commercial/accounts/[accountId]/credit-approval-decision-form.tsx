@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { decideCreditProfileApprovalStepAction } from "./credit-actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { Checkbox } from "../../../../../../components/forms/checkbox.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 /**
  * One eligible step's decide form (COM-157) -- mirrors ApprovalDecisionForm (COM-153)
@@ -18,6 +21,11 @@ export function CreditApprovalDecisionForm({ tenantSlug, accountId, requestStepI
   const [reauthConfirmed, setReauthConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // One instance renders per eligible step (credit-panel.tsx maps over
+  // `myEligibleStepIds`), so the field ids must be per-instance, never a static string.
+  const reactId = useId();
+  const reasonId = `${reactId}-reason`;
+  const errorId = `${reactId}-error`;
 
   function decide(decision: "approved" | "rejected") {
     startTransition(async () => {
@@ -29,16 +37,23 @@ export function CreditApprovalDecisionForm({ tenantSlug, accountId, requestStepI
   return (
     <div className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
       <p className="text-sm font-medium text-neutral-900">Step {stepOrder} is waiting on your decision</p>
-      <Input placeholder="Reason (required to reject)" value={reason} onChange={(e) => setReason(e.target.value)} />
-      <label className="flex items-center gap-2 text-xs text-neutral-600">
-        <input type="checkbox" checked={reauthConfirmed} onChange={(e) => setReauthConfirmed(e.target.checked)} />
-        I have recently re-authenticated (required for this decision)
-      </label>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      <FormField id={reasonId} label={<span className="sr-only">Reason (required to reject)</span>}>
+        <Input
+          id={reasonId}
+          placeholder="Reason (required to reject)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
+        />
+      </FormField>
+      <Checkbox
+        checked={reauthConfirmed}
+        onChange={(e) => setReauthConfirmed(e.target.checked)}
+        label="I have recently re-authenticated (required for this decision)"
+        aria-describedby={error ? errorId : undefined}
+      />
+      {error ? <ValidationMessage id={errorId}>{error}</ValidationMessage> : null}
       <div className="flex gap-2">
         <Button type="button" disabled={!reauthConfirmed} loading={pending} loadingLabel="Approving…" onClick={() => decide("approved")}>
           Approve

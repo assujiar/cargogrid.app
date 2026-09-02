@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { disqualifyProspectAction, archiveProspectAction } from "./actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 /** Disqualify/archive action panel (COM-144, CG-S7-COM-003) -- mirrors COM-143's own `lead-actions-panel.tsx` pattern exactly. */
 export function ProspectActionsPanel({
@@ -23,22 +25,20 @@ export function ProspectActionsPanel({
 
   const canAct = status === "active";
 
+  // Disqualify and archive share this one `error` slot, so the reason field points at the
+  // shared message rather than claiming `aria-invalid` for an error archive may have set
+  // (ISS-2026-242's own documented multi-action case).
+  const describedBy = error ? "prospect-actions-error" : undefined;
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Actions</h2>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="prospect-actions-error">{error}</ValidationMessage> : null}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="disqualify-reason" className="text-sm font-medium text-neutral-700">
-          Disqualify reason
-        </label>
-        <Input id="disqualify-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} />
-      </div>
+      <FormField id="disqualify-reason" label="Disqualify reason">
+        <Input id="disqualify-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} aria-describedby={describedBy} />
+      </FormField>
       <Button
         type="button"
         variant="destructive"

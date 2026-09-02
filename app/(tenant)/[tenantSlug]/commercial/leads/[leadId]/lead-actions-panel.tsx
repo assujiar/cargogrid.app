@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { qualifyLeadAction, disqualifyLeadAction, convertLeadToProspectAction } from "../actions.ts";
 import { Input } from "../../../../../../components/forms/input.tsx";
+import { FormField } from "../../../../../../components/forms/form-field.tsx";
+import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 
 /**
  * Qualify/disqualify/convert action panel (COM-143/`144`, CG-S7-COM-002/`003`) -- a
@@ -34,15 +36,16 @@ export function LeadActionsPanel({
   const canDisqualify = status === "new" || status === "contacted" || status === "qualified";
   const canConvert = status === "qualified";
 
+  // Qualify, disqualify and convert all write into this one `error` slot, so neither
+  // field can honestly claim `aria-invalid`; both instead point at the shared message
+  // (ISS-2026-242's own documented multi-action case).
+  const describedBy = error ? "lead-actions-error" : undefined;
+
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
       <h2 className="text-sm font-semibold text-neutral-900">Actions</h2>
 
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      ) : null}
+      {error ? <ValidationMessage id="lead-actions-error">{error}</ValidationMessage> : null}
 
       <Button
         type="button"
@@ -59,12 +62,9 @@ export function LeadActionsPanel({
         Qualify
       </Button>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="disqualify-reason" className="text-sm font-medium text-neutral-700">
-          Disqualify reason
-        </label>
-        <Input id="disqualify-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} />
-      </div>
+      <FormField id="disqualify-reason" label="Disqualify reason">
+        <Input id="disqualify-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} aria-describedby={describedBy} />
+      </FormField>
       <Button
         type="button"
         variant="destructive"
@@ -83,12 +83,9 @@ export function LeadActionsPanel({
 
       <hr className="border-neutral-200" />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="convert-legal-name" className="text-sm font-medium text-neutral-700">
-          Prospect legal name
-        </label>
-        <Input id="convert-legal-name" type="text" value={legalName} onChange={(event) => setLegalName(event.target.value)} />
-      </div>
+      <FormField id="convert-legal-name" label="Prospect legal name">
+        <Input id="convert-legal-name" type="text" value={legalName} onChange={(event) => setLegalName(event.target.value)} aria-describedby={describedBy} />
+      </FormField>
       <Button
         type="button"
         disabled={!canConvert || !legalName.trim()}
