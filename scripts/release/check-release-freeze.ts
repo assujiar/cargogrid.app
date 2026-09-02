@@ -3473,7 +3473,15 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // app._queue_onboarding_case_notification helper plus an approver fan-out helper, and
   // `create or replace`-ing the four consuming RPCs with their live bodies otherwise verbatim
   // (each diffed against pg_get_functiondef on the hosted project before commit).
-  migrationSetSha256: "ab38d1bb191f83ca6e65c3c69a1d176bd89d2efaee4d8a1e4553eb9b02ba1272",
+  // NINETY-NINTH PASS (2026-09-03, ISS-2026-134 item 4): 481 files (+1). One new file,
+  // 20260903150000_close_iss2026134_item4_loyalty_engagement_metrics_snapshot.sql, closing that
+  // entry's last open item: a snapshot table + persisting sweep + cursor-paginated read, so the
+  // `stable` app.get_loyalty_engagement_metrics becomes genuinely schedulable instead of
+  // computing a result and discarding it every fire, registered as catalogue task 23 with
+  // app._run_scheduled_task_once reproduced from its live 22-branch definition plus one branch.
+  migrationSetSha256: "d0f1474e7bb323bd215d81f70e8f33734aa897b2fd6c606ad96abc587c711fb0",
+  // History: ab38d1bb191f83ca6e65c3c69a1d176bd89d2efaee4d8a1e4553eb9b02ba1272
+  // (480 files, ISS-2026-070 item 1's three remaining PLT-127 notification wiring points).
   // History: 4d31bb05a7c787ac40e42b06513659f22ec8ceb4c31992c8d6ac2b295a88558e
   // (479 files, ISS-2026-129/132/134 item 1's loyalty issuance/notification/reconciliation work).
   // History: b9eeee0431f072f74ba4fd491dae102ba92a0c952772f17d26bb34d2b190bfc3
@@ -4179,7 +4187,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // wiring points end to end, one driving app._queue_onboarding_case_notification against the two
   // failure modes app.queue_notification genuinely has at those call sites plus the no-recipient
   // case, proving a refused send never rolls back the governed business write it accompanies).
-  dbTestSetSha256: "f039b0b7f3026dbafb24371dc1d23328d3c13fa06bd666441514d994a2cd5fe9",
+  // NINETY-NINTH PASS (2026-09-03, ISS-2026-134 item 4): 247 files, unchanged in count -- 2
+  // extended (customer-loyalty-liability-reconciliation.sql: the snapshot equals the on-demand
+  // metrics read field-for-field AND matches the fixture's own known numbers, replays return the
+  // identical stored row, a different window is a different snapshot, and both callers the
+  // metrics RPC refuses are refused here and persist nothing; task-scheduler.sql: the catalogue
+  // count, the list-every-available-task assertion and the every-task-reaches-a-dispatch-branch
+  // loop all move from 22 to 23, the loop also supplying the new task's required window_days).
+  dbTestSetSha256: "51695bdf21337090c1e3d3314b7aa4d78ce3f39fd574963319d981655691b391",
+  // History: f039b0b7f3026dbafb24371dc1d23328d3c13fa06bd666441514d994a2cd5fe9
+  // (247 files, ISS-2026-070 item 1's notification-wiring regressions).
   // History: 865ecccb290a594792b9e198fc8d8d07b21d4be9394a83a6ae17b0f11a1d0dcd
   // (247 files, ISS-2026-129/132/134's loyalty regressions).
   // History: 7bf961dbacd384d5168d455ca8f75d97145f493256cdc2cd1c4e07cb747bbe77

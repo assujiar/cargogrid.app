@@ -43,9 +43,9 @@ written.
 
 | Status | Count |
 |---|---|
-| `OPEN` | 16 — 4 High, 4 Medium, 8 Low |
+| `OPEN` | 15 — 4 High, 4 Medium, 7 Low |
 | `ACCEPTED_RISK` / `ACCEPTED_EXCEPTION` | 10 — formally ruled, not pending work |
-| `RESOLVED` | 251 |
+| `RESOLVED` | 252 |
 | **Total records** | **277** |
 
 Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a to-do.
@@ -141,7 +141,7 @@ Sorted open-first, then by severity. An `ACCEPTED_*` row is a disposition, not a
 | `ISS-2026-131` | Low | `RESOLVED` | Reward Catalogue (CPL-320): the actual redemption/consume-stock transaction does not exist yet (explicitly CPL-321's own future scope); the real, race |
 | `ISS-2026-132` | Low | `RESOLVED` | Redemption Approval and Fulfillment (CPL-321): a genuine, unassisted customer_user self-service redemption never auto-approves synchronously, regardle |
 | `ISS-2026-133` | Low | `RESOLVED` | Expiry and Fraud Prevention (CPL-322): self-approval not structurally blocked for the same staff member opening AND deciding a case; entitlement-level |
-| `ISS-2026-134` | Low | `OPEN` | Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects c |
+| `ISS-2026-134` | Low | `RESOLVED` | Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects c |
 | `ISS-2026-136` | Low | `RESOLVED` | Liability Reconciliation Analytics (CPL-323): `reward_fulfillment_liability_total` is NOT currency-scoped, unlike the other four liability lines, caus |
 | `ISS-2026-146` | Low | `OPEN` | cross-tenant `tenant_id` disclosure via exception message text, confirmed repository-wide (2,087+ occurrences since Phase 6), reproduced live in Group |
 | `ISS-2026-147` | Low | `RESOLVED` | Batch 3's own two Tier C-disclosed findings (zero test coverage for the 9 `/api/v1` REST route handlers; `IAE-013`'s own per-connector execution-log f |
@@ -3415,7 +3415,7 @@ than a written-out argument list, since the two do not share a signature.
 `npx next build` green. Both primitives and their grants verified live against the hosted project
 before the ruling was written. Freeze db-test digest amended (sixty-eighth pass).
 
-### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, OPEN — item 4's engagement-metrics half only; items 1, 2 and 5 `RESOLVED` 2026-09-02, item 4's schedulable half RESOLVED 2026-08-31, item 3 `RESOLVED` Track B Batch 4, Low)
+### ISS-2026-134 — Liability Reconciliation Analytics (CPL-323): reconciliation is currency-scoped (one run per currency for full multi-currency coverage) and reflects current state only (no point-in-time historical bound); a null `internal_cost` on an open reward-fulfillment redemption contributes 0 with no exception; engagement metrics/reconciliation runs are on-demand/staff-triggered only; no Finance-side liability handoff exists yet (Phase 8, Batch 5, `CG-S13-CPL-025`, RESOLVED 2026-09-03 — all five items closed; item 4's engagement-metrics half last, items 1, 2 and 5 2026-09-02, item 4's schedulable half 2026-08-31, item 3 Track B Batch 4, was Low)
 
 Discovered/disclosed `2026-08-18` at `CG-S13-CPL-025` (Prompt 323, Liability Reconciliation Analytics, the fourth and final prompt of Batch 5) — deliberate scope decisions made while authoring `supabase/migrations/20260801250000_create_customer_portal_loyalty_liability_reconciliation_analytics.sql`, not defects found afterward.
 
@@ -3563,6 +3563,67 @@ currency (JPY) with no approved rate leaves the USD+EUR total unchanged at 155.0
 `status=partial_rate_unavailable`; LYL:View read RPCs and raw-function-grant defense-in-depth are
 proven. **Status now: items 1, 2, 3 and 5 are `RESOLVED` — only item 4's engagement-metrics half
 stays `OPEN`, Low.**
+
+**Item 4 `RESOLVED` — the entry's last open item, `2026-09-03`**
+(`supabase/migrations/20260903150000_close_iss2026134_item4_loyalty_engagement_metrics_snapshot.sql`).
+
+*Why this needed more than a catalogue row, which is why it stayed open through four earlier
+passes.* Item 4's reconciliation half was closeable on 2026-08-31 with a single registration
+because `app.execute_loyalty_liability_reconciliation_run` WRITES a row — scheduling it produces
+a durable artefact. `app.get_loyalty_engagement_metrics` does not: it is `stable`, it computes
+over a caller-supplied window and RETURNS the numbers. Registering that alone would have computed
+a result and discarded it on every fire — a catalogue row that reads as coverage and delivers
+nothing. What item 4 actually needs is the thing a schedule is *for*: a series of dated
+measurements a tenant can look back over. So this pass adds the missing durable half — a
+`app.loyalty_engagement_metric_snapshots` table, an `app.run_loyalty_engagement_metrics_snapshot`
+sweep that persists into it, and an `app.list_loyalty_engagement_metric_snapshots` read — and
+registers **that** as `loyalty_engagement_metrics_snapshot` (catalogue task 23).
+
+*The metric arithmetic is not reimplemented.* The sweep calls `app.get_loyalty_engagement_metrics`
+and stores exactly what it returns, so a stored snapshot cannot drift from what the on-demand read
+reports for the same window; that RPC stays the single definition of every metric, and its LYL:View
+gate, session-identity assertion and outright customer_user rejection are inherited by calling it
+rather than re-asserted here — a duplicated authority check is how two rules drift apart later.
+`window_days` is a REQUIRED catalogue param with no default, for the same reason `currency` is
+required on the liability sibling: the window is the one thing that makes two snapshots comparable
+or not, and silently defaulting it would produce a series whose rows nobody can tell apart.
+`tenant_admin_configurable = true`, unlike that sibling — reconciliation produces the financial
+evidence a certification decision rests on, which is platform governance, while how often a tenant
+measures its own engagement rhythm is that tenant's commercial business.
+
+*How the dispatcher was widened.* `app._run_scheduled_task_once` was reproduced from its CURRENT
+LIVE definition (`pg_get_functiondef` on the hosted project, diffed against the repo's own latest
+definer `20260902221000` and found byte-identical) plus exactly one branch — 22 existing branches
+untouched, 23 after. A 22-branch `CASE` rebuilt by hand is how a branch silently goes missing, and
+the `else` arm would then raise on a task that used to work.
+
+*Two real gate catches, recorded rather than quietly fixed.* The first run failed
+`scripts/db-tests/public-api-wrapper-regression.sql`: both new externally-callable functions had
+no `public.*` wrapper. That check exists for exactly this drift and caught it, and both RGL-394
+Option-2 pass-through wrappers were added. The second failed
+`scripts/db-tests/task-scheduler.sql` in three places at once — a catalogue-count assertion, a
+list-every-available-task assertion, and the loop that proves every catalogue task reaches a real
+dispatch branch, which also needed a `window_days` param supplied for the new task since the
+catalogue genuinely refuses a schedule without one. All four were updated to 23; none was relaxed.
+
+*Regression.* `scripts/db-tests/customer-loyalty-liability-reconciliation.sql` gained two blocks:
+the snapshot equals `app.get_loyalty_engagement_metrics` field-for-field for the same window AND
+matches this fixture's own already-asserted numbers (so a future change to the metric arithmetic
+cannot make both sides agree on the wrong answer); a replayed scheduler fire returns the identical
+stored row rather than a second measurement at a different instant; a different window is a
+genuinely different snapshot; a zero-day window and a blank idempotency key are both refused; a
+Plain User and a customer_user are both denied the sweep AND persist nothing; the read is
+staff-only, window-filterable and refuses a customer_user. The second block proves the catalogue
+row exists with the right delegation/floor/required-param shape and that the dispatcher genuinely
+carries a branch for it. Full `pnpm run db:test`: **ALL PASSED**.
+
+*What this does NOT do, said plainly.* It turns no schedule on. `pg_cron` is still not installed
+on the live project, and `ISS-2026-066` already records that pointing a trigger at
+`app.run_due_scheduled_tasks` is a deliberate operator decision, not a migration's to take. What
+exists now is the mechanism, the catalogue entry, the authority model and the durable artefact —
+the same boundary every sibling sweep in this repository already sits behind, unchanged.
+
+**Status now: all five items `RESOLVED`. Entry `RESOLVED`.**
 
 ### ISS-2026-135 — a third `scripts/db-tests/*.sql` file (`hris-shift-roster-scheduling.sql`) confirmed to belong to the already-registered day-of-week/wall-clock-dependent fixture-flakiness class (`ISS-2026-077`/`103`/`115`) — encountered while re-running the FULL `pnpm run db:test` harness during Batch 5's own Tier C review (Phase 8, Batch 5 Tier C review, `CG-S13-CPL-022..025`, `RESOLVED` 2026-08-23 at `CG-S15-HDN-002`, was Low — pre-existing, unrelated to Batch 5, not fixed there)
 

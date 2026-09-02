@@ -1791,4 +1791,155 @@ begin
   end if;
 end $$;
 
+\echo '>> ISS-2026-134 item 4: app.run_loyalty_engagement_metrics_snapshot persists exactly what app.get_loyalty_engagement_metrics reports for the same window (never a second, drifting computation), is idempotent per (tenant, idempotency_key) so a replayed scheduler fire returns the SAME row rather than a second measurement, a genuinely different window is a genuinely different snapshot, the LYL:View gate is inherited from the metrics RPC itself (a Plain User and a customer_user are both refused), and app.list_loyalty_engagement_metric_snapshots is staff-only and newest-first'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'lra1');
+  v_manager1 uuid := '00000000-0000-0000-0000-000000346001';
+  v_plain1 uuid := '00000000-0000-0000-0000-000000346004';
+  v_customer_alpha uuid := '00000000-0000-0000-0000-000000346010';
+  v_now timestamptz := clock_timestamp() + interval '1 day';
+  v_live record;
+  v_snap app.loyalty_engagement_metric_snapshots;
+  v_replay app.loyalty_engagement_metric_snapshots;
+  v_wide app.loyalty_engagement_metric_snapshots;
+  v_rows integer;
+begin
+  -- The point of the item: a schedule over app.get_loyalty_engagement_metrics alone would
+  -- compute these numbers and discard them. Capture the same window through the sweep and
+  -- prove the stored row IS the read, not a re-derivation that could drift from it.
+  select * into v_live
+  from app.get_loyalty_engagement_metrics(v_tenant1, v_now - interval '400 days', v_now, v_manager1);
+
+  select * into v_snap from app.run_loyalty_engagement_metrics_snapshot(
+    v_tenant1, v_now, 400, v_manager1, 'tester', 'iss134-item4-w400-p1');
+
+  if v_snap.id is null then
+    raise exception 'assertion failed: expected a real persisted snapshot row';
+  end if;
+  if v_snap.window_days <> 400 then
+    raise exception 'assertion failed: expected window_days = 400 stored on the row, got %', v_snap.window_days;
+  end if;
+  if v_snap.active_loyalty_accounts_count <> v_live.active_loyalty_accounts_count
+     or v_snap.points_earned_total <> v_live.points_earned_total
+     or v_snap.points_redeemed_total <> v_live.points_redeemed_total
+     or v_snap.redemption_count <> v_live.redemption_count
+     or v_snap.redemption_rate <> v_live.redemption_rate
+     or v_snap.published_reward_count <> v_live.published_reward_count
+     or v_snap.rewards_with_redemption_count <> v_live.rewards_with_redemption_count then
+    raise exception 'assertion failed: the snapshot disagrees with app.get_loyalty_engagement_metrics for the same window -- snapshot=% live=%',
+      to_jsonb(v_snap), to_jsonb(v_live);
+  end if;
+  -- Anchored to this file's own already-asserted fixture numbers, so a future change to the
+  -- metric arithmetic cannot make both sides agree on the wrong answer.
+  if v_snap.active_loyalty_accounts_count <> 4 or v_snap.points_earned_total <> 800
+     or v_snap.redemption_count <> 1 or v_snap.redemption_rate <> 0.2500 then
+    raise exception 'assertion failed: snapshot did not capture this fixture''s own known engagement numbers, got %', to_jsonb(v_snap);
+  end if;
+
+  -- A replayed scheduler fire for a window already captured returns the SAME row -- not a
+  -- second measurement taken at a different instant, and not a unique-violation.
+  select * into v_replay from app.run_loyalty_engagement_metrics_snapshot(
+    v_tenant1, clock_timestamp() + interval '2 days', 400, v_manager1, 'tester', 'iss134-item4-w400-p1');
+  if v_replay.id <> v_snap.id or v_replay.computed_at <> v_snap.computed_at then
+    raise exception 'assertion failed: expected an idempotent replay to return the identical stored measurement, got a different row';
+  end if;
+  select count(*) into v_rows from app.loyalty_engagement_metric_snapshots
+  where tenant_id = v_tenant1 and idempotency_key = 'iss134-item4-w400-p1';
+  if v_rows <> 1 then
+    raise exception 'assertion failed: expected exactly one row for the replayed key, found %', v_rows;
+  end if;
+
+  -- A different window is a genuinely different measurement, which is why window_days is part
+  -- of the scheduler's own idempotency key rather than the day alone.
+  select * into v_wide from app.run_loyalty_engagement_metrics_snapshot(
+    v_tenant1, v_now, 1, v_manager1, 'tester', 'iss134-item4-w1-p1');
+  if v_wide.id = v_snap.id then
+    raise exception 'assertion failed: a different window must produce its own snapshot row';
+  end if;
+  if v_wide.window_days <> 1 then
+    raise exception 'assertion failed: expected window_days = 1 on the narrow snapshot, got %', v_wide.window_days;
+  end if;
+
+  -- A window shorter than a day is refused rather than silently widened.
+  begin
+    perform app.run_loyalty_engagement_metrics_snapshot(v_tenant1, v_now, 0, v_manager1, 'tester', 'iss134-item4-w0');
+    raise exception 'assertion failed: expected invalid_window for a zero-day window';
+  exception when check_violation then
+    if sqlerrm not like 'invalid_window%' then raise; end if;
+  end;
+
+  -- An empty idempotency key is refused: without one, every fire would be a new measurement.
+  begin
+    perform app.run_loyalty_engagement_metrics_snapshot(v_tenant1, v_now, 30, v_manager1, 'tester', '   ');
+    raise exception 'assertion failed: expected idempotency_key_required for a blank key';
+  exception when check_violation then
+    if sqlerrm not like 'idempotency_key_required%' then raise; end if;
+  end;
+
+  -- Authority is app.get_loyalty_engagement_metrics' own LYL:View gate, inherited rather than
+  -- re-implemented -- so both callers that RPC already refuses are refused here too, and no
+  -- partial row is written for either.
+  begin
+    perform app.run_loyalty_engagement_metrics_snapshot(v_tenant1, v_now, 30, v_plain1, 'tester', 'iss134-item4-plain');
+    raise exception 'assertion failed: expected a Plain User to be denied the snapshot sweep';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform app.run_loyalty_engagement_metrics_snapshot(v_tenant1, v_now, 30, v_customer_alpha, 'tester', 'iss134-item4-customer');
+    raise exception 'assertion failed: expected a customer_user to be denied the snapshot sweep';
+  exception when insufficient_privilege then null;
+  end;
+  select count(*) into v_rows from app.loyalty_engagement_metric_snapshots
+  where tenant_id = v_tenant1 and idempotency_key in ('iss134-item4-plain', 'iss134-item4-customer');
+  if v_rows <> 0 then
+    raise exception 'assertion failed: a denied sweep must persist nothing, found % row(s)', v_rows;
+  end if;
+
+  -- The read side: staff-only, newest-first, and filterable by window so one series can be
+  -- read without the other interleaved into it.
+  select count(*) into v_rows from app.list_loyalty_engagement_metric_snapshots(v_tenant1, v_manager1, null, null, null, 50);
+  if v_rows < 2 then
+    raise exception 'assertion failed: expected at least the two snapshots taken above, got %', v_rows;
+  end if;
+  select count(*) into v_rows from app.list_loyalty_engagement_metric_snapshots(v_tenant1, v_manager1, 400, null, null, 50);
+  if v_rows <> 1 then
+    raise exception 'assertion failed: expected exactly the one 400-day snapshot when filtering by window, got %', v_rows;
+  end if;
+  begin
+    perform app.list_loyalty_engagement_metric_snapshots(v_tenant1, v_customer_alpha, null, null, null, 50);
+    raise exception 'assertion failed: expected a customer_user to be denied the snapshot series -- tenant-internal analytics must not leak through the stored rows either';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+\echo '>> ISS-2026-134 item 4: the scheduler catalogue carries the new task, and app._run_scheduled_task_once genuinely dispatches it -- a catalogue row with no dispatch branch would raise scheduled_task_not_dispatchable at fire time rather than at migration time'
+do $$
+declare
+  v_def app.scheduled_task_definitions;
+begin
+  select * into v_def from app.scheduled_task_definitions where task_code = 'loyalty_engagement_metrics_snapshot';
+  if not found then
+    raise exception 'assertion failed: expected a loyalty_engagement_metrics_snapshot catalogue row';
+  end if;
+  if not v_def.tenant_admin_configurable then
+    raise exception 'assertion failed: expected the engagement-metrics snapshot to be delegable to tenant admins -- measuring its own commercial rhythm is a tenant decision, unlike the liability-reconciliation sibling';
+  end if;
+  if v_def.min_interval_minutes <> 1440 then
+    raise exception 'assertion failed: expected a daily interval floor, got %', v_def.min_interval_minutes;
+  end if;
+  if not (v_def.required_params @> array['window_days']) then
+    raise exception 'assertion failed: window_days must be a REQUIRED param -- a defaulted window produces a series whose rows cannot be told apart, got %', v_def.required_params;
+  end if;
+
+  -- Every catalogue task must have a dispatch branch; this proves the new one does, using the
+  -- same pg_proc read the file's own defense-in-depth checks already use rather than firing a
+  -- real schedule (which would need a live authorized identity and a due timestamp).
+  if (select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = '_run_scheduled_task_once')
+     not like '%loyalty_engagement_metrics_snapshot%' then
+    raise exception 'assertion failed: app._run_scheduled_task_once has no dispatch branch for loyalty_engagement_metrics_snapshot';
+  end if;
+end $$;
+
 \echo '>> ALL PASSED: CPL-323 Liability Reconciliation Analytics'
