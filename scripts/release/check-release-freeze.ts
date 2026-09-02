@@ -3407,7 +3407,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // bodies. Left OPEN, honestly: closure judgement deferred to HDN-386, only rate_type='spot'
   // is read, and no new admin UI was built (one already existed) -- new figures are exposed at
   // the RPC/view/contract layer only, the Operations profitability panel UI itself untouched.
-  migrationSetSha256: "1d295d99d0acb36b226e1c6d592c03deed37cbcba5c7996a3bfc88ab0c85902f",
+  // NINETY-THIRD PASS (2026-09-02, ISS-2026-146 partial closure): 469 files (+6). A new
+  // classifier (scripts/security/classify-tenant-id-error-disclosure.ts) separates genuine
+  // cross-tenant risk from same-tenant/caller-supplied noise: of 1,575 live 'for tenant %'
+  // occurrences, 616 are caller-supplied (safe), 382 already tenant-scoped by their own
+  // lookup (safe), and 561 across 518 distinct functions are genuinely unscoped bare-id
+  // lookups -- the real risk. Fixes 120 of those 518 (Finance 40, HRIS 41, Procurement 20,
+  // Ticketing 8, Platform Core 11, including the exact 4 functions this entry's own live
+  // reproduction named), reusing the ISS-2026-043/048/054 fix shape: fold a tenant-membership
+  // pre-check into the existing not-found branch so a zero-relationship caller gets a generic
+  // not-found instead of a tenant_id-bearing insufficient_authority. 441 of 561 remain open,
+  // precisely disclosed as a continuation of this same pass using the same classifier.
+  migrationSetSha256: "b39666ed041ced11ce0b8536eb2b590332e192e777d0ddce742d76068d0d6370",
+  // History: 1d295d99d0acb36b226e1c6d592c03deed37cbcba5c7996a3bfc88ab0c85902f
+  // (463 files, ISS-2026-197's FX conversion wired into Operations job profitability).
   // History: 535448e97215618d9ed978e54d0464d243305ca2de8a35dfda4a158cc658e216
   // (462 files, ISS-2026-122/129/132/134's staff predicate/reconciliation/handoff/voucher work).
   // History: 360d2de06ce1db681fd3c19495805925cdfd09053d6b28445a3bc03d816738a3
@@ -4074,7 +4087,14 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // pre-existing same-currency jobs proven unaffected (rate=1), and a new USD-quoted/
   // USD-invoiced job proving two genuinely different approved rates apply correctly at two
   // genuinely different dates.
-  dbTestSetSha256: "95a06a4c28504d3bfd36777f99c3be50909d38254d9e100d099f8a4353a5abea",
+  // NINETY-THIRD PASS (2026-09-02, ISS-2026-146): 246 files (+1). New
+  // tenant-id-error-message-redaction.sql (one representative function per module, including
+  // the Platform Core function this entry's own live reproduction named) plus 11 pre-existing
+  // files updated where their own fixtures asserted the now-superseded insufficient_authority
+  // shape for a zero-membership caller against one of the 120 newly-fixed functions.
+  dbTestSetSha256: "5662e5b47a4cbda10a35e24c9085857ebdc8b96e92d2e829c980eb0641e0f7b1",
+  // History: 95a06a4c28504d3bfd36777f99c3be50909d38254d9e100d099f8a4353a5abea
+  // (245 files, ISS-2026-197's job-profitability FX-conversion regression).
   // History: 7671e70d0ba9bb43d0c79af8e20c03684f9e437060e5f2793e480aa9c4e7092f
   // (245 files, ISS-2026-122/129/132/134's regression across three files).
   // History: 0f578386c18a3a72cadd0a31c6e4b0f690837fcaedf21024baa02ce664d96826
