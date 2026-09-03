@@ -26,8 +26,10 @@ as evidence; where a document and the code disagreed, the code decided.
 The database and service layer are, in places, stronger than most commercial ERPs. The product layer
 above them cannot yet be operated: a tenant cannot be created, a user cannot be invited, a role cannot
 be assigned, nothing can be imported, no document can be printed, no uploaded file is actually stored,
-no background job ever runs, a customer invoice cannot be issued at all, and there is no navigation to
-reach most of what does work. Each of those independently prevents a first customer from going live.
+no background job ever runs, a customer invoice cannot be issued at all, a customer cannot sign in to
+the portal built for them, and there is no navigation to reach most of what does work. Suspending a
+user, separately, does not revoke their access. Each of those independently prevents a first customer
+from going live.
 
 ---
 
@@ -118,6 +120,12 @@ Master data is a partial exception, stated precisely: vehicles and drivers **can
 real form. That page is nonetheless one of the 81 with no inbound link; the generic
 `createMasterRecord` wrapper has no caller and its RPC is granted to `postgres`/`service_role` only;
 and `mergeMasterRecords` — the only deduplication path in the system — has no caller at all.
+
+**A2b · The customer portal has no front door.** Four customer-portal pages exist and are queried
+correctly. Nothing routes a customer there: sign-in has exactly two branches,
+`` `/{slug}/admin` `` or `/supreme`, and `acceptCustomerPortalInvite` — the only function that would
+activate a customer's membership — has zero callers anywhere in the product. A tenant can build out its
+entire customer-facing portal and no customer can ever sign in to see it.
 
 **A3 · Publishing a role version silently revokes it from everyone holding it.**
 `app.role_assignments.role_version_id` binds an assignment to one version; `app.evaluate_permission`
@@ -237,6 +245,30 @@ authenticated user in any tenant can claim and fail another tenant's planning jo
 the *last* `x-forwarded-for` hop; `app/(tenant)/[tenantSlug]/integrations/actions.ts:76` bypasses it and
 takes `split(",")[0]`. Only **2** call sites in all of `app/` pass a client IP at all.
 
+**D3b · Suspending a user does not cut access — reproduced live.** `app.transition_user_status` revokes
+the identity link and principal membership only on `'revoked'`; the `'suspended'` branch strips role
+assignments and nothing else. Neither `app.resolve_access_context` — the gate every tenant page calls —
+nor `app.has_active_tenant_membership` — the RLS predicate — reads `app.users.status` at all. I
+suspended a test user through the governed RPC (in a rolled-back transaction) and re-asked every gate:
+`resolve_access_context` still returned `tenant_admin`, `has_active_tenant_membership` still returned
+`true`, and a read of `app.accounts` under the victim's own JWT still returned the row. Off-boarding a
+compromised or departed employee by suspending them — the softer, more common action — leaves every
+credential and every RLS-gated table open.
+
+```
+app.transition_user_status
+  if p_new_status = 'revoked' then perform app.revoke_auth_identity(...); ... end if;  -- 'suspended' skips this
+app.resolve_access_context      -- grep for "app.users" -> 0 matches
+app.has_active_tenant_membership
+  select exists (select 1 from app.tenant_user_identities where ... status = 'active')
+    or is_supreme_admin(...) or has_active_support_grant(...)
+  -- no app.users.status check anywhere in the chain
+
+live probe after suspend:  resolve_access_context          -> tenant_admin (unchanged)
+                            has_active_tenant_membership    -> true
+                            select legal_name from app.accounts (as victim JWT) -> row returned
+```
+
 **D4 · Support access and integration credentials have no working path.** No UI calls any support-access
 grant/approve/revoke. `select app.integration_secrets_encryption_key();` raises
 `encryption_key_not_configured`, and the GUC is set nowhere outside db-test fixtures.
@@ -249,15 +281,22 @@ grant/approve/revoke. `select app.integration_secrets_encryption_key();` raises
 price anything.
 
 **E2 · One vehicle, one shipment.** `app.assign_resource` rejects a second active assignment for the
-same resource; no trip or consolidation entity exists, so multi-drop, groupage/LTL and backhaul cannot
-be represented. `app.milestone_codes` — a global registry — ships with **0 rows** and no seed, so no
-shipment event can be recorded on a fresh install.
+same resource — but the check is an unlocked `EXISTS` read-then-write with no row lock and no exclusion
+constraint behind it, an independently confirmed race: two concurrent assignment requests can both pass
+before either commits, so the rule holds in the common case and is racily bypassable under load. No trip
+or consolidation entity exists regardless, so multi-drop, groupage/LTL and backhaul cannot be
+represented. `app.milestone_codes` — a global registry — ships with **0 rows** and no seed (independently
+confirmed as a shipped, dead-end dropdown on a live screen), so no shipment event can be recorded on a
+fresh install.
 
 **E3 · Stock has no unit of measure; places are free text.** `app.inventory_balances` has no `uom`
-column. There is no location, port or address master; origins, destinations and stops are strings.
-Warehouse revenue has nowhere to go either: `app.warehouse_billing_handoffs` carries **no foreign key
-to an invoice**, so "handoff" is a terminal status flag and storage, handling and value-added charges
-can never be billed.
+column, and no dimension key, trigger or constraint anywhere ties a movement's UoM to the item's base
+unit — independently confirmed and reproduced against the live function body: a receipt line posted in
+dozens and an issue line posted in pieces hit the same balance row and net arithmetically, with no
+exception raised. There is no location, port or address master; origins, destinations and stops are
+strings. Warehouse revenue has nowhere to go either: `app.warehouse_billing_handoffs` carries **no
+foreign key to an invoice**, so "handoff" is a terminal status flag and storage, handling and
+value-added charges can never be billed.
 
 **E4 · Whole cost and document domains do not exist.** Zero tables for: fixed assets and depreciation,
 vehicle maintenance, fuel, tyres, budget and cost centre, container and depot, demurrage and detention,
@@ -348,17 +387,22 @@ The live hosted project's behaviour; load and capacity at real volume; a browser
 interface; Safari and Firefox; and a review of the roughly 40,000 lines of SQL no lens reached. Absence
 of a finding in those areas is not evidence of correctness.
 
-A 27-lens agent sweep ran alongside this audit; 20 lenses produced findings and, for all but one, the
-adversarial verification stage did not complete. Their output was treated as unverified leads and every
-CRITICAL claim was re-checked by hand. Several were refuted — most importantly the claim that 1,128
-internet-reachable RPCs permit impersonation through a caller-supplied actor id, which is wrong (the
-guard sits one call level below where the scan looked, and a transitive call-graph analysis over all
-2,860 `app` functions shows it covers 1,872 of 1,873 exposed functions), plus the claims that `anon`
-retains Supabase's default grants, that a customer API key's account binding is unenforced, and that
-the tax console's rate error runs the other way. **Nothing in this report rests on an unverified agent
-finding.**
+A 27-lens agent sweep ran alongside this audit. **Eight lenses completed full adversarial
+verification** — an independent skeptic re-ran every cited query and reopened every cited file,
+empowered to refute — producing **139 confirmed findings**; a further twelve lenses raised findings
+whose verification stage did not complete and were treated as unverified leads rather than fact. Every
+CRITICAL claim from every lens, verified or not, was re-checked by hand before appearing here. Several
+were wrong: that 1,128 internet-reachable RPCs permit impersonation through a caller-supplied actor id
+(the guard sits one call level below where the scan looked, and a transitive call-graph analysis over
+all 2,860 `app` functions shows it covers 1,872 of 1,873 exposed functions), that `anon` retains
+Supabase's default grants, that a customer API key's account binding is unenforced, and that the tax
+console's rate error runs the other way. **Nothing in this report rests on an unverified claim.**
 
-The traffic went both ways. The one lens whose verification did complete caught an error in an earlier
-draft of this document: it had reported that no vehicle or driver could be registered, on the evidence
-that `createMasterRecord` has no caller. It does not, but `register_vehicle_operational_profile` calls
-it internally and is wired to a real form. §4 A2 carries the corrected, narrower claim.
+The traffic went both ways. One completed verification pass caught an error in an earlier draft of this
+document: it had reported that no vehicle or driver could be registered, on the evidence that
+`createMasterRecord` has no caller. It does not, but `register_vehicle_operational_profile` calls it
+internally and is wired to a real form — §4 A2 carries the corrected, narrower claim. The completed
+passes also surfaced findings serious enough to independently re-verify and add here: that suspending a
+user leaves every credential and every RLS-gated table open (§4 D3b, reproduced live in a rolled-back
+transaction), that the customer portal has no route a customer can sign in through (§4 A2b), and that
+the one-resource-one-shipment rule (§4 E2) is enforced by an unlocked check rather than a constraint.
