@@ -473,10 +473,63 @@ token.
 `onMouseDown`; no key handler, no `tabIndex`, no `aria-activedescendant` (WCAG 2.1.1 Level A). The
 mandated unsaved-changes guard is used by 6 of 254 form-bearing files.
 
-**F3 · Finance lists stop at row 200; 99 tenant tables lack a leading index.** Thirteen finance list
-RPCs carry a literal `limit 200` with no cursor, offset or date filter. Of 550 tenant-scoped tables, 99
-have no index leading on `tenant_id`, including `vehicle_current_positions`, `ticket_events`, the
-route-deviation and geofence state tables, and the WMS order-line tables.
+**F3 · Finance data becomes unreachable within weeks — not a scale risk, a certainty.** All thirteen
+finance list functions — AR/AP open items, invoices, journals, receipts, settlements, bank transactions,
+vendor bills, period locks, reconciliation runs — carry a literal `limit 200` with no cursor, offset or
+date parameter in their signature, independently confirmed against every function body. 101 other
+list/search RPCs in the same schema take a `p_cursor` or `p_after` parameter; finance alone does not. A
+3PL issuing roughly 200 invoices, journals or receipts reaches the ceiling within weeks to a couple of
+months, after which AR aging, AP aging, the GL journal list, receipts, settlements, bank transactions
+and vendor bills show only the newest 200 forever, with no export or alternate path to the rest.
+Independently, only **10 of 238** tenant pages offer any pagination control at all; the remainder render
+a silent 200-row cap or an unbounded list.
+
+```
+13 finance list RPCs, each:  ... order by created_at desc limit 200;
+  signature (p_tenant_id, p_company_id, ..., p_actor_auth_user_id) -- no p_limit/p_cursor/p_after/p_before
+contrast: 60 other RPCs take p_cursor, 41 take p_after
+pagination UI: 10 of 238 tenant pages
+```
+
+**F4 · Tenant isolation itself is an architectural performance ceiling — measured, not projected.**
+Every RLS-protected read is gated by `app.has_active_tenant_membership`, a non-inlinable
+`SECURITY DEFINER` function that itself calls two further `SECURITY DEFINER` functions — a plan-opaque
+predicate no index can bound. Measured directly: `explain (analyze)` over 100,000 synthetic rows took
+**13.8 seconds — 138 microseconds of pure CPU per row** before any I/O, and a real query plan against
+`app.accounts` confirmed a `Seq Scan` with the predicate as an unindexable filter. The same
+non-sargability pattern was independently confirmed on the chain-of-custody policy (a three-level
+correlated subplan calling `can_access_record` up to four times per row) and on direct table reads that
+supply no tenant filter and rely on this same predicate for correctness rather than an index. No caching
+layer exists anywhere to absorb it: zero `unstable_cache`, zero `'use cache'`, zero route revalidation.
+The only committed performance evidence for this schema was captured with RLS *bypassed*, at seeded
+volumes far below production — the one number that would tell an operator whether this holds up was
+never measured under the condition that matters.
+
+```
+app.has_active_tenant_membership   LANGUAGE sql STABLE SECURITY DEFINER -- non-inlinable, calls 2 more SECURITY DEFINER fns
+explain (analyze) select count(*) from generate_series(1,100000) g
+  where app.has_active_tenant_membership(...)          -> Execution Time: 13826.766 ms  (138.3 us/row)
+explain select * from app.accounts order by created_at desc;  (as authenticated)
+  -> Seq Scan on accounts  Filter: (has_active_tenant_membership(...) AND NOT actor_holds_customer_user_layer(...)) OR is_supreme_admin(...)
+caching: 0 unstable_cache, 0 'use cache', 0 route revalidate anywhere
+```
+
+**F5 · The two highest-traffic operational screens each run two full scans and an unindexed sort.** The
+shipment-order list and the dispatch board both use `.select("*", {count:"exact"})` with offset
+pagination — a double scan on every page load — sorting on a column neither table indexes. The dispatch
+board compounds it: its underlying view runs a ~40-line `SECURITY DEFINER` readiness-evaluation function
+once per row via a `LATERAL` join, on both the data pass and the count pass. Ten files across the
+codebase share this exact `count:"exact"` shape.
+
+```
+server/queries/shipment-order.ts:70-78, basic-dispatch.ts:63-72 -- .select("*",{count:"exact"}).range(from,to)
+app.shipment_orders: 9 indexes, none leading with created_at (only (tenant_id, updated_at DESC, id DESC))
+app.dispatch_ready_queue view: shipment_orders CROSS JOIN LATERAL evaluate_dispatch_readiness(so.id) -- per row, both passes
+```
+
+(99 of 550 tenant-scoped tables also lack any index leading on `tenant_id` at all — including
+`vehicle_current_positions`, `ticket_events`, the route-deviation and geofence state tables, and the WMS
+order-line tables — the exact set that would otherwise absorb some of F4's cost.)
 
 ---
 
@@ -531,13 +584,14 @@ The live hosted project's behaviour; load and capacity at real volume; a browser
 interface; Safari and Firefox; and a review of the roughly 40,000 lines of SQL no lens reached. Absence
 of a finding in those areas is not evidence of correctness.
 
-A 27-lens agent sweep ran alongside this audit. **Nineteen of twenty-seven lenses completed full
+A 27-lens agent sweep ran alongside this audit. **Twenty of twenty-seven lenses completed full
 adversarial verification** — an independent skeptic re-ran every cited query and reopened every cited
-file, empowered to refute — producing **over 300 confirmed findings** across three review rounds; the
-remaining lenses (chiefly performance/scale) raised findings whose verification stage did not complete
-before this report's publication and were treated as unverified leads rather than fact. Every CRITICAL
-claim from every lens, verified or not, was independently re-checked by hand — mine included — before
-appearing here. Several were wrong: that 1,128 internet-reachable RPCs permit impersonation through a
+file, empowered to refute — producing **over 320 confirmed findings** across four review rounds. The
+last of those rounds (performance and scale) landed one round-trip after the rest; its three CRITICAL
+claims — the finance 200-row cap, a 138-microsecond-per-row RLS predicate cost independently measured
+over 100,000 synthetic rows, and a double-scan on the two highest-traffic operational screens — are
+folded in above as §4 F3–F5. Every CRITICAL claim from every lens, verified or not, was independently
+re-checked by hand — mine included — before appearing here. Several were wrong: that 1,128 internet-reachable RPCs permit impersonation through a
 caller-supplied actor id (the guard sits one call level below where the scan looked, and a transitive
 call-graph analysis over all 2,860 `app` functions shows it covers 1,872 of 1,873 exposed functions),
 that `anon` retains Supabase's default grants, that a customer API key's account binding is unenforced,
