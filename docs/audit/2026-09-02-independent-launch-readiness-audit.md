@@ -21,15 +21,24 @@ as evidence; where a document and the code disagreed, the code decided.
 
 ## 1. Verdict
 
-**Not ready for a paying customer.**
+**On the evidence available, no tenant page has ever loaded for a real signed-in user against the live
+hosted project.**
 
-The database and service layer are, in places, stronger than most commercial ERPs. The product layer
-above them cannot yet be operated: a tenant cannot be created, a user cannot be invited, a role cannot
-be assigned, nothing can be imported, no document can be printed, no uploaded file is actually stored,
-no background job ever runs, a customer invoice cannot be issued at all, a customer cannot sign in to
-the portal built for them, and there is no navigation to reach most of what does work. Suspending a
-user, separately, does not revoke their access. Each of those independently prevents a first customer
-from going live.
+Every server-side data read in this codebase — 163 call sites — is a Supabase `.from("table")` call
+against tables that exist only in schema `app`. The hosted project exposes only `public` and
+`graphql_public` to its Data API, confirmed live against the real deployed project in the repository's
+own build log. Every one of those 163 reads, including the tenant-slug lookup every tenant, customer
+portal and login guard performs first, has no target and returns nothing. No test in the repository
+catches this: the SQL suite talks to Postgres directly and every E2E spec runs against a backend the
+tests themselves call "unreachable." This is not a missing feature — it is the mechanism every other
+finding in this report assumes still works. See §4 Ø for the full evidence.
+
+Underneath that: the database and service layer are, in places, stronger than most commercial ERPs. The
+product layer built on top of it cannot be operated even once the read path is fixed — a tenant cannot
+be created, a user cannot be invited, a role cannot be assigned, nothing can be imported, no document
+can be printed, no uploaded file is actually stored, no background job ever runs, a customer invoice
+cannot be issued, and even a genuine customer account is independently locked out by its own RLS
+policy. Each of these is independently sufficient to block a first customer from going live.
 
 ---
 
@@ -98,6 +107,61 @@ UI was deferred "to a later, separately-scoped slice", and that slice was never 
 
 ## 4. Findings
 
+### Ø — The defect every other finding sits on top of
+
+Verified independently of the sweep that first surfaced it: read the client factories, queried the live
+schema directly, and cross-checked against the repository's own prior incident record for the RPC half
+of this exact bug class.
+
+**Ø1 · Every table read targets a schema the Data API does not expose.** Four tenant-resolution guards —
+the admin portal, the customer portal, the customer ticket portal, and login/session registration itself
+— call `supabase.from("tenants").select(...)` on the RLS-scoped client with no schema override anywhere
+in the client factory. Live: schema `public` holds exactly two base tables and zero views, neither named
+`tenants`; every one of the 106 distinct table names referenced across 163 `.from()` call sites in this
+codebase exists only in schema `app`. `supabase/config.toml` exposes only `public, graphql_public` — and
+the repository's own remediation record for the closely related RPC version of this bug
+(`docs/build-log/release-go-live/RGL-BLK-002-OPTION2-REMEDIATION.md`) confirms this is not a
+local-template artefact: it was reproduced with `curl` against the real hosted project
+(`awdlicmwzdxquopwtcfd`) and its exact `db_schema` setting. That remediation built a `public.*` wrapper
+function for every externally-called RPC — it did not, and structurally cannot without becoming a second
+full schema, cover a direct `.from()` table read. Those 163 call sites, this codebase's entire read
+path, were never touched by it.
+
+```
+public schema:  2 base tables (raw_mutation_tripwire_log, security_state_snapshots), 0 views — no "tenants"
+supabase/config.toml:13   schemas = ["public", "graphql_public"]
+
+RGL-BLK-002-OPTION2-REMEDIATION.md — live against the real hosted project (awdlicmwzdxquopwtcfd):
+  POST /rest/v1/rpc/ping                (no override)   -> 404 PGRST202
+  POST /rest/v1/rpc/ping  Accept-Profile: app            -> 406 PGRST106 "Invalid schema: app"
+  "app was never exposed to PostgREST ... every single server-side RPC call this application makes
+   has been unreachable via the Data API since the first client factory was written, entirely
+   invisible to this build's own test suite" -- confirmed true of every .rpc() call; the wrapper
+   fix that followed covers RPCs only
+
+lib/portal/tenant-admin-guard-deps.server.ts:26      supabase.from("tenants").select(...)
+lib/portal/customer-portal-guard-deps.server.ts:23   supabase.from("tenants").select(...)
+lib/portal/customer-ticket-guard-deps.server.ts:23   supabase.from("tenants").select(...)
+lib/auth/register-login-session-deps.server.ts:21    supabase.from("tenants").select(...)
+
+grep -rn '\.from("' lib server app components  ->  163 call sites, 70 files, 106 distinct tables, 0 in "public"
+```
+
+**Ø2 · Fixing the schema exposure would not fix the customer portal — its own RLS policy locks customers
+out by construction.** The sole policy on `app.tenants` is
+`(app.has_active_tenant_membership(id) AND (NOT app.actor_holds_customer_user_layer(id)))`.
+`actor_holds_customer_user_layer` is true exactly for the population the customer portal serves — a
+customer account holder — which makes the policy's own `AND NOT` clause false for every genuine
+customer, deterministically, not merely as an observed empirical outcome. This is independent of Ø1:
+even a correctly schema-routed client, running as a real customer, is denied by the database itself
+before RLS ever reaches a row.
+
+```
+tenants_select_own_tenant | SELECT | (app.has_active_tenant_membership(id) AND (NOT app.actor_holds_customer_user_layer(id)))
+  -- true for a customer_user membership == the AND NOT clause is false == zero rows, always
+supabase/migrations/20260730560000_harden_customer_user_layer_default_deny.sql:325-326
+```
+
 ### A — The product cannot be operated
 
 **A1 · There is no navigation.** `app/(public)/login/actions.ts:66` sends every tenant user to
@@ -121,11 +185,26 @@ real form. That page is nonetheless one of the 81 with no inbound link; the gene
 `createMasterRecord` wrapper has no caller and its RPC is granted to `postgres`/`service_role` only;
 and `mergeMasterRecords` — the only deduplication path in the system — has no caller at all.
 
-**A2b · The customer portal has no front door.** Four customer-portal pages exist and are queried
-correctly. Nothing routes a customer there: sign-in has exactly two branches,
-`` `/{slug}/admin` `` or `/supreme`, and `acceptCustomerPortalInvite` — the only function that would
-activate a customer's membership — has zero callers anywhere in the product. A tenant can build out its
-entire customer-facing portal and no customer can ever sign in to see it.
+**A2b · The customer portal has no front door — and, separately, no vendor portal exists at all.**
+Thirty customer-portal pages and twelve action modules exist and are queried correctly (see §4 Ø2 for
+the RLS lockout underneath them). Nothing routes a customer there: sign-in has exactly two branches,
+`` `/{slug}/admin` `` or `/supreme`. `acceptCustomerPortalInvite` and
+`grantInitialCustomerPortalAccountAdmin` — the only two functions that could ever activate a customer's
+membership, the second explicitly written as the one deliberate bootstrap exception — both have zero
+callers anywhere in the product. A tenant can build its entire customer-facing portal and no customer
+can ever sign in to see it, then create the first account admin who could invite anyone else.
+Subcontracted carriers fare worse: there is no vendor principal layer at all —
+`principal_memberships_layer_check` allows only `supreme_admin | tenant_admin | org_user | customer_user`
+— so a vendor's only access to the platform is an API key someone hands them out of band; the
+repository's own build status discloses the vendor portal as permanently `BLOCKED`.
+
+```
+login/actions.ts:66   const target = tenantSlug ? `/${tenantSlug}/admin` : "/supreme";   -- no third branch
+acceptCustomerPortalInvite               UI callers: 0
+grantInitialCustomerPortalAccountAdmin   UI callers: 0
+principal_memberships_layer_check   CHECK (layer = ANY (ARRAY['supreme_admin','tenant_admin','org_user','customer_user']))
+CARGOGRID_BUILD_STATUS.md:1008   "CG-S11-PRC-018 (Optional Vendor Portal) remains BLOCKED, disclosed not silently dropped."
+```
 
 **A3 · Publishing a role version silently revokes it from everyone holding it.**
 `app.role_assignments.role_version_id` binds an assignment to one version; `app.evaluate_permission`
@@ -151,11 +230,14 @@ migration — on a serverless deploy target with no long-lived host.
 `20260831090000_create_tenant_configurable_task_scheduler.sql:534` says "Nothing calls this
 automatically yet."
 
-**A6 · Uploading a file stores no file.** No migration creates a Storage bucket or `storage.objects`
-policy; no code calls `.storage.from()`, `.upload()` or `createSignedUrl()`.
-`server/mutations/document.ts:141`: *"content bytes are never stored here"*. `recordFileScanResult` and
-`authorizeFileAccess` have zero callers, so nothing is ever marked clean and nothing can be served
-back — while seven UI panels render a file input.
+**A6 · Uploading a file stores no file, and the scan gate deadlocks flows that are otherwise fully
+wired.** No migration creates a Storage bucket or `storage.objects` policy; no code calls
+`.storage.from()`, `.upload()` or `createSignedUrl()`. `server/mutations/document.ts:141`:
+*"content bytes are never stored here"*. Every upload is inserted with `malware_scan_status='pending'`,
+and `recordFileScanResult` — the only function that ever advances that status — has zero production
+callers, so no file ever leaves `pending`. This is not latent: **57 functions** gate on that column, and
+at least three fully-wired flows hard-fail on it every time — vendor compliance document submission,
+ticket-reply attachments, and any shipment whose mandatory document checklist pins a required file.
 
 **A7 · No printable document of any kind exists.** `package.json` carries no PDF/print/document
 library. No invoice, faktur pajak, delivery order, surat jalan, packing list, POD or purchase order can
@@ -206,10 +288,26 @@ price, amount or currency at all.
 `app.check_customer_credit` never reads AR open items, so credit control cannot compute exposure, and
 no order-acceptance path calls it.
 
-**B8 · Numbering collides in a multi-company tenant; the company key is unvalidated.** Counters are
-unique on `(tenant_id, COALESCE(company_id,…), year)` while invoice numbers are unique on
-`(tenant_id, invoice_number)`. `finance_journals_company_id_fkey` is a plain single-column FK to
-`app.org_units(id)`; there is not one composite `(tenant_id, org_unit)` FK in the finance schema.
+**B8 · The finance company_id dimension is caller-supplied and validated nowhere — an ordinary user can
+plant a foreign-tenant reference.** At least eight reachable finance RPCs, including
+`create_finance_journal_draft`, insert the caller's `p_company_id` straight into a financial record
+after checking tenant authority and line-level account scoping but never once checking that the company
+itself belongs to the caller's tenant or is even a company-type org unit. Every `company_id` foreign key
+in the finance schema is a plain single-column reference to `app.org_units(id)`; there is no composite
+`(tenant_id, org_unit)` key anywhere, and no trigger fills the gap. Number counters compound it: they
+run one sequence per company per year while invoice numbers are unique only per tenant, so a second
+company's first invoice of a year collides with the first company's. Both are reachable by an ordinary
+`FIN:Edit` user in their own tenant, not an admin, independent of any UI gap.
+
+```
+create_finance_journal_draft — tenant_id and FIN:Edit checked; each line's account tenant-filtered;
+  insert into app.finance_journals (tenant_id, company_id, ...) values (p_tenant_id, p_company_id, ...)
+  -- p_company_id: zero lookup, no trigger on finance_journals validates it
+18 FKs of the form  FOREIGN KEY (company_id) REFERENCES app.org_units(id)   -- no tenant predicate
+org_units: 0 (tenant_id, id) unique index · org_units_unit_type_check allows company|branch|department|business_unit|team
+finance_invoice_number_counters_scope_unique  (tenant_id, COALESCE(company_id,'000...0'), year)
+finance_invoices_tenant_number_unique         (tenant_id, invoice_number)
+```
 
 ### C — Indonesia
 
@@ -267,6 +365,52 @@ app.has_active_tenant_membership
 live probe after suspend:  resolve_access_context          -> tenant_admin (unchanged)
                             has_active_tenant_membership    -> true
                             select legal_name from app.accounts (as victim JWT) -> row returned
+```
+
+**D3c · The session cookie ships readable by JavaScript and lasts 400 days — the exact inverse of the
+repo's own tested contract.** The repo's own cookie-attribute module states the requirement plainly:
+*"httpOnly: always true — a session cookie must never be readable from client-side JavaScript."* The
+installed `@supabase/ssr` library's own default options set `httpOnly:false` and a 400-day `maxAge`,
+force-resetting `maxAge` even when a caller supplies one. The client factory's cookie-write callback
+spreads the library's options object *last* — `{...sessionCookieOptions, ...options}` — so the
+library's insecure defaults win over the app's own correct ones on every cookie this app sets. No test
+catches it: the existing unit test asserts only the pure options-builder function's return value, never
+the actual composition that runs in `server.ts`. No known live XSS vector exists in the codebase today
+— a mitigating fact, not an exculpatory one, since any future injection point would immediately
+weaponize a JS-readable, 400-day session credential.
+
+```
+session-cookie-options.ts   "httpOnly: always true -- a session cookie must never be readable
+                              from client-side JavaScript (XSS exfiltration resistance)."
+@supabase/ssr@0.12.3 constants.js
+  DEFAULT_COOKIE_OPTIONS = { path:'/', sameSite:'lax', httpOnly:false, maxAge: 400*24*60*60 }
+  applyServerStorage: { ...DEFAULT_COOKIE_OPTIONS, ...cookieOptions, maxAge: DEFAULT_COOKIE_OPTIONS.maxAge }
+lib/supabase/server.ts:45   setAll: (name, value, options) =>
+                               cookieStore.set(name, value, { ...sessionCookieOptions, ...options })
+                               -- "options" (the library's) spread LAST, wins on httpOnly and maxAge
+session-cookie-options.test.ts   asserts only buildSessionCookieOptions()'s return value, never server.ts's composition
+```
+
+**D3d · An enqueued background job can leak another tenant's credentials and data — reproduced live end
+to end.** `public.enqueue_job` is a thin `SECURITY DEFINER` pass-through to `app.enqueue_job`, both
+callable by any `authenticated` session; the only gates are that the actor equals the session identity
+and holds membership in whatever tenant the caller names — nothing validates any id the caller embeds
+inside the JSON payload. A fresh fixture built in a rolled-back transaction, called as a genuine
+authenticated session with an arbitrary foreign `connection_id` in the payload, returned a real
+`status='pending'` job naming that foreign id, no error. Four of the five workers that later process
+such a job — external sync, notification delivery, logistics-partner sync, finance bank-feed sync —
+resolve the connection or notification from the payload and then read or dispatch under *its* tenant,
+never comparing that tenant back to the job's own; only the webhook worker checks. The precondition
+this needs (job reachability) is proven live, not assumed.
+
+```
+public.enqueue_job / app.enqueue_job — SECURITY DEFINER, EXECUTE granted to authenticated
+  gates: assert_actor_is_session_identity(actor) + has_active_tenant_membership(caller's own p_tenant_id)
+  -- zero validation of any id inside p_payload
+live exploit, rolled back: enqueue_job('<own tenant>','external_sync','{"connection_id":"<foreign uuid>",...}',...)
+  -> real job row returned, status='pending', naming the foreign connection_id, no error
+4 of 5 workers: resolve connection/notification from payload, dispatch/record under ITS tenant,
+  never compare to job.tenantId -- only lib/webhooks/process-webhook-delivery-job.server.ts:103-108 checks
 ```
 
 **D4 · Support access and integration credentials have no working path.** No UI calls any support-access
@@ -387,16 +531,21 @@ The live hosted project's behaviour; load and capacity at real volume; a browser
 interface; Safari and Firefox; and a review of the roughly 40,000 lines of SQL no lens reached. Absence
 of a finding in those areas is not evidence of correctness.
 
-A 27-lens agent sweep ran alongside this audit. **Eight lenses completed full adversarial
-verification** — an independent skeptic re-ran every cited query and reopened every cited file,
-empowered to refute — producing **139 confirmed findings**; a further twelve lenses raised findings
-whose verification stage did not complete and were treated as unverified leads rather than fact. Every
-CRITICAL claim from every lens, verified or not, was re-checked by hand before appearing here. Several
-were wrong: that 1,128 internet-reachable RPCs permit impersonation through a caller-supplied actor id
-(the guard sits one call level below where the scan looked, and a transitive call-graph analysis over
-all 2,860 `app` functions shows it covers 1,872 of 1,873 exposed functions), that `anon` retains
-Supabase's default grants, that a customer API key's account binding is unenforced, and that the tax
-console's rate error runs the other way. **Nothing in this report rests on an unverified claim.**
+A 27-lens agent sweep ran alongside this audit. **Nineteen of twenty-seven lenses completed full
+adversarial verification** — an independent skeptic re-ran every cited query and reopened every cited
+file, empowered to refute — producing **over 300 confirmed findings** across three review rounds; the
+remaining lenses (chiefly performance/scale) raised findings whose verification stage did not complete
+before this report's publication and were treated as unverified leads rather than fact. Every CRITICAL
+claim from every lens, verified or not, was independently re-checked by hand — mine included — before
+appearing here. Several were wrong: that 1,128 internet-reachable RPCs permit impersonation through a
+caller-supplied actor id (the guard sits one call level below where the scan looked, and a transitive
+call-graph analysis over all 2,860 `app` functions shows it covers 1,872 of 1,873 exposed functions),
+that `anon` retains Supabase's default grants, that a customer API key's account binding is unenforced,
+and that the tax console's rate error runs the other way. The most consequential finding in this
+report — §4 Ø, the schema-exposure defect underneath everything else — was additionally re-derived from
+scratch: every client factory read directly, the live schema queried independently, and the result
+cross-checked against the repository's own prior incident record for the closely related RPC half of
+the same bug class before it was accepted. **Nothing in this report rests on an unverified claim.**
 
 The traffic went both ways. One completed verification pass caught an error in an earlier draft of this
 document: it had reported that no vehicle or driver could be registered, on the evidence that
