@@ -33,8 +33,8 @@ export interface ResolvedAccessContextResult {
 export interface TenantAdminGuardDeps {
   /** Resolves to the authenticated principal's `auth.users.id`, or `null` if unauthenticated. Backed by `supabase.auth.getUser()` (RLS-scoped client) -- never `getSession()`, which does not revalidate the JWT server-side. */
   getCurrentUserId(): Promise<string | null>;
-  /** Resolves the tenant by slug through the RLS-scoped client (`app.tenants`'s own `tenants_select_own_tenant` policy, PLT-113) -- returns `null` for both "does not exist" and "caller is not a member," deliberately not distinguished (no tenant-enumeration signal, the same posture `app.resolve_tenant_by_domain` already established). */
-  findTenantBySlug(slug: string): Promise<TenantLookupResult | null>;
+  /** Resolves the tenant by slug via `app.resolve_tenant_by_slug_for_actor` (CG-AUDIT-2026-09-02 Ø1 -- schema `app` is not exposed to PostgREST, so this can no longer be a `.from("tenants")` query; the RPC mirrors `app.tenants`'s own `tenants_select_own_tenant` policy, PLT-113, exactly). Returns `null` for "does not exist," "caller is not an active member," and "caller is a customer_user-layer member" alike, deliberately not distinguished (no tenant-enumeration signal, the same posture `app.resolve_tenant_by_domain` already established). `authUserId` is the caller-supplied actor id the RPC asserts against the real session identity server-side. */
+  findTenantBySlug(slug: string, authUserId: string): Promise<TenantLookupResult | null>;
   /** Calls `app.resolve_access_context` via the service-role client (PLT-108) -- `service_role`-only, the actor's id is passed explicitly rather than inferred from RLS context. Returns `null` if no active membership exists for this (authUserId, tenantId) pair. */
   resolveAccessContext(authUserId: string, tenantId: string): Promise<ResolvedAccessContextResult | null>;
 }
@@ -54,7 +54,7 @@ export async function resolveTenantAdminAccess(deps: TenantAdminGuardDeps, tenan
     return { status: "unauthenticated" };
   }
 
-  const tenant = await deps.findTenantBySlug(tenantSlug);
+  const tenant = await deps.findTenantBySlug(tenantSlug, authUserId);
   if (!tenant) {
     return { status: "tenant_not_found_or_not_member" };
   }
