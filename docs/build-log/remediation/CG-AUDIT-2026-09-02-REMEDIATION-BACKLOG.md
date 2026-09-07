@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | TODO | |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | TODO | |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | TODO (recon in progress) | |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `DEFERRED_LARGE` (recon complete) | |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -132,3 +132,12 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 - 2026-09-06 — Ø1-tenant-admin closed (`80b81ce`). See that commit for full gate evidence.
 - 2026-09-07 — this document created; declaring backlog-remediation mode; beginning B1.
+- 2026-09-07 — Ø1-query-layer recon complete (8-cluster parallel sweep, 158 call sites across
+  66 files, `CG-AUDIT-2026-09-02-O1-QUERY-LAYER-RECON.json`): **154 need a brand-new `app.*` +
+  `public.*` SECURITY DEFINER function authored from scratch, 3 unclear, only 1 swappable onto an
+  existing RPC.** This confirms Ø1-query-layer is genuinely `CODE-BIG` — realistically dozens of
+  small, individually-verified migrations (each new function mirroring the correct tenant/RLS/
+  authority semantics for its table, adversarially checked, one or a few per commit), not a single
+  session's work. Dispositioned `DEFERRED_LARGE` with the recon itself as the scoped starting point
+  for that follow-up effort; the classification file names every call site so no further rediscovery
+  is needed before starting.
