@@ -5,5 +5,11 @@
       "main": false
     }
   },
-  "ignoreCommand": "node --experimental-strip-types scripts/release/check-go-decision.ts"
+  "ignoreCommand": "node --experimental-strip-types scripts/release/check-go-decision.ts",
+  "crons": [
+    {
+      "path": "/api/cron/supervisor-tick",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }

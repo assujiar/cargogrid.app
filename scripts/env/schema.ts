@@ -96,6 +96,14 @@ export const ENV_REGISTRY: readonly EnvVarDefinition[] = [
     description: "Canonical site URL used for auth redirect allow-listing and constructing links in emails.",
     schema: urlSchema,
   },
+  {
+    name: "CRON_SECRET",
+    classification: "secret",
+    description:
+      "Shared secret app/api/cron/supervisor-tick/route.ts requires as `Authorization: Bearer <value>` (CG-AUDIT-2026-09-02 A5) — Vercel sends this header automatically once the variable is set on the project, per Vercel's own Cron Jobs contract. Required only in production today: that is the one tier vercel.json's crons entry actually targets.",
+    schema: z.string().min(1, "must not be empty"),
+    requiredIn: ["production"],
+  },
 ] as const;
 
 /** Fails loudly at module-load time if a `secret`-classified variable is misdeclared with the NEXT_PUBLIC_ prefix — the one static leak-check we can perform before a real bundler exists (Phase 1). */

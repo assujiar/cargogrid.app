@@ -125,6 +125,14 @@ export const PHASE_0_REGISTRY: readonly ClassificationEntry[] = [
     owner: "Platform/Security",
     description: "Supabase service-role key (scripts/env/schema.ts) — server-only, never sent to the browser bundle.",
   },
+  {
+    id: "env:CRON_SECRET",
+    category: "security_credential",
+    level: "credential",
+    owner: "Platform/Security",
+    description:
+      "Shared secret (scripts/env/schema.ts) authorizing Vercel Cron to invoke app/api/cron/supervisor-tick/route.ts (CG-AUDIT-2026-09-02 A5) — server-only, compared with a constant-time check, never logged.",
+  },
 ];
 
 /**

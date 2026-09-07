@@ -100,7 +100,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | **DONE** | (this commit) |
 | F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | **DONE** | (this commit) |
 | F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | **DONE** | (this commit) |
-| A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | TODO | attempt a bounded first slice |
+| A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | **PARTIAL** | CODE half done (this commit); INFRA half (setting `CRON_SECRET` on the live Vercel project) is an operator step this repository cannot perform, see execution log |
 | A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | DEFERRED_LARGE | weeks, UI over existing capability |
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
@@ -384,3 +384,46 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `pnpm run test` (5949 tests), `db:test` (sanity pass; no migration or db-test file touched), `git:
   check-paths`, and `security:check` gates all pass unchanged. `check-release-freeze.ts` needed no
   amendment (no `supabase/migrations/*.sql` or `scripts/db-tests/*.sql` file touched by this item).
+- 2026-09-07 — A5 PARTIAL (this commit), the CODE half only, exactly as the item's own
+  classification disclosed up front (`CODE` + `INFRA`, "attempt a bounded first slice"). The audit's
+  finding was precise: `scripts/jobs/supervisor.ts` is "correct and installs nothing," and this
+  repository's actual deploy target is serverless — "no Vercel crons, no Edge Functions, no
+  scheduled workflow, and `pg_cron` is never created in any migration... on a serverless deploy
+  target with no long-lived host." There is no long-lived process to point a scheduler AT; the fix
+  has to be an HTTP entry point plus a Vercel Cron schedule calling it. Added `app/api/cron/
+  supervisor-tick/route.ts`: a `GET` route that calls `supervisor.ts`'s own exported `runTick`
+  (the identical function `--once` mode already calls) for exactly one tick — every lane
+  (scheduler, database-jobs, and all five external-handoff workers) keeps the same per-lane
+  isolation and authority model `supervisor.ts`'s own header already documents; nothing about the
+  job/schedule authority logic was reimplemented, only a caller was added. Authorization mirrors
+  Vercel's own documented Cron Jobs contract exactly: Vercel signs its own invocations with
+  `Authorization: Bearer <CRON_SECRET>` once that variable is set on the project, checked here with
+  `crypto.timingSafeEqual` (never `===`, so a byte-by-byte mismatch can't leak how many leading
+  bytes matched); an unset `CRON_SECRET` fails every request closed, never open — there is no
+  "unauthenticated but allowed" mode for a route that runs privileged, service-role-authenticated
+  writes. `vercel.json` now carries the `crons` entry itself (`*/5 * * * *`, matching the cadence
+  the audit's own `docs/runbooks/human-execution-pack.md` §6 table already recommended for the
+  shortest-interval sweeps), so the schedule ships as code, not a dashboard click. `CRON_SECRET`
+  is now a properly declared, `secret`-classified `scripts/env/schema.ts` entry — the FIRST entry
+  in that registry to actually use `requiredIn` (required only in `production`, since that is the
+  one tier `vercel.json`'s `crons` entry actually targets); added a new regression test in
+  `scripts/env/validate.test.ts` proving env-class-conditional requiredness actually works
+  end-to-end (local accepts it missing, production rejects it missing), since no prior test had
+  ever exercised that code path at all — every existing `ENV_REGISTRY` entry before this one was
+  unconditionally required everywhere. Also registered the new secret in
+  `scripts/data-classification/registry.ts` (`env:CRON_SECRET`) so `pnpm run data-classification:
+  check`'s own adoption gate doesn't flag it as unclassified, and added the new route file to
+  `eslint.config.js`'s `serviceRoleImportGuard` allowlist (the existing, deliberately manual gate on
+  every legitimate service-role importer) alongside the other Route Handlers already on it. New
+  route-level test suite (`tests/api/cron/supervisor-tick.test.ts`, using the existing
+  `installRpcFetchStub` HTTP-layer harness `tests/api/v1/support/rpc-fetch-stub.ts` already
+  provides): unset secret and wrong/missing `Authorization` all deny with 401 AND never call any
+  RPC at all (proving fail-closed, not merely fail-*something*); a correct secret runs a real tick
+  end to end and reports all 7 lanes; a simulated `run_due_jobs` failure proves the route surfaces
+  `runTick`'s own per-lane isolation as 207 (that ONE lane failed, every other lane still ran) rather
+  than collapsing to a 500. **What remains open, and why it is not closed here:** setting the actual
+  `CRON_SECRET` value on the live Vercel project is an operator action against infrastructure this
+  repository has no access to from inside a coding session — exactly the boundary `docs/runbooks/
+  human-execution-pack.md` §6 already draws ("whoever owns the deployment," "about an hour, once").
+  Marked `PARTIAL` rather than `DONE`: the code path is real, tested, and fails closed by
+  construction, but the schedule does not actually run in production until that one secret is set.

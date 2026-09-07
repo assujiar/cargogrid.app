@@ -166,6 +166,7 @@ const serviceRoleImportGuard = {
     "app/(tenant)/\\[tenantSlug\\]/procurement/assessments/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/procurement/compliance/vendors/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/procurement/vendors/\\[masterRecordId\\]/financial/actions.ts",
+    "app/api/cron/supervisor-tick/route.ts",
     "app/api/ready/route.ts",
     "app/api/tracking/driver-mobile/route.ts",
     "app/api/webhooks/finance-payment-gateway/\\[connectionId\\]/route.ts",
