@@ -75,7 +75,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
-| B5 | Withholding tax added instead of deducted on customer invoices | `CODE` | TODO | |
+| B5 | Withholding tax added instead of deducted on customer invoices | `CODE` | **DONE** | (this commit) |
 | B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | DEFERRED_LARGE | real report-building effort, weeks per the audit's own estimate |
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs a billing-model decision (partial/milestone billing) before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | DEFERRED_LARGE | schema redesign across `finance_journals`/`finance_journal_lines` |
@@ -160,8 +160,20 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 - 2026-09-07 — D3 closed (`f5f0878`). Widened beyond the audit's own stated count (2 call sites)
   after a repository-wide grep found 9 real occurrences of the vulnerable
   `x-forwarded-for.split(",")[0]` pattern; all 9 fixed.
-- 2026-09-07 — B8 closed (this commit). Fifteen finance write RPCs (not the audit's own "≥8"
+- 2026-09-07 — B8 closed (`85be6c9`). Fifteen finance write RPCs (not the audit's own "≥8"
   estimate — a systematic `pg_get_function_identity_arguments` sweep found the true count) now
   validate a caller-supplied `p_company_id` via a new shared `app.assert_finance_company_org_unit`
   precondition (same-tenant, `unit_type = 'company'`, checked after authority/IP-allowlist,
   before any other business-logic validation). New findings this pass: none.
+- 2026-09-07 — B5 closed (this commit). `app.calculate_finance_tax` now discloses the resolved
+  rule's own `tax_type`; a new `finance_invoices.withholding_tax_amount` column carries a
+  withholding-type tax's own withheld amount instead of `tax_amount`, leaving `total_amount`
+  unaffected; `app.issue_finance_invoice` posts the AR open item/AR-control debit net of the
+  withheld amount and DEBITS (never credits) the tax rule's own governed `recoverable_account_id`
+  (or the `withholding_tax_receivable_default` posting-map fallback). Also found and fixed, while
+  writing this fix's own regression test, a latent pre-existing bug in the SAME branch logic: a
+  plpgsql row variable's own `IS NOT NULL` requires every field non-null (never merely "was a row
+  found"), so `v_tax_rule is not null` silently read false whenever the fetched rule had any other
+  nullable column set to null (e.g. `currency`) — unexercised by any test before this one, since no
+  prior fixture ever configured a real `output_account_id`/`recoverable_account_id` on a tax rule.
+  Fixed by checking each row's own guaranteed-NOT-NULL `id` column instead.

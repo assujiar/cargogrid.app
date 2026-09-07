@@ -3586,7 +3586,35 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // assert_vendor_profile_editable's identical shape for an internal-only precondition
   // never referenced from an RLS policy or called directly), so it needs no public.*
   // wrapper.
-  migrationSetSha256: "1fca1ec22b42d6b1b9a115c610fd28bf160a5c110beb68beadeeda9d6ba4de97",
+  // HUNDRED-AND-SEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 504 files (+1). One new migration, 20260907130000, closing the audit's B5
+  // finding -- PPH21/PPH23/PPH4_2 are seeded with finance_tax_codes.tax_type =
+  // 'withholding', but app.calculate_finance_tax returned base*rate with no branch on
+  // tax_type at all, and app.prepare_finance_invoice_from_readiness wrote that amount
+  // straight into tax_amount (ADDED to total_amount via the generated column) and app.
+  // issue_finance_invoice CREDITED it to a tax-payable liability -- both backwards for a
+  // genuine withholding tax, which the customer deducts at source and remits directly to
+  // the tax authority (never collected by CargoGrid, and a recoverable asset, not a
+  // payable). Fix: calculate_finance_tax now discloses the resolved rule's own taxType; a
+  // new finance_invoices.withholding_tax_amount column (additive, default 0) carries a
+  // withheld amount instead of tax_amount, leaving total_amount unaffected by it;
+  // issue_finance_invoice posts the AR open item and its own AR-control debit net of the
+  // withheld amount, and DEBITS (never credits) the tax rule's own governed
+  // recoverable_account_id (or the withholding_tax_receivable_default posting-map key)
+  // for it -- mirroring app.post_finance_vendor_bill's own established
+  // recoverable_account_id-debit pattern for input tax credits on the AP side. While
+  // writing this fix's own regression test (the first to ever configure a real
+  // recoverable_account_id/output_account_id on a tax rule and exercise
+  // issue_finance_invoice's branch logic against it), also found and fixed a latent,
+  // previously-unexercised bug in that same branch logic: a plpgsql row variable's own
+  // `IS NOT NULL` is true only when EVERY field of the row is non-null (SQL composite-type
+  // semantics), so `v_tax_rule is not null`/`v_tax_code is not null` silently read as false
+  // whenever the fetched row had any other nullable column set to null (e.g. currency) --
+  // never previously caught because no test before this one configured a real account on a
+  // tax rule. Fixed by checking each row's own guaranteed-NOT-NULL id column instead.
+  migrationSetSha256: "4b6d270110ecb08b88a57d729aa97aaafd8f1159d99e4fa5d3abb6a76828909a",
+  // History: 1fca1ec22b42d6b1b9a115c610fd28bf160a5c110beb68beadeeda9d6ba4de97
+  // (503 files, HUNDRED-AND-SIXTH PASS).
   // History: b877952bce57e2bab4020a039c75b489e6363910b7904597dd6d040df18b0d98
   // (502 files, HUNDRED-AND-FIFTH PASS).
   // History: 7468be3a8ab6fb61957df4060cfe033fd86f8db6d4524e759df76100b733969b
@@ -4375,7 +4403,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // create_finance_bank_account) -- cross-tenant/wrong-type rejection, authority still
   // checked before the new company check, and the legitimate own-tenant/null-company paths
   // still succeed.
-  dbTestSetSha256: "ab205db0c68005dd859ec5457654a6242355b0f795f9da11eb30f824cdd572a4",
+  // HUNDRED-AND-SEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 254 files (+1). One new file, finance-invoice-withholding-tax.sql (B5): a
+  // self-contained tenant/job-order fixture (finance-invoice.sql's own job order already
+  // carries an issued invoice, and only one invoice per job order may ever be issued) --
+  // proves app.calculate_finance_tax discloses taxType=withholding for PPH23; a
+  // withholding-taxed invoice's tax_amount stays 0 and total_amount is unaffected while
+  // withholding_tax_amount carries the withheld magnitude; issuing posts the AR open item
+  // and AR-control debit net of the withheld amount plus a DEBIT (never a credit) to the
+  // tax rule's own governed recoverable account, with the GL journal still balancing
+  // exactly at the subtotal; a second withholding rule (PPH21) with no rule-level
+  // recoverable_account_id configured is proven correct at prepare-time (the
+  // withholding_tax_receivable_default posting-map fallback); and PPN (vat, not
+  // withholding) is proven completely unaffected by this fix.
+  dbTestSetSha256: "dacea19f1c53b02185c43ff7d3e5bd6f3656a60289f0b2271bb5ad70e550f021",
+  // History: ab205db0c68005dd859ec5457654a6242355b0f795f9da11eb30f824cdd572a4
+  // (253 files, HUNDRED-AND-SIXTH PASS).
   // History: 05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9
   // (252 files, HUNDRED-AND-FIFTH PASS).
   // History: 407d6499ecc6d8fabe744d129958086b33221ae3e5470a5769dd3edcfe7d0c69

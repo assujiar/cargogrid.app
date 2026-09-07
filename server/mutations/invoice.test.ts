@@ -18,7 +18,7 @@ const ACTOR_ID = "723e4567-e89b-12d3-a456-426614174000";
 const INVOICE_ROW = {
   id: INVOICE_ID, tenant_id: TENANT_ID, company_id: null, invoice_number: null,
   customer_account_id: TENANT_ID, job_order_id: TENANT_ID, billing_readiness_handoff_id: HANDOFF_ID,
-  currency: "IDR", status: "draft", subtotal_amount: "15000000.00", tax_amount: "0.00", total_amount: "15000000.00",
+  currency: "IDR", status: "draft", subtotal_amount: "15000000.00", tax_amount: "0.00", withholding_tax_amount: "0.00", total_amount: "15000000.00",
   payment_term_days: 30, issue_date: null, due_date: null, posting_period_id: null, ar_open_item_id: null,
   submitted_by: null, submitted_at: null, approved_by: null, approved_at: null, issued_by: null, issued_at: null,
   void_reason: null, voided_by: null, voided_at: null,

@@ -6,10 +6,25 @@ import { useActionState } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
+import { Select } from "../../../../../components/forms/select.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import type { FinanceInvoiceFormState } from "./actions.ts";
 
 const INITIAL_STATE: FinanceInvoiceFormState = { error: null };
+
+/**
+ * CG-AUDIT-2026-09-02 B5: the seeded baseline finance_tax_codes -- a known, static, small
+ * option list (the exact shape Select's own header comment calls for), never free text
+ * (finance_tax_codes.tax_type distinguishes PPN's own added-tax treatment from PPH21/
+ * PPH23/PPH4_2's own withheld-not-billed treatment; a typo here previously just failed
+ * later with a rejected/unresolvable code).
+ */
+const TAX_CODE_OPTIONS = [
+  { code: "PPN", label: "PPN (11% VAT, added to the invoice)" },
+  { code: "PPH21", label: "PPh 21 (withholding, deducted -- employee income)" },
+  { code: "PPH23", label: "PPh 23 (withholding, deducted -- services/royalties/rent)" },
+  { code: "PPH4_2", label: "PPh 4(2) (final withholding, deducted)" },
+] as const;
 
 type BoundAction = (prevState: FinanceInvoiceFormState, formData: FormData) => Promise<FinanceInvoiceFormState>;
 
@@ -34,9 +49,16 @@ export function PrepareFinanceInvoiceFromReadinessForm({ action }: { action: Bou
           </FormField>
         </div>
 
-        <div className="w-32">
+        <div className="w-72">
           <FormField id="taxCode" label="Tax code (optional)">
-            <Input id="taxCode" name="taxCode" type="text" placeholder="PPN" maxLength={20} className="uppercase" invalid={Boolean(state.error)} />
+            <Select id="taxCode" name="taxCode" defaultValue="" invalid={Boolean(state.error)}>
+              <option value="">No tax</option>
+              {TAX_CODE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
           </FormField>
         </div>
       </div>

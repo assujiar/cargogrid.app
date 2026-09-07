@@ -59,6 +59,7 @@ export default async function InvoicesPage({ params }: { params: Promise<{ tenan
     { key: "currency", header: "Currency", render: (invoice) => invoice.currency },
     { key: "subtotal", header: "Subtotal", render: (invoice) => invoice.subtotalAmount },
     { key: "tax", header: "Tax", render: (invoice) => invoice.taxAmount },
+    { key: "withheld", header: "Withheld", render: (invoice) => (invoice.withholdingTaxAmount > 0 ? invoice.withholdingTaxAmount : "—") },
     { key: "total", header: "Total", render: (invoice) => invoice.totalAmount },
     { key: "dueDate", header: "Due date", render: (invoice) => invoice.dueDate ?? "—" },
     {
