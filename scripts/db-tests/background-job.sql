@@ -306,6 +306,104 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 NEW-1 regression: app.claim_next_job / app.complete_job no longer raise actor_identity_mismatch when a genuine authenticated session that is NOT the job''s own original requester claims and completes it, and the resulting app.audit_logs rows attribute the event to the CALLING session, preserving the original requester as metadata instead of discarding it'
+do $$
+declare
+  v_tenant_id uuid;
+  v_job app.jobs;
+  v_claimed app.jobs;
+  v_completed app.jobs;
+  v_drained app.jobs;
+  v_claim_actor uuid;
+  v_claim_meta jsonb;
+  v_complete_actor uuid;
+  v_complete_meta jsonb;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmejob');
+
+  -- ticket_sla_evaluation is untouched by every earlier block in this file, but drain
+  -- first anyway (this file's own established idiom, see the webhook_retry block
+  -- above) so this assertion can never silently pick up a stray job left by a LATER
+  -- reordering of this file rather than the one job this block itself creates.
+  loop
+    v_drained := app.claim_next_job('worker-drain-new1', array['ticket_sla_evaluation'], 300);
+    exit when v_drained is null;
+    perform app.complete_job(v_drained.job_id, 'worker-drain-new1', null, 'worker-drain-new1');
+  end loop;
+
+  -- Requester (4001) enqueues; teammate (4002) -- a genuinely different, genuinely
+  -- active member of the SAME tenant, never the job's own original requester -- claims
+  -- and completes it. Before this fix, capture_audit_event's own IAE-037 default-
+  -- support-session lookup (app.current_support_session, which asserts its own actor
+  -- argument equals the real session identity) raised actor_identity_mismatch here
+  -- unconditionally, because both functions substituted the job's ORIGINAL requester
+  -- for the identity-asserted actor instead of the calling session -- before either
+  -- function's own caller ever reached its own job-type-specific authority guard (see
+  -- CG-AUDIT-2026-09-02 D2's own app.run_next_route_planning_job regression in
+  -- scripts/db-tests/advanced-tms-route-load-planning.sql, where this was first found).
+  v_job := app.enqueue_job(v_tenant_id, 'ticket_sla_evaluation', '{}'::jsonb, 0, 'idem-new1-cross-user', 3, '00000000-0000-0000-0000-000000004001', 'requester');
+
+  -- Real production callers reach app.claim_next_job/app.complete_job either as
+  -- service_role (no session, auth.uid() is null, unaffected either way) or nested
+  -- inside a job-type-specific SECURITY DEFINER wrapper such as
+  -- app.run_next_route_planning_job -- never directly as `authenticated` (neither
+  -- function is granted to it). What matters for this bug is auth.uid() alone
+  -- (assert_actor_is_session_identity reads only that GUC, never the connection's
+  -- role), so this reproduces the exact condition -- a genuine, non-null session
+  -- identity that differs from the job's original requester -- without needing a
+  -- second SECURITY DEFINER wrapper of its own.
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000004002"}';
+  v_claimed := app.claim_next_job('teammate-worker', array['ticket_sla_evaluation'], 300);
+  v_completed := app.complete_job(v_claimed.job_id, 'teammate-worker', null, 'teammate-worker');
+
+  -- Live-discovered while writing this test: a custom/placeholder GUC like
+  -- request.jwt.claims set via SET LOCAL outside an explicit transaction block does NOT
+  -- revert to unset once this block ends -- it reverts to an empty string, which is not
+  -- valid JSON (this file's own pre-existing set local request.jwt.claims blocks further
+  -- below have always carried this same latent quirk; it was harmless only because
+  -- nothing downstream ever read the GUC without first overwriting it with a fresh
+  -- value). CG-AUDIT-2026-09-02 NEW-1's own migration now reads this GUC defensively
+  -- inside app.claim_next_job/app.complete_job (mirroring app.
+  -- assert_actor_is_session_identity's own established try/catch idiom), so a leaked ''
+  -- degrades safely to a null actor rather than crashing -- this reset to a valid empty
+  -- JSON object is belt-and-suspenders hygiene for whatever runs after, not a
+  -- correctness requirement for this test itself.
+  perform set_config('request.jwt.claims', '{}', true);
+
+  if v_claimed.job_id <> v_job.job_id or v_completed.status <> 'completed' then
+    raise exception 'assertion failed: expected the teammate (a genuine, different, same-tenant session) to successfully claim and complete the requester''s own job end to end, got claimed=% completed=%', v_claimed, v_completed;
+  end if;
+
+  select actor_auth_user_id, after_value into v_claim_actor, v_claim_meta
+  from app.audit_logs where action = 'claim_next_job' and resource_id = v_job.job_id;
+  if v_claim_actor is distinct from '00000000-0000-0000-0000-000000004002'::uuid then
+    raise exception 'assertion failed: expected claim_next_job''s audit actor to be the calling teammate session, got %', v_claim_actor;
+  end if;
+  if (v_claim_meta ->> 'requested_by_auth_user_id') is distinct from '00000000-0000-0000-0000-000000004001' then
+    raise exception 'assertion failed: expected claim_next_job''s audit metadata to preserve the original requester, got %', v_claim_meta;
+  end if;
+
+  select actor_auth_user_id, after_value into v_complete_actor, v_complete_meta
+  from app.audit_logs where action = 'complete_job' and resource_id = v_job.job_id;
+  if v_complete_actor is distinct from '00000000-0000-0000-0000-000000004002'::uuid then
+    raise exception 'assertion failed: expected complete_job''s audit actor to be the calling teammate session, got %', v_complete_actor;
+  end if;
+  if (v_complete_meta ->> 'requested_by_auth_user_id') is distinct from '00000000-0000-0000-0000-000000004001' then
+    raise exception 'assertion failed: expected complete_job''s audit metadata to preserve the original requester, got %', v_complete_meta;
+  end if;
+
+  -- The original requester's own enqueue_job audit event is untouched by this fix --
+  -- still attributed to the requester, exactly as before (enqueue_job already receives
+  -- a real actor parameter from its own caller, never a substituted job field).
+  if not exists (
+    select 1 from app.audit_logs
+    where action = 'enqueue_job' and resource_id = v_job.job_id and actor_auth_user_id = '00000000-0000-0000-0000-000000004001'::uuid
+  ) then
+    raise exception 'assertion failed: expected enqueue_job''s own audit row to still attribute to the original requester, unaffected by this fix';
+  end if;
+end;
+$$;
+
 \echo '>> app.record_job_failure (extended): schedules next_attempt_at via backoff on retry, releases the lease, clears next_attempt_at on dead_letter; a job is not claimable before its next_attempt_at and is claimable after'
 do $$
 declare

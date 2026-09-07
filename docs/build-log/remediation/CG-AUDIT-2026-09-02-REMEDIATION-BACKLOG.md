@@ -124,7 +124,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
-| NEW-1 | `app.claim_next_job`'s own audit-trail write (`capture_audit_event`) attributes the claim event to the job's ORIGINAL requester (`v_job.requested_by_auth_user_id`), not the calling worker -- so under a genuine (non-null) session identity, `capture_audit_event`'s own `assert_actor_is_session_identity` check raises `actor_identity_mismatch` for ANY caller who is not that exact original requester, before any of the job-type-specific authority guards (e.g. D2's) are ever reached. Discovered while writing a behavioral regression test for D2 in `advanced-tms-route-load-planning.sql` -- confirmed live, not theoretical. In production this is masked because the only real caller today is the job supervisor's service-role client (null session identity, which the check exempts), but it means NO job-claiming RPC in this family can currently be correctly exercised, or safely called, by any genuine authenticated session other than the job's own creator -- over-blocking legitimate cross-user operation of the SAME tenant's own queue, not just closing off cross-tenant abuse. | `CODE` | TODO | Needs its own bounded fix and its own adversarial verification -- likely `capture_audit_event` should record the ORIGINAL requester as event *metadata*, not as the identity-asserted actor parameter, or `claim_next_job` should pass the calling worker's own identity as actor instead. Out of scope for D2 itself, which is a real, independent, already-fixed defect. |
+| NEW-1 | `app.claim_next_job`'s own audit-trail write (`capture_audit_event`) attributes the claim event to the job's ORIGINAL requester (`v_job.requested_by_auth_user_id`), not the calling worker -- so under a genuine (non-null) session identity, `capture_audit_event`'s own `assert_actor_is_session_identity` check raises `actor_identity_mismatch` for ANY caller who is not that exact original requester, before any of the job-type-specific authority guards (e.g. D2's) are ever reached. Discovered while writing a behavioral regression test for D2 in `advanced-tms-route-load-planning.sql` -- confirmed live, not theoretical. In production this is masked because the only real caller today is the job supervisor's service-role client (null session identity, which the check exempts), but it means NO job-claiming RPC in this family can currently be correctly exercised, or safely called, by any genuine authenticated session other than the job's own creator -- over-blocking legitimate cross-user operation of the SAME tenant's own queue, not just closing off cross-tenant abuse. | `CODE` | **DONE** | (this commit) |
 
 ## Housekeeping
 
@@ -427,3 +427,48 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   human-execution-pack.md` §6 already draws ("whoever owns the deployment," "about an hour, once").
   Marked `PARTIAL` rather than `DONE`: the code path is real, tested, and fails closed by
   construction, but the schedule does not actually run in production until that one secret is set.
+- 2026-09-07 — NEW-1 closed (this commit). Root-caused precisely by live reproduction against a
+  disposable database (not static reading alone -- a static read of `app.capture_audit_event`'s
+  own body does not show the actual mechanism): `capture_audit_event`'s IAE-037 fix defaults
+  `p_support_access_grant_id` from `app.current_support_session(p_tenant_id, p_actor_auth_user_
+  id)`, whose own FIRST statement is `perform app.assert_actor_is_session_identity(p_actor_auth_
+  user_id)` -- correct for the ~1735 other call sites across this repository, where the passed
+  actor genuinely IS the caller's own session identity by construction, but wrong for `app.
+  claim_next_job` and (found during this same investigation, identical bug, identical fix)
+  `app.complete_job`: neither has any real actor-identity parameter of its own, and both
+  substituted `v_job.requested_by_auth_user_id` -- the job's ORIGINAL requester -- for the
+  identity-asserted actor. Live-reproduced end to end against a disposable database before
+  writing the fix: enqueued a job as one genuine tenant member (a rep), then claimed/ran it as a
+  second, equally genuine, active member of the SAME tenant (a manager, via `app.
+  run_next_route_planning_job`) -- reliably raised `actor_identity_mismatch` every time, exactly
+  as the audit finding described. Fixed in `20260907190000_fix_job_claim_complete_audit_actor_
+  mismatch_new1.sql`: both functions now pass `auth.uid()` (the CALLER's own real session
+  identity -- null for service-role/nested-SECURITY-DEFINER-only calls, exactly preserving
+  today's production behavior; the genuine session identity when invoked from within an
+  authenticated user's own SECURITY DEFINER wrapper, trivially satisfying the assertion since the
+  two values are now identical by construction) as the identity-asserted actor, never `v_job.
+  requested_by_auth_user_id` -- which is preserved as event metadata instead of being discarded.
+  `auth.uid()` is read defensively (`begin`/`exception`), mirroring `app.assert_actor_is_session_
+  identity`'s own established idiom, rather than bare -- this was not paranoia: while writing this
+  fix's own db-test regression, a genuinely different, previously-undetected quirk surfaced live
+  (documented in detail in the release-freeze HUNDRED-AND-THIRTEENTH PASS comment and in `scripts/
+  db-tests/background-job.sql`'s own new test) -- a custom/placeholder GUC like `request.jwt.
+  claims` set via `SET LOCAL` outside an explicit transaction block does not revert to unset once
+  the block ends, it reverts to an empty string, which is not valid JSON, and neither function had
+  ever read that GUC before this fix (so no prior code path could ever have surfaced it). The
+  defensive read degrades a leaked '' to a null actor exactly like never having set it at all,
+  rather than crashing a job-queue primitive on malformed session state. `CREATE OR REPLACE
+  FUNCTION` for both -- unchanged signatures, no `DROP + CREATE`; confirmed via the F3-taught
+  check that neither function was ever touched by any later migration, so no security-mode
+  hardening to preserve. New regression in `scripts/db-tests/background-job.sql` proves the fix
+  end to end (a genuinely different same-tenant teammate claims and completes another identity's
+  job without raising, and the resulting `app.audit_logs` rows correctly attribute the calling
+  identity while preserving the original requester as metadata); `scripts/db-tests/advanced-tms-
+  route-load-planning.sql`'s own pre-existing D2 regression comment (which had disclosed this
+  exact NEW-1 limitation as blocking a real end-to-end cross-session exercise of that guard) was
+  corrected to say so is now fixed, without adding a redundant cross-tenant case there (would need
+  a second tenant that file has never otherwise needed; the general cross-user proof already lives
+  in `background-job.sql`). Full `pnpm run db:test` re-run twice end to end (once mid-investigation
+  against the correct file order via the real `run.sh` glob, once as the final sanity pass) --
+  `ALL PASSED` both times, alongside `typecheck`/`lint`/full `pnpm run test` (5955 tests)/`git:
+  check-paths`/`security:check`.

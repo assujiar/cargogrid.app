@@ -3809,7 +3809,30 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (grepping for a later ALTER FUNCTION/CREATE OR REPLACE touching this function's own
   // security mode) that `app.publish_role_version` was never widened to SECURITY DEFINER or
   // given a pinned search_path by any later migration, so there was nothing to preserve.
-  migrationSetSha256: "a182a76409dc6e5ddbe6fd8fa3c1f55496a5eca9ef784ce483a4f4b3c7f86c57",
+  // HUNDRED-AND-THIRTEENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A, NEW-1): 510 files (+1) -- new migration
+  // 20260907190000_fix_job_claim_complete_audit_actor_mismatch_new1.sql. `app.claim_next_job`
+  // and `app.complete_job` both lack any real actor-identity parameter of their own (only
+  // `p_worker_id text` / `p_actor_label text`) yet both passed `v_job.requested_by_auth_
+  // user_id` (the job's ORIGINAL requester) as `app.capture_audit_event`'s identity-asserted
+  // `p_actor_auth_user_id`. `capture_audit_event`'s IAE-037 fix defaults
+  // `p_support_access_grant_id` from `app.current_support_session(p_tenant_id, p_actor_auth_
+  // user_id)`, whose first statement is `assert_actor_is_session_identity(p_actor_auth_user_
+  // id)` -- so under a genuine (non-null) session identity that is NOT the job's original
+  // requester, this raised `actor_identity_mismatch` unconditionally, before either
+  // function's own caller's job-type-specific authority guard was ever reached (self-found
+  // while first writing the HUNDRED-AND-TENTH/A3-era D2 regression test in scripts/db-tests/
+  // advanced-tms-route-load-planning.sql). Masked in production because the only real caller
+  // is the job supervisor's service-role client (null session identity, exempted). Fixed by
+  // passing `auth.uid()` (read defensively, begin/exception, mirroring `app.assert_actor_is_
+  // session_identity`'s own idiom) as the identity-asserted actor instead, preserving the
+  // original requester as event metadata rather than discarding it. `CREATE OR REPLACE
+  // FUNCTION` for both -- unchanged signatures, no DROP + CREATE; neither function was ever
+  // touched by any later migration (confirmed via the same case-insensitive
+  // ALTER/CREATE-OR-REPLACE grep), so no security-mode hardening to preserve.
+  migrationSetSha256: "097e81c3be29d3477ec76107ad1f137895a15b7c7df9f14fd5f15e198d74587f",
+  // History: a182a76409dc6e5ddbe6fd8fa3c1f55496a5eca9ef784ce483a4f4b3c7f86c57
+  // (509 files, HUNDRED-AND-TWELFTH PASS).
   // History: 2983672fb1e79e945912c7ec5f027745c41bd94050419c141aaf8de83295ba55
   // (508 files, HUNDRED-AND-ELEVENTH PASS).
   // History: c62a545dc710bb9485577327a7c7f2e8295d5007e1c62286847d6e43f41d88da
@@ -4708,7 +4731,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ... unaffected by every test above" baseline foremost among them) depend on this
   // identity's assignment surviving in an active, granting state all the way through the
   // file, and all passed unmodified against the corrected behavior.
-  dbTestSetSha256: "d4301843e34f91c750b1c1dfa7cc32592a3c0c6be5f1206b99090edf4e4062d2",
+  // HUNDRED-AND-THIRTEENTH PASS (2026-09-07, NEW-1): 255 files, unchanged in count -- two
+  // extended. scripts/db-tests/background-job.sql gained a new regression block after its
+  // own "app.complete_job" block: requester enqueues, teammate (a genuinely different,
+  // genuinely active member of the SAME tenant, never the job's own original requester)
+  // claims and completes it under a real session identity (auth.uid() set via request.jwt.
+  // claims, no role switch needed since neither function is granted to `authenticated`
+  // directly) -- proves no actor_identity_mismatch is raised, and that both the resulting
+  // claim_next_job/complete_job app.audit_logs rows attribute actor_auth_user_id to the
+  // CALLING teammate while preserving the original requester as `requested_by_auth_user_id`
+  // metadata; also proves enqueue_job's own audit row is unaffected. Live-discovered while
+  // writing this test and fixed in the SAME migration (20260907190000): a custom/placeholder
+  // GUC like request.jwt.claims set via SET LOCAL outside an explicit transaction block does
+  // not revert to unset once the block ends, it reverts to an empty string (not valid JSON)
+  // -- harmless for every PRE-EXISTING use in this file (nothing downstream ever read the
+  // GUC without first overwriting it), but a real hazard now that claim_next_job/complete_job
+  // read it for the first time; the migration reads auth.uid() defensively (begin/exception)
+  // so a leaked '' degrades to a null actor rather than crashing, and this test also resets
+  // to a valid empty JSON object afterward as belt-and-suspenders hygiene.
+  // scripts/db-tests/advanced-tms-route-load-planning.sql's own pre-existing D2 regression
+  // comment (which had disclosed this exact NEW-1 limitation as blocking a real end-to-end
+  // cross-session exercise of that guard) was corrected to reflect that NEW-1 is now fixed --
+  // no new assertion added there, since a genuine cross-TENANT proof would need a second
+  // tenant this file has never otherwise needed, and scripts/db-tests/background-job.sql's
+  // own new regression above already proves the general (cross-user, same-tenant) case.
+  dbTestSetSha256: "378f7312ee3075106e9eed85317cb55b88e4dd275fd5d524fcef1e23d26d03d7",
+  // History: d4301843e34f91c750b1c1dfa7cc32592a3c0c6be5f1206b99090edf4e4062d2
+  // (255 files, HUNDRED-AND-TWELFTH PASS).
   // History: bd8065108cc1d0728e119c1aadea92af9ab29f097da63570549e9906b6ecc2ff
   // (255 files, HUNDRED-AND-ELEVENTH PASS).
   // History: 05a737f2f3ea2a5773d6d3f79d76670afed3725997193fb9ea8c844242e64293

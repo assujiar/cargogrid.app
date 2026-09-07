@@ -634,19 +634,28 @@ declare
   v_handler_pos integer;
 begin
   -- Structural proof the fix actually changed the shape of the bug, not just its
-  -- surface behavior: `app.claim_next_job`'s own audit-trail write
-  -- (capture_audit_event, attributing the claim event to the job's ORIGINAL
-  -- requester -- a separate, pre-existing quirk, not this finding) makes it
-  -- impossible to exercise this guard end-to-end through a genuinely different
-  -- simulated session without first tripping that unrelated actor-identity check --
-  -- confirmed live while writing this test (any identity but the job's own original
-  -- requester raises actor_identity_mismatch inside claim_next_job, before this
-  -- guard is ever reached). That is real and worth its own separate fix (recorded
-  -- in the remediation backlog), but it must not block verifying THIS fix. So this
-  -- proves the actual defect class directly: the guard call
-  -- (assert_session_identity_in_tenant) must appear in the function body BEFORE its
-  -- exception-catching block (`when others`), never inside it -- exactly the
-  -- structural property that was wrong before this migration and is right after it.
+  -- surface behavior: the guard call (assert_session_identity_in_tenant) must appear
+  -- in the function body BEFORE its exception-catching block (`when others`), never
+  -- inside it -- exactly the structural property that was wrong before this
+  -- migration and is right after it.
+  --
+  -- CG-AUDIT-2026-09-02 NEW-1 (self-found while first writing this test, now fixed by
+  -- 20260907190000_fix_job_claim_complete_audit_actor_mismatch_new1.sql): `app.
+  -- claim_next_job`'s own audit-trail write (capture_audit_event, then attributing
+  -- the claim event to the job's ORIGINAL requester -- a separate, pre-existing
+  -- quirk, not this D2 finding) made it impossible to exercise this guard
+  -- end-to-end through a genuinely different simulated session without first
+  -- tripping that unrelated actor-identity check -- confirmed live at the time
+  -- (any identity but the job's own original requester raised
+  -- actor_identity_mismatch inside claim_next_job, before this guard was ever
+  -- reached), which is why this block relied on the structural proof above rather
+  -- than a real cross-session exercise of the guard. That limitation is gone now
+  -- (see scripts/db-tests/background-job.sql's own direct NEW-1 regression for the
+  -- general proof); it is not repeated here as an additional end-to-end case
+  -- because doing so would require a second tenant this file has never needed
+  -- otherwise -- the structural proof above remains this guard's own regression
+  -- coverage, and the positive path below already proves NEW-1's fix did not
+  -- disturb the legitimate same-identity case.
   select prosrc into v_src from pg_proc where proname = 'run_next_route_planning_job' and pronamespace = 'app'::regnamespace;
   v_guard_pos := position('assert_session_identity_in_tenant' in v_src);
   v_handler_pos := position('when others' in v_src);
