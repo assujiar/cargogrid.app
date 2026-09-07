@@ -120,6 +120,12 @@ scoped and left for a dedicated follow-up session) Â· `NEEDS_PRODUCT_DECISION` Â
 | E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE-BIG` | DEFERRED_LARGE |
 | E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | DEFERRED_LARGE |
 
+## New findings discovered during remediation (not in the original audit)
+
+| ID | Item | Class | Status | Notes |
+|---|---|---|---|---|
+| NEW-1 | `app.claim_next_job`'s own audit-trail write (`capture_audit_event`) attributes the claim event to the job's ORIGINAL requester (`v_job.requested_by_auth_user_id`), not the calling worker -- so under a genuine (non-null) session identity, `capture_audit_event`'s own `assert_actor_is_session_identity` check raises `actor_identity_mismatch` for ANY caller who is not that exact original requester, before any of the job-type-specific authority guards (e.g. D2's) are ever reached. Discovered while writing a behavioral regression test for D2 in `advanced-tms-route-load-planning.sql` -- confirmed live, not theoretical. In production this is masked because the only real caller today is the job supervisor's service-role client (null session identity, which the check exempts), but it means NO job-claiming RPC in this family can currently be correctly exercised, or safely called, by any genuine authenticated session other than the job's own creator -- over-blocking legitimate cross-user operation of the SAME tenant's own queue, not just closing off cross-tenant abuse. | `CODE` | TODO | Needs its own bounded fix and its own adversarial verification -- likely `capture_audit_event` should record the ORIGINAL requester as event *metadata*, not as the identity-asserted actor parameter, or `claim_next_job` should pass the calling worker's own identity as actor instead. Out of scope for D2 itself, which is a real, independent, already-fixed defect. |
+
 ## Housekeeping
 
 | ID | Item | Class | Status | Notes |

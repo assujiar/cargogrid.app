@@ -3539,7 +3539,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // INVOKER to SECURITY DEFINER with search_path now pinned, reproduced live before the fix
   // ("permission denied for table finance_invoices" under the authenticated role) and verified
   // fixed by the extended db-tests below.
-  migrationSetSha256: "df0c466d4fded333fd6fd2edcb1230f33189d0d6e22e9eac35d52f8632bf4b16",
+  // HUNDRED-AND-FOURTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 501 files (+1). One new migration, 20260907100000, closing the audit's D2
+  // finding -- app.run_next_route_planning_job's cross-tenant guard
+  // (assert_session_identity_in_tenant) sat INSIDE the function's own exception-swallowing
+  // block, so a cross-tenant claim was caught and recorded as a job failure instead of
+  // rolling back the job claim as the guard's own comment always said it did. The guard now
+  // sits outside that block; a separate, pre-existing, unrelated defect in
+  // app.claim_next_job's own audit-trail write (attributes the claim event to the job's
+  // ORIGINAL requester, not the calling worker) was discovered while verifying this fix and
+  // is tracked separately (NEW-1 in the remediation backlog), not fixed here.
+  migrationSetSha256: "7468be3a8ab6fb61957df4060cfe033fd86f8db6d4524e759df76100b733969b",
+  // History: df0c466d4fded333fd6fd2edcb1230f33189d0d6e22e9eac35d52f8632bf4b16
+  // (500 files, HUNDRED-AND-THIRD PASS).
   // History: 4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99
   // (498 files, HUNDRED-AND-SECOND PASS).
   // History: 58f6ffb411bb3213be951b6f081f0d6cf0be83bcf27e46d93455bfd0a04bc032
@@ -4291,7 +4303,16 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // caught issue_finance_invoice/lock_finance_period's SECURITY INVOKER defect, since every
   // other call in both files ran privileged and never exercised the table-grant boundary that
   // was actually broken.
-  dbTestSetSha256: "f403db07eb42a65b9c54b70de2b80b4d71fbbf3ec13470595bf2633f9d6a16f9",
+  // HUNDRED-AND-FOURTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 251 files, unchanged in count -- one extended (advanced-tms-route-load-
+  // planning.sql: a structural regression proving app.run_next_route_planning_job's
+  // cross-tenant guard call now appears before its own exception-catching block rather than
+  // inside it, plus a positive-path check that a genuine authenticated session which IS the
+  // job's own requester and an active tenant member still runs the job successfully end to
+  // end -- the guard's relocation did not break the legitimate case).
+  dbTestSetSha256: "407d6499ecc6d8fabe744d129958086b33221ae3e5470a5769dd3edcfe7d0c69",
+  // History: f403db07eb42a65b9c54b70de2b80b4d71fbbf3ec13470595bf2633f9d6a16f9
+  // (251 files, HUNDRED-AND-THIRD PASS).
   // History: f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480
   // (250 files, HUNDRED-AND-SECOND PASS).
   // History: 9ca8a134673c439931ef4d376b42c04e7a98fb83cefdac3e8175fd9fcd03ffbc

@@ -623,6 +623,60 @@ begin
   end;
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 D2 regression: app.run_next_route_planning_job''s cross-tenant guard sits outside its own exception-swallowing block, so a refusal genuinely rolls back the job claim instead of being caught and recorded as a job failure'
+do $$
+declare
+  v_shipment_id uuid;
+  v_scenario app.route_planning_scenarios;
+  v_ran app.route_planning_scenarios;
+  v_src text;
+  v_guard_pos integer;
+  v_handler_pos integer;
+begin
+  -- Structural proof the fix actually changed the shape of the bug, not just its
+  -- surface behavior: `app.claim_next_job`'s own audit-trail write
+  -- (capture_audit_event, attributing the claim event to the job's ORIGINAL
+  -- requester -- a separate, pre-existing quirk, not this finding) makes it
+  -- impossible to exercise this guard end-to-end through a genuinely different
+  -- simulated session without first tripping that unrelated actor-identity check --
+  -- confirmed live while writing this test (any identity but the job's own original
+  -- requester raises actor_identity_mismatch inside claim_next_job, before this
+  -- guard is ever reached). That is real and worth its own separate fix (recorded
+  -- in the remediation backlog), but it must not block verifying THIS fix. So this
+  -- proves the actual defect class directly: the guard call
+  -- (assert_session_identity_in_tenant) must appear in the function body BEFORE its
+  -- exception-catching block (`when others`), never inside it -- exactly the
+  -- structural property that was wrong before this migration and is right after it.
+  select prosrc into v_src from pg_proc where proname = 'run_next_route_planning_job' and pronamespace = 'app'::regnamespace;
+  v_guard_pos := position('assert_session_identity_in_tenant' in v_src);
+  v_handler_pos := position('when others' in v_src);
+  if v_guard_pos = 0 then
+    raise exception 'assertion failed: app.run_next_route_planning_job no longer calls assert_session_identity_in_tenant at all';
+  end if;
+  if v_handler_pos = 0 or v_guard_pos > v_handler_pos then
+    raise exception 'assertion failed: CG-AUDIT-2026-09-02 D2 regression -- the cross-tenant guard call must appear BEFORE the function''s own exception-catching block, never inside it (a raised insufficient_authority must roll back the job claim, not be swallowed and recorded as a job failure)';
+  end if;
+
+  -- Positive path: a genuine authenticated session that IS the job's own original
+  -- requester, and IS an active member of the scenario's own tenant, still runs the
+  -- job successfully end to end -- the guard's relocation did not break the
+  -- legitimate same-identity case.
+  select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-plan-feasible';
+  select * into v_scenario from app.prepare_route_planning_scenario(v_shipment_id, 'idem-scenario-d2-realsession', 800, 10, '00000000-0000-0000-0000-000000039302', 'rep');
+  perform app.add_route_planning_stop(v_scenario.id, 1, 'pickup', 'Jakarta Warehouse', null, 106.8456, -6.2088, null, null, '00000000-0000-0000-0000-000000039302', 'rep');
+  perform app.add_route_planning_stop(v_scenario.id, 2, 'delivery', 'Bandung Warehouse', null, 107.6098, -6.9175, null, null, '00000000-0000-0000-0000-000000039302', 'rep');
+  select * into v_scenario from app.validate_route_planning_scenario(v_scenario.id, v_scenario.record_version, '00000000-0000-0000-0000-000000039302', 'rep');
+  select * into v_scenario from app.execute_route_planning_scenario(v_scenario.id, v_scenario.record_version, 'idem-plan-job-d2-realsession', '00000000-0000-0000-0000-000000039302', 'rep');
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000039302", "role": "authenticated"}';
+  select * into v_ran from app.run_next_route_planning_job('rep-own-worker');
+  reset role;
+  if v_ran is null or v_ran.id <> v_scenario.id or v_ran.status <> 'ready' then
+    raise exception 'assertion failed: expected the scenario''s own requester, in a genuine authenticated session, to still successfully run their own queued job, got %', v_ran;
+  end if;
+end $$;
+
 \echo '>> schema-privilege defense in depth: anon holds no EXECUTE on any of the 15 new Route and Load Planning functions (ERR-2026-004 regression guard)'
 do $$
 declare
@@ -674,8 +728,8 @@ begin
   v_tenant1 := (select id from app.tenants where slug = 'acmeplan');
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.route_planning_scenarios' and action = 'prepare_route_planning_scenario';
-  if v_count <> 4 then
-    raise exception 'assertion failed: expected exactly 4 prepare_route_planning_scenario audit events (feasible, infeasible, legs-done, to-cancel; the idempotent retry and the denied attempt are not counted), found %', v_count;
+  if v_count <> 5 then
+    raise exception 'assertion failed: expected exactly 5 prepare_route_planning_scenario audit events (feasible, infeasible, legs-done, to-cancel, and CG-AUDIT-2026-09-02 D2''s own real-session regression scenario; the idempotent retry and the denied attempt are not counted), found %', v_count;
   end if;
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.route_planning_selected_plans' and action = 'override_route_planning_selection';
