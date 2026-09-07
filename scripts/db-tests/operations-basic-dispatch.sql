@@ -251,6 +251,33 @@ begin
   reset role;
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 F5: a plain count against app.shipment_orders (tenant_id + status=assigned) is EXACTLY equivalent to a count through app.dispatch_ready_queue for the SAME real, RLS-scoped authenticated session -- server/queries/basic-dispatch.ts#listDispatchReadyQueue now takes the exact page count this way specifically to avoid running app.evaluate_dispatch_readiness (the views own ~40-line SECURITY DEFINER lateral join) once per row on the count pass too; this is the live proof the two counts can never disagree, not merely reasoned about'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmedispatch');
+  v_base_table_count integer;
+  v_view_count integer;
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000009831", "role": "authenticated"}';
+
+  select count(*) into v_base_table_count from app.shipment_orders where tenant_id = v_tenant1 and status = 'assigned';
+  select count(*) into v_view_count from app.dispatch_ready_queue where tenant_id = v_tenant1;
+
+  if v_base_table_count <> v_view_count then
+    raise exception 'assertion failed: base-table assigned count (%) must equal dispatch_ready_queue count (%) -- the query layer''s own count/data split is unsound if these ever disagree', v_base_table_count, v_view_count;
+  end if;
+  -- Not asserted as exactly 4: this tenant also carries other Shipment Orders driven to
+  -- 'assigned' by later fixtures in this same file (dispatch_shipment_order / bulk_dispatch
+  -- tests below) -- the only property that matters here is that the two counts NEVER
+  -- disagree, at any fixture population, not a specific count.
+  if v_base_table_count < 4 then
+    raise exception 'assertion failed: expected at least the 4 named assigned fixtures the prior assertion already counted, got %', v_base_table_count;
+  end if;
+
+  reset role;
+end $$;
+
 \echo '>> app.dispatch_shipment_order: authority-gated (OPS:View-only denied OPS:Edit); dispatch_not_ready for each blocked fixture; a valid dispatch on the ready fixture succeeds exactly once, transitions the shipment to dispatched, and records a real readiness_snapshot; idempotent retry on the same idempotency_key returns the same command row'
 do $$
 declare

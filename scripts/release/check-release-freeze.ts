@@ -3744,7 +3744,45 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // 13 (body/filter/sort logic otherwise byte-identical, verified line by line against
   // 20260810900000's own current text, the migration's real source of truth here, not the
   // 2026-07-29 creation migrations this backlog item's own header otherwise describes).
-  migrationSetSha256: "c62a545dc710bb9485577327a7c7f2e8295d5007e1c62286847d6e43f41d88da",
+  // HUNDRED-AND-ELEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 508 files (+1). One new migration, 20260907170000, closing the audit's F5
+  // finding: the shipment-order list and dispatch board (server/queries/shipment-order.ts#
+  // listShipmentOrders, basic-dispatch.ts#listDispatchReadyQueue) each run `.select("*",
+  // { count: "exact" }).range(from, to)` with no supporting index for their own ORDER BY
+  // column -- app.shipment_orders carries 9 indexes, none leading with `created_at` (only
+  // `(tenant_id, updated_at desc, id desc)`, added for a different query) and none at all
+  // for `planned_pickup_at`, forcing a full scan-and-sort of every tenant row on both the
+  // count pass and the data pass, every page load. The dispatch board compounds this:
+  // app.dispatch_ready_queue is `select so.*, r.is_ready, r.blockers from app.shipment_
+  // orders so cross join lateral app.evaluate_dispatch_readiness(so.id) as r where so.
+  // status = 'assigned' and <can_access_record>` -- a ~40-line SECURITY DEFINER function
+  // invoked once per matching row on BOTH passes (Postgres cannot prove the lateral output
+  // is unused just because count(*) doesn't reference it). Two fixes: (1) two new additive
+  // covering indexes, mirroring 20260801050000's own shipment_orders_tenant_updated_id_idx
+  // shape exactly -- shipment_orders_tenant_created_at_id_idx (tenant_id, created_at desc,
+  // id desc) for the shipment-order list, and a PARTIAL shipment_orders_tenant_assigned_
+  // pickup_id_idx (tenant_id, planned_pickup_at nulls last, id) where status = 'assigned'
+  // for the dispatch board, scoped to exactly the row set app.dispatch_ready_queue's own
+  // WHERE clause reads. (2) listDispatchReadyQueue now takes its exact count as a SEPARATE,
+  // plain HEAD request against app.shipment_orders directly (tenant_id + status='assigned'),
+  // never touching the view or the lateral join for the count pass -- provably equivalent,
+  // not approximated: app.shipment_orders' own RLS policy (shipment_orders_select_scoped)
+  // is the IDENTICAL predicate the view's own WHERE clause uses, and neither the view's
+  // WHERE clause nor the row count depends on r.is_ready/r.blockers at all. Live-proven in
+  // a new assertion appended to scripts/db-tests/operations-basic-dispatch.sql: a plain
+  // base-table count and a count through the view, taken under the SAME real, RLS-scoped
+  // authenticated session, are asserted equal (not merely reasoned about). Net effect: the
+  // readiness function now runs exactly pageSize times per dispatch-board page load, not
+  // pageSize + totalCount. listShipmentOrders keeps its existing single count:exact query
+  // as-is (no LATERAL join to make asymmetric there) -- only the missing index was the gap.
+  // These two screens are 2 of 10 files across the codebase sharing the count:exact shape
+  // (the audit's own count) -- a wholesale redesign of all ten, or of the numbered-jump-to-
+  // page components/tables/pagination.tsx UI they all feed (which genuinely needs an exact
+  // total to render page-number links), is out of this bounded item's scope; this migration
+  // closes exactly the two screens the audit itself named and reproduced.
+  migrationSetSha256: "2983672fb1e79e945912c7ec5f027745c41bd94050419c141aaf8de83295ba55",
+  // History: c62a545dc710bb9485577327a7c7f2e8295d5007e1c62286847d6e43f41d88da
+  // (507 files, HUNDRED-AND-TENTH PASS).
   // History: ebf2014640553ddc87d687c8c04e96696fcc6b394e5ba2f980ba408c995fd612
   // (507 files -- same HUNDRED-AND-TENTH PASS, superseded same-pass by the security-
   // definer/search_path fix above before this backlog item was ever considered closed).
@@ -4593,7 +4631,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // finance-vendor-bill.sql, finance-period-lock.sql, finance-subledger.sql,
   // finance-reversal-adjustment.sql), whose own pre-existing calls pass unaffected through
   // the new optional trailing parameters.
-  dbTestSetSha256: "05a737f2f3ea2a5773d6d3f79d76670afed3725997193fb9ea8c844242e64293",
+  // HUNDRED-AND-ELEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 255 files, unchanged in count -- one extended (F5). scripts/db-tests/operations-
+  // basic-dispatch.sql gained a new assertion, appended right after its own existing "app.
+  // dispatch_ready_queue: lists exactly the four assigned fixtures" block, reusing that
+  // block's own already-seeded tenant/fixtures rather than building new ones: under the SAME
+  // real, RLS-scoped authenticated session, a plain count(*) against app.shipment_orders
+  // (tenant_id + status = 'assigned') is asserted equal to a count(*) through app.
+  // dispatch_ready_queue for the same tenant -- the live proof that server/queries/
+  // basic-dispatch.ts#listDispatchReadyQueue's new split (an exact count taken directly
+  // against the base table, bypassing the view's own per-row SECURITY DEFINER lateral join
+  // entirely) can never disagree with what the view itself would report, not merely reasoned
+  // about from the two predicates' text. Deliberately asserts "at least 4", not "exactly 4" --
+  // this tenant also carries other Shipment Orders driven to 'assigned' by later fixtures
+  // further down the same file (dispatch_shipment_order/bulk_dispatch tests); the only
+  // property this assertion needs is that the two counts never disagree, at any fixture
+  // population, not a specific count.
+  dbTestSetSha256: "bd8065108cc1d0728e119c1aadea92af9ab29f097da63570549e9906b6ecc2ff",
+  // History: 05a737f2f3ea2a5773d6d3f79d76670afed3725997193fb9ea8c844242e64293
+  // (255 files, HUNDRED-AND-TENTH PASS).
   // History: d11d8a12a24ed61c87ba6b85773006fb2acef160d02b703cc6595ea7ca8db413
   // (254 files -- last changed at HUNDRED-AND-SEVENTH PASS, carried forward unchanged
   // through HUNDRED-AND-EIGHTH and HUNDRED-AND-NINTH since neither touched a db-test file).

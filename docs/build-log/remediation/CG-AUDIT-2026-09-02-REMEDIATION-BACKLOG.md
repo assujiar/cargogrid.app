@@ -98,7 +98,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | E2 | One-vehicle-one-shipment is an unlocked `EXISTS` check — racily bypassable | `CODE` | **DONE** | (this commit) — bundled `app.milestone_codes` seeding sub-finding NOT closed, see Housekeeping |
 | F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | **DONE** | (this commit) |
 | F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | **DONE** | (this commit) |
-| F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | TODO | bounded |
+| F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | **DONE** | (this commit) |
 | F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | TODO | bounded, one component |
 | A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | TODO | attempt a bounded first slice |
 | A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | DEFERRED_LARGE | weeks, UI over existing capability |
@@ -284,3 +284,34 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   exhaustive `prosecdef` parity assertion failing against all 13; fixed by adding `security
   definer` + `set search_path = app, pg_temp` to each (body/filter/sort logic otherwise
   byte-identical, verified line by line against `20260810900000`'s own current text).
+- 2026-09-07 — F5 closed (this commit). The shipment-order list and dispatch board
+  (`server/queries/shipment-order.ts#listShipmentOrders`, `basic-dispatch.ts#
+  listDispatchReadyQueue`) each ran `.select("*", { count: "exact" }).range(from, to)` with no
+  supporting index for their own `ORDER BY` column — `app.shipment_orders` carried 9 indexes,
+  none leading with `created_at` (only `(tenant_id, updated_at desc, id desc)`, added for a
+  different query) and none at all for `planned_pickup_at`, forcing a full scan-and-sort of every
+  tenant row on both the count pass and the data pass, every page load. The dispatch board
+  compounded this: `app.dispatch_ready_queue` runs `app.evaluate_dispatch_readiness` (a ~40-line
+  `SECURITY DEFINER` function) once per matching row via a `LATERAL` join, on BOTH passes (Postgres
+  cannot prove the lateral output is unused just because `count(*)` doesn't reference it). Two
+  fixes: (1) two new additive covering indexes, mirroring an existing precedent's own shape exactly
+  — `shipment_orders_tenant_created_at_id_idx (tenant_id, created_at desc, id desc)` for the
+  shipment-order list, and a PARTIAL `shipment_orders_tenant_assigned_pickup_id_idx (tenant_id,
+  planned_pickup_at nulls last, id) where status = 'assigned'` for the dispatch board, scoped to
+  exactly the row set `app.dispatch_ready_queue`'s own `WHERE` clause reads. (2)
+  `listDispatchReadyQueue` now takes its exact count as a SEPARATE, plain HEAD request against
+  `app.shipment_orders` directly (`tenant_id` + `status = 'assigned'`), never touching the view or
+  the lateral join for the count pass — provably equivalent, not approximated:
+  `shipment_orders_select_scoped` (the base table's own RLS policy) is the IDENTICAL predicate the
+  view's own `WHERE` clause uses, and neither the view's filter nor the row count depends on
+  `r.is_ready`/`r.blockers` at all. Live-proven with a new assertion appended to
+  `scripts/db-tests/operations-basic-dispatch.sql`: under the SAME real, RLS-scoped authenticated
+  session, a plain base-table count and a count through the view are asserted equal. Net effect:
+  the readiness function now runs exactly `pageSize` times per dispatch-board page load, not
+  `pageSize + totalCount`. `listShipmentOrders` keeps its existing single `count: exact` query as-is
+  (no `LATERAL` join to make asymmetric there) — only the missing index was the gap for that screen.
+  These two screens are 2 of 10 files across the codebase sharing the `count: exact` shape (the
+  audit's own count); a wholesale redesign of all ten, or of the numbered-jump-to-page
+  `components/tables/pagination.tsx` UI they all feed (which genuinely needs an exact total to
+  render page-number links — switching away from `count: exact` everywhere is a real UX trade-off,
+  not a drop-in change), is out of this bounded item's scope.

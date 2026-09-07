@@ -70,28 +70,49 @@ describe("getDispatchReadiness", () => {
   });
 });
 
+/**
+ * CG-AUDIT-2026-09-02 F5: listDispatchReadyQueue now issues two separate queries -- a
+ * plain HEAD count against `shipment_orders` (awaited directly, no `.range()` call), and
+ * the enriched data page against `dispatch_ready_queue` (resolved via `.range()`, exactly
+ * as before). This mock routes by table name: the `shipment_orders` chain is itself
+ * thenable at every step (simulating a real supabase-js query builder, which resolves on
+ * `await` without needing a terminal method call) and answers with `countResponse`; the
+ * `dispatch_ready_queue` chain resolves via `.range()` exactly as the single-query mock
+ * used to, answering with `dataResponse`.
+ */
 function fakeTableClient(
-  response: { data: unknown; error: { message: string } | null; count?: number },
+  countResponse: { count: number | null; error: { message: string } | null },
+  dataResponse: { data: unknown; error: { message: string } | null },
   captureRange?: (from: number, to: number) => void,
 ): BasicDispatchQueryClient {
-  function chainNode(): unknown {
+  function dataChain(): unknown {
     return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
+      select: () => dataChain(),
+      eq: () => dataChain(),
+      order: () => dataChain(),
       range: (from: number, to: number) => {
         captureRange?.(from, to);
-        return Promise.resolve(response);
+        return Promise.resolve(dataResponse);
       },
     };
   }
-  return { from: () => chainNode(), rpc: () => Promise.resolve(response) } as unknown as BasicDispatchQueryClient;
+  function countChain(): PromiseLike<unknown> {
+    return {
+      select: () => countChain(),
+      eq: () => countChain(),
+      then: (onFulfilled: (value: unknown) => unknown) => Promise.resolve(countResponse).then(onFulfilled),
+    } as unknown as PromiseLike<unknown>;
+  }
+  return {
+    from: (table: string) => (table === "shipment_orders" ? countChain() : dataChain()),
+    rpc: () => Promise.resolve(dataResponse),
+  } as unknown as BasicDispatchQueryClient;
 }
 
 describe("listDispatchReadyQueue", () => {
   test("bounds the query to one 50-row default page and maps every row", async () => {
     const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [BASE_ROW], error: null, count: 1 }, (from, to) => ranges.push([from, to]));
+    const client = fakeTableClient({ count: 1, error: null }, { data: [BASE_ROW], error: null }, (from, to) => ranges.push([from, to]));
     const result = await listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 });
     assert.deepEqual(ranges[0], [0, 49]);
     assert.equal(result.rows.length, 1);
@@ -103,13 +124,21 @@ describe("listDispatchReadyQueue", () => {
 
   test("advances the page offset correctly for page 2 and clamps an oversized pageSize", async () => {
     const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [], error: null, count: 0 }, (from, to) => ranges.push([from, to]));
+    const client = fakeTableClient({ count: 0, error: null }, { data: [], error: null }, (from, to) => ranges.push([from, to]));
     await listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
     assert.deepEqual(ranges[0], [100, 199]);
   });
 
-  test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+  test("wraps an error from the count query", async () => {
+    const client = fakeTableClient({ count: null, error: { message: "boom" } }, { data: [], error: null });
+    await assert.rejects(
+      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 }),
+      (err: unknown) => err instanceof BasicDispatchQueryError,
+    );
+  });
+
+  test("wraps an error from the data query", async () => {
+    const client = fakeTableClient({ count: 0, error: null }, { data: null, error: { message: "boom" } });
     await assert.rejects(
       () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 }),
       (err: unknown) => err instanceof BasicDispatchQueryError,

@@ -57,16 +57,44 @@ export async function getDispatchReadiness(client: BasicDispatchQueryClient, inp
   return parseDispatchReadiness(row as Record<string, unknown>);
 }
 
-/** Server-paginated ready queue -- every assigned Shipment Order the caller can access, is_ready/blockers precomputed. RLS (dispatch_ready_queue's own can_access_record predicate) is the real scope gate. */
+/**
+ * Server-paginated ready queue -- every assigned Shipment Order the caller can access, is_ready/blockers precomputed. RLS (dispatch_ready_queue's own can_access_record predicate) is the real scope gate.
+ *
+ * CG-AUDIT-2026-09-02 F5: the exact count is deliberately taken as a SEPARATE, plain HEAD
+ * request against `app.shipment_orders` directly, not by adding `count: "exact"` to the
+ * `dispatch_ready_queue` read below. `dispatch_ready_queue` is `select so.*, r.is_ready,
+ * r.blockers from app.shipment_orders so cross join lateral app.evaluate_dispatch_readiness(so.id)
+ * as r where so.status = 'assigned' and <the same can_access_record predicate
+ * app.shipment_orders' own RLS policy already enforces>` -- a ~40-line SECURITY DEFINER
+ * function invoked once per matching row. Piggy-backing `count: "exact"` onto that view
+ * would run it once per matching row on the count pass too (Postgres cannot prove the
+ * lateral output is unused just because `count(*)` doesn't reference it), on top of once
+ * per row on the data pass. Neither the view's WHERE clause nor the row count depends on
+ * `r.is_ready`/`r.blockers` at all, and `shipment_orders_select_scoped` is the identical
+ * predicate the view's own WHERE clause uses, so a plain base-table count can never
+ * disagree with one taken through the view -- see 20260907170000's own migration header
+ * for the full equivalence argument. Net effect: the readiness function now runs exactly
+ * `pageSize` times per page load, not `pageSize + totalCount`.
+ */
 export async function listDispatchReadyQueue(client: BasicDispatchQueryClient, input: ListDispatchReadyQueueInput): Promise<ListDispatchReadyQueueResult> {
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
   const page = Math.max(Math.trunc(input.page), 1);
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const { data, error, count } = await client
+  const { count, error: countError } = await client
+    .from("shipment_orders")
+    .select("*", { count: "exact", head: true })
+    .eq("tenant_id", input.tenantId)
+    .eq("status", "assigned");
+
+  if (countError) {
+    throw new BasicDispatchQueryError(countError.message);
+  }
+
+  const { data, error } = await client
     .from("dispatch_ready_queue")
-    .select("*", { count: "exact" })
+    .select("*")
     .eq("tenant_id", input.tenantId)
     .order("planned_pickup_at", { ascending: true, nullsFirst: false })
     .range(from, to);
