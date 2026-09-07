@@ -12,6 +12,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { resolveRequestClientIp } from "../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../lib/supabase/service-role.ts";
 import { recordQuotationCustomerDecision, QuotationAcceptanceMutationError } from "../../../../server/mutations/quotation-acceptance.ts";
 
@@ -34,8 +35,11 @@ export async function recordCustomerDecisionAction(rawToken: string, _prevState:
     return { error: "Your name is required.", success: false };
   }
 
+  // CG-AUDIT-2026-09-02 D3: the FIRST x-forwarded-for hop is caller-controlled and a proxy
+  // only ever appends to it -- lib/security/client-ip.ts's own resolveRequestClientIp is the
+  // shared, correct resolution (x-real-ip first, else the LAST x-forwarded-for hop).
   const requestHeaders = await headers();
-  const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const ipAddress = await resolveRequestClientIp();
   const userAgent = requestHeaders.get("user-agent");
 
   const client = createSupabaseServiceRoleClient();

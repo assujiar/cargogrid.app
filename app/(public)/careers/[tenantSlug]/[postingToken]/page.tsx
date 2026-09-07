@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { headers } from "next/headers";
+import { resolveRequestClientIp } from "../../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { resolvePublicJobPosting } from "../../../../../server/queries/recruitment.ts";
 import { ApplyForm } from "./apply-form.tsx";
@@ -13,8 +13,10 @@ import { ApplyForm } from "./apply-form.tsx";
 export default async function CareersPostingPage({ params }: { params: Promise<{ tenantSlug: string; postingToken: string }> }) {
   const { tenantSlug, postingToken } = await params;
 
-  const requestHeaders = await headers();
-  const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // CG-AUDIT-2026-09-02 D3: the FIRST x-forwarded-for hop is caller-controlled and a proxy
+  // only ever appends to it -- lib/security/client-ip.ts's own resolveRequestClientIp is the
+  // shared, correct resolution (x-real-ip first, else the LAST x-forwarded-for hop).
+  const ipAddress = (await resolveRequestClientIp()) ?? "unknown";
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const detail = await (async () => {

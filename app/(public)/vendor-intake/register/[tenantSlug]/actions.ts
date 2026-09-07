@@ -12,7 +12,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { headers } from "next/headers";
+import { resolveRequestClientIp } from "../../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { submitVendorProfileSelfRegistration } from "../../../../../server/mutations/vendor-profile.ts";
 import type { VendorIntakeSubmitResult } from "../../../../../server/contracts/vendor-profile/vendor-profile.ts";
@@ -40,9 +40,12 @@ export async function submitVendorSelfRegistrationAction(tenantId: string, _prev
 
   // client_key is a sha256 hash of the caller's own best-effort IP address, never the
   // raw IP itself -- same disclosed shape as the token-redemption action and
-  // app/(public)/tracking/[token]/page.tsx before it.
-  const requestHeaders = await headers();
-  const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // app/(public)/tracking/[token]/page.tsx before it. CG-AUDIT-2026-09-02 D3: this used to
+  // take the FIRST x-forwarded-for hop directly, which a client fully controls -- trivially
+  // defeating whatever this key is used for downstream (dedup/rate-limit signal) by varying
+  // the forged header per request. lib/security/client-ip.ts's own resolveRequestClientIp is
+  // the shared, correct resolution (x-real-ip first, else the LAST x-forwarded-for hop).
+  const ipAddress = (await resolveRequestClientIp()) ?? "unknown";
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const client = createSupabaseServiceRoleClient();
