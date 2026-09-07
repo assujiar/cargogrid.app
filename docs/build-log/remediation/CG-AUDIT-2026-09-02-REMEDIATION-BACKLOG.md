@@ -131,7 +131,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
 | LINT-1 | `scripts/jobs/supervisor.ts:50` trips the service-role import guard — pre-existing, confirmed via `git stash` baseline comparison before the Ø1 commit | `CODE` | **DONE** (`57fc8fe`) | quick, unblocks a red Tier A gate |
-| E2-seed | `app.milestone_codes` ships with 0 rows and no seed (bundled in E2's own audit paragraph) — a live, reproducible dead-end dropdown (`ingest-milestone-event-form.tsx`) on a fresh install | `CODE` | TODO | attempted and reverted during E2 (this session): a migration-time direct-insert seed (mirroring `finance_tax_codes`/`config_types`) collided with ≥16 existing `scripts/db-tests/*.sql` fixtures that already `register_milestone_code` their own definitions for names an obvious baseline set would need (`delivered`, `departed_origin`, `out_for_delivery`, `customs_hold` among them) — `app.milestone_codes` is genuinely platform-wide (no `tenant_id`) and `register_milestone_code` is idempotent, so a pre-seeded row silently pre-empts a later fixture's own intended `is_customer_visible`/`affects_eta`/`is_terminal` values (confirmed live: `operations-milestone-management.sql`'s own internal-only `customs_hold` regressed to customer-visible). Needs a full audit of every existing `register_milestone_code` call site first (exact code/name/category/visibility each test expects) before a seed can be written without silently breaking one of them. |
+| E2-seed | `app.milestone_codes` ships with 0 rows and no seed (bundled in E2's own audit paragraph) — a live, reproducible dead-end dropdown (`ingest-milestone-event-form.tsx`) on a fresh install | `CODE` | **DONE** | (this commit) — see execution log for the full call-site audit and the two codes deliberately excluded |
 
 ---
 
@@ -472,3 +472,35 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   against the correct file order via the real `run.sh` glob, once as the final sanity pass) --
   `ALL PASSED` both times, alongside `typecheck`/`lint`/full `pnpm run test` (5955 tests)/`git:
   check-paths`/`security:check`.
+- 2026-09-07 — E2-seed closed (this commit). The prior attempt's own mistake wasn't the
+  approach (a migration-time direct-insert seed, mirroring `finance_tax_codes`) -- it was
+  skipping the audit before guessing values. This attempt started from one: `grep -rn
+  register_milestone_code scripts/db-tests/*.sql` across all 11 files that use the registry
+  (33 real call sites), grouped by `code`, comparing every occurrence's own `name`/`category`/
+  `is_customer_visible`/`affects_eta`/`is_terminal` tuple byte-for-byte. Two REAL, independent
+  cross-file disagreements turned up -- not the prior attempt's own wrong guess, but two
+  actual different tests wanting two different things for the identical code: `delivery_
+  arrival` (`advanced-tms-geofence-route-deviation-signals.sql` wants affects_eta=false/
+  is_terminal=false; `advanced-tms-wms-integrated-verification.sql` wants both true) and
+  `delivered` (`operations-integrated-verification.sql` and `operations-milestone-
+  management.sql` both want affects_eta=true; `operations-public-tracking.sql` wants false).
+  Both excluded from the seed -- no value this migration could pick would avoid silently
+  breaking one of those files' own current, passing assertions, and register_milestone_code's
+  idempotent-first-wins semantics mean a seed's own value always wins over whichever test runs
+  first. Every OTHER code was confirmed identical across every one of its own call sites --
+  `picked_up` alone recurs identically in 4 separate files -- and is now seeded in
+  `20260907200000_seed_milestone_codes_baseline_e2_seed.sql`: `pickup_arrival`, `pickup_
+  departure`, `picked_up`, `departed_origin`, `in_transit`, `customs_hold`, `out_for_delivery`,
+  `delivery_departure` (8 of the ~10 unprefixed, production-meaningful codes the audit itself
+  implicitly expected; file-prefixed synthetic test codes like `customer_tracking_*`/
+  `iaeeta_*`/`vperf_*`/`iss146b_*` were excluded on purpose -- not a real baseline). Notably,
+  re-deriving `customs_hold` this time found it was NEVER actually in conflict --
+  `operations-milestone-management.sql` and `operations-public-tracking.sql` both already
+  wanted `is_customer_visible=false`; the PRIOR attempt's own regression was its own wrong
+  guess (customer-visible=true), not an inherent test disagreement, so `customs_hold` is
+  safely seeded this time with the value both files already shared. `scripts/release/check-
+  release-freeze.ts`'s HUNDRED-AND-FOURTEENTH PASS documents the full reasoning inline. Full
+  `pnpm run db:test` re-run twice (once immediately after writing the migration, once as the
+  final sanity pass after the release-freeze update) -- `ALL PASSED` both times, confirming
+  none of the 11 dependent db-test files' own assertions changed, alongside `typecheck`/
+  `lint`/full `pnpm run test` (5955 tests)/`git:check-paths`/`security:check`.

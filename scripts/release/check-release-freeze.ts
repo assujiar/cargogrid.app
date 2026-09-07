@@ -3830,7 +3830,29 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // FUNCTION` for both -- unchanged signatures, no DROP + CREATE; neither function was ever
   // touched by any later migration (confirmed via the same case-insensitive
   // ALTER/CREATE-OR-REPLACE grep), so no security-mode hardening to preserve.
-  migrationSetSha256: "097e81c3be29d3477ec76107ad1f137895a15b7c7df9f14fd5f15e198d74587f",
+  // HUNDRED-AND-FOURTEENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A, E2-seed): 511 files (+1) -- new migration
+  // 20260907200000_seed_milestone_codes_baseline_e2_seed.sql. `app.milestone_codes` (OPS-173)
+  // shipped with zero seeded rows on a fresh install -- a live, reproducible dead-end dropdown
+  // in `ingest-milestone-event-form.tsx`. A prior attempt (recorded in the backlog's own
+  // execution log) was reverted after silently regressing `operations-milestone-management.
+  // sql`'s own internal-only `customs_hold` expectation, because `app.register_milestone_code`
+  // is idempotent-first-wins per `code` and the seed had guessed a conflicting value. This
+  // attempt is built from a full audit of all 33 real `register_milestone_code` call sites
+  // across all 11 db-test files that use this registry, grouped by code: two REAL,
+  // independent cross-file disagreements were found (`delivery_arrival` and `delivered`, each
+  // with two files genuinely expecting different affects_eta/is_terminal values for the same
+  // code) and deliberately excluded from the seed; every other code was confirmed
+  // byte-for-byte identical across every one of its own real call sites and is now seeded via
+  // a plain `insert` (mirroring `20260729090000_create_finance_tax_baseline.sql`'s own
+  // `app.finance_tax_codes` platform-catalog seed precedent) -- `pickup_arrival`,
+  // `pickup_departure`, `picked_up`, `departed_origin`, `in_transit`, `customs_hold`,
+  // `out_for_delivery`, `delivery_departure`. Full `pnpm run db:test` re-run end to end after
+  // this migration: `ALL PASSED`, including every one of the 11 db-test files that touch this
+  // registry -- confirming the seed changes nothing any of them already observed.
+  migrationSetSha256: "1b57197248d04de881757dc9af9b6b4875e9cdc52adeb8008e034a1e499b90aa",
+  // History: 097e81c3be29d3477ec76107ad1f137895a15b7c7df9f14fd5f15e198d74587f
+  // (510 files, HUNDRED-AND-THIRTEENTH PASS).
   // History: a182a76409dc6e5ddbe6fd8fa3c1f55496a5eca9ef784ce483a4f4b3c7f86c57
   // (509 files, HUNDRED-AND-TWELFTH PASS).
   // History: 2983672fb1e79e945912c7ec5f027745c41bd94050419c141aaf8de83295ba55
