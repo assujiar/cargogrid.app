@@ -3680,7 +3680,76 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // public-api-wrapper-regression.sql's own three assertions are catalog-derived (every
   // externally-callable app.* function, not a hardcoded list), so the new function and its
   // wrapper are verified by the existing, unmodified test automatically.
-  migrationSetSha256: "000e1423c9fe992a9b768a2098b13f45cc87ecac9df3172b386585afc7e8b6df",
+  // HUNDRED-AND-TENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 507 files (+1). One new migration, 20260907160000, closing the audit's F3
+  // finding: all 13 finance list functions carried a literal `limit 200` with no cursor,
+  // offset or date parameter -- 101 other list/search RPCs in this schema already take a
+  // p_cursor/p_after parameter (app.list_attendance_correction_requests's own p_after_id
+  // uuid keyset idiom); finance alone did not, so a tenant issuing ~200 invoices/journals/
+  // receipts reached the ceiling within weeks with no path to the rest. Fix, applied
+  // identically to all 13 (app.list_finance_ar_open_items/ap_open_items/invoices/journals/
+  // receipts/settlements/bank_accounts/bank_transactions/vendor_bills/period_locks/
+  // reconciliation_runs/subledger_batches/journal_corrections): added p_limit integer
+  // default 200/p_after_id uuid default null (DROP + CREATE, not CREATE OR REPLACE --
+  // Postgres does not allow adding parameters to an existing function signature, the same
+  // reason 20260730100000/20260730130000 dropped+recreated app.lookup_public_shipment_
+  // tracking to widen its own signature); each fetches limit + 1 rows so the TS query layer
+  // can trim and detect truncation the same way server/queries/bounded-list.ts#toBoundedList
+  // already does for direct-table reads; each function's own anchor-row lookup is
+  // deliberately scoped `and tenant_id = p_tenant_id`, which app.list_attendance_correction_
+  // requests's own precedent does not do -- closes a narrow cross-tenant sort-key oracle a
+  // foreign p_after_id could otherwise open, caught by this migration's own review rather
+  // than copied uncritically from precedent. Plus all 13 functions' public.* Option-2
+  // wrappers, widened identically with the same two trailing parameters and an unchanged
+  // grant set. Deeply tested for both distinct sort-order shapes (ascending due_date+id tie-
+  // break for AR open items, descending created_at+id tie-break for reconciliation runs) in
+  // a new db-test file, scripts/db-tests/finance-list-cursor-pagination.sql -- full multi-row
+  // cursor walk visiting every seeded row exactly once in order, one page past the end
+  // returning zero rows, the limit+1 over-fetch arithmetic, the cross-tenant anchor-scoping
+  // hardening, and old-shape-call backward compatibility. The remaining 11 functions share
+  // the identical two code shapes (verified by direct code review) and are exercised without
+  // error by their own existing, unmodified db-test files' calls (this migration's new
+  // trailing parameters are optional, so no existing call site needed to change) -- a
+  // dedicated cursor-walk regression for each of those 11 was not added in this bounded
+  // change. All 13 corresponding server/queries/*.ts wrapper functions gained the SAME
+  // optional, additive limit/afterId input fields (return type and default behavior
+  // unchanged for every existing caller); no page.tsx UI wiring ("Load more" controls) was
+  // added in this bounded change -- the audit's own F3 paragraph is about the RPC signature
+  // defect specifically, and its separately-stated "only 10 of 238 tenant pages offer any
+  // pagination control at all" finding is independent, repo-wide, and out of this item's
+  // scope.
+  // AMENDED same-pass: the migration initially omitted the standing per-migration
+  // convention (ERR-2026-004/PLT-118) of an explicit `revoke execute on all functions in
+  // schema app from public` after each DROP+CREATE -- unlike CREATE OR REPLACE, DROP+
+  // CREATE resets a function's privileges to Postgres's own implicit PUBLIC-execute
+  // default, re-opening exactly the class of gap PLT-118 closed repository-wide. Caught
+  // live by scripts/db-tests/finance-accounts-payable.sql's own pre-existing "anon holds
+  // zero EXECUTE" assertion failing against the recreated app.list_finance_ap_open_items
+  // during this same pass's db:test run -- fixed by adding the revoke statement once per
+  // recreated function (13 total), matching the file-end blanket-revoke convention every
+  // other multi-function migration in this repository already uses.
+  // AMENDED same-pass, a SECOND and separate defect: all 13 app.* functions were
+  // recreated plain `language plpgsql stable`, copied from their own 2026-07-29 creation
+  // migrations -- but 20260810900000_harden_finance_authority_chain_tierc_completeness.sql
+  // had already widened every one of them (among ~20 other list_finance_* functions,
+  // confirmed by direct inspection, not assumed) to `security definer` with `set
+  // search_path to 'app', 'pg_temp'`, which is the CURRENT, authoritative shape a
+  // migration-built database actually has. Recreating from the pre-hardening shape
+  // silently REVERTED that hardening -- exactly the app.<name>/public.<name> security-
+  // mode drift class 20260826010000's own header comment documents as an RLS-bypass-by-
+  // wrapper risk. Caught live by scripts/db-tests/public-api-wrapper-regression.sql's own
+  // pre-existing exhaustive `prosecdef` parity assertion failing against all 13 recreated
+  // functions during this same pass's own re-run (after the ERR-2026-004 fix above) --
+  // fixed by adding `security definer` + `set search_path = app, pg_temp` to each of the
+  // 13 (body/filter/sort logic otherwise byte-identical, verified line by line against
+  // 20260810900000's own current text, the migration's real source of truth here, not the
+  // 2026-07-29 creation migrations this backlog item's own header otherwise describes).
+  migrationSetSha256: "c62a545dc710bb9485577327a7c7f2e8295d5007e1c62286847d6e43f41d88da",
+  // History: ebf2014640553ddc87d687c8c04e96696fcc6b394e5ba2f980ba408c995fd612
+  // (507 files -- same HUNDRED-AND-TENTH PASS, superseded same-pass by the security-
+  // definer/search_path fix above before this backlog item was ever considered closed).
+  // History: 000e1423c9fe992a9b768a2098b13f45cc87ecac9df3172b386585afc7e8b6df
+  // (506 files, HUNDRED-AND-NINTH PASS).
   // History: a7287556fa485208595d75b5a9a08b421a7245419ff826daf92ddbb832a5dafa
   // (505 files, HUNDRED-AND-EIGHTH PASS).
   // History: 4b6d270110ecb08b88a57d729aa97aaafd8f1159d99e4fa5d3abb6a76828909a
@@ -4504,9 +4573,30 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // unconstructible: shipment F now gets its own, separate, real vehicle assignment, with
   // the shared-fan-out/degraded/stale-precedence assertions all adapted to two
   // independently-tracked vehicles instead of one shared one.
-  dbTestSetSha256: "d11d8a12a24ed61c87ba6b85773006fb2acef160d02b703cc6595ea7ca8db413",
-  // History: dacea19f1c53b02185c43ff7d3e5bd6f3656a60289f0b2271bb5ad70e550f021
-  // (254 files, HUNDRED-AND-SEVENTH PASS).
+  // HUNDRED-AND-TENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 255 files (+1). New file scripts/db-tests/finance-list-cursor-pagination.sql
+  // proves F3's fix (20260907160000) deeply for both distinct sort-order shapes the 13
+  // widened finance list functions use: app.list_finance_ar_open_items (ascending due_date,
+  // id tie-break) and app.list_finance_reconciliation_runs (descending created_at, id tie-
+  // break), each with 5 rows sharing an identical sort-key value to force every row through
+  // the id tie-break. Asserts: a full cursor walk visits all 5 rows exactly once in the
+  // documented order; one page past the end returns zero rows, not an error or a repeat; the
+  // limit+1 over-fetch arithmetic is exact; a cross-tenant p_after_id (a real row id from a
+  // DIFFERENT tenant the same actor also holds FIN:View on) is silently ignored rather than
+  // leaking that other tenant's own sort-key value into this tenant's predicate; and the old,
+  // un-widened 5/4-positional-argument call shape still returns the full un-paginated set.
+  // The remaining 11 widened functions were not given their own dedicated cursor-walk file in
+  // this bounded change -- they share the identical two code shapes just proven, verified by
+  // direct code review, and are exercised without error by their own existing, unmodified
+  // db-test files (finance-accounts-payable.sql, finance-invoice.sql, finance-journal.sql,
+  // finance-receipt-allocation.sql, finance-settlement.sql, finance-cash-bank.sql,
+  // finance-vendor-bill.sql, finance-period-lock.sql, finance-subledger.sql,
+  // finance-reversal-adjustment.sql), whose own pre-existing calls pass unaffected through
+  // the new optional trailing parameters.
+  dbTestSetSha256: "05a737f2f3ea2a5773d6d3f79d76670afed3725997193fb9ea8c844242e64293",
+  // History: d11d8a12a24ed61c87ba6b85773006fb2acef160d02b703cc6595ea7ca8db413
+  // (254 files -- last changed at HUNDRED-AND-SEVENTH PASS, carried forward unchanged
+  // through HUNDRED-AND-EIGHTH and HUNDRED-AND-NINTH since neither touched a db-test file).
   // History: ab205db0c68005dd859ec5457654a6242355b0f795f9da11eb30f824cdd572a4
   // (253 files, HUNDRED-AND-SIXTH PASS).
   // History: 05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9

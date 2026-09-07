@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { BOUNDED_LIST_LIMIT } from "./bounded-list.ts";
 import {
   parseFinanceApOpenItem,
   parseFinanceApOpenItemEvent,
@@ -24,11 +25,25 @@ export class AccountsPayableQueryError extends Error {
   }
 }
 
-/** FIN:View-gated. Bounded (200-row), server-filtered/sorted list, due_date ascending. */
+/**
+ * FIN:View-gated. Bounded (200-row default/cap), server-filtered/sorted list, due_date
+ * ascending. CG-AUDIT-2026-09-02 F3: `afterId`/`limit` optional and additive -- see
+ * accounts-receivable.ts#listFinanceArOpenItems's own header comment for the full rationale.
+ */
 export async function listFinanceApOpenItems(
   client: AccountsPayableQueryRpcClient,
-  input: { tenantId: string; companyId: string | null; vendorMasterId: string | null; status: string | null; overdueOnly: boolean; actorAuthUserId: string },
+  input: {
+    tenantId: string;
+    companyId: string | null;
+    vendorMasterId: string | null;
+    status: string | null;
+    overdueOnly: boolean;
+    actorAuthUserId: string;
+    limit?: number;
+    afterId?: string | null;
+  },
 ): Promise<FinanceApOpenItem[]> {
+  const limit = input.limit ?? BOUNDED_LIST_LIMIT;
   const { data, error } = await client.rpc("list_finance_ap_open_items", {
     p_tenant_id: input.tenantId,
     p_company_id: input.companyId,
@@ -36,12 +51,14 @@ export async function listFinanceApOpenItems(
     p_status: input.status,
     p_overdue_only: input.overdueOnly,
     p_actor_auth_user_id: input.actorAuthUserId,
+    p_limit: limit,
+    p_after_id: input.afterId ?? null,
   });
   if (error) {
     throw new AccountsPayableQueryError(error.message);
   }
   const rows = Array.isArray(data) ? data : [];
-  return rows.map((row) => parseFinanceApOpenItem(row as Record<string, unknown>));
+  return rows.slice(0, limit).map((row) => parseFinanceApOpenItem(row as Record<string, unknown>));
 }
 
 /** FIN:View-gated. Full append-only activity trail for one open item, oldest first. */

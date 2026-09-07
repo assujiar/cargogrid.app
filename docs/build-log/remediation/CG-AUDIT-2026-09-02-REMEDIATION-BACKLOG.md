@@ -97,7 +97,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A3 | Publishing a role version silently revokes it from every holder (assignment pinned to `role_version_id`, publish never migrates it) | `CODE` | TODO | bounded, real fix identified |
 | E2 | One-vehicle-one-shipment is an unlocked `EXISTS` check — racily bypassable | `CODE` | **DONE** | (this commit) — bundled `app.milestone_codes` seeding sub-finding NOT closed, see Housekeeping |
 | F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | **DONE** | (this commit) |
-| F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | TODO | bounded, mirrors an existing in-repo pattern |
+| F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | **DONE** | (this commit) |
 | F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | TODO | bounded |
 | F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | TODO | bounded, one component |
 | A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | TODO | attempt a bounded first slice |
@@ -247,3 +247,40 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   unavailable" copy a bad token already renders. Verified via a full `npx next build` (the same
   "booted build" condition the audit itself reproduced against) — builds clean, `/_not-found`
   registered, zero errors.
+- 2026-09-07 — F3 closed (this commit). All 13 finance list functions (`app.list_finance_
+  ar_open_items`/`ap_open_items`/`invoices`/`journals`/`receipts`/`settlements`/`bank_accounts`/
+  `bank_transactions`/`vendor_bills`/`period_locks`/`reconciliation_runs`/`subledger_batches`/
+  `journal_corrections`) gained `p_limit integer default 200`/`p_after_id uuid default null`,
+  mirroring the `p_after_id` keyset idiom `app.list_attendance_correction_requests` and 100 other
+  list/search RPCs already use; each fetches `limit + 1` rows so the TS query layer can trim and
+  detect truncation the same way `server/queries/bounded-list.ts#toBoundedList` already does for
+  direct-table reads. The anchor-row lookup is additionally scoped `and tenant_id = p_tenant_id`
+  (a hardening beyond the `list_attendance_correction_requests` precedent, which doesn't tenant-
+  scope its own anchor) — closes a narrow cross-tenant sort-key oracle a foreign `p_after_id`
+  could otherwise open. Deeply tested for both distinct sort-order shapes (ascending `due_date`+id
+  tie-break for AR open items, descending `created_at`+id tie-break for reconciliation runs) in a
+  new file, `scripts/db-tests/finance-list-cursor-pagination.sql`; the remaining 11 share the
+  identical two code shapes (verified by direct code review) and are exercised without error by
+  their own existing, unmodified db-test files (the new parameters are optional). All 13
+  `server/queries/*.ts` wrapper functions gained the same optional, additive `limit`/`afterId`
+  input fields — return type and default behavior unchanged for every existing caller; no
+  page.tsx "Load more" UI wiring was added in this bounded change (the audit's own F3 paragraph is
+  about the RPC signature specifically; its separately-stated "only 10 of 238 tenant pages offer
+  any pagination control" finding is independent, repo-wide, and out of this item's scope).
+  Two same-pass, live-caught bugs in the migration's own first draft, both found by re-running
+  `pnpm run db:test` (never assumed fixed): (1) each `DROP + CREATE` (required since the
+  parameter list changes — Postgres doesn't allow `CREATE OR REPLACE` to add parameters) silently
+  reset the recreated function's privileges to Postgres's own implicit PUBLIC-execute default,
+  re-opening the exact class of gap `ERR-2026-004`/`PLT-118` closed repository-wide — caught by
+  `finance-accounts-payable.sql`'s own pre-existing "anon holds zero EXECUTE" assertion; fixed by
+  adding the standing `revoke execute on all functions in schema app from public` once per
+  recreated function. (2) all 13 were recreated plain `language plpgsql stable`, copied from their
+  own 2026-07-29 creation migrations — but `20260810900000_harden_finance_authority_chain_tierc_
+  completeness.sql` had already widened every one of them to `security definer` with `set
+  search_path to 'app', 'pg_temp'`, the CURRENT authoritative shape a migration-built database
+  actually has; recreating from the pre-hardening shape silently reverted that hardening, exactly
+  the app.\<name\>/public.\<name\> security-mode drift class `20260826010000`'s own header comment
+  documents as an RLS-bypass-by-wrapper risk. Caught by `public-api-wrapper-regression.sql`'s own
+  exhaustive `prosecdef` parity assertion failing against all 13; fixed by adding `security
+  definer` + `set search_path = app, pg_temp` to each (body/filter/sort logic otherwise
+  byte-identical, verified line by line against `20260810900000`'s own current text).
