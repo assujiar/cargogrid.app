@@ -3652,7 +3652,37 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // fixture's own intended definition, confirmed live against
   // operations-milestone-management.sql's own internal-only customs_hold regressing to
   // customer-visible) -- tracked separately, not closed by this migration.
-  migrationSetSha256: "a7287556fa485208595d75b5a9a08b421a7245419ff826daf92ddbb832a5dafa",
+  // HUNDRED-AND-NINTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 506 files (+1). One new migration, 20260907150000, closing the audit's Ø1
+  // (remaining tenant-lookup guards) and Ø2 (customer-portal RLS lockout) findings
+  // together, since they share one root cause and one fix. Ø1: three more
+  // `findTenantBySlug` call sites still ran `supabase.from("tenants")...` against schema
+  // `app`, which PostgREST never exposes -- lib/portal/customer-ticket-guard-deps.server.ts,
+  // lib/portal/customer-portal-guard-deps.server.ts, and lib/auth/register-login-session-
+  // deps.server.ts. Ø2: 20260906090000's own resolver, app.resolve_tenant_by_slug_for_actor,
+  // cannot be reused for any of the three -- it deliberately mirrors app.tenants' own
+  // tenants_select_own_tenant RLS policy (has_active_tenant_membership(id) AND NOT actor_
+  // holds_customer_user_layer(id)), which structurally excludes every customer_user, by
+  // construction, for the two guards that admit ONLY customer_user (the exact Ø2 lockout,
+  // reached through this RPC instead of a raw table read) and is also wrong for the login-
+  // session tracker, which needs both layers since it fires from the one shared
+  // app/(public)/login/ route for every principal layer. Fix: one new resolver, app.
+  // resolve_tenant_by_slug_for_member, identical to resolve_tenant_by_slug_for_actor except
+  // it omits the customer-layer exclusion -- 20260730560000's own migration already proved,
+  // in a disposable database, that a customer_user principal satisfies has_active_tenant_
+  // membership on its own (it is the tenant-admin guard's own additional "AND NOT actor_
+  // holds_customer_user_layer" line that excludes them, not has_active_tenant_membership
+  // itself). Plus its public.* Option-2 wrapper with an identical grant set (service_role,
+  // authenticated only), mirroring 20260906090000 exactly. All three TS call sites' pure-
+  // logic interfaces (customer-ticket-guard.ts, customer-portal-guard.ts, register-login-
+  // session.ts) and their real deps.server.ts wirings were updated to thread the caller's
+  // authUserId through to the new RPC; no db-test file changed since scripts/db-tests/
+  // public-api-wrapper-regression.sql's own three assertions are catalog-derived (every
+  // externally-callable app.* function, not a hardcoded list), so the new function and its
+  // wrapper are verified by the existing, unmodified test automatically.
+  migrationSetSha256: "000e1423c9fe992a9b768a2098b13f45cc87ecac9df3172b386585afc7e8b6df",
+  // History: a7287556fa485208595d75b5a9a08b421a7245419ff826daf92ddbb832a5dafa
+  // (505 files, HUNDRED-AND-EIGHTH PASS).
   // History: 4b6d270110ecb08b88a57d729aa97aaafd8f1159d99e4fa5d3abb6a76828909a
   // (504 files, HUNDRED-AND-SEVENTH PASS).
   // History: 1fca1ec22b42d6b1b9a115c610fd28bf160a5c110beb68beadeeda9d6ba4de97

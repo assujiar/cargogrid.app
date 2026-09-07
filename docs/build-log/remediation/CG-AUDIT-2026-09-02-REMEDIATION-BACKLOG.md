@@ -48,8 +48,8 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Commit |
 |---|---|---|---|---|
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
-| Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | TODO | |
-| Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | TODO | |
+| Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
+| Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
 | Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `DEFERRED_LARGE` (recon complete) | |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
@@ -195,3 +195,28 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   instead, with every dependent assertion adapted accordingly. The bundled `app.milestone_codes`
   seeding sub-finding was attempted and reverted — see the new `E2-seed` Housekeeping row for why
   and what a real fix needs.
+- 2026-09-07 — Ø1-remaining-guards and Ø1-customer-portal-guard + Ø2 closed together (this commit),
+  since all three broken call sites share one root cause and one fix. Ø1:
+  `customer-ticket-guard-deps.server.ts`, `customer-portal-guard-deps.server.ts`, and
+  `register-login-session-deps.server.ts` all still ran `supabase.from("tenants")...` against schema
+  `app`, which PostgREST never exposes — the same defect `Ø1-tenant-admin` already fixed for
+  `tenant-admin-guard-deps.server.ts`. Ø2: `20260906090000`'s own resolver,
+  `app.resolve_tenant_by_slug_for_actor`, could not be reused for any of the three — it deliberately
+  mirrors `app.tenants`' own `tenants_select_own_tenant` RLS policy
+  (`has_active_tenant_membership(id) AND NOT actor_holds_customer_user_layer(id)`), which structurally
+  excludes every `customer_user` by construction. Two of the three guards admit ONLY `customer_user`
+  (the exact Ø2 lockout, just reached through this RPC instead of a raw table read), and the third
+  (login-session tracking) needs both layers, since it fires from the one shared `app/(public)/login/`
+  route for every principal layer. Fix: one new resolver, `app.resolve_tenant_by_slug_for_member`
+  (`20260907150000`), identical to `resolve_tenant_by_slug_for_actor` except it omits the
+  customer-layer exclusion — `20260730560000`'s own migration already proved, in a disposable
+  database, that a `customer_user` principal satisfies `has_active_tenant_membership` on its own (it
+  is the tenant-admin guard's own additional `AND NOT actor_holds_customer_user_layer` line that
+  excludes them, not `has_active_tenant_membership` itself). Plus its `public.*` Option-2 wrapper with
+  an identical grant set (`service_role`, `authenticated` only). All three TS call sites' pure-logic
+  interfaces (`customer-ticket-guard.ts`, `customer-portal-guard.ts`, `register-login-session.ts`) and
+  their real `deps.server.ts` wirings were updated to thread the caller's `authUserId` through to the
+  new RPC. No `db-test` file needed changes — `scripts/db-tests/public-api-wrapper-regression.sql`'s
+  own assertions are catalog-derived (every externally-callable `app.*` function, not a hardcoded
+  list), so the new function and its wrapper are verified by the existing, unmodified test
+  automatically.
