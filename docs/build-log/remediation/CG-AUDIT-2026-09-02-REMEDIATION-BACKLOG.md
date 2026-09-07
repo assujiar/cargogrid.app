@@ -96,7 +96,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 |---|---|---|---|---|
 | A3 | Publishing a role version silently revokes it from every holder (assignment pinned to `role_version_id`, publish never migrates it) | `CODE` | TODO | bounded, real fix identified |
 | E2 | One-vehicle-one-shipment is an unlocked `EXISTS` check — racily bypassable | `CODE` | **DONE** | (this commit) — bundled `app.milestone_codes` seeding sub-finding NOT closed, see Housekeeping |
-| F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | TODO | mechanical, bounded |
+| F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | **DONE** | (this commit) |
 | F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | TODO | bounded, mirrors an existing in-repo pattern |
 | F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | TODO | bounded |
 | F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | TODO | bounded, one component |
@@ -220,3 +220,30 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   own assertions are catalog-derived (every externally-callable `app.*` function, not a hardcoded
   list), so the new function and its wrapper are verified by the existing, unmodified test
   automatically.
+- 2026-09-07 — F1 closed (this commit). Added `app/error.tsx`, `app/global-error.tsx`, and
+  `app/not-found.tsx` — the root-level boundaries the audit found 0 of anywhere (195 `loading.tsx`
+  existed, but no error/not-found equivalent). `error.tsx`/`global-error.tsx` follow
+  `docs/architecture/09_UX_DESIGN_SYSTEM_WORKSTREAM.md` §5's Error-state contract (human-readable
+  message + a request id + retry, never the raw exception) — `error.digest` (Next's own
+  production-safe correlation id for a Server Component throw) is shown as the request id, reusing
+  the existing `components/ui/error-state.tsx` primitive already used by 218 pages for their own
+  known-query-failure states, so an uncaught throw now renders consistently with every already-
+  handled one. `global-error.tsx` renders its own `<html>`/`<body>` deliberately unstyled (no
+  design-system primitives) since it exists specifically to survive the root layout itself failing.
+  Also root-caused and fixed both of the audit's own reproduced 500s: (1) `/api/v1/status` — all 9
+  `app/api/v1/**` route handlers call `recordApiV1Success()` AFTER already computing a successful
+  response, with no try/catch around it, so a transient failure in the audit-log write itself
+  (`record_api_request` erroring) propagated as an uncaught exception, discarding an
+  already-succeeded (for a mutation route, already-COMMITTED) result; fixed at the one shared
+  function (`lib/api-gateway/authenticate.server.ts`) rather than at each of the 9 call sites, so
+  audit logging can never again override a response the gateway already decided to return — the
+  same "best-effort, never a precondition" posture `register-login-session.ts`/`resolveRequestClientIp`
+  already establish. Regression test added (`tests/api/v1/status.test.ts`), confirmed to fail without
+  the fix and pass with it. (2) `/tracking/{token}` — `app.lookup_public_shipment_tracking` itself is
+  designed to never raise, but this route's own TS layer (`lookupPublicShipmentTracking()`) can still
+  throw `PublicTrackingQueryError` on a real RPC/network error or a row that fails its zod schema;
+  since this route is unauthenticated and outside every portal guard (no session/tenant context to
+  fall back on), the lookup is now wrapped in try/catch and degrades to the same "Tracking
+  unavailable" copy a bad token already renders. Verified via a full `npx next build` (the same
+  "booted build" condition the audit itself reproduced against) — builds clean, `/_not-found`
+  registered, zero errors.

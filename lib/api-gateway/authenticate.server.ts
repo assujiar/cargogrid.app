@@ -167,26 +167,47 @@ export async function authorizeApiV1Request(request: Request, operation: string,
   };
 }
 
-/** The route handler's own success-path log call -- one app.api_logs row per accepted request, mirroring the denial path's own single-row discipline above. */
+/**
+ * The route handler's own success-path log call -- one app.api_logs row per accepted
+ * request, mirroring the denial path's own single-row discipline above.
+ *
+ * CG-AUDIT-2026-09-02 F1: every one of the 9 `app/api/v1/**` route handlers calls this
+ * AFTER already computing its own successful response, with no try/catch around it --
+ * a transient failure here (a DB blip, a constraint violation in the audit-log write
+ * itself) previously propagated as an uncaught exception, turning an already-succeeded
+ * (for a mutation route, already-COMMITTED) request into a 500 the caller never should
+ * have seen. Reproduced live against a booted build for GET /api/v1/status. Audit
+ * logging is an observability enhancement layered on top of a request the gateway has
+ * already decided to answer, never a precondition for answering it -- the same
+ * "deliberately best-effort" posture `lib/auth/register-login-session.ts` and
+ * `lib/security/client-ip.ts#resolveRequestClientIp` already establish for their own
+ * non-critical side effects. A failure here is swallowed, not surfaced -- there is no
+ * error-tracking/observability plumbing in this repository to report it to, and this
+ * function's return type is already `void` at every real call site.
+ */
 export async function recordApiV1Success(
   authorized: AuthorizedApiV1Request,
   params: { operation: string; httpMethod: string; path: string; statusCode: number; idempotencyKey?: string | null; startedAt: number },
 ): Promise<void> {
-  await recordApiRequest(authorized.rpcClient, {
-    correlationId: authorized.correlationId,
-    tenantId: authorized.tenantId,
-    actorAuthUserId: authorized.createdByAuthUserId,
-    actorType: "api_key",
-    apiKeyId: authorized.apiKeyId,
-    interface: "rest",
-    operation: params.operation,
-    httpMethod: params.httpMethod,
-    path: params.path,
-    statusCode: params.statusCode,
-    result: params.statusCode < 400 ? "success" : "failure",
-    idempotencyKey: params.idempotencyKey ?? null,
-    durationMs: Date.now() - params.startedAt,
-  });
+  try {
+    await recordApiRequest(authorized.rpcClient, {
+      correlationId: authorized.correlationId,
+      tenantId: authorized.tenantId,
+      actorAuthUserId: authorized.createdByAuthUserId,
+      actorType: "api_key",
+      apiKeyId: authorized.apiKeyId,
+      interface: "rest",
+      operation: params.operation,
+      httpMethod: params.httpMethod,
+      path: params.path,
+      statusCode: params.statusCode,
+      result: params.statusCode < 400 ? "success" : "failure",
+      idempotencyKey: params.idempotencyKey ?? null,
+      durationMs: Date.now() - params.startedAt,
+    });
+  } catch {
+    // Best-effort: see this function's own header comment.
+  }
 }
 
 /**

@@ -111,4 +111,27 @@ describe("GET /api/v1/status", () => {
       stub.restore();
     }
   });
+
+  test("CG-AUDIT-2026-09-02 F1: a request succeeds even when its own success-path audit log write fails", async () => {
+    // Reproduced live against a booted build: record_api_request throwing (a DB blip, a
+    // constraint violation in the log write itself) previously propagated as an
+    // uncaught exception from recordApiV1Success(), turning this already-computed 200
+    // into an uncaught 500 the caller never should have seen. Audit logging must never
+    // override a response the gateway has already decided to return.
+    const stub = installRpcFetchStub({
+      authenticate_and_authorize_api_request: { data: okAuthRow({ rateLimitPerMinute: 60, rateLimitRemaining: 42 }) },
+      list_api_versions: {
+        data: [{ code: "v1", status: "active", sunset_at: null, notes: "Initial version.", registered_by: null, created_at: "2026-07-19T00:00:00.000Z", updated_at: "2026-07-19T00:00:00.000Z" }],
+      },
+      record_api_request: { error: { message: "simulated audit-log write failure" } },
+    });
+    try {
+      const response = await GET(new Request("http://localhost/api/v1/status", { headers: { authorization: "Bearer cgk_test_valid" } }));
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as { versions: Array<{ code: string; status: string }> };
+      assert.equal(body.versions.length, 1);
+    } finally {
+      stub.restore();
+    }
+  });
 });
