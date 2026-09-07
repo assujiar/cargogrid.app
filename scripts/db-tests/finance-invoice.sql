@@ -291,7 +291,20 @@ begin
     raise exception 'assertion failed: expected status approved, got %', v_invoice.status;
   end if;
 
+  -- CG-AUDIT-2026-09-02 B1 regression: issue_finance_invoice is called for real by
+  -- server/mutations/invoice.ts through the RLS-scoped `authenticated` client (via its
+  -- public.* Option-2 wrapper), never as the superuser this file otherwise runs as --
+  -- running this exact call as role `authenticated` (no JWT claims needed: the audit's
+  -- own reproduction was a pure table-grant error, "permission denied for table
+  -- finance_invoices", not an RLS/identity failure -- assert_actor_is_session_identity
+  -- already treats a null session identity as trusted) is the only way this suite would
+  -- have caught B1 (the function was SECURITY INVOKER with authenticated holding no
+  -- table privileges, so this exact call raised that permission error in production
+  -- while still passing every db-test that called it unqualified as the connecting
+  -- superuser).
+  set local role authenticated;
   select * into v_invoice from app.issue_finance_invoice(v_invoice.id, v_invoice.record_version, '2026-03-15'::date, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  reset role;
   if v_invoice.status <> 'issued' or v_invoice.invoice_number !~ '^INV-2026-[0-9]{6}$' or v_invoice.due_date <> '2026-04-14'::date then
     raise exception 'assertion failed: expected status issued, a real invoice_number, and due_date 2026-04-14 (issue_date + 30d), got status=% number=% due=%', v_invoice.status, v_invoice.invoice_number, v_invoice.due_date;
   end if;

@@ -161,7 +161,19 @@ begin
   v_rev_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'REV-LOCK');
   v_period_may_id := (select id from app.finance_fiscal_periods where tenant_id = v_tenant_a and period_code like '%2026-05%' limit 1);
 
+  -- CG-AUDIT-2026-09-02 B1 regression: lock_finance_period is called for real by
+  -- server/mutations/period-lock.ts through the RLS-scoped `authenticated` client (via
+  -- its public.* Option-2 wrapper), never as the superuser this file otherwise runs as --
+  -- running this exact call as role `authenticated` (no JWT claims needed: the audit's
+  -- own reproduction was a pure table-grant error, not an RLS/identity failure --
+  -- assert_actor_is_session_identity already treats a null session identity as trusted)
+  -- is the only way this suite would have caught B1 (the function was SECURITY INVOKER
+  -- with authenticated holding no table privileges, so this exact call raised a
+  -- permission error in production while still passing every db-test that called it
+  -- unqualified as the connecting superuser).
+  set local role authenticated;
   select * into v_lock from app.lock_finance_period(v_tenant_a, null, v_period_may_id, 'gl', 'GL close complete', 'evidence-1', '00000000-0000-0000-0000-000000032002', 'financemanagera');
+  reset role;
   if v_lock.status <> 'locked' then
     raise exception 'assertion failed: expected a locked gl scope';
   end if;

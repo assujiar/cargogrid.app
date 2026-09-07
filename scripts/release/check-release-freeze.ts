@@ -3524,7 +3524,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ONLY the 9 job types with a real in-database executor; the other 24 are external handoffs and
   // stay pending rather than being claimed and dead-lettered -- a job marked completed whose work
   // never happened is strictly worse than one that never ran.
-  migrationSetSha256: "4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99",
+  // HUNDRED-AND-THIRD PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027 Part
+  // A -- see docs/build-log/remediation/CG-AUDIT-2026-09-02-REMEDIATION-BACKLOG.md): 500 files
+  // (+2). This is the independent launch-readiness audit's own remediation, not a Step 16/17
+  // release-lineage checkpoint -- recorded here because this file's own mechanism requires it,
+  // exactly as RGL-BLK-002-OPTION2-REMEDIATION.md's prior amendment above already did for an
+  // out-of-band fix of the same underlying defect class. Two new migrations: (1)
+  // 20260906090000, closing the audit's Ø1 finding for the tenant-admin-guard path --
+  // app.resolve_tenant_by_slug_for_actor plus its public.* Option-2 wrapper, replacing a
+  // supabase.from("tenants") call that targeted schema app (never exposed to PostgREST) with a
+  // real RPC path, mirroring app.tenants' own tenants_select_own_tenant RLS predicate exactly;
+  // (2) 20260907090000, closing the audit's B1 finding -- app.issue_finance_invoice and
+  // app.lock_finance_period (plus their existing public.* wrappers) converted from SECURITY
+  // INVOKER to SECURITY DEFINER with search_path now pinned, reproduced live before the fix
+  // ("permission denied for table finance_invoices" under the authenticated role) and verified
+  // fixed by the extended db-tests below.
+  migrationSetSha256: "df0c466d4fded333fd6fd2edcb1230f33189d0d6e22e9eac35d52f8632bf4b16",
+  // History: 4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99
+  // (498 files, HUNDRED-AND-SECOND PASS).
   // History: 58f6ffb411bb3213be951b6f081f0d6cf0be83bcf27e46d93455bfd0a04bc032
   // (497 files, ISS-2026-311's cargogrid.net reserved-hostname guard).
   // History: 4d064ccc938fcbf43cddcee5165b43b08f89a556ab4b70dc3eb3c9dea62907ff
@@ -4263,7 +4280,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // failed with one attempt spent and a future backoff while the good job in the same batch still
   // completes; an enqueued external-handoff job comes through untouched with zero attempts; the
   // batch ceiling holds; a drained queue returns empty; and the worker is service_role-only).
-  dbTestSetSha256: "f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480",
+  // HUNDRED-AND-THIRD PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027 Part
+  // A -- see docs/build-log/remediation/CG-AUDIT-2026-09-02-REMEDIATION-BACKLOG.md): 251 files
+  // (+1). One new file, tenant-admin-guard-postgrest-schema-exposure.sql (Ø1: membership
+  // resolution, anti-enumeration collapse, customer_user-layer exclusion, actor-identity-
+  // mismatch rejection, anon-grant denial for the new resolve_tenant_by_slug_for_actor RPC).
+  // Two existing files extended, count unchanged (B1): finance-invoice.sql and
+  // finance-period-lock.sql each now run their real issue/lock call under `set local role
+  // authenticated` rather than the connecting superuser -- the only way this suite would have
+  // caught issue_finance_invoice/lock_finance_period's SECURITY INVOKER defect, since every
+  // other call in both files ran privileged and never exercised the table-grant boundary that
+  // was actually broken.
+  dbTestSetSha256: "f403db07eb42a65b9c54b70de2b80b4d71fbbf3ec13470595bf2633f9d6a16f9",
+  // History: f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480
+  // (250 files, HUNDRED-AND-SECOND PASS).
   // History: 9ca8a134673c439931ef4d376b42c04e7a98fb83cefdac3e8175fd9fcd03ffbc
   // (250 files, ISS-2026-311's reserved-hostname assertions).
   // History: a5878f102a570613a93841c439ebf859a3b37c760ff8cc34aec678f73c0399c6
