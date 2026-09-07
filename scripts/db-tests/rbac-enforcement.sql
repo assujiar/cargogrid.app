@@ -1189,19 +1189,32 @@ begin
     raise exception 'assertion failed: expected the role_assignments row to survive a raw app.users.status UPDATE untouched (that is the whole point of this test -- the cascade must NOT have fired), found 0 -- test fixture assumption broken';
   end if;
 
+  -- CG-AUDIT-2026-09-02 D3b: app.has_active_tenant_membership itself now excludes a
+  -- suspended/revoked app.users row (the audit's own live reproduction: a suspended
+  -- identity's session could still read arbitrary RLS-gated tenant data, since no RLS
+  -- policy ever went through evaluate_permission's own app.users check below -- they all
+  -- gate on has_active_tenant_membership directly). evaluate_permission's first gate
+  -- (has_active_tenant_membership, HDN-373 above) therefore now denies THIS exact scenario
+  -- earlier than the dedicated ISS-2026-072 check further down ever gets to -- reason
+  -- becomes the broader not_active_tenant_member, not the narrower not_active_platform_user.
+  -- Still correctly denied (allowed=false) either way; no application code anywhere
+  -- pattern-matches on either specific reason string (confirmed by repository-wide grep
+  -- before this change). The ISS-2026-072 check itself is untouched and remains real
+  -- defense in depth for any future path that reaches it with a still-true
+  -- has_active_tenant_membership.
   v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
   if v_decision.allowed then
     raise exception 'assertion failed: an actor whose app.users.status is suspended (via a raw UPDATE that never touched role_assignments) still evaluated allowed=true -- ISS-2026-072''s app.users.status half has reappeared';
   end if;
-  if v_decision.reason is distinct from 'not_active_platform_user' then
-    raise exception 'assertion failed: expected reason=not_active_platform_user for a suspended app.users row with a surviving active role_assignment, got %', v_decision.reason;
+  if v_decision.reason is distinct from 'not_active_tenant_member' then
+    raise exception 'assertion failed: expected reason=not_active_tenant_member (CG-AUDIT-2026-09-02 D3b -- has_active_tenant_membership itself now closes this) for a suspended app.users row with a surviving active role_assignment, got %', v_decision.reason;
   end if;
 
   -- Same proof for 'revoked'.
   update app.users set status = 'revoked' where tenant_id = v_tenant_id and auth_user_id = v_actor;
   v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
-  if v_decision.allowed or v_decision.reason is distinct from 'not_active_platform_user' then
-    raise exception 'assertion failed: expected reason=not_active_platform_user for a revoked app.users row too, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  if v_decision.allowed or v_decision.reason is distinct from 'not_active_tenant_member' then
+    raise exception 'assertion failed: expected reason=not_active_tenant_member for a revoked app.users row too, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
   end if;
 
   -- Restoring app.users.status alone (still bypassing app.transition_user_status) is

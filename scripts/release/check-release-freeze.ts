@@ -3549,7 +3549,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // app.claim_next_job's own audit-trail write (attributes the claim event to the job's
   // ORIGINAL requester, not the calling worker) was discovered while verifying this fix and
   // is tracked separately (NEW-1 in the remediation backlog), not fixed here.
-  migrationSetSha256: "7468be3a8ab6fb61957df4060cfe033fd86f8db6d4524e759df76100b733969b",
+  // HUNDRED-AND-FIFTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 502 files (+1). One new migration, 20260907110000, closing the audit's D3b
+  // finding -- suspending a user through the governed RPC did not cut their RLS-gated
+  // access, because neither app.resolve_access_context nor app.has_active_tenant_membership
+  // (the RLS predicate underneath 450+ policies) read app.users.status at all, only
+  // app.tenant_user_identities.status (which suspend never touched, only revoke).
+  // Reproduced live per the audit before the fix. Both functions now additionally exclude a
+  // suspended/revoked app.users row via NOT EXISTS (an identity with no app.users row --
+  // e.g. a customer_user-layer portal principal -- is unaffected). A new app.
+  // has_active_identity_link (plus its public.* Option-2 wrapper) preserves the EXACT prior
+  // behavior for the narrow, already-reviewed set of self-service RPCs HRT-295 (ISS-2026-104)
+  // deliberately built to keep working through a temporary suspension -- app.
+  // get_my_employee_profile and 4 siblings, each reading only the caller's own row.
+  migrationSetSha256: "b877952bce57e2bab4020a039c75b489e6363910b7904597dd6d040df18b0d98",
+  // History: 7468be3a8ab6fb61957df4060cfe033fd86f8db6d4524e759df76100b733969b
+  // (501 files, HUNDRED-AND-FOURTH PASS).
   // History: df0c466d4fded333fd6fd2edcb1230f33189d0d6e22e9eac35d52f8632bf4b16
   // (500 files, HUNDRED-AND-THIRD PASS).
   // History: 4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99
@@ -4310,7 +4325,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // inside it, plus a positive-path check that a genuine authenticated session which IS the
   // job's own requester and an active tenant member still runs the job successfully end to
   // end -- the guard's relocation did not break the legitimate case).
-  dbTestSetSha256: "407d6499ecc6d8fabe744d129958086b33221ae3e5470a5769dd3edcfe7d0c69",
+  // HUNDRED-AND-FIFTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 252 files (+1). One new file, suspended-user-access-revocation.sql (D3b: before
+  // suspend access resolves normally; after suspend resolve_access_context/has_active_tenant_
+  // membership fail closed and a real RLS-gated read under the suspended user's own session
+  // returns zero rows; reactivating restores access; an identity with no app.users row at all
+  // is unaffected). Two existing files extended: hris-employee-master.sql's own suspend
+  // regression now asserts has_active_tenant_membership=false (was, incorrectly per the
+  // audit, asserting true) while has_active_identity_link stays true and
+  // get_my_employee_profile still returns the row (self-service preserved); rbac-
+  // enforcement.sql's ISS-2026-072 defense-in-depth assertions updated from
+  // reason=not_active_platform_user to reason=not_active_tenant_member for a raw suspended/
+  // revoked app.users row, since app.has_active_tenant_membership's own first gate inside
+  // evaluate_permission now denies it earlier -- still correctly denied either way, no
+  // application code pattern-matches on either specific reason string (confirmed by
+  // repository-wide grep).
+  dbTestSetSha256: "05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9",
+  // History: 407d6499ecc6d8fabe744d129958086b33221ae3e5470a5769dd3edcfe7d0c69
+  // (251 files, HUNDRED-AND-FOURTH PASS).
   // History: f403db07eb42a65b9c54b70de2b80b4d71fbbf3ec13470595bf2633f9d6a16f9
   // (251 files, HUNDRED-AND-THIRD PASS).
   // History: f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480
