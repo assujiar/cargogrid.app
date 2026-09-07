@@ -259,4 +259,28 @@ describe("processNotificationDeliveryJob", () => {
     assert.match(outcome.errorMessage ?? "", /notification_id/);
     assert.equal(recorded.failedJobs.length, 1);
   });
+
+  test("CG-AUDIT-2026-09-02 D3d: a notification whose own tenant_id does not match the enqueuing job's tenant_id fails closed without a live HTTP call", async () => {
+    let called = false;
+    const { server, url } = await startServer((_req, res) => {
+      called = true;
+      res.writeHead(200);
+      res.end();
+    });
+    const OTHER_TENANT_ID = "823e4567-e89b-12d3-a456-426614174000";
+    try {
+      const recorded: RecordedCalls = { deliveryAttempts: [], completedJobs: [], failedJobs: [] };
+      const client = mockClient(url, { tenant_id: OTHER_TENANT_ID }, recorded);
+      const outcome = await processNotificationDeliveryJob(client, baseJob(), "test-worker", "test-worker", ALLOW_ALL_URLS);
+
+      assert.equal(outcome.outcome, "failed");
+      assert.match(outcome.errorMessage ?? "", /belongs to tenant/);
+      assert.equal(called, false, "must never dispatch a live HTTP call for a cross-tenant notification/job mismatch");
+      assert.equal(recorded.deliveryAttempts.length, 1);
+      assert.equal(recorded.deliveryAttempts[0]?.p_status, "failed");
+      assert.equal(recorded.failedJobs.length, 1);
+    } finally {
+      server.close();
+    }
+  });
 });

@@ -74,6 +74,21 @@ export async function processFinanceBankFeedSyncJob(client: ProcessFinanceBankFe
     return { outcome: "failed", lineCount: 0, errorMessage };
   }
 
+  // CG-AUDIT-2026-09-02 D3d: app.enqueue_job validates only that the caller holds active
+  // membership in the tenant they NAME as the job's own tenant -- it applies no validation
+  // to any id embedded inside the job payload. Every other worker in this family already
+  // fails closed on this (../webhooks/process-webhook-delivery-job.server.ts, ISS-2026-178)
+  // -- this worker did not: it resolved connection.tenantId and used it to import the bank
+  // statement batch without ever comparing it back to job.tenantId, so a foreign connection
+  // (and, downstream, another tenant's bank data/credential) could be reached by a job
+  // enqueued under a different tenant. Fail closed before any live dispatch or
+  // state-machine write, mirroring the webhook worker's own fix exactly.
+  if (connection.tenantId !== job.tenantId) {
+    const errorMessage = `bank feed connection ${connectionId} belongs to tenant ${connection.tenantId}, not the enqueuing job's tenant ${job.tenantId}`;
+    await recordJobFailure(client, { jobId: job.jobId, errorMessage, actorAuthUserId, actorLabel });
+    return { outcome: "failed", lineCount: 0, errorMessage };
+  }
+
   const pollUrl = typeof connection.connectionConfig.pollUrl === "string" ? connection.connectionConfig.pollUrl : null;
   if (!pollUrl) {
     const errorMessage = `bank feed connection ${connectionId} has no pollUrl configured`;

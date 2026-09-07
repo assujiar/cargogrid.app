@@ -119,6 +119,23 @@ export async function processNotificationDeliveryJob(client: ProcessNotification
     return { outcome: "failed", errorMessage: "notification not found" };
   }
 
+  // CG-AUDIT-2026-09-02 D3d: app.enqueue_job validates only that the caller holds active
+  // membership in the tenant they NAME as the job's own tenant -- it applies no validation
+  // to any id embedded inside the job payload. This worker's own sibling
+  // (../webhooks/process-webhook-delivery-job.server.ts, ISS-2026-178) already fails closed
+  // on exactly this shape of mismatch -- this worker did not: it resolved dispatchInfo
+  // (including the recipient address and, later, the provider connection/credential)
+  // without ever comparing dispatchInfo.tenantId back to job.tenantId, so a foreign
+  // notification_id in the payload would be dispatched to and recorded under the wrong
+  // tenant. Fail closed before any live dispatch or state-machine write, mirroring the
+  // webhook worker's own fix exactly, and before the recipient address is even read.
+  if (dispatchInfo.tenantId !== job.tenantId) {
+    const errorMessage = `notification ${notificationId} belongs to tenant ${dispatchInfo.tenantId}, not the enqueuing job's tenant ${job.tenantId}`;
+    await recordNotificationDeliveryAttempt(client, { notificationId, status: "failed", errorMessage, actorAuthUserId, actorLabel });
+    await recordJobFailure(client, { jobId: job.jobId, errorMessage, actorAuthUserId, actorLabel });
+    return { outcome: "failed", errorMessage };
+  }
+
   if (dispatchInfo.status === "sent" || dispatchInfo.status === "skipped") {
     await completeJob(client, { jobId: job.jobId, workerId, resultUrl: null, actorLabel });
     return { outcome: "already_terminal", errorMessage: null };
