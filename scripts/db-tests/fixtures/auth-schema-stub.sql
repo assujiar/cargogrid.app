@@ -57,3 +57,16 @@ stable
 as $$
   select nullif(current_setting('request.jwt.claims', true)::json->>'role', '')::text
 $$;
+
+-- CG-AUDIT-2026-09-02 D1: real Supabase auth.jwt(), reproduced verbatim from Supabase's own
+-- published reference implementation (same request.jwt.claims GUC as auth.uid()/auth.role()
+-- above) -- added so app.verify_mfa_step_up_challenge's own real-AAL2-session requirement
+-- can be exercised against a simulated authenticated session carrying a real `aal` claim,
+-- exactly the same simulation mechanism this file's own header comment already documents.
+create or replace function auth.jwt()
+returns jsonb
+language sql
+stable
+as $$
+  select nullif(current_setting('request.jwt.claims', true), '')::jsonb
+$$;

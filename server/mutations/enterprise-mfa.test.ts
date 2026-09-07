@@ -104,6 +104,17 @@ describe("requestMfaStepUpChallenge / verifyMfaStepUpChallenge", () => {
       (err: unknown) => err instanceof EnterpriseMfaMutationError && err.code === "mfa_step_up_challenge_expired",
     );
   });
+
+  // CG-AUDIT-2026-09-02 D1: app.verify_mfa_step_up_challenge now rejects a genuine session
+  // not already authenticated at AAL2 -- classified distinctly so a real future caller can
+  // tell "you need a real second factor" apart from every other verify failure.
+  test("verify classifies mfa_step_up_requires_real_aal2_session", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "mfa_step_up_requires_real_aal2_session: the calling session must itself already be authenticated at AAL2" } });
+    await assert.rejects(
+      verifyMfaStepUpChallenge(client, { challengeId: CHALLENGE_ID, actorAuthUserId: ACTOR_ID, actorLabel: "admin1" }),
+      (err: unknown) => err instanceof EnterpriseMfaMutationError && err.code === "mfa_step_up_requires_real_aal2_session",
+    );
+  });
 });
 
 describe("assertCurrentStepUpAuthorization", () => {

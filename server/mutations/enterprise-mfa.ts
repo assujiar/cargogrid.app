@@ -48,6 +48,7 @@ export const ENTERPRISE_MFA_KNOWN_MUTATION_ERROR_CODES = [
   "mfa_step_up_not_required",
   "mfa_step_up_challenge_not_pending",
   "mfa_step_up_challenge_expired",
+  "mfa_step_up_requires_real_aal2_session",
   "mfa_step_up_required",
   "user_session_not_active",
   "mfa_exception_reason_required",

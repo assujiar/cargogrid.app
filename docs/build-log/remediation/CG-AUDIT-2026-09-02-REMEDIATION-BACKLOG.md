@@ -68,7 +68,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | D3d | An enqueued job can leak another tenant's data — 4 of 5 workers never compare the payload's embedded ids back to the job's own tenant | `CODE` | **DONE** | `b9c1663` |
 | D3 | IP allowlist bypass — `integrations/actions.ts:76` takes `x-forwarded-for` first-hop instead of last-hop | `CODE` | **DONE** | `f5f0878` |
 | B8 | Finance `company_id` is caller-supplied and never validated against the caller's tenant across ≥8 reachable RPCs | `CODE` | **DONE** | (this commit) |
-| D1 | MFA switched off; `verify_mfa_step_up_challenge` validates no real factor | `CODE` (challenge validation) + `INFRA` (enabling a real TOTP provider is a Supabase project auth-config change) | TODO | |
+| D1 | MFA switched off; `verify_mfa_step_up_challenge` validates no real factor | `CODE` (challenge validation) + `INFRA` (enabling a real TOTP provider is a Supabase project auth-config change) | **PARTIAL** | CODE half done (this commit) — now requires the calling session itself to be authenticated at AAL2; INFRA half (enabling a real TOTP/phone provider, building the client-side `challengeAndVerify()` UI) is an operator/product task this repository cannot perform, see execution log |
 | D4 | `integration_secrets_encryption_key()` GUC never configured outside db-test fixtures | `INFRA` (real secret provisioning, not a code change) | NEEDS_HUMAN_GATE | |
 
 ## B — Money (beyond B1/B8, already tracked above)
@@ -504,3 +504,54 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   final sanity pass after the release-freeze update) -- `ALL PASSED` both times, confirming
   none of the 11 dependent db-test files' own assertions changed, alongside `typecheck`/
   `lint`/full `pnpm run test` (5955 tests)/`git:check-paths`/`security:check`.
+- 2026-09-07 — D1 PARTIAL (this commit), the CODE half only, following the same "attempt a
+  bounded first slice" disposition A5 already established for a `CODE` + `INFRA` item. The
+  audit's own finding was precise: `app.verify_mfa_step_up_challenge` accepts no OTP, factor
+  id or assertion at all -- the constrained principal satisfies it itself. That is not an
+  oversight the function's own creation (`20260807100000`, IAE-027) missed: its own header
+  already discloses, as a deliberate design boundary, that real TOTP secret crypto is
+  Supabase Auth's own external infrastructure this repository never fabricates a parallel
+  copy of. The REAL, narrower gap the audit actually found: nothing confirmed a genuine
+  Supabase-side MFA check ever happened before this function recorded "verified" -- it is
+  granted directly to `authenticated`, reachable from the app's real API surface with zero
+  real second factor, and `server/mutations/enterprise-mfa.ts`'s own `verifyMfaStepUpChallenge`
+  is confirmed to be a thin RPC pass-through with no prior real `supabase.auth.mfa.
+  challengeAndVerify()` call anywhere in this repository. Fixed in
+  `20260907210000_require_real_aal2_session_mfa_step_up_iss_d1.sql`: the function now requires
+  the CALLING session itself to already be authenticated at AAL2 -- `auth.jwt() ->> 'aal' =
+  'aal2'`, Supabase's own Authenticator Assurance Level claim, stamped into a session's JWT
+  only after GoTrue has actually verified a real second factor, entirely independent of
+  anything this repository's own schema could fabricate. Gated on `auth.uid() is not null`
+  (mirroring `app.assert_actor_is_session_identity`'s own established "engages only for a
+  genuine authenticated session" idiom verbatim) after a full audit of every one of the ~30
+  real `app.verify_mfa_step_up_challenge` call sites across the 12 `scripts/db-tests/*.sql`
+  files that depend on it as a precondition for some OTHER high-risk action under test found
+  that every single one calls it with a null session identity already (the same service-
+  role-equivalent exemption this repository's whole authority model already relies on for
+  db-tests) -- so this gate needed zero changes to any of those 12 files, confirmed by a full
+  `pnpm run db:test` re-run twice (`ALL PASSED` both times). In real production, PostgREST
+  always populates a real session's JWT for every authenticated request, so there is no
+  realistic external path to this function with a null session identity -- the gate engages
+  on exactly the one channel the audit's own finding is about. Live-caught while writing this
+  fix's own db-test regression: the identical class of bug `20260907190000`'s (NEW-1) own
+  migration already documents in detail -- a leaked empty-string `request.jwt.claims` GUC --
+  bit again here because calling `auth.uid()` BARE a second time (rather than relying solely
+  on the one call already safely wrapped inside `assert_actor_is_session_identity`) crashed on
+  exactly that leaked state; both `auth.uid()` and the newly-added `auth.jwt()` are now read
+  defensively (`begin`/`exception`) inside this function. New regression appended to
+  `scripts/db-tests/enterprise-mfa-session-controls.sql` proves a genuine AAL1 session (no
+  `aal` claim at all, and an explicit `"aal": "aal1"`) is rejected without consuming the
+  challenge, a genuine AAL2 session still succeeds, and a null-session caller remains
+  unaffected. `scripts/db-tests/fixtures/auth-schema-stub.sql` gained `auth.jwt()` (Supabase's
+  own real reference implementation) to make this exercisable at all. `server/mutations/
+  enterprise-mfa.ts`'s known-error-code registry and its own test file were extended for the
+  new `mfa_step_up_requires_real_aal2_session` classification. **What remains open, and why it
+  is not closed here:** actually enabling a real TOTP/phone factor provider
+  (`supabase/config.toml`'s currently-disabled `[auth.mfa.totp]`/`[auth.mfa.phone]` sections)
+  is a Supabase project auth-config change an operator must make against the live project, and
+  no client-side UI in this repository yet calls Supabase's real `challengeAndVerify()` before
+  invoking this RPC -- building that enrollment/challenge UI and turning on a real provider is
+  a separate, larger product/infra task, not attempted here. Marked `PARTIAL` rather than
+  `DONE`: the database gate now genuinely fails closed for the one channel it is reachable
+  through, but no real second factor can be verified in production until both remaining pieces
+  exist.

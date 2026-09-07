@@ -3850,7 +3850,36 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // `out_for_delivery`, `delivery_departure`. Full `pnpm run db:test` re-run end to end after
   // this migration: `ALL PASSED`, including every one of the 11 db-test files that touch this
   // registry -- confirming the seed changes nothing any of them already observed.
-  migrationSetSha256: "1b57197248d04de881757dc9af9b6b4875e9cdc52adeb8008e034a1e499b90aa",
+  // HUNDRED-AND-FIFTEENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A, D1 partial): 512 files (+1) -- new migration
+  // 20260907210000_require_real_aal2_session_mfa_step_up_iss_d1.sql. `app.verify_mfa_step_up_
+  // challenge` accepted no OTP/factor/assertion at all -- the constrained principal satisfied
+  // it itself, exactly as the audit found. The function's OWN creation (20260807100000)
+  // already disclosed real TOTP crypto as Supabase Auth's own external infrastructure, never
+  // fabricated in Postgres -- that boundary is correct and unchanged. The real, narrower gap:
+  // nothing confirmed a real Supabase-side MFA check ever happened before this function
+  // recorded "verified" -- it is granted directly to `authenticated`, reachable from the
+  // app's real API surface with zero real second factor. Fixed by requiring the CALLING
+  // session itself to already be authenticated at AAL2 (`auth.jwt() ->> 'aal' = 'aal2'`,
+  // Supabase's own claim, stamped only after a real second factor is verified by GoTrue) --
+  // gated on `auth.uid() is not null` (mirroring `app.assert_actor_is_session_identity`'s own
+  // idiom) after confirming, via a full audit of the ~30 real call sites across the 12
+  // scripts/db-tests/*.sql files that depend on this function as a precondition, that every
+  // single one calls it with a null session identity already -- zero existing test changes
+  // needed anywhere; confirmed by a full `pnpm run db:test` re-run, `ALL PASSED`. Both
+  // `auth.uid()`/`auth.jwt()` reads are defensive (`begin`/`exception`) -- live-caught while
+  // writing this fix's own db-test regression, the identical class of leaked-empty-string-GUC
+  // bug `20260907190000`'s own header already documents in detail, this time because calling
+  // `auth.uid()` bare a second time (rather than relying solely on the one call already safely
+  // wrapped inside `assert_actor_is_session_identity`) crashed on that exact leaked state.
+  // `CREATE OR REPLACE FUNCTION` -- unchanged signature, no `DROP + CREATE`; confirmed via the
+  // F3-taught check that this function was never touched by any later migration. Partial, not
+  // DONE: enabling a real TOTP/phone provider (`supabase/config.toml`) and building the
+  // client-side `challengeAndVerify()` UI flow remain open, the same disclosed operator/
+  // product boundary A5's own remediation left open for its own INFRA half.
+  migrationSetSha256: "41f13cc719246dcc27c2c1462e923fe86340d6fbbddedb5f6901c924ee729abf",
+  // History: 1b57197248d04de881757dc9af9b6b4875e9cdc52adeb8008e034a1e499b90aa
+  // (511 files, HUNDRED-AND-FOURTEENTH PASS).
   // History: 097e81c3be29d3477ec76107ad1f137895a15b7c7df9f14fd5f15e198d74587f
   // (510 files, HUNDRED-AND-THIRTEENTH PASS).
   // History: a182a76409dc6e5ddbe6fd8fa3c1f55496a5eca9ef784ce483a4f4b3c7f86c57
@@ -4777,7 +4806,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // no new assertion added there, since a genuine cross-TENANT proof would need a second
   // tenant this file has never otherwise needed, and scripts/db-tests/background-job.sql's
   // own new regression above already proves the general (cross-user, same-tenant) case.
-  dbTestSetSha256: "378f7312ee3075106e9eed85317cb55b88e4dd275fd5d524fcef1e23d26d03d7",
+  // HUNDRED-AND-FIFTEENTH PASS (2026-09-07, D1 partial): 255 files, unchanged in count -- two
+  // extended, no new file. `scripts/db-tests/fixtures/auth-schema-stub.sql` gained `auth.
+  // jwt()` (real Supabase reference implementation, same `request.jwt.claims` GUC `auth.uid()`/
+  // `auth.role()` already read) so `app.verify_mfa_step_up_challenge`'s new real-AAL2-session
+  // requirement can be exercised. `scripts/db-tests/enterprise-mfa-session-controls.sql`
+  // gained a new regression block after its own "wrong actor rejected, correct actor
+  // verifies" block: a genuine session with no `aal` claim at all, and one with an explicit
+  // `"aal": "aal1"`, both now correctly rejected with `mfa_step_up_requires_real_aal2_session`
+  // (proving the challenge stays 'pending', not silently consumed by either rejected
+  // attempt); a genuine session carrying `"aal": "aal2"` still succeeds; a null-session
+  // (service-role-equivalent) caller is unaffected, matching every one of the ~30 other real
+  // call sites across the other 11 db-test files that depend on this function as a
+  // precondition and never simulate a session at all -- confirmed unaffected by a full
+  // `pnpm run db:test` re-run, not merely by this one assertion.
+  dbTestSetSha256: "2551fef57e3f647928c1e9560aadbf78f00f80e1ebcc031270eec2e41b45d7e6",
+  // History: 378f7312ee3075106e9eed85317cb55b88e4dd275fd5d524fcef1e23d26d03d7
+  // (255 files, HUNDRED-AND-THIRTEENTH PASS).
   // History: d4301843e34f91c750b1c1dfa7cc32592a3c0c6be5f1206b99090edf4e4062d2
   // (255 files, HUNDRED-AND-TWELFTH PASS).
   // History: bd8065108cc1d0728e119c1aadea92af9ab29f097da63570549e9906b6ecc2ff
