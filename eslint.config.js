@@ -138,8 +138,9 @@ const chartGovernancePatterns = {
 // flag the import everywhere, then `ignores` the exact file list of every current,
 // audited-legitimate importer (Server Actions, Route Handlers, and Server Components
 // under `app/`, plus `lib/portal/*-deps.server.ts`, `lib/api-gateway/authenticate.
-// server.ts`, and `scripts/jobs/*-worker.ts` -- all confirmed server-only code that
-// already owns the service-role call). A brand-new importer -- a Client Component or
+// server.ts`, and `scripts/jobs/*-worker.ts` plus their own CLI-only supervisor,
+// `scripts/jobs/supervisor.ts` -- all confirmed server-only code that already owns the
+// service-role call, never bundled into a Client Component). A brand-new importer -- a Client Component or
 // anything else not on this list -- is not exempted and trips the rule immediately;
 // extending legitimate access requires deliberately adding the new file to this list,
 // which is itself a lightweight review gate on top of the import boundary. Square
@@ -178,6 +179,7 @@ const serviceRoleImportGuard = {
     "scripts/jobs/finance-bank-feed-sync-worker.ts",
     "scripts/jobs/logistics-partner-sync-worker.ts",
     "scripts/jobs/notification-delivery-worker.ts",
+    "scripts/jobs/supervisor.ts",
     "scripts/jobs/webhook-delivery-worker.ts",
   ],
   rules: {
