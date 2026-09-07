@@ -315,4 +315,87 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 A3: republishing a role version migrates every ACTIVE holder of the version it archives onto the version it publishes, so evaluate_permission keeps granting access the identity already held -- never a silent revocation, and a real role_lifecycle_history version_migrated event is recorded for it'
+do $$
+declare
+  v_tenant_id uuid;
+  v_role app.roles;
+  v_draft1 app.role_versions;
+  v_draft2 app.role_versions;
+  v_published1 app.role_versions;
+  v_published2 app.role_versions;
+  v_fin_view_id uuid;
+  v_assignment app.role_assignments;
+  v_after app.role_assignments;
+  v_decision app.rbac_decision;
+  v_migrate_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerole');
+
+  select * into v_role from app.create_role(v_tenant_id, 'A3 Republish Role', 'republish migration test', 'tester');
+  select * into v_draft1 from app.create_role_version(v_role.id, 'tester');
+  select id into v_fin_view_id from app.permissions where resource_module_code = 'FIN' and action = 'View';
+  perform app.set_role_version_permissions(v_draft1.id, array[v_fin_view_id], 'tester');
+  select * into v_published1 from app.publish_role_version(v_draft1.id, now(), 'tester');
+
+  select * into v_assignment from app.assign_role(v_tenant_id, v_published1.id, '00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000301', 'tester');
+
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000302', v_tenant_id, 'FIN', 'View');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: expected FIN:View allowed before the role is republished';
+  end if;
+
+  -- Publish a second version of the SAME role -- this is the exact operation that used to
+  -- silently revoke the assignment above (the version it was bound to gets archived, and
+  -- app.evaluate_permission's own join requires status = 'published').
+  select * into v_draft2 from app.create_role_version(v_role.id, 'tester');
+  perform app.set_role_version_permissions(v_draft2.id, array[v_fin_view_id], 'tester');
+  select * into v_published2 from app.publish_role_version(v_draft2.id, now(), 'tester');
+
+  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000302', v_tenant_id, 'FIN', 'View');
+  if not v_decision.allowed then
+    raise exception 'assertion failed: republishing the role silently revoked FIN:View from an existing holder -- CG-AUDIT-2026-09-02 A3 regression';
+  end if;
+
+  select * into v_after from app.role_assignments where id = v_assignment.id;
+  if v_after.role_version_id <> v_published2.id then
+    raise exception 'assertion failed: expected the assignment migrated onto the newly published version %, still points at %', v_published2.id, v_after.role_version_id;
+  end if;
+  if v_after.status <> 'active' then
+    raise exception 'assertion failed: expected the migrated assignment to remain active, got %', v_after.status;
+  end if;
+
+  select count(*) into v_migrate_count from app.role_lifecycle_history
+  where role_assignment_id = v_assignment.id and event_type = 'version_migrated' and role_version_id = v_published2.id;
+  if v_migrate_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 version_migrated history row for the migrated assignment, got %', v_migrate_count;
+  end if;
+
+  -- A publish with NO existing holders of the version it archives must not fabricate a
+  -- migration event -- a brand-new role, republished with zero assignments ever made
+  -- against it, must record zero version_migrated rows.
+  declare
+    v_unheld_role app.roles;
+    v_unheld_draft1 app.role_versions;
+    v_unheld_draft2 app.role_versions;
+    v_unheld_migrate_count integer;
+  begin
+    select * into v_unheld_role from app.create_role(v_tenant_id, 'A3 Unheld Role', 'never assigned', 'tester');
+    select * into v_unheld_draft1 from app.create_role_version(v_unheld_role.id, 'tester');
+    perform app.set_role_version_permissions(v_unheld_draft1.id, array[v_fin_view_id], 'tester');
+    perform app.publish_role_version(v_unheld_draft1.id, now(), 'tester');
+
+    select * into v_unheld_draft2 from app.create_role_version(v_unheld_role.id, 'tester');
+    perform app.set_role_version_permissions(v_unheld_draft2.id, array[v_fin_view_id], 'tester');
+    perform app.publish_role_version(v_unheld_draft2.id, now(), 'tester');
+
+    select count(*) into v_unheld_migrate_count from app.role_lifecycle_history
+    where role_id = v_unheld_role.id and event_type = 'version_migrated';
+    if v_unheld_migrate_count <> 0 then
+      raise exception 'assertion failed: expected zero version_migrated events for a role nobody ever held, got %', v_unheld_migrate_count;
+    end if;
+  end;
+end;
+$$;
+
 \echo 'ALL PLT-111 db-test assertions passed.'

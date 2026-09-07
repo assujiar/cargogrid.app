@@ -94,7 +94,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
-| A3 | Publishing a role version silently revokes it from every holder (assignment pinned to `role_version_id`, publish never migrates it) | `CODE` | TODO | bounded, real fix identified |
+| A3 | Publishing a role version silently revokes it from every holder (assignment pinned to `role_version_id`, publish never migrates it) | `CODE` | **DONE** | (this commit) |
 | E2 | One-vehicle-one-shipment is an unlocked `EXISTS` check — racily bypassable | `CODE` | **DONE** | (this commit) — bundled `app.milestone_codes` seeding sub-finding NOT closed, see Housekeeping |
 | F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | **DONE** | (this commit) |
 | F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | **DONE** | (this commit) |
@@ -315,3 +315,42 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `components/tables/pagination.tsx` UI they all feed (which genuinely needs an exact total to
   render page-number links — switching away from `count: exact` everywhere is a real UX trade-off,
   not a drop-in change), is out of this bounded item's scope.
+- 2026-09-07 — A3 closed (this commit). `app.role_assignments.role_version_id` binds an
+  assignment to one SPECIFIC version, never the role in general, and `app.evaluate_permission`
+  requires that version's own `status = 'published'` — its own header comment already conceded
+  this exact defect as a "disclosed, bounded limitation... not an oversight." `app.
+  publish_role_version` archived the prior published version but never touched `app.
+  role_assignments` at all, so every real holder lost every permission the role granted the
+  moment anyone republished a new version of the SAME role. `app.publish_role_version` now
+  migrates every ACTIVE assignment still bound to the version it is about to archive onto the
+  version it is publishing, in the same transaction as the publish itself — safe as a plain
+  `UPDATE` (can never violate `role_assignments_active_unique`: nobody could hold an active
+  assignment on the version being published before this function runs, since `app.assign_role`
+  requires `status = 'published'` to assign at all, and that version was still a `draft` until the
+  status flip a few lines above). A new `role_lifecycle_history` event, `version_migrated`, is
+  recorded once per migrated assignment, mirroring `assigned`/`revoked`'s own per-row convention.
+  `CREATE OR REPLACE FUNCTION` — unchanged signature, no `DROP + CREATE`, no `public.*` wrapper
+  touch needed; confirmed via the F3-taught check (grepping for a later `ALTER FUNCTION`/`CREATE
+  OR REPLACE` touching this function's own security mode) that `app.publish_role_version` was
+  never widened to `SECURITY DEFINER` or given a pinned `search_path` by any later migration, so
+  there was nothing to preserve this time. Live-proven with a new assertion appended to
+  `scripts/db-tests/role-permission.sql`: republishing a role's second version migrates an active
+  assignment bound to the first (now-archived) version onto the second, `app.evaluate_permission`
+  keeps granting the same permission the identity already held (proving the fix end to end, not
+  just the row-level bookkeeping), and exactly one `version_migrated` event is recorded, scoped to
+  that one assignment; a second sub-case proves the negative — republishing a role nobody has ever
+  been assigned to fabricates zero `version_migrated` events. Deliberately narrow, matching the
+  audit's own A3 finding exactly — does not touch any OTHER "published version" binding pattern
+  elsewhere in the repository (automation rules, workflow definitions, approval definitions); the
+  evaluator's own comment already disclosed "no auto-reassignment... anywhere in this repository"
+  as a repository-wide posture, and this migration deliberately closes it for role_assignments/
+  role_versions only, the one the audit named and reproduced. `scripts/db-tests/rbac-
+  enforcement.sql` had its own pre-existing "a stale assignment ... fails closed" block, which
+  encoded the audit-confirmed A3 bug itself as this test's own intended contract — caught live by
+  re-running `pnpm run db:test` after the migration (never assumed fixed): `expected the stale
+  assignment to deny, got allowed=t reason=role_grant`. Rewrote the block to assert the CORRECTED
+  contract instead (republishing migrates the assignment, `evaluate_permission` keeps granting it),
+  removed the old block's own now-meaningless "re-assigning restores access" recovery step, and
+  re-verified the entire 1600+-line file end to end — several much-later blocks (HRT-295's own
+  "grantee still holds active FIN:Approve" baseline foremost) depend on this identity's assignment
+  surviving in an active, granting state all the way through the file, and all passed unmodified.

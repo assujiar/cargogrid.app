@@ -122,37 +122,40 @@ begin
 end;
 $$;
 
-\echo '>> a stale assignment (still active, but pointing at a now-archived, superseded role version) fails closed -- PLT-112 §23''s "stale permission fails closed"'
+\echo '>> CG-AUDIT-2026-09-02 A3: republishing a role version migrates a still-active assignment onto the newly published version, so it keeps evaluating allowed -- superseding this file''s own former "stale permission fails closed" expectation, which encoded the audit-confirmed bug (publish silently revoked every real holder) as this test''s own intended contract'
 do $$
 declare
   v_tenant_id uuid;
   v_role_id uuid;
+  v_assignment_id uuid;
   v_new_draft app.role_versions;
   v_decision app.rbac_decision;
+  v_bound_version_id uuid;
 begin
   v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
   v_role_id := (select id from app.roles where name = 'RBAC Finance Approver');
+  select id into v_assignment_id from app.role_assignments
+  where tenant_id = v_tenant_id and auth_user_id = '00000000-0000-0000-0000-000000000401' and status = 'active'
+    and role_version_id = (select id from app.role_versions where role_id = v_role_id and status = 'published');
 
   -- Publish a *new* version of the same role -- this archives (supersedes) the version
-  -- the existing assignment still points to, without touching app.role_assignments itself.
+  -- the existing assignment used to point to; app.publish_role_version now migrates that
+  -- assignment onto the new version in the same transaction (CG-AUDIT-2026-09-02 A3), so
+  -- there is no longer a "stale" window between the two publishes to observe at all.
   select * into v_new_draft from app.create_role_version(v_role_id, 'tester');
   perform app.set_role_version_permissions(v_new_draft.id, array[(select id from app.permissions where resource_module_code = 'FIN' and action = 'Approve')], 'tester');
   perform app.publish_role_version(v_new_draft.id, now(), 'tester');
 
   v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
-  if v_decision.allowed or v_decision.reason <> 'no_granting_role' then
-    raise exception 'assertion failed: expected the stale assignment to deny (reason=no_granting_role), got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' or v_decision.role_version_id <> v_new_draft.id then
+    raise exception 'assertion failed: expected the migrated assignment to still grant FIN:Approve via the newly published version %, got allowed=% reason=% role_version_id=%',
+      v_new_draft.id, v_decision.allowed, v_decision.reason, v_decision.role_version_id;
   end if;
 
-  -- re-assigning to the newly published version restores access -- proving the denial
-  -- above was caused by staleness, not by some other unrelated breakage.
-  perform app.assign_role(
-    v_tenant_id, v_new_draft.id,
-    '00000000-0000-0000-0000-000000000401', '00000000-0000-0000-0000-000000000401', 'tester'
-  );
-  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
-  if not v_decision.allowed then
-    raise exception 'assertion failed: expected access restored once re-assigned to the newly published version';
+  -- The SAME assignment row (id unchanged) was rebound, not replaced by a second row.
+  select role_version_id into v_bound_version_id from app.role_assignments where id = v_assignment_id;
+  if v_bound_version_id <> v_new_draft.id then
+    raise exception 'assertion failed: expected assignment % rebound to version %, still points at %', v_assignment_id, v_new_draft.id, v_bound_version_id;
   end if;
 end;
 $$;
