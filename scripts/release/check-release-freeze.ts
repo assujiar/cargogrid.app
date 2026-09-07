@@ -3612,7 +3612,49 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // whenever the fetched row had any other nullable column set to null (e.g. currency) --
   // never previously caught because no test before this one configured a real account on a
   // tax rule. Fixed by checking each row's own guaranteed-NOT-NULL id column instead.
-  migrationSetSha256: "4b6d270110ecb08b88a57d729aa97aaafd8f1159d99e4fa5d3abb6a76828909a",
+  // HUNDRED-AND-EIGHTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 505 files (+1). One new migration, 20260907140000, closing the audit's E2
+  // finding -- "one vehicle, one shipment": app.assign_resource rejected a second active
+  // assignment for the same resource via an unlocked EXISTS read-then-write with no row
+  // lock and no exclusion constraint behind it, an independently confirmed race (two
+  // concurrent assignment requests for the SAME resource on DIFFERENT shipment orders
+  // could both pass before either committed). app.reassign_resource carried the
+  // byte-identical unlocked check for its own new resource, and app.
+  // resume_resource_assignment (returning a held assignment to active) carried no check of
+  // this kind AT ALL. Fix: a real partial unique index,
+  // resource_assignments_active_resource_unique on (tenant_id, resource_id) where
+  // is_current and status = 'active', makes the invariant genuine at the database level;
+  // each of the three functions now catches a real concurrent violation of it (GET STACKED
+  // DIAGNOSTICS, mirroring app.start_vendor_assessment's own established pattern) and
+  // re-raises the same named assignment_conflict/already_assigned errors the existing
+  // sequential pre-checks already gave, never a raw unique_violation; resume_resource_
+  // assignment also gained the sequential pre-check it never had at all. A live two-process
+  // concurrent race regression (scripts/db-tests/operations-resource-assignment.sql) proves
+  // it: exactly one of two racing app.assign_resource calls for the same resource reaches
+  // active, the other is denied assignment_conflict. The new hard invariant also made an
+  // existing fixture (scripts/db-tests/advanced-tms-shipment-tracking-health-writer.sql)
+  // unconstructible -- it deliberately bypassed app.assign_resource via a raw insert to
+  // give two shipments (E, F) the SAME active vehicle assignment, specifically to prove
+  // app.arbitrate_and_project_vehicle_position's own defensive multi-row loop handled that
+  // case, "in case a future assignment path ever legitimately produced one." E2's own fix
+  // makes that state permanently unconstructible through any path, so the loop can now only
+  // ever iterate 0 or 1 times -- the fixture was updated to give shipment F its own,
+  // separate vehicle (via the real assign_resource RPC) instead, with each dependent
+  // assertion (shared-fan-out telemetry, degraded, stale precedence) adapted to two
+  // independently-tracked vehicles rather than one shared one, preserving every one of its
+  // original assertions in spirit. The audit's own E2 paragraph also names app.
+  // milestone_codes shipping with 0 rows and no seed; a migration-time seed was drafted and
+  // tried but reverted -- it collided with at least 16 existing scripts/db-tests/*.sql
+  // fixtures that already register their own definitions for names a baseline set would
+  // obviously need (delivered, departed_origin, out_for_delivery, customs_hold among them),
+  // since app.milestone_codes is a genuinely platform-wide, non-tenant-scoped registry and
+  // app.register_milestone_code is idempotent (a pre-seeded row silently pre-empts a later
+  // fixture's own intended definition, confirmed live against
+  // operations-milestone-management.sql's own internal-only customs_hold regressing to
+  // customer-visible) -- tracked separately, not closed by this migration.
+  migrationSetSha256: "a7287556fa485208595d75b5a9a08b421a7245419ff826daf92ddbb832a5dafa",
+  // History: 4b6d270110ecb08b88a57d729aa97aaafd8f1159d99e4fa5d3abb6a76828909a
+  // (504 files, HUNDRED-AND-SEVENTH PASS).
   // History: 1fca1ec22b42d6b1b9a115c610fd28bf160a5c110beb68beadeeda9d6ba4de97
   // (503 files, HUNDRED-AND-SIXTH PASS).
   // History: b877952bce57e2bab4020a039c75b489e6363910b7904597dd6d040df18b0d98
@@ -4416,7 +4458,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // recoverable_account_id configured is proven correct at prepare-time (the
   // withholding_tax_receivable_default posting-map fallback); and PPN (vat, not
   // withholding) is proven completely unaffected by this fix.
-  dbTestSetSha256: "dacea19f1c53b02185c43ff7d3e5bd6f3656a60289f0b2271bb5ad70e550f021",
+  // HUNDRED-AND-EIGHTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 254 files, unchanged in count -- two extended (E2). operations-resource-
+  // assignment.sql gained a real two-process concurrent race regression: two DIFFERENT
+  // shipment orders on the SAME job order race app.assign_resource for the SAME brand-new
+  // vendor at the same instant -- exactly one reaches an active assignment (proven via a
+  // real database query, never the racing processes' own stdout), the other is denied
+  // assignment_conflict, never a raw unique_violation; its own audit-trail count assertion
+  // bumped 6 -> 7 for the race winner's own event. advanced-tms-shipment-tracking-health-
+  // writer.sql's own fixture, which deliberately bypassed app.assign_resource via a raw
+  // insert to give two shipments the SAME active vehicle assignment (to exercise app.
+  // arbitrate_and_project_vehicle_position's defensive multi-row loop against a state the
+  // RPC itself already blocked but a future path "might" someday produce), was updated
+  // once E2's own new database-level constraint made that exact state permanently
+  // unconstructible: shipment F now gets its own, separate, real vehicle assignment, with
+  // the shared-fan-out/degraded/stale-precedence assertions all adapted to two
+  // independently-tracked vehicles instead of one shared one.
+  dbTestSetSha256: "d11d8a12a24ed61c87ba6b85773006fb2acef160d02b703cc6595ea7ca8db413",
+  // History: dacea19f1c53b02185c43ff7d3e5bd6f3656a60289f0b2271bb5ad70e550f021
+  // (254 files, HUNDRED-AND-SEVENTH PASS).
   // History: ab205db0c68005dd859ec5457654a6242355b0f795f9da11eb30f824cdd572a4
   // (253 files, HUNDRED-AND-SIXTH PASS).
   // History: 05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9

@@ -17,7 +17,7 @@
 -- infrastructure concern (mirrors app.vendor_financial_encryption_keys own pattern).
 select set_config('app.integration_secrets_encryption_key', 'test-only-key-not-for-production', false);
 
-\echo '>> setup: one tenant, two vehicles (A: receives real telemetry, B: never does), one GPS device on vehicle A, a third-party connection mapped to vehicle A, four Shipment Orders (C: no resource assigned, D: vehicle B assigned, E+F: both vehicle A assigned concurrently) via the real Commercial pipeline'
+\echo '>> setup: one tenant, three vehicles (A: receives real telemetry via device+webhook, B: never tracked, C: receives telemetry via a direct arbitrate call for shipment F -- CG-AUDIT-2026-09-02 E2 fix: no two shipments may ever share one active vehicle assignment anymore, so E and F each get their own), one GPS device on vehicle A, a third-party connection mapped to vehicle A, four Shipment Orders (C: no resource assigned, D: vehicle B assigned, E: vehicle A assigned, F: vehicle C assigned) via the real Commercial pipeline'
 create temporary table th_test_state (key text primary key, value text not null);
 do $$
 declare
@@ -45,6 +45,7 @@ declare
   v_shipment_f app.shipment_orders;
   v_vehicle_a app.vehicle_operational_profiles;
   v_vehicle_b app.vehicle_operational_profiles;
+  v_vehicle_c app.vehicle_operational_profiles;
   v_device app.gps_devices;
   v_conn record;
   v_key record;
@@ -85,6 +86,8 @@ begin
   select * into v_vehicle_a from app.set_vehicle_tracking_eligibility(v_vehicle_a.id, true, true, true, v_vehicle_a.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
   select * into v_vehicle_b from app.register_vehicle_operational_profile(v_tenant1, 'VEH-HEALTH-B', 'Health Truck B (never tracked)', 'owned', 2000, 20, '00000000-0000-0000-0000-000000047201', 'admin');
   select * into v_vehicle_b from app.set_vehicle_tracking_eligibility(v_vehicle_b.id, true, true, true, v_vehicle_b.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
+  select * into v_vehicle_c from app.register_vehicle_operational_profile(v_tenant1, 'VEH-HEALTH-C', 'Health Truck C', 'owned', 2000, 20, '00000000-0000-0000-0000-000000047201', 'admin');
+  select * into v_vehicle_c from app.set_vehicle_tracking_eligibility(v_vehicle_c.id, true, true, true, v_vehicle_c.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
 
   -- GPS device on vehicle A -- transitioned to 'installed' directly (device
   -- installation evidence is not a precondition of app.transition_gps_device_
@@ -179,31 +182,35 @@ begin
   select * into v_shipment_e from app.confirm_shipment_order(v_shipment_e.id, v_shipment_e.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
   perform app.assign_resource(v_shipment_e.id, 'vehicle', v_vehicle_a.vehicle_master_id, '00000000-0000-0000-0000-000000047201', 'admin');
 
-  -- Shipment F: ALSO vehicle A, assigned via a direct app.resource_assignments
-  -- INSERT rather than app.assign_resource (design note f -- "there may
+  -- Shipment F: its OWN dedicated vehicle C, via the real app.assign_resource RPC.
+  -- CG-AUDIT-2026-09-02 E2: this fixture previously gave E and F the SAME vehicle A,
+  -- via a direct app.resource_assignments INSERT bypassing app.assign_resource on
+  -- purpose (this migration's own now-superseded design note f -- "there may
   -- legitimately be zero or more than zero such shipments for a given vehicle at
-  -- once, do not assume exactly one"). Direct inspection of app.assign_resource
-  -- (20260727130000) found it structurally enforces at most one active shipment
-  -- per resource across the WHOLE tenant via its own assignment_conflict guard --
-  -- so two concurrently-assigned shipments for the same vehicle cannot actually
-  -- be produced through that RPC today. This fixture bypasses it on purpose, via
-  -- the exact same columns/defaults app.assign_resource itself would set, to
-  -- prove the widened app.arbitrate_and_project_vehicle_position's own defensive
-  -- "zero, one, or more than one" loop (this migration's own design note 7)
-  -- handles a real multi-row case correctly, in case a future assignment path
-  -- ever legitimately produces one.
+  -- once, do not assume exactly one"), specifically to prove app.arbitrate_and_
+  -- project_vehicle_position's own defensive "zero, one, or more than one" loop
+  -- handled a real multi-row case correctly, in case a future assignment path ever
+  -- legitimately produced one. E2's own fix closes that possibility for good: a real
+  -- database-level constraint (resource_assignments_active_resource_unique) now
+  -- makes two CURRENT, ACTIVE assignments for the same resource genuinely
+  -- unconstructible, through app.assign_resource or any other insert path -- so that
+  -- defensive loop can now only ever iterate 0 or 1 times, never more, and this
+  -- fixture's own former "two shipments sharing one live vehicle" scenario is
+  -- unreachable. F gets a separate, dedicated vehicle instead (its own health is
+  -- still independently exercised below, just never fanned out from a shared
+  -- position update).
   select * into v_shipment_f from app.create_shipment_order_from_job(
     v_job_order.id, 'idem-health-f', null, null, 'land_freight', 'land', 'Jakarta', 'Semarang',
     now() + interval '1 day', now() + interval '2 days', null, null, null, null, null, null, 'split: f', '00000000-0000-0000-0000-000000047201', 'admin'
   );
   select * into v_shipment_f from app.confirm_shipment_order(v_shipment_f.id, v_shipment_f.record_version, '00000000-0000-0000-0000-000000047201', 'admin');
-  insert into app.resource_assignments (tenant_id, shipment_order_id, role, resource_id, resource_snapshot, created_by)
-  values (v_tenant1, v_shipment_f.id, 'vehicle', v_vehicle_a.vehicle_master_id, jsonb_build_object('code', 'VEH-HEALTH-A', 'name', 'Health Truck A'), 'admin');
+  perform app.assign_resource(v_shipment_f.id, 'vehicle', v_vehicle_c.vehicle_master_id, '00000000-0000-0000-0000-000000047201', 'admin');
 
   insert into th_test_state (key, value) values
     ('tenant_id', v_tenant1::text),
     ('vehicle_a_master_id', v_vehicle_a.vehicle_master_id::text),
     ('vehicle_b_master_id', v_vehicle_b.vehicle_master_id::text),
+    ('vehicle_c_master_id', v_vehicle_c.vehicle_master_id::text),
     ('device_id', v_device.id::text),
     ('connection_id', v_conn.connection_id::text),
     ('webhook_secret', v_conn.raw_webhook_secret),
@@ -265,11 +272,13 @@ begin
   end if;
 end $$;
 
-\echo '>> real telemetry (shipments E and F, vehicle A): a single ingested direct_device report recomputes health for BOTH concurrently-assigned shipments -- tracked, fresh, no exceptions yet'
+\echo '>> real telemetry (shipments E and F, each on its own vehicle): a real ingested direct_device report tracks E via vehicle A; a direct arbitrate call (this file''s own disclosed exception to "always via the real ingest RPC" -- vehicle C carries no GPS device/webhook fixture of its own) independently tracks F via vehicle C -- both fresh, no exceptions yet, CG-AUDIT-2026-09-02 E2: never fanned out from ONE shared position update anymore, since no two shipments may ever share one active vehicle assignment'
 do $$
 declare
+  v_tenant1 uuid := (select value::uuid from th_test_state where key = 'tenant_id');
   v_device_id uuid := (select value::uuid from th_test_state where key = 'device_id');
   v_api_key text := (select value from th_test_state where key = 'api_key');
+  v_vehicle_c_id uuid := (select value::uuid from th_test_state where key = 'vehicle_c_master_id');
   v_shipment_e_id uuid := (select value::uuid from th_test_state where key = 'shipment_e_id');
   v_shipment_f_id uuid := (select value::uuid from th_test_state where key = 'shipment_f_id');
   v_health_e app.shipment_tracking_health;
@@ -284,12 +293,17 @@ begin
     )),
     'test-gateway'
   );
+  perform app.arbitrate_and_project_vehicle_position(
+    v_tenant1, v_vehicle_c_id, 'direct_device', gen_random_uuid(), v_event_at, v_event_at,
+    app.geojson_point_to_geography(jsonb_build_object('type', 'Point', 'coordinates', jsonb_build_array(106.845599, -6.208763))),
+    40, 90, null
+  );
 
   select * into v_health_e from app.shipment_tracking_health where shipment_order_id = v_shipment_e_id;
   select * into v_health_f from app.shipment_tracking_health where shipment_order_id = v_shipment_f_id;
 
   if v_health_e.tracking_status <> 'tracked' or v_health_f.tracking_status <> 'tracked' then
-    raise exception 'assertion failed: expected BOTH shipment E and F to be tracked after one ingest for their shared vehicle, got E=% F=%', v_health_e.tracking_status, v_health_f.tracking_status;
+    raise exception 'assertion failed: expected both shipment E (vehicle A) and shipment F (vehicle C) to be tracked, got E=% F=%', v_health_e.tracking_status, v_health_f.tracking_status;
   end if;
   if v_health_e.authoritative_source_type <> 'direct_device' or v_health_f.authoritative_source_type <> 'direct_device' then
     raise exception 'assertion failed: expected authoritative_source_type = direct_device for both, got E=% F=%', v_health_e.authoritative_source_type, v_health_f.authoritative_source_type;
@@ -372,10 +386,11 @@ begin
   end if;
 end $$;
 
-\echo '>> stale precedence over degraded (design note 3): once the shared vehicle''s position goes stale, F reports stale (not degraded) even with its open exception still present, and E reports stale too'
+\echo '>> stale precedence over degraded (design note 3): once each shipment''s own vehicle position goes stale, F reports stale (not degraded) even with its open exception still present, and E reports stale too -- CG-AUDIT-2026-09-02 E2: E and F sit on distinct vehicles now, so both are backdated independently'
 do $$
 declare
   v_vehicle_a_id uuid := (select value::uuid from th_test_state where key = 'vehicle_a_master_id');
+  v_vehicle_c_id uuid := (select value::uuid from th_test_state where key = 'vehicle_c_master_id');
   v_shipment_e_id uuid := (select value::uuid from th_test_state where key = 'shipment_e_id');
   v_shipment_f_id uuid := (select value::uuid from th_test_state where key = 'shipment_f_id');
   v_health_e app.shipment_tracking_health;
@@ -386,8 +401,8 @@ begin
   -- the identical technique advanced-tms-canonical-telemetry-arbitration.sql
   -- already uses (no RPC exists to backdate a real device's own clock, nor should
   -- one).
-  update app.vehicle_current_positions set received_at = now() - interval '1 hour' where vehicle_master_id = v_vehicle_a_id;
-  update app.vehicle_source_health set last_seen_received_at = now() - interval '1 hour' where vehicle_master_id = v_vehicle_a_id;
+  update app.vehicle_current_positions set received_at = now() - interval '1 hour' where vehicle_master_id in (v_vehicle_a_id, v_vehicle_c_id);
+  update app.vehicle_source_health set last_seen_received_at = now() - interval '1 hour' where vehicle_master_id in (v_vehicle_a_id, v_vehicle_c_id);
 
   v_health_e := app.recalculate_shipment_tracking_health(v_shipment_e_id);
   v_health_f := app.recalculate_shipment_tracking_health(v_shipment_f_id);

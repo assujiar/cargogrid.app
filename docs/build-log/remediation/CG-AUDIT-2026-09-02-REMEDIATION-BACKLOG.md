@@ -95,7 +95,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
 | A3 | Publishing a role version silently revokes it from every holder (assignment pinned to `role_version_id`, publish never migrates it) | `CODE` | TODO | bounded, real fix identified |
-| E2 | One-vehicle-one-shipment is an unlocked `EXISTS` check — racily bypassable | `CODE` | TODO | bounded, add row lock / exclusion constraint |
+| E2 | One-vehicle-one-shipment is an unlocked `EXISTS` check — racily bypassable | `CODE` | **DONE** | (this commit) — bundled `app.milestone_codes` seeding sub-finding NOT closed, see Housekeeping |
 | F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | TODO | mechanical, bounded |
 | F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | TODO | bounded, mirrors an existing in-repo pattern |
 | F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | TODO | bounded |
@@ -131,6 +131,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
 | LINT-1 | `scripts/jobs/supervisor.ts:50` trips the service-role import guard — pre-existing, confirmed via `git stash` baseline comparison before the Ø1 commit | `CODE` | **DONE** (`57fc8fe`) | quick, unblocks a red Tier A gate |
+| E2-seed | `app.milestone_codes` ships with 0 rows and no seed (bundled in E2's own audit paragraph) — a live, reproducible dead-end dropdown (`ingest-milestone-event-form.tsx`) on a fresh install | `CODE` | TODO | attempted and reverted during E2 (this session): a migration-time direct-insert seed (mirroring `finance_tax_codes`/`config_types`) collided with ≥16 existing `scripts/db-tests/*.sql` fixtures that already `register_milestone_code` their own definitions for names an obvious baseline set would need (`delivered`, `departed_origin`, `out_for_delivery`, `customs_hold` among them) — `app.milestone_codes` is genuinely platform-wide (no `tenant_id`) and `register_milestone_code` is idempotent, so a pre-seeded row silently pre-empts a later fixture's own intended `is_customer_visible`/`affects_eta`/`is_terminal` values (confirmed live: `operations-milestone-management.sql`'s own internal-only `customs_hold` regressed to customer-visible). Needs a full audit of every existing `register_milestone_code` call site first (exact code/name/category/visibility each test expects) before a seed can be written without silently breaking one of them. |
 
 ---
 
@@ -165,7 +166,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   validate a caller-supplied `p_company_id` via a new shared `app.assert_finance_company_org_unit`
   precondition (same-tenant, `unit_type = 'company'`, checked after authority/IP-allowlist,
   before any other business-logic validation). New findings this pass: none.
-- 2026-09-07 — B5 closed (this commit). `app.calculate_finance_tax` now discloses the resolved
+- 2026-09-07 — B5 closed (`d2e95ad`). `app.calculate_finance_tax` now discloses the resolved
   rule's own `tax_type`; a new `finance_invoices.withholding_tax_amount` column carries a
   withholding-type tax's own withheld amount instead of `tax_amount`, leaving `total_amount`
   unaffected; `app.issue_finance_invoice` posts the AR open item/AR-control debit net of the
@@ -177,3 +178,20 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   nullable column set to null (e.g. `currency`) — unexercised by any test before this one, since no
   prior fixture ever configured a real `output_account_id`/`recoverable_account_id` on a tax rule.
   Fixed by checking each row's own guaranteed-NOT-NULL `id` column instead.
+- 2026-09-07 — E2 closed (this commit). A real partial unique index,
+  `resource_assignments_active_resource_unique` on `(tenant_id, resource_id) where is_current and
+  status = 'active'`, makes "one vehicle, one shipment" a genuine database-level invariant;
+  `app.assign_resource`/`app.reassign_resource`/`app.resume_resource_assignment` all now catch a
+  real concurrent violation of it (`GET STACKED DIAGNOSTICS`, mirroring
+  `app.start_vendor_assessment`'s own established pattern) and re-raise the same named errors
+  their own sequential pre-checks already gave, never a raw `unique_violation`; `resume_resource_
+  assignment` also gained the sequential pre-check it never had at all. Proven via a real
+  two-process concurrent race in `operations-resource-assignment.sql`. The new hard invariant made
+  an existing fixture (`advanced-tms-shipment-tracking-health-writer.sql`) unconstructible — it had
+  deliberately bypassed `app.assign_resource` via a raw insert to give two shipments the SAME
+  active vehicle assignment, to exercise `app.arbitrate_and_project_vehicle_position`'s own
+  defensive multi-row loop against a state the RPC itself already blocked but a future path
+  "might" someday produce; that fixture now gives the second shipment its own, separate vehicle
+  instead, with every dependent assertion adapted accordingly. The bundled `app.milestone_codes`
+  seeding sub-finding was attempted and reverted — see the new `E2-seed` Housekeeping row for why
+  and what a real fix needs.
