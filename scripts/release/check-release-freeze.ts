@@ -3562,7 +3562,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // behavior for the narrow, already-reviewed set of self-service RPCs HRT-295 (ISS-2026-104)
   // deliberately built to keep working through a temporary suspension -- app.
   // get_my_employee_profile and 4 siblings, each reading only the caller's own row.
-  migrationSetSha256: "b877952bce57e2bab4020a039c75b489e6363910b7904597dd6d040df18b0d98",
+  // HUNDRED-AND-SIXTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 503 files (+1). One new migration, 20260907120000, closing the audit's B8
+  // finding -- fifteen finance write RPCs (app.create_finance_journal_draft, app.
+  // lock_finance_period, app.create_and_post_finance_system_journal, app.
+  // create_finance_bank_account, app.execute_finance_reconciliation_run, app.
+  // generate_finance_fiscal_calendar, app.import_historical_finance_journal, app.
+  // post_finance_ap_open_item, app.post_finance_ar_open_item, app.
+  // post_finance_subledger_batch, app.prepare_finance_journal_adjustment, app.
+  // prepare_finance_journal_reversal, app.prepare_finance_settlement, app.
+  // capture_finance_receipt, app.create_finance_account_draft) accepted a caller-supplied
+  // p_company_id with no check that it was even a real org_units row for the caller's own
+  // tenant, let alone company-typed -- an authorized caller could tag finance data with
+  // another tenant's company_id, or a non-company org unit. A new shared precondition, app.
+  // assert_finance_company_org_unit(p_tenant_id, p_company_id), is now called immediately
+  // after each function's own authority (and, where present, IP-allowlist) checks: a no-op
+  // on a null company_id (company scoping stays optional), otherwise raises unless the id
+  // resolves to a same-tenant, unit_type='company' org_units row. Mirrors app.
+  // enforce_employee_org_unit_shape's own established tenant-scope + unit_type check;
+  // deliberately does not also require status='active', since several callers post
+  // historical finance data against a company that may since have been deactivated. The
+  // helper itself is SECURITY INVOKER with no explicit grant (mirroring app.
+  // assert_vendor_profile_editable's identical shape for an internal-only precondition
+  // never referenced from an RLS policy or called directly), so it needs no public.*
+  // wrapper.
+  migrationSetSha256: "1fca1ec22b42d6b1b9a115c610fd28bf160a5c110beb68beadeeda9d6ba4de97",
+  // History: b877952bce57e2bab4020a039c75b489e6363910b7904597dd6d040df18b0d98
+  // (502 files, HUNDRED-AND-FIFTH PASS).
   // History: 7468be3a8ab6fb61957df4060cfe033fd86f8db6d4524e759df76100b733969b
   // (501 files, HUNDRED-AND-FOURTH PASS).
   // History: df0c466d4fded333fd6fd2edcb1230f33189d0d6e22e9eac35d52f8632bf4b16
@@ -4340,7 +4366,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // evaluate_permission now denies it earlier -- still correctly denied either way, no
   // application code pattern-matches on either specific reason string (confirmed by
   // repository-wide grep).
-  dbTestSetSha256: "05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9",
+  // HUNDRED-AND-SIXTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 253 files (+1). One new file, finance-company-org-unit-scope.sql (B8): a direct
+  // unit test of app.assert_finance_company_org_unit (no-ops on null, accepts a real
+  // own-tenant company org unit, rejects a cross-tenant company_id, rejects a same-tenant
+  // non-company org unit, rejects a nonexistent id) plus end-to-end integration proof
+  // through two of the fifteen affected RPCs (app.create_finance_journal_draft, app.
+  // create_finance_bank_account) -- cross-tenant/wrong-type rejection, authority still
+  // checked before the new company check, and the legitimate own-tenant/null-company paths
+  // still succeed.
+  dbTestSetSha256: "ab205db0c68005dd859ec5457654a6242355b0f795f9da11eb30f824cdd572a4",
+  // History: 05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9
+  // (252 files, HUNDRED-AND-FIFTH PASS).
   // History: 407d6499ecc6d8fabe744d129958086b33221ae3e5470a5769dd3edcfe7d0c69
   // (251 files, HUNDRED-AND-FOURTH PASS).
   // History: f403db07eb42a65b9c54b70de2b80b4d71fbbf3ec13470595bf2633f9d6a16f9

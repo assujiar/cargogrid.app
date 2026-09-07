@@ -56,18 +56,18 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Commit |
 |---|---|---|---|---|
-| B1 | Convert both `app.*` functions (and their already-existing `public.*` wrappers) to `SECURITY DEFINER`, pinning `search_path` on the `app.*` side (currently unpinned) | `CODE` | TODO | |
+| B1 | Convert both `app.*` functions (and their already-existing `public.*` wrappers) to `SECURITY DEFINER`, pinning `search_path` on the `app.*` side (currently unpinned) | `CODE` | **DONE** | `130d49c` |
 
 ## D — Security and identity (all independently CRITICAL, each bounded)
 
 | ID | Item | Class | Status | Commit |
 |---|---|---|---|---|
-| D3c | Session cookie ships `httpOnly:false`, 400-day `maxAge` — library defaults win over the app's own correct options because of spread order | `CODE` | TODO | |
-| D2 | Cross-tenant guard in `run_next_route_planning_job` is swallowed by its own exception handler | `CODE` | TODO | |
-| D3b | Suspending a user does not cut access — `resolve_access_context`/`has_active_tenant_membership` never read `app.users.status` | `CODE` | TODO | |
-| D3d | An enqueued job can leak another tenant's data — 4 of 5 workers never compare the payload's embedded ids back to the job's own tenant | `CODE` | TODO | |
-| D3 | IP allowlist bypass — `integrations/actions.ts:76` takes `x-forwarded-for` first-hop instead of last-hop | `CODE` | TODO | |
-| B8 | Finance `company_id` is caller-supplied and never validated against the caller's tenant across ≥8 reachable RPCs | `CODE` | TODO | |
+| D3c | Session cookie ships `httpOnly:false`, 400-day `maxAge` — library defaults win over the app's own correct options because of spread order | `CODE` | **DONE** | `76b611e` |
+| D2 | Cross-tenant guard in `run_next_route_planning_job` is swallowed by its own exception handler | `CODE` | **DONE** | `4fa9dff` |
+| D3b | Suspending a user does not cut access — `resolve_access_context`/`has_active_tenant_membership` never read `app.users.status` | `CODE` | **DONE** | `1b9b8fc` |
+| D3d | An enqueued job can leak another tenant's data — 4 of 5 workers never compare the payload's embedded ids back to the job's own tenant | `CODE` | **DONE** | `b9c1663` |
+| D3 | IP allowlist bypass — `integrations/actions.ts:76` takes `x-forwarded-for` first-hop instead of last-hop | `CODE` | **DONE** | `f5f0878` |
+| B8 | Finance `company_id` is caller-supplied and never validated against the caller's tenant across ≥8 reachable RPCs | `CODE` | **DONE** | (this commit) |
 | D1 | MFA switched off; `verify_mfa_step_up_challenge` validates no real factor | `CODE` (challenge validation) + `INFRA` (enabling a real TOTP provider is a Supabase project auth-config change) | TODO | |
 | D4 | `integration_secrets_encryption_key()` GUC never configured outside db-test fixtures | `INFRA` (real secret provisioning, not a code change) | NEEDS_HUMAN_GATE | |
 
@@ -86,7 +86,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
-| C3 | Tax console shows 11% as "0.11%" — display bug only, calculator is correct | `CODE` | TODO | trivial, high-value |
+| C3 | Tax console shows 11% as "0.11%" — display bug only, calculator is correct | `CODE` | **DONE** (`57fc8fe`) | trivial, high-value |
 | C1 | No NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | compliance-domain modeling, needs a tax SME |
 | C2 | PPh 21 uncomputable — no PTKP/bracket/NPWP columns | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | same |
 
@@ -130,7 +130,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
-| LINT-1 | `scripts/jobs/supervisor.ts:50` trips the service-role import guard — pre-existing, confirmed via `git stash` baseline comparison before the Ø1 commit | `CODE` | TODO | quick, unblocks a red Tier A gate |
+| LINT-1 | `scripts/jobs/supervisor.ts:50` trips the service-role import guard — pre-existing, confirmed via `git stash` baseline comparison before the Ø1 commit | `CODE` | **DONE** (`57fc8fe`) | quick, unblocks a red Tier A gate |
 
 ---
 
@@ -147,3 +147,21 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   session's work. Dispositioned `DEFERRED_LARGE` with the recon itself as the scoped starting point
   for that follow-up effort; the classification file names every call site so no further rediscovery
   is needed before starting.
+- 2026-09-07 — B1 closed (`130d49c`); LINT-1 + C3 closed together (`57fc8fe`).
+- 2026-09-07 — D3c closed (`76b611e`).
+- 2026-09-07 — D2 closed (`4fa9dff`).
+- 2026-09-07 — D3d closed (`b9c1663`).
+- 2026-09-07 — D3b closed (`1b9b8fc`). Discovered and resolved a genuine tension with the
+  pre-existing, deliberate HRT-295 (ISS-2026-104) design (5 self-service RPCs must keep working
+  through a suspension) via a principled split: a new, narrower `app.has_active_identity_link`
+  (the exact prior `has_active_tenant_membership` body) preserves that behavior, while
+  `has_active_tenant_membership`/`resolve_access_context` themselves now correctly deny a
+  suspended/revoked `app.users` row everywhere else (450+ RLS policies, `evaluate_permission`).
+- 2026-09-07 — D3 closed (`f5f0878`). Widened beyond the audit's own stated count (2 call sites)
+  after a repository-wide grep found 9 real occurrences of the vulnerable
+  `x-forwarded-for.split(",")[0]` pattern; all 9 fixed.
+- 2026-09-07 — B8 closed (this commit). Fifteen finance write RPCs (not the audit's own "≥8"
+  estimate — a systematic `pg_get_function_identity_arguments` sweep found the true count) now
+  validate a caller-supplied `p_company_id` via a new shared `app.assert_finance_company_org_unit`
+  precondition (same-tenant, `unit_type = 'company'`, checked after authority/IP-allowlist,
+  before any other business-logic validation). New findings this pass: none.
