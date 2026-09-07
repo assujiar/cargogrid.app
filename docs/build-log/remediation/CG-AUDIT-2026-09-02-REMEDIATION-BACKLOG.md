@@ -99,7 +99,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | F1 | No `error.tsx`/`not-found.tsx`/`global-error.tsx` anywhere; 2 reproduced uncaught 500s | `CODE` | **DONE** | (this commit) |
 | F3 | 13 finance list RPCs hard-cap at 200 rows, no cursor param (101 other list RPCs already have one) | `CODE` | **DONE** | (this commit) |
 | F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | **DONE** | (this commit) |
-| F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | TODO | bounded, one component |
+| F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | **DONE** | (this commit) |
 | A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | TODO | attempt a bounded first slice |
 | A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | DEFERRED_LARGE | weeks, UI over existing capability |
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | DEFERRED_LARGE | weeks |
@@ -354,3 +354,33 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   re-verified the entire 1600+-line file end to end — several much-later blocks (HRT-295's own
   "grantee still holds active FIN:Approve" baseline foremost) depend on this identity's assignment
   surviving in an active, granting state all the way through the file, and all passed unmodified.
+- 2026-09-07 — F2 closed (this commit). `components/forms/multi-select.tsx`'s `<li role="option">`
+  elements had `onMouseDown` as their only handler — no key handler, no `tabIndex`, no
+  `aria-activedescendant` — so an option could never be reached from the keyboard at all (WCAG
+  2.1.1 Level A, exactly as the audit found). Fixed by adopting this repository's own already-
+  correct sibling pattern, `components/forms/combobox.tsx`'s WAI-ARIA combobox implementation,
+  verbatim rather than inventing a second one: real DOM focus stays on the text input the entire
+  time; `role="combobox"`/`aria-expanded`/`aria-controls`/`aria-activedescendant` on the input,
+  plus a new `handleKeyDown` for ArrowDown/ArrowUp/Enter/Escape, tell an assistive-technology user
+  which option is virtually focused and let them act on it without ever moving focus onto an
+  `<li>` — the same reason neither this fix nor `Combobox` puts `tabIndex` on the options
+  themselves. Enter adds the active option and clears the query (mirroring this component's own
+  multi-value `add()`, precisely as `onMouseDown` already did) rather than committing-and-closing
+  like `Combobox`'s single-value case. The one real consumer (`api-keys-admin-panel.tsx`'s n8n
+  connector scope picker) needed no changes — same props, same behavior for a mouse user.
+  Live-verified in a real browser per this session's own standing UI-verification requirement:
+  built and started the app (`next build && next start --port 3100`) and drove a temporary,
+  backend-independent scratch page under the existing unauthenticated `(internal)` route group
+  (mirroring the accepted `internal/design-system/components` showcase pattern, since no live
+  Supabase project exists in this sandbox to exercise the component through its one real
+  authenticated consumer) with a Playwright script: confirmed Tab reaches the input, focusing it
+  opens the list with `aria-activedescendant` already on the first option, ArrowDown/ArrowUp move
+  `aria-activedescendant` across options without ever moving real DOM focus off the input, Enter
+  adds the active option as a chip and updates the bound value, and Escape closes the dropdown
+  without altering the selection — then deleted the scratch page before committing (it is not part
+  of this change; only `components/forms/multi-select.tsx` is touched). No test runner exists for
+  `.tsx` files in this repository yet (confirmed by `pagination.tsx`'s own header comment), so no
+  new automated test accompanies this fix — `typecheck`/`lint`/`ui:check` all pass, and the full
+  `pnpm run test` (5949 tests), `db:test` (sanity pass; no migration or db-test file touched), `git:
+  check-paths`, and `security:check` gates all pass unchanged. `check-release-freeze.ts` needed no
+  amendment (no `supabase/migrations/*.sql` or `scripts/db-tests/*.sql` file touched by this item).
