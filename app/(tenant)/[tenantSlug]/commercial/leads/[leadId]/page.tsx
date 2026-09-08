@@ -40,7 +40,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
     notFound();
   }
 
-  const activities = await listActivitiesForRecord(supabase, "lead", lead.id);
+  const activities = await listActivitiesForRecord(supabase, "lead", lead.id, access.authUserId);
   const reentryCandidates =
     lead.status === "new" || lead.status === "contacted" || lead.status === "qualified"
       ? await findExistingAccountsForLead(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, leadId: lead.id })

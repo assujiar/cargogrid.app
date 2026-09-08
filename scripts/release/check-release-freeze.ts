@@ -3944,7 +3944,43 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // result -> complete cycle moves a real file off `pending`, plus a real
   // TypeScript unit-test suite for the VirusTotal adapter (a local loopback HTTP
   // server, not a mocked fetch) and the job processor.
-  migrationSetSha256: "db524d7f5447f005c191fe338d340a54bf92869e767a00febea684421a756936",
+  // HUNDRED-AND-EIGHTEENTH PASS (2026-09-08, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 515 files (+1) -- new migration
+  // 20260908020000_close_o1_query_layer_cluster0_batch1_crm_core.sql. Closes the first
+  // batch (8 of 32 tables) of Ø1-query-layer cluster 0 (CRM/commercial), the highest-
+  // severity item the Ø1 recon (CG-AUDIT-2026-09-02-O1-QUERY-LAYER-RECON.json) left
+  // DEFERRED_LARGE: every server/queries/*.ts `.from()` call against an `app.*` table has
+  // never worked in production, since supabase/config.toml only exposes public/
+  // graphql_public to PostgREST and `app` is a completely separate, invisible schema --
+  // this is a live, currently-broken read path on real pages
+  // (/commercial/accounts, /contacts, /contracts, /costing-requests), not an
+  // architectural nitpick. Fixed via the same Option-2 wrapper pattern (a new app.*
+  // SECURITY DEFINER function per read, plus a thin public.* pass-through with an
+  // identical grant set) already established for the 4 guard-deps files this session
+  // closed earlier (Ø1/Ø2). 15 new app.*/public.* function pairs across
+  // app.accounts/app.account_conversions/app.contacts/app.activities/
+  // app.customer_contracts/app.customer_contract_price_components_directory/
+  // app.costing_requests/app.costing_request_components. Every function asserts
+  // RULE A (app.assert_actor_is_session_identity as the first executable statement,
+  // ATW-031/032 precedent) and reproduces the CURRENT (not original) RLS predicate for
+  // its table, including RULE B (20260730560000's customer_user-layer exclusion) on
+  // app.accounts/app.customer_contracts/app.customer_contract_price_components_directory
+  // -- both caught live by an adversarial design-verify-fix pipeline before this file was
+  // ever applied to a database, not assumed. Two further genuine defects were caught only
+  // by this pass's own db-test (scripts/db-tests/o1-query-layer-cluster0-batch1.sql, new
+  // file, see dbTestSetSha256 below): app.list_contacts and app.get_contact_by_id had
+  // both reintroduced normalized_email/normalized_phone/duplicate_fingerprint into their
+  // return shape (a PII-correlation leak the recon's own instructions explicitly
+  // excluded) -- fixed directly in this migration before commit, never worked around.
+  // All 4 affected TS query files (server/queries/account.ts, contact.ts, contract.ts,
+  // costing.ts) and every real call site (11 page.tsx files) switched from `.from()` to
+  // `.rpc()` in the same commit, per this migration's own embedded TS INTEGRATION notes.
+  // Full Tier A gate suite re-run clean before this digest was changed: typecheck, lint
+  // (0 errors), the 5,992-test unit suite, a full `pnpm run db:test` (ALL PASSED,
+  // 515 migrations / 259 db-test files), git:check-paths, security:check, and `next build`.
+  migrationSetSha256: "c4812e14488d0730a6a105798a6491ce672b21dc2ea3be6f2e657f475a913807",
+  // History: db524d7f5447f005c191fe338d340a54bf92869e767a00febea684421a756936
+  // (514 files, HUNDRED-AND-SEVENTEENTH PASS).
   // History: 77c43404839fe193cac0febdd2bab03e3298a74d64c29f18505b5ed06ed04c87
   // (513 files, HUNDRED-AND-SIXTEENTH PASS).
   // History: 41f13cc719246dcc27c2c1462e923fe86340d6fbbddedb5f6901c924ee729abf
@@ -4916,7 +4952,32 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // covers generically); document_scan_already_resolved still refuses a different
   // re-resolution; and an infected verdict quarantines even the file's own uploader
   // via app.authorize_file_access.
-  dbTestSetSha256: "422d3401dc38f86407617b132c88adeaa5b907ca20eeb8ec7e14b5fceeb9c751",
+  // HUNDRED-AND-EIGHTEENTH PASS (2026-09-08, same ruling as migrationSetSha256 above):
+  // 259 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch1.sql.
+  // Proves, against a real disposable database, every one of the 15 new function pairs
+  // this pass's migration adds: real data returned for a tenant member; RULE A genuinely
+  // rejects a claimed actor that does not match the real session identity (via an
+  // explicit `request.jwt.claims` GUC inside a real transaction, not merely a denied-
+  // for-the-wrong-reason false positive); RULE B excludes a customer_user-layer
+  // principal from app.accounts/app.customer_contracts/
+  // app.customer_contract_price_components_directory even though it independently
+  // satisfies tenant membership; cross-tenant denial; and (via an
+  // information_schema.parameters introspection of the function's own OUT parameters,
+  // not merely a sample row) that app.list_contacts/app.get_contact_by_id never return
+  // normalized_email/normalized_phone/duplicate_fingerprint -- the exact PII-correlation
+  // leak this test caught live in the first drafted version of both functions. Mutation
+  // fixtures for tables with no direct create path in this batch (app.customer_contracts,
+  // app.leads/app.prospects/app.opportunities/app.costing_requests) are seeded via direct
+  // insert rather than through their own pre-existing, already-tested mutation RPCs
+  // (app.create_customer_contract_draft, app.create_opportunity, app.request_costing),
+  // mirroring this same file's own app.accounts fixture -- those RPCs require a full
+  // accepted+converted quotation or lead-qualification chain this test does not otherwise
+  // need, and are already exercised end-to-end by commercial-customer-contract-
+  // pricing.sql / commercial-opportunity-management.sql / commercial-costing-request-
+  // workflow.sql.
+  dbTestSetSha256: "aab4daf2d27cf92ec2b2dad47be04d587771695de95fa6a8526da301324c49a0",
+  // History: 422d3401dc38f86407617b132c88adeaa5b907ca20eeb8ec7e14b5fceeb9c751
+  // (258 files, HUNDRED-AND-SEVENTEENTH PASS).
   // History: 7de55b831acd07bff9feaa49a63f88763ccde4c381c963d36c1d216b288bee41
   // (256 files, HUNDRED-AND-SIXTEENTH PASS).
   // History: 2551fef57e3f647928c1e9560aadbf78f00f80e1ebcc031270eec2e41b45d7e6

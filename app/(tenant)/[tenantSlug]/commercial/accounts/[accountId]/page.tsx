@@ -24,7 +24,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
 
   let account;
   try {
-    account = await getAccountById(supabase, accountId);
+    account = await getAccountById(supabase, accountId, access.authUserId);
   } catch (error) {
     if (!(error instanceof AccountQueryError)) {
       throw error;
@@ -45,8 +45,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   // any tenant size and cheaper besides; this was always the right shape, and the cap is what
   // made that obvious.
   const [parent, subsidiaries] = await Promise.all([
-    account.parentAccountId ? getAccountById(supabase, account.parentAccountId) : Promise.resolve(null),
-    listSubsidiaryAccounts(supabase, account.id),
+    account.parentAccountId ? getAccountById(supabase, account.parentAccountId, access.authUserId) : Promise.resolve(null),
+    listSubsidiaryAccounts(supabase, account.id, access.authUserId),
   ]);
 
   const creditProfile = await getCreditProfileForAccount(supabase, account.id);

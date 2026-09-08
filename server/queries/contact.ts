@@ -15,6 +15,7 @@ export type ContactQueryRpcClient = Pick<SupabaseClient, "rpc">;
 
 export interface ListContactsInput {
   readonly tenantId: string;
+  readonly actorAuthUserId: string;
   readonly page: number;
   readonly pageSize?: number;
 }
@@ -51,58 +52,66 @@ export async function findDuplicateContacts(client: ContactQueryRpcClient, input
   return data.map((row) => parseContact(row as Record<string, unknown>));
 }
 
-/** Server-side paginated Contact directory -- RLS (contacts_select_scoped) is the real scope gate. */
-export async function listContacts(client: Pick<SupabaseClient, "from">, input: ListContactsInput): Promise<ListContactsResult> {
+/** Server-side paginated Contact directory -- app.list_contacts (SECURITY DEFINER) is the real scope gate; never returns normalized_email/normalized_phone/duplicate_fingerprint. */
+export async function listContacts(client: ContactQueryRpcClient, input: ListContactsInput): Promise<ListContactsResult> {
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
   const page = Math.max(Math.trunc(input.page), 1);
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  const { data, error, count } = await client
-    .from("contacts")
-    .select("*", { count: "exact" })
-    .eq("tenant_id", input.tenantId)
-    .order("full_name", { ascending: true })
-    .range(from, to);
+  const { data, error } = await client.rpc("list_contacts", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+    p_page: page,
+    p_page_size: pageSize,
+  });
 
   if (error) {
     throw new ContactQueryError(error.message);
   }
 
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const totalCount = rows.length > 0 ? Number(rows[0]?.total_count) : 0;
+
   return {
-    contacts: (data ?? []).map((row: Record<string, unknown>) => parseContact(row)),
-    totalCount: count ?? 0,
+    contacts: rows.map((row) => parseContact(row)),
+    totalCount,
     page,
     pageSize,
   };
 }
 
-/** A single contact by id, for the Contact Detail view -- returns null (never an error) when RLS/no-match yields zero rows. */
-export async function getContactById(client: Pick<SupabaseClient, "from">, contactId: string): Promise<Contact | null> {
-  const { data, error } = await client.from("contacts").select("*").eq("id", contactId).maybeSingle();
+/** A single contact by id, for the Contact Detail view -- returns null (never an error) when denied/no-match yields zero rows. */
+export async function getContactById(client: ContactQueryRpcClient, contactId: string, actorAuthUserId: string): Promise<Contact | null> {
+  const { data, error } = await client.rpc("get_contact_by_id", {
+    p_contact_id: contactId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new ContactQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseContact(data as Record<string, unknown>);
+  return parseContact(row as Record<string, unknown>);
 }
 
-/** The unified activity timeline for one related record (lead, prospect, or -- since COM-147 -- opportunity), most recent first -- RLS (activities_select_scoped) is the real scope gate. */
+/** The unified activity timeline for one related record (lead, prospect, or -- since COM-147 -- opportunity), most recent first -- app.list_activities_for_record (SECURITY DEFINER) is the real scope gate. */
 export async function listActivitiesForRecord(
-  client: Pick<SupabaseClient, "from">,
+  client: ContactQueryRpcClient,
   relatedType: RelatedType,
   relatedId: string,
+  actorAuthUserId: string,
 ): Promise<Activity[]> {
-  const { data, error } = await client
-    .from("activities")
-    .select("*")
-    .eq("related_type", relatedType)
-    .eq("related_id", relatedId)
-    .order("created_at", { ascending: false });
+  const { data, error } = await client.rpc("list_activities_for_record", {
+    p_related_type: relatedType,
+    p_related_id: relatedId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new ContactQueryError(error.message);
   }
-  return (data ?? []).map((row: Record<string, unknown>) => parseActivity(row));
+  if (!Array.isArray(data)) {
+    throw new ContactQueryError("list_activities_for_record returned a non-array result");
+  }
+  return data.map((row) => parseActivity(row as Record<string, unknown>));
 }

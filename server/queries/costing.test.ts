@@ -71,6 +71,8 @@ const VALID_RESPONSE_COMPONENT_ROW = {
   created_at: "2026-07-24T00:00:00.000Z",
 };
 
+const ACTOR_ID = "823e4567-e89b-12d3-a456-426614174000";
+
 function fakeTableClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): CostingQueryTableClient {
   const fake = {
     from(table: string) {
@@ -97,27 +99,31 @@ function fakeTableClient(response: { data: unknown; error: { message: string } |
         },
       };
     },
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.rpcFn = fn;
+      capture.calls.rpcArgs = args;
+      return response;
+    },
   };
   return fake as unknown as CostingQueryTableClient;
 }
 
 describe("listCostingRequestsForOpportunity", () => {
-  test("filters by opportunity_id and orders newest first", async () => {
+  test("calls list_costing_requests_for_opportunity with opportunity/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: [VALID_REQUEST_ROW], error: null }, capture);
-    const requests = await listCostingRequestsForOpportunity(client, OPPORTUNITY_ID);
-    assert.equal(capture.calls.table, "costing_requests");
-    assert.equal(capture.calls.eqColumn, "opportunity_id");
-    assert.equal(capture.calls.ascending, false);
+    const requests = await listCostingRequestsForOpportunity(client, OPPORTUNITY_ID, ACTOR_ID);
+    assert.equal(capture.calls.rpcFn, "list_costing_requests_for_opportunity");
+    assert.deepEqual(capture.calls.rpcArgs, { p_opportunity_id: OPPORTUNITY_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(requests.length, 1);
   });
 });
 
 describe("getCostingRequestById", () => {
-  test("returns null (never an error) when RLS/no-match yields zero rows", async () => {
+  test("returns null (never an error) when denied/no-match yields zero rows", async () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: [], error: null }, capture);
-    const request = await getCostingRequestById(client, REQUEST_ID);
+    const request = await getCostingRequestById(client, REQUEST_ID, ACTOR_ID);
     assert.equal(request, null);
   });
 
@@ -125,7 +131,7 @@ describe("getCostingRequestById", () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: null, error: { message: "boom" } }, capture);
     await assert.rejects(
-      () => getCostingRequestById(client, REQUEST_ID),
+      () => getCostingRequestById(client, REQUEST_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof CostingQueryError);
         return true;
@@ -135,11 +141,12 @@ describe("getCostingRequestById", () => {
 });
 
 describe("listCostingRequestComponents", () => {
-  test("maps rows to the contract shape, oldest first", async () => {
+  test("maps rows to the contract shape", async () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: [VALID_COMPONENT_ROW], error: null }, capture);
-    const components = await listCostingRequestComponents(client, REQUEST_ID);
-    assert.equal(capture.calls.ascending, true);
+    const components = await listCostingRequestComponents(client, REQUEST_ID, ACTOR_ID);
+    assert.equal(capture.calls.rpcFn, "list_costing_request_components");
+    assert.deepEqual(capture.calls.rpcArgs, { p_request_id: REQUEST_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(components.length, 1);
   });
 });

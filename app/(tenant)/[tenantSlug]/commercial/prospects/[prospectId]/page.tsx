@@ -44,7 +44,7 @@ export default async function ProspectDetailPage({ params }: { params: Promise<{
     notFound();
   }
 
-  const activities = await listActivitiesForRecord(supabase, "prospect", prospect.id);
+  const activities = await listActivitiesForRecord(supabase, "prospect", prospect.id, access.authUserId);
   const reentryCandidates =
     prospect.status === "active"
       ? await findExistingAccountsForProspect(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, prospectId: prospect.id })

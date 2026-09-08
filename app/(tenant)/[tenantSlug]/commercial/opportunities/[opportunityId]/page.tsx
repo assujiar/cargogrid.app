@@ -48,8 +48,8 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
   const [stageHistory, readiness, activities, costingRequests, quotations] = await Promise.all([
     listOpportunityStageHistory(supabase, opportunity.id),
     getOpportunityCostingReadiness(supabase, opportunity.id, access.authUserId),
-    listActivitiesForRecord(supabase, "opportunity", opportunity.id),
-    listCostingRequestsForOpportunity(supabase, opportunity.id),
+    listActivitiesForRecord(supabase, "opportunity", opportunity.id, access.authUserId),
+    listCostingRequestsForOpportunity(supabase, opportunity.id, access.authUserId),
     listQuotationsForOpportunity(supabase, opportunity.id),
   ]);
 

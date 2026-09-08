@@ -17,7 +17,7 @@ import {
   type CostingResponseComponent,
 } from "../contracts/costing/costing.ts";
 
-export type CostingQueryTableClient = Pick<SupabaseClient, "from">;
+export type CostingQueryTableClient = Pick<SupabaseClient, "from" | "rpc">;
 
 export class CostingQueryError extends Error {
   constructor(message: string) {
@@ -26,38 +26,40 @@ export class CostingQueryError extends Error {
   }
 }
 
-/** All costing requests for one opportunity, most recently created first -- RLS (costing_requests_select_scoped) is the real scope gate. */
-export async function listCostingRequestsForOpportunity(client: CostingQueryTableClient, opportunityId: string): Promise<CostingRequest[]> {
-  const { data, error } = await client
-    .from("costing_requests")
-    .select("*")
-    .eq("opportunity_id", opportunityId)
-    .order("created_at", { ascending: false });
+/** All costing requests for one opportunity, most recently created first -- app.list_costing_requests_for_opportunity (SECURITY DEFINER) is the real scope gate. */
+export async function listCostingRequestsForOpportunity(client: CostingQueryTableClient, opportunityId: string, actorAuthUserId: string): Promise<CostingRequest[]> {
+  const { data, error } = await client.rpc("list_costing_requests_for_opportunity", {
+    p_opportunity_id: opportunityId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CostingQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseCostingRequest(row));
 }
 
-/** A single costing request by id -- returns null (never an error) when RLS/no-match yields zero rows. */
-export async function getCostingRequestById(client: CostingQueryTableClient, requestId: string): Promise<CostingRequest | null> {
-  const { data, error } = await client.from("costing_requests").select("*").eq("id", requestId).maybeSingle();
+/** A single costing request by id -- returns null (never an error) when denied/no-match yields zero rows. */
+export async function getCostingRequestById(client: CostingQueryTableClient, requestId: string, actorAuthUserId: string): Promise<CostingRequest | null> {
+  const { data, error } = await client.rpc("get_costing_request_by_id", {
+    p_request_id: requestId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CostingQueryError(error.message);
   }
-  if (!data) {
+  const row = (data ?? [])[0];
+  if (!row) {
     return null;
   }
-  return parseCostingRequest(data as Record<string, unknown>);
+  return parseCostingRequest(row as Record<string, unknown>);
 }
 
-/** The requested line items for one costing request -- RLS (costing_request_components_select_scoped) is the real scope gate. */
-export async function listCostingRequestComponents(client: CostingQueryTableClient, requestId: string): Promise<CostingRequestComponent[]> {
-  const { data, error } = await client
-    .from("costing_request_components")
-    .select("*")
-    .eq("costing_request_id", requestId)
-    .order("created_at", { ascending: true });
+/** The requested line items for one costing request -- app.list_costing_request_components (SECURITY DEFINER) is the real scope gate. */
+export async function listCostingRequestComponents(client: CostingQueryTableClient, requestId: string, actorAuthUserId: string): Promise<CostingRequestComponent[]> {
+  const { data, error } = await client.rpc("list_costing_request_components", {
+    p_request_id: requestId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CostingQueryError(error.message);
   }

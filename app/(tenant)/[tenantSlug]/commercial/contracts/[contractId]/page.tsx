@@ -26,7 +26,7 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
 
   let contract;
   try {
-    contract = await getCustomerContractById(supabase, contractId);
+    contract = await getCustomerContractById(supabase, contractId, access.authUserId);
   } catch (error) {
     if (!(error instanceof ContractQueryError)) {
       throw error;
@@ -41,9 +41,9 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   }
 
   const [components, versions, account] = await Promise.all([
-    listCustomerContractPriceComponents(supabase, contract.id),
-    listCustomerContractVersions(supabase, contract.rootContractId),
-    getAccountById(supabase, contract.accountId),
+    listCustomerContractPriceComponents(supabase, contract.id, access.authUserId),
+    listCustomerContractVersions(supabase, contract.rootContractId, access.authUserId),
+    getAccountById(supabase, contract.accountId, access.authUserId),
   ]);
 
   const editable = contract.status === "draft";

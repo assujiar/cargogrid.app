@@ -36,7 +36,7 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
 
   let request;
   try {
-    request = await getCostingRequestById(supabase, requestId);
+    request = await getCostingRequestById(supabase, requestId, access.authUserId);
   } catch (error) {
     if (!(error instanceof CostingQueryError)) {
       throw error;
@@ -51,7 +51,7 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
   }
 
   const [components, responses] = await Promise.all([
-    listCostingRequestComponents(supabase, request.id),
+    listCostingRequestComponents(supabase, request.id, access.authUserId),
     listCostingResponsesForRequest(supabase, request.id),
   ]);
 

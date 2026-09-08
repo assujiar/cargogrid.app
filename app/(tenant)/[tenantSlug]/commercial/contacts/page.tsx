@@ -34,7 +34,7 @@ export default async function CommercialContactsPage({
   let result: ListContactsResult | null = null;
   let loadFailed = false;
   try {
-    result = await listContacts(supabase, { tenantId: access.tenant.id, page });
+    result = await listContacts(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page });
   } catch (error) {
     if (!(error instanceof ContactQueryError)) {
       throw error;

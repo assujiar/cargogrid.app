@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `DEFERRED_LARGE` (recon complete) | |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batch 1 of 4+ **DONE**, see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -669,3 +669,49 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   that VirusTotal genuinely cannot resolve within `max_attempts` dead-letters and needs a
   support-authority `app.requeue_dead_letter_job` call, the same residual-gap class A5/D4 already
   disclose for their own bounded scopes.
+- 2026-09-08 — Ø1-query-layer cluster 0 batch 1 closed (this commit), user-directed ("lanjut sampe
+  siap launching") continuation past the 2026-09-07 recon's own `DEFERRED_LARGE` disposition.
+  Reassessed severity first: every one of the 158 recon-catalogued `.from()` reads against `app.*`
+  tables has NEVER worked in production (confirmed live: `supabase/config.toml` exposes only
+  `public`/`graphql_public` to PostgREST, `app` is completely invisible to it), and cluster 0 (CRM/
+  commercial, 54 sites / 32 tables) sits behind real, reachable pages
+  (`/commercial/accounts`, `/contacts`, `/contracts`, `/costing-requests`, `/opportunities`,
+  `/quotations`, `/leads`, `/prospects`) — this is a live, currently-broken read path, not merely
+  the architectural backlog the prior framing implied, and is now treated as the top launch-
+  blocking priority. This batch closes the first 8 of cluster 0's 32 tables: app.accounts,
+  app.account_conversions, app.contacts, app.activities, app.customer_contracts,
+  app.customer_contract_price_components_directory, app.costing_requests,
+  app.costing_request_components. New migration
+  `20260908020000_close_o1_query_layer_cluster0_batch1_crm_core.sql` adds 15 new `app.*`+`public.*`
+  Option-2 wrapper pairs (see that migration's own header and per-function comments for the full
+  authority-derivation reasoning). Every function was drafted via an adversarial design→verify→fix
+  pipeline before ever touching a database, checked against three explicit rules baked into both
+  the design and verify prompts: RULE A (`app.assert_actor_is_session_identity` as the first
+  executable statement, the ATW-031/032 actor-impersonation guard — 5 of the first 8 drafts were
+  caught missing it and fixed before commit), RULE B (reproducing the CURRENT RLS predicate for a
+  table, not its original pre-hardening text — `20260730560000`'s `customer_user`-layer exclusion
+  on `app.accounts`/`app.customer_contracts`/`app.customer_contract_price_components_directory` was
+  caught missing from one draft this way), and RULE C (citing the most recent `create or replace`
+  of a precedent function, never its original body). Beyond the adversarial pipeline, this pass's
+  own db-test (`scripts/db-tests/o1-query-layer-cluster0-batch1.sql`, run against a real disposable
+  database) caught two further, genuine defects the pipeline's own verify stage had missed (both
+  introduced in a later fix-and-reverify round the pipeline never re-ran adversarially after a
+  session-capacity interruption): `app.list_contacts` and `app.get_contact_by_id` had both
+  reintroduced `normalized_email`/`normalized_phone`/`duplicate_fingerprint` into their return
+  shape — a PII-correlation leak the recon's own instructions explicitly required excluding, caught
+  via an `information_schema.parameters` introspection of the functions' own OUT parameters rather
+  than a sample-row check. Both fixed directly in the migration before it was ever applied outside
+  a disposable test database. All 4 affected TS query files (`server/queries/account.ts`,
+  `contact.ts`, `contract.ts`, `costing.ts`) and every real call site (11 `page.tsx` files) were
+  switched from `.from()` to `.rpc()` in this same commit, per this migration's own embedded "TS
+  INTEGRATION" notes — nothing was left half-migrated. `server/queries/account.test.ts`,
+  `contact.test.ts`, `contract.test.ts`, `costing.test.ts` updated to mock `.rpc()` instead of
+  `.from()` for every migrated function. Full Tier A gate suite re-run clean: `typecheck`, `lint`
+  (0 errors), the 5,992-test unit suite, a full `pnpm run db:test` (`ALL PASSED`, 515 migrations /
+  259 db-test files), `git:check-paths`, `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-EIGHTEENTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
+  Still `IN_PROGRESS`, not `DONE`: 24 of cluster 0's 32 tables remain, plus clusters 1-7 (104 more
+  call sites across finance/identity/dispatch/tracking/documents/analytics/misc) — the same
+  Design→Verify→Fix pipeline with RULE A/B/C baked in is the established, working pattern for the
+  remaining batches, not a new approach to derive.

@@ -28,7 +28,7 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
   let truncated = false;
   let loadFailed = false;
   try {
-    const page = await listAccounts(supabase, access.tenant.id);
+    const page = await listAccounts(supabase, access.tenant.id, access.authUserId);
     accounts = page.rows;
     truncated = page.truncated;
   } catch (error) {

@@ -27,7 +27,7 @@ export default async function ContractsPage({ params }: { params: Promise<{ tena
   let truncated = false;
   let loadFailed = false;
   try {
-    const page = await listCustomerContracts(supabase, access.tenant.id);
+    const page = await listCustomerContracts(supabase, access.tenant.id, access.authUserId);
     contracts = page.rows;
     truncated = page.truncated;
   } catch (error) {
