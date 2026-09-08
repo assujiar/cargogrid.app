@@ -3877,7 +3877,36 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // DONE: enabling a real TOTP/phone provider (`supabase/config.toml`) and building the
   // client-side `challengeAndVerify()` UI flow remain open, the same disclosed operator/
   // product boundary A5's own remediation left open for its own INFRA half.
-  migrationSetSha256: "41f13cc719246dcc27c2c1462e923fe86340d6fbbddedb5f6901c924ee729abf",
+  // HUNDRED-AND-SIXTEENTH PASS (2026-09-08, user-directed extension of CG-AUDIT-2026-09-02
+  // A6/D4): 513 files (+1) -- new migration
+  // 20260908000000_create_platform_integration_secrets.sql. The user asked for a
+  // VirusTotal API key (to give A6's own malware-scan gap a real scanner) to be
+  // configurable from the Supreme Admin UI, generalized so any FUTURE platform-level
+  // (not tenant-owned) API key is added the same way rather than as an environment
+  // variable. Every existing secret-bearing table in this repository is tenant-scoped;
+  // this adds the missing "platform itself holds the credential" shape -- app.
+  // platform_integration_secrets, app.set_platform_integration_secret/app.
+  // get_platform_integration_secret/app.list_platform_integration_secrets -- reusing
+  // the EXISTING app._encrypt_integration_secret/_decrypt_integration_secret mechanism
+  // (20260826050000) rather than inventing a second one, and mirroring app.
+  // platform_scheduled_task_definitions (20260902020000) as the established
+  // "platform-wide, no tenant_id, Supreme-Admin-only" shape. Every write/read still
+  // depends on CG-AUDIT-2026-09-02 D4's own disclosed, still-open gap (the app.
+  // integration_secrets_encryption_key GUC is never set outside db-test fixtures) --
+  // this migration does not close D4, it fails closed through it with a clear error.
+  // Live-caught and fixed during this migration's own authoring: ISS-2026-309's exact
+  // regression class -- `revoke execute on function public.X(...) from public` does
+  // NOT revoke the direct anon/authenticated/service_role grants Supabase's own ALTER
+  // DEFAULT PRIVILEGES rule gives every new public.* function at CREATE time (only
+  // `scripts/db-tests/lib/setup-disposable-db.sh`'s own mirror of that rule, added for
+  // exactly this class of bug, caught it locally) -- fixed by revoking from all three
+  // named roles plus PUBLIC explicitly, per 20260830200000's own established
+  // correction, before every one of the 3 new public.* wrappers here.
+  // `scripts/db-tests/public-api-wrapper-regression.sql` re-verified exhaustively
+  // green after the fix. Full `pnpm run db:test` re-run: `ALL PASSED`.
+  migrationSetSha256: "77c43404839fe193cac0febdd2bab03e3298a74d64c29f18505b5ed06ed04c87",
+  // History: 41f13cc719246dcc27c2c1462e923fe86340d6fbbddedb5f6901c924ee729abf
+  // (512 files, HUNDRED-AND-FIFTEENTH PASS).
   // History: 1b57197248d04de881757dc9af9b6b4875e9cdc52adeb8008e034a1e499b90aa
   // (511 files, HUNDRED-AND-FOURTEENTH PASS).
   // History: 097e81c3be29d3477ec76107ad1f137895a15b7c7df9f14fd5f15e198d74587f
@@ -4820,7 +4849,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // call sites across the other 11 db-test files that depend on this function as a
   // precondition and never simulate a session at all -- confirmed unaffected by a full
   // `pnpm run db:test` re-run, not merely by this one assertion.
-  dbTestSetSha256: "2551fef57e3f647928c1e9560aadbf78f00f80e1ebcc031270eec2e41b45d7e6",
+  // HUNDRED-AND-SIXTEENTH PASS (2026-09-08, user-directed extension of A6/D4): 256
+  // files (+1) -- new file scripts/db-tests/platform-integration-secrets.sql. Proves,
+  // against a real disposable database: fails closed with encryption_key_not_
+  // configured when the GUC is unset; Supreme-Admin-only for both set and list (an
+  // identity with no principal membership at all is rejected); invalid key shape and
+  // empty value both rejected; a real round-trip through pgcrypto encryption; rotation
+  // upserts in place (never a second row) and preserves the prior description when a
+  // rotation passes a null one; an unconfigured key decrypts to null, never raises;
+  // the list RPC's own RETURNS TABLE shape structurally has no value column at all;
+  // and (ISS-2026-309's own regression class) anon holds zero EXECUTE on any of the 3
+  // new functions across BOTH app.* and their public.* wrappers.
+  dbTestSetSha256: "7de55b831acd07bff9feaa49a63f88763ccde4c381c963d36c1d216b288bee41",
+  // History: 2551fef57e3f647928c1e9560aadbf78f00f80e1ebcc031270eec2e41b45d7e6
+  // (255 files, HUNDRED-AND-FIFTEENTH PASS).
   // History: 378f7312ee3075106e9eed85317cb55b88e4dd275fd5d524fcef1e23d26d03d7
   // (255 files, HUNDRED-AND-THIRTEENTH PASS).
   // History: d4301843e34f91c750b1c1dfa7cc32592a3c0c6be5f1206b99090edf4e4062d2

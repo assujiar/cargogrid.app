@@ -69,7 +69,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | D3 | IP allowlist bypass — `integrations/actions.ts:76` takes `x-forwarded-for` first-hop instead of last-hop | `CODE` | **DONE** | `f5f0878` |
 | B8 | Finance `company_id` is caller-supplied and never validated against the caller's tenant across ≥8 reachable RPCs | `CODE` | **DONE** | (this commit) |
 | D1 | MFA switched off; `verify_mfa_step_up_challenge` validates no real factor | `CODE` (challenge validation) + `INFRA` (enabling a real TOTP provider is a Supabase project auth-config change) | **PARTIAL** | CODE half done (this commit) — now requires the calling session itself to be authenticated at AAL2; INFRA half (enabling a real TOTP/phone provider, building the client-side `challengeAndVerify()` UI) is an operator/product task this repository cannot perform, see execution log |
-| D4 | `integration_secrets_encryption_key()` GUC never configured outside db-test fixtures | `INFRA` (real secret provisioning, not a code change) | NEEDS_HUMAN_GATE | |
+| D4 | `integration_secrets_encryption_key()` GUC never configured outside db-test fixtures | `INFRA` (real secret provisioning, not a code change) | NEEDS_HUMAN_GATE | a new real consumer now depends on this GUC being set: `app.platform_integration_secrets` (this commit, user-directed A6 extension) fails closed with `encryption_key_not_configured` until it is |
 
 ## B — Money (beyond B1/B8, already tracked above)
 
@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | DEFERRED_LARGE | bucket+policy migration is boundable; full upload/scan wiring across the app is not |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **IN_PROGRESS** | user-directed: platform integration secrets infra (this commit) landed first, as a real prerequisite for a real scanner; the bucket/policy migration + wiring one flow (vendor compliance) + the VirusTotal scan adapter are next, still bounded to one flow, not the full CODE-BIG remainder |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -555,3 +555,47 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `DONE`: the database gate now genuinely fails closed for the one channel it is reachable
   through, but no real second factor can be verified in production until both remaining pieces
   exist.
+- 2026-09-08 — A6/D4 extension, part 1 of 2 (this commit): platform integration secrets
+  infrastructure. User-directed: after discussing A6's own malware-scan gap, the user asked for
+  a VirusTotal API key to close it, entered via the Supreme Admin UI, generalized so any FUTURE
+  platform-level (not tenant-owned) third-party API key is added the same way rather than as an
+  environment variable requiring a redeploy. Every existing secret-bearing table in this
+  repository (`app.integration_connection_credentials` and its siblings) is tenant-scoped -- a
+  tenant's own credential for its own third-party account; there was no shape for a secret the
+  PLATFORM ITSELF holds to call an outbound service on every tenant's behalf. New migration
+  `20260908000000_create_platform_integration_secrets.sql` adds exactly that shape --
+  `app.platform_integration_secrets` (`app.set_platform_integration_secret`/`app.
+  get_platform_integration_secret`/`app.list_platform_integration_secrets`) -- reusing the
+  EXISTING `app._encrypt_integration_secret`/`_decrypt_integration_secret` pgcrypto mechanism
+  (`20260826050000`) rather than inventing a second one, and mirroring `app.
+  platform_scheduled_task_definitions` (`20260902020000`) as the established "platform-wide, no
+  tenant_id, Supreme-Admin-only" shape. New Supreme Admin UI at `/supreme/integrations`
+  (`page.tsx`/`actions.ts`/a form component, mirroring `supreme/helpdesk`'s own shape exactly)
+  lists configured keys (name/description/who/when -- NEVER a value, encrypted or otherwise --
+  structurally impossible to leak back out since `list_platform_integration_secrets`'s own
+  `RETURNS TABLE` shape has no such column) and a form to add or rotate one.
+  Live-caught and fixed during this migration's own authoring: ISS-2026-309's exact regression
+  class -- `revoke execute on function public.X(...) from public` does NOT revoke the direct
+  `anon`/`authenticated`/`service_role` grants Supabase's own `ALTER DEFAULT PRIVILEGES` rule
+  gives every new `public.*` function at CREATE time (only `scripts/db-tests/lib/setup-
+  disposable-db.sh`'s own mirror of that rule, added specifically for this class of bug, caught
+  it locally rather than only on a live project) -- fixed by revoking from all three named roles
+  plus PUBLIC explicitly, per `20260830200000`'s own established correction, before every one of
+  the 3 new `public.*` wrappers this migration adds. Also re-confirmed, mid-investigation, that
+  every EARLIER fix this session (A3/A5/NEW-1/D1 -- all `CREATE OR REPLACE` on unchanged
+  signatures) remains correctly reachable in production: each already had a pre-existing
+  `public.*` wrapper (a pure pass-through) that needed no change at all.
+  Deliberately gated by, not working around, CG-AUDIT-2026-09-02 D4's own disclosed gap: every
+  write and read through this table calls `app.integration_secrets_encryption_key()`, which
+  raises `encryption_key_not_configured` while that GUC is unset (true in every environment
+  today) -- the Supreme Admin UI's own error message names this plainly rather than failing
+  silently or falling back to plaintext. New `scripts/db-tests/platform-integration-secrets.sql`
+  proves the full CRUD/authority/encryption surface, including the fail-closed D4 path and the
+  ISS-2026-309 grant-parity fix, against a real disposable database. Full `pnpm run db:test`
+  re-run twice (once immediately after authoring, once as the final sanity pass after the
+  release-freeze update) -- `ALL PASSED` both times, alongside `typecheck`/`lint`/full `pnpm run
+  test` (5969 tests)/`git:check-paths`/`security:check`/a real `next build` (route registers)/a
+  real-browser check confirming the new page redirects unauthenticated exactly like the
+  pre-existing `/supreme/helpdesk` page. Part 2 (the actual A6 deadlock fix -- Storage bucket +
+  RLS policies, the VirusTotal scan adapter, and wiring one real upload flow end to end) follows
+  in a separate commit.
