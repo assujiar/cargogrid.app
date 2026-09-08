@@ -52,6 +52,7 @@ import { runDueJobs, runDueScheduledTasks, type JobRunnerRpcClient } from "../..
 import { runExternalSyncWorker } from "./external-sync-worker.ts";
 import { runFinanceBankFeedSyncWorker } from "./finance-bank-feed-sync-worker.ts";
 import { runLogisticsPartnerSyncWorker } from "./logistics-partner-sync-worker.ts";
+import { runMalwareScanWorker } from "./malware-scan-worker.ts";
 import { runNotificationDeliveryWorker } from "./notification-delivery-worker.ts";
 import { runWebhookDeliveryWorker } from "./webhook-delivery-worker.ts";
 
@@ -87,6 +88,7 @@ export const ALL_LANES = [
   "external-sync",
   "logistics-partner-sync",
   "finance-bank-feed-sync",
+  "malware-scan",
 ] as const;
 
 export function parseArgs(argv: readonly string[]): SupervisorOptions {
@@ -197,6 +199,10 @@ export async function runTick(
   await lane("finance-bank-feed-sync", async () => {
     const r = await runFinanceBankFeedSyncWorker(client as never, externalOptions);
     return `${r.claimed} claimed, ${r.synced} synced, ${r.failed} failed`;
+  });
+  await lane("malware-scan", async () => {
+    const r = await runMalwareScanWorker(client as never, externalOptions);
+    return `${r.claimed} claimed, ${r.resolved} resolved, ${r.failed} failed`;
   });
 
   return { lanes: results, allOk: results.every((r) => r.ok) };

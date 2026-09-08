@@ -26,7 +26,9 @@ import {
   VendorComplianceMutationError,
 } from "../../../../../../server/mutations/vendor-compliance.ts";
 import { getVendorComplianceRequirement, VendorComplianceQueryError } from "../../../../../../server/queries/vendor-compliance.ts";
-import { initiateFileUpload, DocumentMutationError, type DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
+import { initiateFileUpload, requestFileDeletion, DocumentMutationError, type DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
+import { enqueueJob, type BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
+import { TENANT_DOCUMENTS_BUCKET_ID } from "../../../../../../lib/storage/tenant-documents-bucket.ts";
 import type {
   VendorComplianceDocumentDecision,
   VendorComplianceWaiverDecision,
@@ -71,6 +73,72 @@ async function requireAccess(tenantSlug: string) {
  */
 function toDocumentClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient {
   return client as unknown as DocumentMutationRpcClient;
+}
+
+/**
+ * Same adapter-cast reasoning as toDocumentClient above, for app.enqueue_job
+ * (CG-AUDIT-2026-09-02 A6). Unlike initiate_file_upload, enqueue_job IS granted to
+ * `authenticated` (20260730410000_harden_job_type_single_source_of_truth.sql) and
+ * performs its own internal app.check_job_authority check -- the RLS-scoped
+ * `supabase` client is correct here, the same "authenticated-grantable, self-
+ * checking RPC uses the RLS-scoped client" precedent
+ * accessVendorComplianceDocumentEvidenceAction already established below.
+ */
+function toBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): BackgroundJobMutationRpcClient {
+  return client as unknown as BackgroundJobMutationRpcClient;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: stores the real evidence bytes behind
+ * app.initiate_file_upload's server-generated storage_path, then enqueues the
+ * malware_scan job that resolves malware_scan_status away from 'pending' -- the
+ * first real production caller anywhere in this repository of
+ * app.record_file_scan_result (see lib/malware-scan/process-malware-scan-job.server.ts's
+ * own header). On a storage upload failure, compensates with a soft
+ * app.request_file_deletion rather than leaving a bytes-less 'pending' file row
+ * behind; a best-effort compensation only -- if the deletion call ALSO fails, the
+ * row remains 'pending' with no stored bytes, the same disclosed residual state
+ * A6 started in, not a regression this checkpoint introduces.
+ */
+async function storeEvidenceBytesAndEnqueueScan(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  serviceRoleClient: ReturnType<typeof createSupabaseServiceRoleClient>,
+  uploaded: { id: string; storagePath: string; mimeType: string; originalFilename: string },
+  evidenceFile: File,
+  tenantId: string,
+  actorAuthUserId: string,
+): Promise<{ error: string } | null> {
+  const bytes = new Uint8Array(await evidenceFile.arrayBuffer());
+  const { error: uploadError } = await serviceRoleClient.storage.from(TENANT_DOCUMENTS_BUCKET_ID).upload(uploaded.storagePath, bytes, { contentType: uploaded.mimeType, upsert: false });
+  if (uploadError) {
+    try {
+      await requestFileDeletion(toDocumentClient(serviceRoleClient), { fileId: uploaded.id, reason: "storage upload failed", actorAuthUserId, actorLabel: actorAuthUserId });
+    } catch {
+      // Best-effort compensation only -- see this function's own header.
+    }
+    return { error: `Could not store this evidence file: ${uploadError.message}` };
+  }
+
+  try {
+    await enqueueJob(toBackgroundJobClient(supabase), {
+      tenantId,
+      jobType: "malware_scan",
+      payload: {
+        file_id: uploaded.id,
+        storage_path: uploaded.storagePath,
+        uploaded_by_auth_user_id: actorAuthUserId,
+        original_filename: uploaded.originalFilename,
+        mime_type: uploaded.mimeType,
+      },
+      idempotencyKey: "malware_scan:" + uploaded.id,
+      actorAuthUserId,
+      actorLabel: actorAuthUserId,
+    });
+  } catch (error) {
+    return { error: `Evidence stored, but could not queue it for a malware scan: ${error instanceof Error ? error.message : "unknown error"}` };
+  }
+
+  return null;
 }
 
 function detailPath(tenantSlug: string, vendorMasterRecordId: string): string {
@@ -122,8 +190,9 @@ export async function submitVendorComplianceDocumentAction(tenantSlug: string, v
   }
 
   let evidenceFileId: string;
+  const serviceRoleClient = createSupabaseServiceRoleClient();
   try {
-    const uploaded = await initiateFileUpload(toDocumentClient(createSupabaseServiceRoleClient()), {
+    const uploaded = await initiateFileUpload(toDocumentClient(serviceRoleClient), {
       tenantId: access.tenant.id,
       documentTypeCode,
       recordType: "vendor_compliance",
@@ -141,6 +210,9 @@ export async function submitVendorComplianceDocumentAction(tenantSlug: string, v
       actorLabel: access.authUserId,
     });
     evidenceFileId = uploaded.id;
+
+    const storeError = await storeEvidenceBytesAndEnqueueScan(supabase, serviceRoleClient, uploaded, evidenceFile, access.tenant.id, access.authUserId);
+    if (storeError) return storeError;
   } catch (error) {
     if (error instanceof DocumentMutationError) return { error: `Could not upload this evidence file: ${error.message}` };
     throw error;
@@ -187,8 +259,9 @@ export async function renewVendorComplianceDocumentAction(
   const supabase = await createSupabaseServerClient();
 
   let evidenceFileId: string;
+  const serviceRoleClient = createSupabaseServiceRoleClient();
   try {
-    const uploaded = await initiateFileUpload(toDocumentClient(createSupabaseServiceRoleClient()), {
+    const uploaded = await initiateFileUpload(toDocumentClient(serviceRoleClient), {
       tenantId: access.tenant.id,
       documentTypeCode,
       recordType: "vendor_compliance",
@@ -206,6 +279,9 @@ export async function renewVendorComplianceDocumentAction(
       actorLabel: access.authUserId,
     });
     evidenceFileId = uploaded.id;
+
+    const storeError = await storeEvidenceBytesAndEnqueueScan(supabase, serviceRoleClient, uploaded, evidenceFile, access.tenant.id, access.authUserId);
+    if (storeError) return storeError;
   } catch (error) {
     if (error instanceof DocumentMutationError) return { error: `Could not upload this renewal evidence file: ${error.message}` };
     throw error;

@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **IN_PROGRESS** | user-directed: platform integration secrets infra (this commit) landed first, as a real prerequisite for a real scanner; the bucket/policy migration + wiring one flow (vendor compliance) + the VirusTotal scan adapter are next, still bounded to one flow, not the full CODE-BIG remainder |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | user-directed, part 2 of 2: a real private Storage bucket, a real `malware_scan` job type/worker, and a real VirusTotal scan adapter now exist, and one of the 3 named deadlocked flows (vendor compliance document submission/renewal) is wired end to end. Still bounded, not DONE: ticket-reply attachments and shipment document checklists are not wired (the pattern now exists for them to reuse); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -599,3 +599,73 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   pre-existing `/supreme/helpdesk` page. Part 2 (the actual A6 deadlock fix -- Storage bucket +
   RLS policies, the VirusTotal scan adapter, and wiring one real upload flow end to end) follows
   in a separate commit.
+- 2026-09-08 — A6/D4 extension, part 2 of 2 (this commit): the actual A6 deadlock fix. New
+  migration `20260908010000_close_a6_storage_bucket_and_malware_scan_job_type.sql` provisions a
+  real, private `tenant-documents` Storage bucket (`insert into storage.buckets`, `public =
+  false`) -- closing the audit's own literal "no migration creates a Storage bucket" finding --
+  and asserts RLS is enabled on `storage.objects` explicitly rather than relying on it silently
+  (zero permissive policies + RLS enabled already denies every caller but `service_role`, which
+  bypasses RLS via the Storage API's own service-key posture -- mirrors `app.files.storage_path`'s
+  own service_role-only precedent; no signed-URL issuance is added, staying inside the same
+  disclosed boundary `20260801080000`'s own header already established). The same migration adds
+  a new `malware_scan` `job_type`, widened on BOTH of ATW-031's sources of truth (the `app.jobs`
+  CHECK constraint and `app.generic_job_types()`, the latter a `CREATE OR REPLACE` on an unchanged
+  signature needing no new `public.*` wrapper) plus their two TypeScript mirrors
+  (`GENERIC_JOB_TYPES`, `IMPORT_EXPORT_JOB_TYPES`) and the two SQL-side drift-gate literals in
+  `scripts/db-tests/background-job.sql` -- every place ATW-031's own history proved a new job type
+  can silently drift out of sync was updated together, not just the one that happened to be
+  exercised first.
+  A new sixth external-handoff worker, `scripts/jobs/malware-scan-worker.ts`, mirrors the existing
+  five workers' own shape exactly and is wired into `scripts/jobs/supervisor.ts`'s `ALL_LANES` --
+  picked up automatically by A5's cron route with no route change. It claims `malware_scan` jobs
+  and calls `lib/malware-scan/process-malware-scan-job.server.ts`, the first real caller anywhere
+  in this repository of `app.record_file_scan_result` (that function's own header, at
+  `20260719140000_create_document_file_engine.sql:558`, names itself the bounded adapter interface
+  "a future scan-provider webhook/job would call" -- this is that job). It downloads the uploaded
+  bytes from Storage, reads a VirusTotal API key via `app.get_platform_integration_secret` (part 1
+  of this extension), and calls the new `lib/malware-scan/scan-file-with-virustotal.server.ts` --
+  a real, bounded (a request timeout on every fetch, and a bounded number of poll attempts rather
+  than blocking indefinitely on VirusTotal's own asynchronous analysis) outbound multipart
+  file-upload HTTP client, the first one anywhere in this repository (every prior outbound `fetch`
+  here — webhooks, notifications, geocoding, tax lookups, e-invoicing — sends JSON, never a real
+  file body). Two failure classes are handled deliberately differently, disclosed in the file's own
+  header: "could not even attempt a scan" (no API key configured yet, or a storage download
+  failure) retries via the job framework's own exponential backoff, leaving the file `pending`
+  exactly as before; "a scan was attempted and produced some real, actionable answer" (a completed
+  verdict, or VirusTotal never finishing within the bounded poll window, or an unparseable
+  response) always resolves the file OFF `pending` for good via `app.record_file_scan_result`,
+  never leaving it in limbo.
+  One real flow is wired end to end in this same commit, exactly as disclosed in part 1's own
+  entry and in the backlog row above: vendor compliance document submission/renewal
+  (`app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts`) now reads the real
+  uploaded bytes, stores them via `.storage.from().upload()` behind
+  `app.initiate_file_upload`'s own server-generated `storage_path` (compensating with a soft
+  `app.request_file_deletion` on a storage failure, matching this repository's own established
+  compensating-action convention), and enqueues the `malware_scan` job with the real, already-
+  authority-checked submitter as its actor. The audit's other two named deadlocked flows
+  (ticket-reply attachments, shipment document checklists) are deliberately NOT wired here --
+  still bounded to one flow, per this checkpoint's own disclosed scope -- but the pattern
+  (initiate upload → store bytes → enqueue `malware_scan` → worker resolves the status) now exists
+  for them to reuse without re-deriving it.
+  New `scripts/db-tests/fixtures/storage-schema-stub.sql` (mirroring `auth-schema-stub.sql`'s own
+  rationale: no Supabase-managed `storage` schema exists in a bare disposable Postgres) and new
+  `scripts/db-tests/tenant-documents-storage-malware-scan.sql` prove, against a real disposable
+  database: the bucket exists/is private/RLS is enabled; a real enqueue → claim →
+  `app.record_file_scan_result` → complete cycle moves a real `app.files` row from `pending` to
+  `clean`; `document_scan_already_resolved` still refuses a different re-resolution; and an
+  infected verdict quarantines even the file's own uploader via `app.authorize_file_access`. New
+  `lib/malware-scan/scan-file-with-virustotal.server.test.ts` exercises the VirusTotal adapter
+  against a real local loopback HTTP server (not a mocked `fetch`), and new
+  `lib/malware-scan/process-malware-scan-job.server.test.ts` /
+  `scripts/jobs/malware-scan-worker.test.ts` cover the job processor and worker loop with an
+  injectable scanner dependency, mirroring `processWebhookDeliveryJob`'s own
+  injected-`checkUrlSafety` pattern. Full `pnpm run db:test` -- `ALL PASSED` -- alongside
+  `typecheck`/`lint`/full `pnpm run test` (5990 tests)/`git:check-paths`/`security:check`/a real
+  `next build`.
+  Still PARTIAL, not DONE, disclosed plainly rather than claimed closed: 2 of the audit's 3 named
+  deadlocked flows remain unwired, and every scan — including the one now-wired flow — still fails
+  closed on D4's own still-open gap (`encryption_key_not_configured`) until an operator configures
+  both the encryption key GUC and a real VirusTotal API key via `/supreme/integrations`; a file
+  that VirusTotal genuinely cannot resolve within `max_attempts` dead-letters and needs a
+  support-authority `app.requeue_dead_letter_job` call, the same residual-gap class A5/D4 already
+  disclose for their own bounded scopes.

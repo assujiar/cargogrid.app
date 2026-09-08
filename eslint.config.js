@@ -179,6 +179,7 @@ const serviceRoleImportGuard = {
     "scripts/jobs/external-sync-worker.ts",
     "scripts/jobs/finance-bank-feed-sync-worker.ts",
     "scripts/jobs/logistics-partner-sync-worker.ts",
+    "scripts/jobs/malware-scan-worker.ts",
     "scripts/jobs/notification-delivery-worker.ts",
     "scripts/jobs/supervisor.ts",
     "scripts/jobs/webhook-delivery-worker.ts",

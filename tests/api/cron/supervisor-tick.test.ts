@@ -72,8 +72,8 @@ describe("GET /api/cron/supervisor-tick", () => {
       assert.equal(response.status, 200);
       const body = (await response.json()) as { allOk: boolean; lanes: Array<{ lane: string; ok: boolean }> };
       assert.equal(body.allOk, true);
-      // scheduler + database-jobs + the 5 external-handoff workers, matching supervisor.ts's own ALL_LANES.
-      assert.equal(body.lanes.length, 7);
+      // scheduler + database-jobs + the 6 external-handoff workers, matching supervisor.ts's own ALL_LANES.
+      assert.equal(body.lanes.length, 8);
       assert.ok(body.lanes.every((l) => l.ok));
       assert.ok(stub.calls.some((c) => c.fn === "run_due_scheduled_tasks"));
       assert.ok(stub.calls.some((c) => c.fn === "run_due_jobs"));

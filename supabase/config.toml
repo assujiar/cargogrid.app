@@ -129,6 +129,15 @@ file_size_limit = "50MiB"
 # allowed_mime_types = ["image/png", "image/jpeg"]
 # objects_path = "./images"
 
+# CG-AUDIT-2026-09-02 A6: local CLI dev (`supabase start`) parity with the real
+# bucket supabase/migrations/20260908010000_close_a6_storage_bucket_and_malware_scan_job_type.sql
+# provisions on the live project. `pnpm run db:test` does not use this config at
+# all (its disposable database is bare Postgres, not the Supabase CLI stack) --
+# see scripts/db-tests/fixtures/storage-schema-stub.sql for that path.
+[storage.buckets.tenant-documents]
+public = false
+file_size_limit = "50MiB"
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true

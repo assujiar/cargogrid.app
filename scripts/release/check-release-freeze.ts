@@ -3904,7 +3904,49 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // correction, before every one of the 3 new public.* wrappers here.
   // `scripts/db-tests/public-api-wrapper-regression.sql` re-verified exhaustively
   // green after the fix. Full `pnpm run db:test` re-run: `ALL PASSED`.
-  migrationSetSha256: "77c43404839fe193cac0febdd2bab03e3298a74d64c29f18505b5ed06ed04c87",
+  // HUNDRED-AND-SEVENTEENTH PASS (2026-09-08, user-directed A6/D4 extension, part 2
+  // of 2): 514 files (+1) -- new migration
+  // 20260908010000_close_a6_storage_bucket_and_malware_scan_job_type.sql. Closes the
+  // structural half of CG-AUDIT-2026-09-02 A6 ("Uploading a file stores no file, and
+  // the scan gate deadlocks flows that are otherwise fully wired"): (1) a real,
+  // private `tenant-documents` Storage bucket (`insert into storage.buckets`,
+  // `public = false`), RLS asserted explicitly on `storage.objects` rather than
+  // relied on implicitly; (2) a new `malware_scan` job_type, widened on BOTH sources
+  // of truth ATW-031 (20260730410000) established -- the app.jobs CHECK constraint
+  // and `app.generic_job_types()` (CREATE OR REPLACE, unchanged signature, no new
+  // public.* wrapper needed) -- together with their TypeScript mirrors
+  // (GENERIC_JOB_TYPES, IMPORT_EXPORT_JOB_TYPES) and the two db-test drift-gate
+  // literals (scripts/db-tests/background-job.sql), so nothing drifts silently the
+  // way ATW-031's own history already once caught. A new sixth external-handoff
+  // worker, scripts/jobs/malware-scan-worker.ts, wired into
+  // scripts/jobs/supervisor.ts's own ALL_LANES (picked up automatically by the A5
+  // cron route with no route change), claims malware_scan jobs and calls
+  // lib/malware-scan/process-malware-scan-job.server.ts -- the first real caller
+  // anywhere in this repository of app.record_file_scan_result. That function
+  // downloads the uploaded bytes from Storage, reads a VirusTotal API key via
+  // app.get_platform_integration_secret (part 1 of this extension,
+  // 20260908000000), and calls lib/malware-scan/scan-file-with-virustotal.server.ts
+  // -- a real, bounded (timeout + a few poll attempts, never blocking indefinitely)
+  // outbound multipart file-upload HTTP client, the first one anywhere in this
+  // repository (every prior outbound fetch here sends JSON). One real flow is wired
+  // end to end in this same commit: vendor compliance document submission/renewal
+  // (app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts) now
+  // stores real bytes via `.storage.from().upload()` (compensating with a soft
+  // app.request_file_deletion on a storage failure) and enqueues the scan job with
+  // the real uploader as its actor. Deliberately bounded, matching this
+  // checkpoint's own backlog entry (CG-AUDIT-2026-09-02-REMEDIATION-BACKLOG.md, row
+  // A6): the audit's other two named deadlocked flows (ticket-reply attachments,
+  // shipment document checklists) are not wired here -- the pattern this commit
+  // establishes now exists for them to follow without re-deriving it. `pnpm run
+  // db:test` re-run: `ALL PASSED`, including a new
+  // scripts/db-tests/tenant-documents-storage-malware-scan.sql proving the bucket
+  // exists/is private/RLS-enabled and a real enqueue -> claim -> record_file_scan_
+  // result -> complete cycle moves a real file off `pending`, plus a real
+  // TypeScript unit-test suite for the VirusTotal adapter (a local loopback HTTP
+  // server, not a mocked fetch) and the job processor.
+  migrationSetSha256: "db524d7f5447f005c191fe338d340a54bf92869e767a00febea684421a756936",
+  // History: 77c43404839fe193cac0febdd2bab03e3298a74d64c29f18505b5ed06ed04c87
+  // (513 files, HUNDRED-AND-SIXTEENTH PASS).
   // History: 41f13cc719246dcc27c2c1462e923fe86340d6fbbddedb5f6901c924ee729abf
   // (512 files, HUNDRED-AND-FIFTEENTH PASS).
   // History: 1b57197248d04de881757dc9af9b6b4875e9cdc52adeb8008e034a1e499b90aa
@@ -4860,7 +4902,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // the list RPC's own RETURNS TABLE shape structurally has no value column at all;
   // and (ISS-2026-309's own regression class) anon holds zero EXECUTE on any of the 3
   // new functions across BOTH app.* and their public.* wrappers.
-  dbTestSetSha256: "7de55b831acd07bff9feaa49a63f88763ccde4c381c963d36c1d216b288bee41",
+  // HUNDRED-AND-SEVENTEENTH PASS (2026-09-08, user-directed A6/D4 extension, part 2
+  // of 2): 258 files (+2) -- new fixture scripts/db-tests/fixtures/storage-schema-
+  // stub.sql (a minimal storage.buckets/storage.objects stub, mirroring auth-schema-
+  // stub.sql's own rationale: no Supabase-managed `storage` schema exists in a bare
+  // disposable Postgres) and new file scripts/db-tests/tenant-documents-storage-
+  // malware-scan.sql, proving against a real disposable database: the tenant-
+  // documents bucket exists/is private/storage.objects RLS is enabled; a real
+  // enqueue -> claim -> app.record_file_scan_result -> complete cycle moves a real
+  // app.files row from 'pending' to 'clean' for job_type=malware_scan (the exact
+  // deadlock A6 named, closed for real -- not merely a list-equality assertion,
+  // which scripts/db-tests/background-job.sql's own ATW-031 drift gate already
+  // covers generically); document_scan_already_resolved still refuses a different
+  // re-resolution; and an infected verdict quarantines even the file's own uploader
+  // via app.authorize_file_access.
+  dbTestSetSha256: "422d3401dc38f86407617b132c88adeaa5b907ca20eeb8ec7e14b5fceeb9c751",
+  // History: 7de55b831acd07bff9feaa49a63f88763ccde4c381c963d36c1d216b288bee41
+  // (256 files, HUNDRED-AND-SIXTEENTH PASS).
   // History: 2551fef57e3f647928c1e9560aadbf78f00f80e1ebcc031270eec2e41b45d7e6
   // (255 files, HUNDRED-AND-FIFTEENTH PASS).
   // History: 378f7312ee3075106e9eed85317cb55b88e4dd275fd5d524fcef1e23d26d03d7

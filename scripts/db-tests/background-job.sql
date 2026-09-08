@@ -682,7 +682,7 @@ declare
     'logistics_partner_sync', 'finance_bank_feed_sync', 'external_sync', 'audit_export', 'retention_archive',
     'incident_escalation_sweep',
     'loyalty_earning_evaluation_sweep', 'loyalty_tier_recalculation_sweep', 'loyalty_points_posting_sweep',
-    'loyalty_benefit_issuance_sweep'
+    'loyalty_benefit_issuance_sweep', 'malware_scan'
   ];
   v_missing text[];
   v_extra text[];
