@@ -29,7 +29,7 @@ export default async function QuotationsPage({ params }: { params: Promise<{ ten
   let truncated = false;
   let loadFailed = false;
   try {
-    const page = await listQuotationsForTenant(supabase, access.tenant.id);
+    const page = await listQuotationsForTenant(supabase, access.tenant.id, access.authUserId);
     quotations = page.rows;
     truncated = page.truncated;
   } catch (error) {

@@ -26,7 +26,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ ten
 
   let lead;
   try {
-    lead = await getLeadById(supabase, leadId);
+    lead = await getLeadById(supabase, leadId, access.authUserId);
   } catch (error) {
     if (!(error instanceof LeadQueryError)) {
       throw error;

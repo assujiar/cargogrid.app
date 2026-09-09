@@ -4043,7 +4043,59 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // before this digest was changed: typecheck, lint (0 errors), the 5,992-test unit
   // suite, a full `pnpm run db:test` (ALL PASSED, 517 migrations / 261 db-test files),
   // git:check-paths, security:check, check-rls-initplan.ts, and `next build`.
-  migrationSetSha256: "fe289e21bf5e6a0bec67e9e81155dec3b17586a9467a8d301c5166141bec3995",
+  // HUNDRED-AND-TWENTY-FIRST PASS (2026-09-09, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 518 files (+1) -- new migration
+  // 20260909020000_close_o1_query_layer_cluster0_batch4_leads_prospects_quotation_
+  // directory.sql. Closes cluster 0 batch 4 of ~4 (6 of the remaining 10 tables):
+  // app.leads (list_leads, get_lead_by_id), app.prospects (list_prospects,
+  // get_prospect_by_id), app.quotations_directory (get_quotation_by_id,
+  // list_quotation_versions, list_quotations_for_opportunity,
+  // list_quotations_for_tenant), app.quotation_lines_directory
+  // (list_quotation_lines), app.quotation_approval_rules
+  // (list_quotation_approval_rule_versions), app.quotation_acceptance_tokens
+  // (list_quotation_acceptance_tokens). 11 new app.*/public.* Option-2 wrapper
+  // function pairs via the same adversarial Design->Verify->Fix pipeline batches
+  // 1-3 established (RULE A/B/C baked into every draft and every independent
+  // verify pass). The Workflow tool's own subagent-spawning path failed twice in a
+  // row with a permission-handler schema-validation bug during this batch's design
+  // stage (a session/harness-level defect, not a code issue -- confirmed by testing
+  // that the plain Agent tool worked fine in the same session); the batch was
+  // completed instead via 6 parallel design agents plus 6 independent verify agents
+  // launched directly through the Agent tool, following the identical RULE A/B/C
+  // discipline the Workflow pipeline itself encodes. Two real issues were found and
+  // fixed during the independent verify pass, before this migration was ever
+  // applied to any database: (1) app.prospects' first draft returned all 26
+  // physical columns including normalized_legal_name/normalized_tax_id/
+  // duplicate_fingerprint/disqualified_at/archived_at -- none of which is part of
+  // the real ProspectSchema/parseProspect contract; fixed to exclude all five,
+  // matching the "return exactly what the TS contract consumes" discipline batch
+  // 1's app.contacts and this same batch's own app.leads already established
+  // (app.leads keeps its own duplicate_fingerprint only because LeadSchema
+  // explicitly requires it; ProspectSchema has no such field). (2)
+  // app.quotations_directory had a documentation-only miscount (header prose
+  // claimed 39 current columns; independently recounting the live view's own
+  // SELECT list found 40) -- the actual reproduced column lists in every function
+  // body and RETURNS TABLE clause were already correct throughout; corrected for
+  // accuracy. The other 4 tables (app.leads, app.quotation_lines_directory,
+  // app.quotation_approval_rules, app.quotation_acceptance_tokens) passed
+  // independent adversarial re-verification with zero issues found. This pass's
+  // own db-test (scripts/db-tests/o1-query-layer-cluster0-batch4.sql) passed
+  // completely on the first full run against a real disposable database -- no
+  // defect surfaced by testing that the design/verify pipeline had missed. Two
+  // residual RULE-A-regression findings surfaced during design (out of scope for
+  // this read-only batch, logged in the backlog doc): app.add_quotation_line/
+  // app.remove_quotation_line and app.assign_lead/app.convert_lead_to_prospect all
+  // currently lack the assert_actor_is_session_identity call in their latest
+  // bodies. All 5 affected TS query files (server/queries/lead.ts, prospect.ts,
+  // quotation.ts, quotation-approval.ts, quotation-acceptance.ts) and every real
+  // call site (9 page.tsx files) switched from `.from()` to `.rpc()` in this same
+  // commit. Full Tier A gate suite re-run clean before this digest was changed:
+  // typecheck, lint (0 errors), the 5,993-test unit suite, check-rls-initplan.ts (0
+  // findings), a full `pnpm run db:test` (ALL PASSED, 518 migrations / 262 db-test
+  // files), git:check-paths, security:check, and `next build`.
+  migrationSetSha256: "9b225ba6030a7bf4d82369b48e21ed732de32111c92e1d372307b05eb76c480d",
+  // History: fe289e21bf5e6a0bec67e9e81155dec3b17586a9467a8d301c5166141bec3995
+  // (517 files, HUNDRED-AND-TWENTIETH PASS).
   // History: 61119938892522671dec527c7f4a474bed49aaf50f76e3e46c30776a15762167
   // (516 files, HUNDRED-AND-NINETEENTH PASS).
   // History: c4812e14488d0730a6a105798a6491ce672b21dc2ea3be6f2e657f475a913807
@@ -5088,7 +5140,32 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // batches 1-2's own established "seed the row directly, prove the new READ path" scope
   // boundary. Also confirmed against public-api-wrapper-regression.sql (no cross-file
   // grant-parity or RULE A/B/C regression from any of this batch's 7 new function pairs).
-  dbTestSetSha256: "168c7f2166bfd81642019a55f3003d2bc4adfeabb10b304a458b1fb7acd07391",
+  // HUNDRED-AND-TWENTY-FIRST PASS (2026-09-09, same ruling as migrationSetSha256 above):
+  // 262 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch4.sql. Proves,
+  // against a real disposable database, every one of the 11 new function pairs this pass's
+  // migration adds: real data for a tenant member/record owner (app.leads,
+  // app.prospects, all 4 app.quotations_directory functions, app.quotation_lines_
+  // directory, app.quotation_approval_rules, app.quotation_acceptance_tokens); RULE A
+  // genuinely rejects a claimed actor that does not match the real session identity
+  // (checked against app.list_leads); app.prospects' deliberate column exclusion
+  // (normalized_legal_name/normalized_tax_id/duplicate_fingerprint/disqualified_at/
+  // archived_at never returned) confirmed via information_schema.parameters on the
+  // function's own OUT parameters, not a sample-row check; app.quotations_directory/
+  // app.quotation_lines_directory's sell_masked/cost_masked confirmed true for a member
+  // lacking COM:View selling price/cost; app.quotation_acceptance_tokens' token_hash
+  // exclusion confirmed the same way (a hard, security-critical check); app.quotation_
+  // approval_rules' RULE B excludes the customer_user layer and a Supreme Admin with
+  // zero tenant membership bypasses via the explicit OR is_supreme_admin() branch, while
+  // a genuine non-member raises; and cross-tenant denial throughout every one of the 11
+  // functions. This batch's db-test passed completely on the first full run -- no defect
+  // surfaced by testing that the design/verify pipeline had missed (the Agent-tool-based
+  // design/verify substitute for this batch, used after the Workflow tool's subagent path
+  // failed twice with a permission-handler bug, itself caught and fixed the app.prospects
+  // column-exclusion and app.quotations_directory documentation-count defects before this
+  // db-test was ever written -- see migrationSetSha256's own note above).
+  dbTestSetSha256: "38188accb3c759278a82ef49b68ea43e693396b833619f322e9936c7cf6400e5",
+  // History: 168c7f2166bfd81642019a55f3003d2bc4adfeabb10b304a458b1fb7acd07391
+  // (261 files, HUNDRED-AND-TWENTIETH PASS).
   // History: 13ffa858b00fddb16b39c12f3e4f60becef9b09c17c2f6812d925a4a13574600
   // (260 files, HUNDRED-AND-NINETEENTH PASS).
   // History: aab4daf2d27cf92ec2b2dad47be04d587771695de95fa6a8526da301324c49a0

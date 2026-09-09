@@ -8,7 +8,7 @@ import {
   listQuotationLines,
   getQuotationSubmissionReadiness,
   QuotationQueryError,
-  type QuotationQueryTableClient,
+  type QuotationQueryRpcClient,
   type QuotationReadinessRpcClient,
 } from "./quotation.ts";
 
@@ -54,59 +54,31 @@ const VALID_QUOTATION_ROW = {
   revision_reason: null,
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): QuotationQueryTableClient {
-  function chain(): Record<string, unknown> {
-    return {
-      eq(column: string, value: unknown) {
-        const eqCalls = (capture.calls.eqCalls ?? []) as { column: string; value: unknown }[];
-        eqCalls.push({ column, value });
-        capture.calls.eqCalls = eqCalls;
-        return chain();
-      },
-      order(column: string, opts: { ascending: boolean }) {
-        capture.calls.orderColumn = column;
-        capture.calls.ascending = opts.ascending;
-        // ISS-2026-238: the result of order() is BOTH the response (for the reads that end
-        // there) and chainable into .range() (for the bounded ones). Making order() chainable
-        // unconditionally would have broken every unbounded caller's own test in this file, so
-        // it carries both shapes rather than forcing a choice.
-        return {
-          ...response,
-          range(from: number, to: number) {
-            capture.calls.range = { from, to };
-            return response;
-          },
-        };
-      },
-      async maybeSingle() {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return { data: row, error: response.error };
-      },
-    };
-  }
-
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): QuotationQueryRpcClient {
   const fake = {
-    from(table: string) {
-      capture.calls.table = table;
-      return { select: () => chain() };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.fn = fn;
+      capture.calls.args = args;
+      return response;
     },
   };
-  return fake as unknown as QuotationQueryTableClient;
+  return fake as unknown as QuotationQueryRpcClient;
 }
 
 describe("getQuotationById", () => {
-  test("reads from quotations_directory and returns null when not found", async () => {
+  test("calls get_quotation_by_id and returns null when not found", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null }, capture);
-    const quotation = await getQuotationById(client, QUOTATION_ID);
-    assert.equal(capture.calls.table, "quotations_directory");
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    const quotation = await getQuotationById(client, QUOTATION_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "get_quotation_by_id");
+    assert.deepEqual(capture.calls.args, { p_quotation_id: QUOTATION_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(quotation, null);
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } }, { calls: {} });
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } }, { calls: {} });
     await assert.rejects(
-      () => getQuotationById(client, QUOTATION_ID),
+      () => getQuotationById(client, QUOTATION_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof QuotationQueryError);
         return true;
@@ -116,52 +88,55 @@ describe("getQuotationById", () => {
 });
 
 describe("listQuotationVersions", () => {
-  test("filters by root_quotation_id, ordered oldest-version-first", async () => {
+  test("calls list_quotation_versions with root_quotation_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
-    const versions = await listQuotationVersions(client, QUOTATION_ID);
-    const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
-    assert.deepEqual(eqCalls, [{ column: "root_quotation_id", value: QUOTATION_ID }]);
-    assert.equal(capture.calls.orderColumn, "version_number");
-    assert.equal(capture.calls.ascending, true);
+    const client = fakeRpcClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
+    const versions = await listQuotationVersions(client, QUOTATION_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_quotation_versions");
+    assert.deepEqual(capture.calls.args, { p_root_quotation_id: QUOTATION_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(versions[0]?.versionNumber, 1);
   });
 });
 
 describe("listQuotationsForOpportunity", () => {
-  test("filters by opportunity_id, newest first", async () => {
+  test("calls list_quotations_for_opportunity with opportunity_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
-    const quotations = await listQuotationsForOpportunity(client, OPPORTUNITY_ID);
-    const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
-    assert.deepEqual(eqCalls, [{ column: "opportunity_id", value: OPPORTUNITY_ID }]);
-    assert.equal(capture.calls.ascending, false);
+    const client = fakeRpcClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
+    const quotations = await listQuotationsForOpportunity(client, OPPORTUNITY_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_quotations_for_opportunity");
+    assert.deepEqual(capture.calls.args, { p_opportunity_id: OPPORTUNITY_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(quotations[0]?.quoteNumber, "QTN-2026-000001");
   });
 });
 
 describe("listQuotationsForTenant", () => {
-  test("filters by tenant_id", async () => {
+  test("calls list_quotations_for_tenant with tenant/actor/limit", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
-    const quotations = await listQuotationsForTenant(client, TENANT_ID);
-    const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
-    assert.deepEqual(eqCalls, [{ column: "tenant_id", value: TENANT_ID }]);
+    const client = fakeRpcClient({ data: [VALID_QUOTATION_ROW], error: null }, capture);
+    const quotations = await listQuotationsForTenant(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_quotations_for_tenant");
+    assert.deepEqual(capture.calls.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(quotations.truncated, false);
+  });
+
+  test("reports truncated when the row count reaches the cap", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
+    const rows = Array.from({ length: 200 }, () => VALID_QUOTATION_ROW);
+    const client = fakeRpcClient({ data: rows, error: null }, capture);
+    const quotations = await listQuotationsForTenant(client, TENANT_ID, ACTOR_ID);
     // ISS-2026-238: the cap is asserted, not assumed -- this read used to fetch every quotation
     // for the tenant on every page load, and nothing in the suite would have noticed.
-    assert.deepEqual(capture.calls.range, { from: 0, to: 200 });
+    assert.equal(quotations.truncated, true);
   });
 });
 
 describe("listQuotationLines", () => {
-  test("queries the field-masked quotation_lines_directory view, ordered by line_no ascending", async () => {
+  test("calls list_quotation_lines with quotation_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null }, capture);
-    await listQuotationLines(client, QUOTATION_ID);
-    assert.equal(capture.calls.table, "quotation_lines_directory");
-    assert.equal(capture.calls.orderColumn, "line_no");
-    assert.equal(capture.calls.ascending, true);
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    await listQuotationLines(client, QUOTATION_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_quotation_lines");
+    assert.deepEqual(capture.calls.args, { p_quotation_id: QUOTATION_ID, p_actor_auth_user_id: ACTOR_ID });
   });
 });
 

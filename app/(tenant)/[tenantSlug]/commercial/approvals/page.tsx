@@ -38,7 +38,7 @@ export default async function ApprovalsInboxPage({ params }: { params: Promise<{
     items = [];
   }
 
-  const quotations = await Promise.all(items.map((item) => getQuotationById(supabase, item.quotationId)));
+  const quotations = await Promise.all(items.map((item) => getQuotationById(supabase, item.quotationId, access.authUserId)));
   const rows = items.map((item, index) => ({ item, quotation: quotations[index] }));
 
   const columns: readonly DataTableColumn<(typeof rows)[number]>[] = [

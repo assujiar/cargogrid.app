@@ -50,7 +50,7 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
     getOpportunityCostingReadiness(supabase, opportunity.id, access.authUserId),
     listActivitiesForRecord(supabase, "opportunity", opportunity.id, access.authUserId),
     listCostingRequestsForOpportunity(supabase, opportunity.id, access.authUserId),
-    listQuotationsForOpportunity(supabase, opportunity.id),
+    listQuotationsForOpportunity(supabase, opportunity.id, access.authUserId),
   ]);
 
   return (

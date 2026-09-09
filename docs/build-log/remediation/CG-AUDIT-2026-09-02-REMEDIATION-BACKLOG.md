@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batches 1-3 of 4+ **DONE**, see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batches 1-4 of 4+ **DONE**, see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -799,3 +799,63 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   rate_selections_directory, vendor_rate_tiers_directory — args already prepared for batches 4 and
   5), plus clusters 1-7 (104 more call sites across finance/identity/dispatch/tracking/documents/
   analytics/misc).
+- 2026-09-09 — Ø1-query-layer cluster 0 batch 4 closed (this commit), continuing the same
+  user-directed ("lanjut sampe siap launching") mandate. Closes 6 of the remaining 10 tables:
+  `app.leads` (`list_leads`, `get_lead_by_id`), `app.prospects` (`list_prospects`,
+  `get_prospect_by_id`), `app.quotations_directory` (`get_quotation_by_id`,
+  `list_quotation_versions`, `list_quotations_for_opportunity`, `list_quotations_for_tenant`),
+  `app.quotation_lines_directory` (`list_quotation_lines`), `app.quotation_approval_rules`
+  (`list_quotation_approval_rule_versions`), `app.quotation_acceptance_tokens`
+  (`list_quotation_acceptance_tokens`). New migration
+  `20260909020000_close_o1_query_layer_cluster0_batch4_leads_prospects_quotation_directory.sql`
+  adds 11 new `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial
+  Design→Verify→Fix pipeline batches 1-3 established (RULE A/B/C baked into both stages).
+  **Infra note**: the Workflow tool's own subagent-spawning path failed twice in a row during
+  this batch's design stage with a permission-handler schema-validation bug (a session/
+  harness-level defect confirmed by testing that the plain Agent tool worked correctly in the
+  same session — not a code or prompt-design issue). Rather than keep retrying the broken
+  path, this batch was completed via 6 parallel design agents plus 6 independent verify
+  agents launched directly through the Agent tool, applying the identical RULE A/B/C
+  discipline the Workflow pipeline itself encodes — the pipeline's rigor, not merely its
+  automation, is what actually matters, and it survived the substitution intact.
+  Two real, security/data-relevant issues were found and fixed during the independent verify
+  pass, before this migration was ever applied to any database: (1) `app.prospects`' first
+  draft returned all 26 physical columns, including `normalized_legal_name`/
+  `normalized_tax_id`/`duplicate_fingerprint`/`disqualified_at`/`archived_at` — none of which
+  is part of the real `ProspectSchema`/`parseProspect` contract (`server/contracts/prospect/
+  prospect.ts`). Fixed to exclude all five, matching the "return exactly what the TS contract
+  consumes" discipline batch 1's `app.contacts` and this same batch's own `app.leads` already
+  established (`app.leads` keeps its own `duplicate_fingerprint` only because `LeadSchema`
+  explicitly requires it; `ProspectSchema` has no such field, so it does not qualify for that
+  exception). (2) `app.quotations_directory` had a documentation-only miscount — the header
+  prose claimed the replaced view's current column count was 39; independently recounting the
+  live view's own `SELECT` list found 40. The actual reproduced column lists in every function
+  body and `RETURNS TABLE` clause were already correct throughout — a citation-accuracy
+  defect, not a masking or authority bug — corrected for accuracy. The other 4 tables
+  (`app.leads`, `app.quotation_lines_directory`, `app.quotation_approval_rules`,
+  `app.quotation_acceptance_tokens`) passed independent adversarial re-verification with zero
+  issues found. This pass's own db-test (`scripts/db-tests/o1-query-layer-cluster0-batch4.sql`)
+  passed completely on the first full run against a real disposable database — no defect
+  surfaced by testing that the design/verify pipeline had missed.
+  **Residual findings, disclosed not fixed** (out of scope for this read-only batch, flagged
+  for whoever owns the mutation surface): `app.assign_lead`'s and
+  `app.convert_lead_to_prospect`'s current bodies (`20260902200000_harden_tenant_id_
+  disclosure_commercial.sql`) both lack the `assert_actor_is_session_identity` RULE A guard —
+  `app.assign_lead` had it added by an earlier ATW-032 patch (`20260730510000`) but a later,
+  unrelated fix silently dropped it again; `app.convert_lead_to_prospect` never had it in any
+  version. Similarly, `app.add_quotation_line`/`app.remove_quotation_line` (quotation line
+  mutations) still lack the same guard in their latest bodies. Both are live RULE A gaps in
+  already-shipped mutation code, not introduced or touched by this migration — recorded here
+  rather than silently left for someone to rediscover.
+  All 5 affected TS query files (`server/queries/lead.ts`, `prospect.ts`, `quotation.ts`,
+  `quotation-approval.ts`, `quotation-acceptance.ts`) and every real call site (9 `page.tsx`
+  files) switched from `.from()` to `.rpc()` in this same commit. Full Tier A gate suite
+  re-run clean: `typecheck`, `lint` (0 errors), the 5,993-test unit suite,
+  `check-rls-initplan.ts` (0 findings), a full `pnpm run db:test` (`ALL PASSED`, 518
+  migrations / 262 db-test files), `git:check-paths`, `security:check`, and a real `next
+  build`. `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-FIRST PASS,
+  `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
+  Still `IN_PROGRESS`, not `DONE`: 4 of cluster 0's 32 tables remain (vendor_rate_versions_
+  directory, v_active_vendor_rates, rate_selections_directory, vendor_rate_tiers_directory —
+  args already prepared for batch 5), plus clusters 1-7 (104 more call sites across finance/
+  identity/dispatch/tracking/documents/analytics/misc).

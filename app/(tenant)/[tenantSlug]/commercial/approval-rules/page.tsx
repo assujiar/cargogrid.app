@@ -32,7 +32,7 @@ export default async function ApprovalRulesPage({ params }: { params: Promise<{ 
   let rules: QuotationApprovalRuleVersion[];
   let loadFailed = false;
   try {
-    rules = await listQuotationApprovalRuleVersions(supabase, access.tenant.id);
+    rules = await listQuotationApprovalRuleVersions(supabase, access.tenant.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof QuotationApprovalQueryError)) {
       throw error;

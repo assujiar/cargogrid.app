@@ -36,7 +36,7 @@ export default async function CommercialProspectsPage({
   let result: ListProspectsResult | null = null;
   let loadFailed = false;
   try {
-    result = await listProspects(supabase, { tenantId: access.tenant.id, page });
+    result = await listProspects(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page });
   } catch (error) {
     if (!(error instanceof ProspectQueryError)) {
       throw error;

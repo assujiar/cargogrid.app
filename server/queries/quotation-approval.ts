@@ -13,7 +13,7 @@ import { getApprovalRequestHistory, listPendingApprovalStepsForActor, type Appro
 import type { ApprovalRequestHistoryEntry } from "../contracts/approval/approval.ts";
 import type { Quotation } from "../contracts/quotation/quotation.ts";
 
-export type QuotationApprovalQueryClient = Pick<SupabaseClient, "from" | "rpc">;
+export type QuotationApprovalQueryClient = Pick<SupabaseClient, "rpc">;
 
 /** Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict `Promise`) -- structurally incompatible with server/queries/approval.ts's hand-written `ApprovalQueryRpcClient` interface. This adapter is the same `async (fn, args) => await client.rpc(fn, args)` wrapper every other cross-module RPC composition in this repository already uses for that exact mismatch. */
 function toApprovalQueryRpcClient(client: QuotationApprovalQueryClient): ApprovalQueryRpcClient {
@@ -28,8 +28,12 @@ export class QuotationApprovalQueryError extends Error {
 }
 
 /** Every quotation approval rule version for one tenant (any status), most recently created first -- tenant-wide reference/policy data, never field-masked (mirrors app.margin_rule_versions, COM-150). */
-export async function listQuotationApprovalRuleVersions(client: QuotationApprovalQueryClient, tenantId: string): Promise<QuotationApprovalRuleVersion[]> {
-  const { data, error } = await client.from("quotation_approval_rules").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+export async function listQuotationApprovalRuleVersions(client: QuotationApprovalQueryClient, tenantId: string, actorAuthUserId: string): Promise<QuotationApprovalRuleVersion[]> {
+  const { data, error } = await client.rpc("list_quotation_approval_rule_versions", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new QuotationApprovalQueryError(error.message);
   }

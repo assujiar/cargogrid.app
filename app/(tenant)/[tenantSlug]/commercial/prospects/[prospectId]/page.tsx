@@ -27,7 +27,7 @@ export default async function ProspectDetailPage({ params }: { params: Promise<{
   let prospect;
   let readiness;
   try {
-    prospect = await getProspectById(supabase, prospectId);
+    prospect = await getProspectById(supabase, prospectId, access.authUserId);
     if (prospect) {
       readiness = await getProspectConversionReadiness(supabase, prospectId);
     }
