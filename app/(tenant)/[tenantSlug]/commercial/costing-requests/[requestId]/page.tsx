@@ -79,7 +79,7 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
 
   let marginCalculations: MarginCalculation[];
   try {
-    marginCalculations = await listMarginCalculationsForRequest(supabase, request.id);
+    marginCalculations = await listMarginCalculationsForRequest(supabase, request.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof MarginQueryError)) {
       throw error;

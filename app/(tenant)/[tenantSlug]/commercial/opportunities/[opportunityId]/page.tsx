@@ -31,7 +31,7 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
 
   let opportunity;
   try {
-    opportunity = await getOpportunityById(supabase, opportunityId);
+    opportunity = await getOpportunityById(supabase, opportunityId, access.authUserId);
   } catch (error) {
     if (!(error instanceof OpportunityQueryError)) {
       throw error;
@@ -46,7 +46,7 @@ export default async function OpportunityDetailPage({ params }: { params: Promis
   }
 
   const [stageHistory, readiness, activities, costingRequests, quotations] = await Promise.all([
-    listOpportunityStageHistory(supabase, opportunity.id),
+    listOpportunityStageHistory(supabase, opportunity.id, access.authUserId),
     getOpportunityCostingReadiness(supabase, opportunity.id, access.authUserId),
     listActivitiesForRecord(supabase, "opportunity", opportunity.id, access.authUserId),
     listCostingRequestsForOpportunity(supabase, opportunity.id, access.authUserId),

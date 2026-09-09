@@ -11,7 +11,6 @@ import {
   listWinLossReasons,
   PipelineQueryError,
   type PipelineQueryRpcClient,
-  type PipelineQueryTableClient,
 } from "./pipeline.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -134,79 +133,79 @@ describe("getSalesTargetActual", () => {
   });
 });
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): PipelineQueryTableClient {
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture?: { calls: { fn: string; args: Record<string, unknown> }[] }): PipelineQueryRpcClient {
   const fake = {
-    from(_table: string) {
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                order() {
-                  return response;
-                },
-                async maybeSingle() {
-                  const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-                  return { data: row, error: response.error };
-                },
-              };
-            },
-          };
-        },
-      };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture?.calls.push({ fn, args });
+      return response;
     },
   };
-  return fake as unknown as PipelineQueryTableClient;
+  return fake as unknown as PipelineQueryRpcClient;
 }
 
 describe("listSalesPlans", () => {
-  test("maps rows to the contract shape", async () => {
-    const client = fakeTableClient({ data: [VALID_PLAN_ROW], error: null });
-    const plans = await listSalesPlans(client, TENANT_ID);
+  test("calls list_sales_plans with tenant/actor/limit", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_PLAN_ROW], error: null }, capture);
+    const plans = await listSalesPlans(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_sales_plans");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(plans.length, 1);
     assert.equal(plans[0]?.name, "Q3 Plan");
   });
 });
 
 describe("getSalesPlanById", () => {
-  test("returns null (never an error) when RLS/no-match yields zero rows", async () => {
-    const client = fakeTableClient({ data: [], error: null });
-    const plan = await getSalesPlanById(client, PLAN_ID);
+  test("returns null (never an error) when denied/no-match yields zero rows", async () => {
+    const client = fakeRpcClient({ data: [], error: null });
+    const plan = await getSalesPlanById(client, PLAN_ID, ACTOR_ID);
     assert.equal(plan, null);
   });
 });
 
 describe("listSalesTargetsForPlan", () => {
-  test("maps rows to the contract shape", async () => {
-    const client = fakeTableClient({ data: [VALID_TARGET_ROW], error: null });
-    const targets = await listSalesTargetsForPlan(client, PLAN_ID);
+  test("calls list_sales_targets_for_plan with plan/actor", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_TARGET_ROW], error: null }, capture);
+    const targets = await listSalesTargetsForPlan(client, PLAN_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_sales_targets_for_plan");
+    assert.deepEqual(capture.calls[0]?.args, { p_sales_plan_id: PLAN_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(targets.length, 1);
     assert.equal(targets[0]?.metricType, "leads_captured");
   });
 });
 
 describe("listForecastSnapshotsForTarget", () => {
-  test("maps rows to the contract shape", async () => {
-    const client = fakeTableClient({ data: [VALID_SNAPSHOT_ROW], error: null });
-    const snapshots = await listForecastSnapshotsForTarget(client, TARGET_ID);
+  test("calls list_forecast_snapshots_for_target with target/actor/limit", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_SNAPSHOT_ROW], error: null }, capture);
+    const snapshots = await listForecastSnapshotsForTarget(client, TARGET_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_forecast_snapshots_for_target");
+    assert.deepEqual(capture.calls[0]?.args, { p_sales_target_id: TARGET_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(snapshots.length, 1);
     assert.equal(snapshots[0]?.computedValue, 3);
   });
 });
 
 describe("listPipelineCategories", () => {
-  test("maps rows to the contract shape", async () => {
-    const client = fakeTableClient({ data: [VALID_CATEGORY_ROW], error: null });
-    const categories = await listPipelineCategories(client, TENANT_ID);
+  test("calls list_pipeline_categories with tenant/actor/limit", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_CATEGORY_ROW], error: null }, capture);
+    const categories = await listPipelineCategories(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_pipeline_categories");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(categories.length, 1);
     assert.equal(categories[0]?.code, "TOP_FUNNEL");
   });
 });
 
 describe("listWinLossReasons", () => {
-  test("maps rows to the contract shape", async () => {
-    const client = fakeTableClient({ data: [VALID_REASON_ROW], error: null });
-    const reasons = await listWinLossReasons(client, TENANT_ID);
+  test("calls list_win_loss_reasons with tenant/actor", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_REASON_ROW], error: null }, capture);
+    const reasons = await listWinLossReasons(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_win_loss_reasons");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(reasons.length, 1);
     assert.equal(reasons[0]?.outcome, "lost");
   });

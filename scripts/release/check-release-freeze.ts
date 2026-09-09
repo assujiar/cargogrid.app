@@ -3978,7 +3978,44 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // Full Tier A gate suite re-run clean before this digest was changed: typecheck, lint
   // (0 errors), the 5,992-test unit suite, a full `pnpm run db:test` (ALL PASSED,
   // 515 migrations / 259 db-test files), git:check-paths, security:check, and `next build`.
-  migrationSetSha256: "c4812e14488d0730a6a105798a6491ce672b21dc2ea3be6f2e657f475a913807",
+  // HUNDRED-AND-NINETEENTH PASS (2026-09-09, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 516 files (+1) -- new migration
+  // 20260909000000_close_o1_query_layer_cluster0_batch2_pipeline_margin_opportunity.sql.
+  // Closes cluster 0 batch 2 of ~4 (opportunity/margin/sales-pipeline core reads, 9 of the
+  // remaining 24 tables): app.margin_rule_versions, app.margin_calculations_directory,
+  // app.opportunities_directory, app.opportunity_stage_history, app.sales_plans,
+  // app.sales_targets, app.forecast_snapshots, app.pipeline_categories,
+  // app.win_loss_reasons -- each behind the same, now-established Option-2 wrapper pattern
+  // (app.* SECURITY DEFINER + public.* pass-through with an identical grant set) and the
+  // same RULE A/B/C discipline batch 1 established. 12 new app.*/public.* function pairs,
+  // each drafted via the same adversarial Design->Verify->Fix pipeline: 8 of 9 tables
+  // passed independent re-verification against the live repo on the first draft; one
+  // (app.opportunities_directory) had a documentation/audit-trail-integrity defect caught
+  // and fixed before commit (a false "never replaced" RULE C claim in its own header
+  // comment -- the actual authority predicate it copied forward was unaffected and
+  // remained correct). This pass's own db-test (scripts/db-tests/
+  // o1-query-layer-cluster0-batch2.sql) additionally caught and corrected a genuine
+  // misunderstanding in the test itself, not the migration: app.has_active_tenant_
+  // membership's own current body (20260907110000) already ORs in app.is_supreme_admin
+  // internally, so a global Supreme Admin transitively passes every function gated by it
+  // (including app.pipeline_categories/app.win_loss_reasons, whose own predicates carry no
+  // SEPARATE is_supreme_admin() clause) -- both the test's assertions and two migration
+  // header comments that had claimed "no supreme-admin bypass" were corrected to describe
+  // this transitive behavior accurately, live-verified rather than assumed. All 3 affected
+  // TS query files (server/queries/margin.ts, opportunity.ts, pipeline.ts) and every real
+  // call site (8 page.tsx files) switched from `.from()` to `.rpc()` in this same commit.
+  // Full Tier A gate suite re-run clean before this digest was changed: typecheck, lint
+  // (0 errors), the 5,992-test unit suite (including a fixed check-rls-initplan.ts false
+  // positive -- this migration's own header prose happened to contain the literal
+  // case-insensitive substring "alter policy" followed by a bare `auth.uid()`/
+  // `app.is_supreme_admin(p_auth_user_id)`-shaped mention within the same comment-on-
+  // function string, which that guard's naive "up to the next semicolon" statement-span
+  // heuristic misread as a live policy clause -- reworded, not suppressed, and reverified
+  // 0 findings), a full `pnpm run db:test` (ALL PASSED, 516 migrations / 260 db-test
+  // files), git:check-paths, security:check, and `next build`.
+  migrationSetSha256: "61119938892522671dec527c7f4a474bed49aaf50f76e3e46c30776a15762167",
+  // History: c4812e14488d0730a6a105798a6491ce672b21dc2ea3be6f2e657f475a913807
+  // (515 files, HUNDRED-AND-EIGHTEENTH PASS).
   // History: db524d7f5447f005c191fe338d340a54bf92869e767a00febea684421a756936
   // (514 files, HUNDRED-AND-SEVENTEENTH PASS).
   // History: 77c43404839fe193cac0febdd2bab03e3298a74d64c29f18505b5ed06ed04c87
@@ -4975,7 +5012,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // need, and are already exercised end-to-end by commercial-customer-contract-
   // pricing.sql / commercial-opportunity-management.sql / commercial-costing-request-
   // workflow.sql.
-  dbTestSetSha256: "aab4daf2d27cf92ec2b2dad47be04d587771695de95fa6a8526da301324c49a0",
+  // HUNDRED-AND-NINETEENTH PASS (2026-09-09, same ruling as migrationSetSha256 above):
+  // 260 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch2.sql.
+  // Proves, against a real disposable database, every one of the 12 new function pairs
+  // this pass's migration adds: real data for a tenant member/record owner; RULE A
+  // genuinely rejects a claimed actor that does not match the real session identity;
+  // RULE B excludes a customer_user-layer principal from app.margin_rule_versions/
+  // app.pipeline_categories/app.win_loss_reasons; a global Supreme Admin with ZERO tenant
+  // membership genuinely bypasses app.margin_rule_versions (an explicit "OR
+  // is_supreme_admin()" in its own predicate) AND app.pipeline_categories/
+  // app.win_loss_reasons (transitively, via app.has_active_tenant_membership's own current
+  // body) but does NOT bypass any can_access_record-gated function (whose own body
+  // requires has_active_tenant_membership unconditionally, even for a supreme admin) --
+  // this last distinction was caught live by the test itself, not assumed, and corrected
+  // (see migrationSetSha256's own note above); field-masking for
+  // app.margin_calculations_directory (cost/sell) and app.opportunities_directory
+  // (probability/value_amount/value_currency) confirmed via cost_masked/sell_masked/
+  // value_masked flags on real rows; and cross-tenant denial throughout (zero rows or a
+  // raised exception, matching each function's own documented not-found/denied contract).
+  // Fixture rows for tables with no lightweight create path (app.margin_calculations,
+  // requiring a real app.rate_selections row) are seeded via a real is_adhoc=true rate
+  // selection rather than a full vendor-rate-version chain, and via direct insert for
+  // app.opportunities/app.sales_plans/app.sales_targets/app.forecast_snapshots -- mirroring
+  // batch 1's own established "seed the row directly, prove the new READ path" scope
+  // boundary against these tables' own already-tested mutation RPCs.
+  dbTestSetSha256: "13ffa858b00fddb16b39c12f3e4f60becef9b09c17c2f6812d925a4a13574600",
+  // History: aab4daf2d27cf92ec2b2dad47be04d587771695de95fa6a8526da301324c49a0
+  // (259 files, HUNDRED-AND-EIGHTEENTH PASS).
   // History: 422d3401dc38f86407617b132c88adeaa5b907ca20eeb8ec7e14b5fceeb9c751
   // (258 files, HUNDRED-AND-SEVENTEENTH PASS).
   // History: 7de55b831acd07bff9feaa49a63f88763ccde4c381c963d36c1d216b288bee41

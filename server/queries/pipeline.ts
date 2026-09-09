@@ -25,7 +25,6 @@ import {
 } from "../contracts/pipeline/pipeline.ts";
 
 export type PipelineQueryRpcClient = Pick<SupabaseClient, "rpc">;
-export type PipelineQueryTableClient = Pick<SupabaseClient, "from">;
 
 export class PipelineQueryError extends Error {
   constructor(message: string) {
@@ -70,77 +69,79 @@ export async function getSalesTargetActual(
   return parsed;
 }
 
-/** Sales plans for a tenant, most recently created first -- RLS (sales_plans_select_scoped) is the real scope gate. */
-export async function listSalesPlans(client: PipelineQueryTableClient, tenantId: string): Promise<SalesPlan[]> {
-  const { data, error } = await client
-    .from("sales_plans")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
+/** Sales plans for a tenant, most recently created first -- app.list_sales_plans (SECURITY DEFINER) is the real scope gate. */
+export async function listSalesPlans(client: PipelineQueryRpcClient, tenantId: string, actorAuthUserId: string): Promise<SalesPlan[]> {
+  const { data, error } = await client.rpc("list_sales_plans", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new PipelineQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseSalesPlan(row));
 }
 
-/** A single sales plan by id, for the Plan Detail view -- returns null (never an error) when RLS/no-match yields zero rows. */
-export async function getSalesPlanById(client: PipelineQueryTableClient, planId: string): Promise<SalesPlan | null> {
-  const { data, error } = await client.from("sales_plans").select("*").eq("id", planId).maybeSingle();
+/** A single sales plan by id, for the Plan Detail view -- returns null (never an error) when denied/no-match yields zero rows. */
+export async function getSalesPlanById(client: PipelineQueryRpcClient, planId: string, actorAuthUserId: string): Promise<SalesPlan | null> {
+  const { data, error } = await client.rpc("get_sales_plan_by_id", {
+    p_plan_id: planId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new PipelineQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? (data[0] ?? null) : data;
+  if (!row) {
     return null;
   }
-  return parseSalesPlan(data as Record<string, unknown>);
+  return parseSalesPlan(row as Record<string, unknown>);
 }
 
-/** The targets belonging to one sales plan -- RLS (sales_targets_select_scoped) is the real scope gate. */
-export async function listSalesTargetsForPlan(client: PipelineQueryTableClient, salesPlanId: string): Promise<SalesTarget[]> {
-  const { data, error } = await client
-    .from("sales_targets")
-    .select("*")
-    .eq("sales_plan_id", salesPlanId)
-    .order("metric_type", { ascending: true });
+/** The targets belonging to one sales plan -- app.list_sales_targets_for_plan (SECURITY DEFINER) is the real scope gate. */
+export async function listSalesTargetsForPlan(client: PipelineQueryRpcClient, salesPlanId: string, actorAuthUserId: string): Promise<SalesTarget[]> {
+  const { data, error } = await client.rpc("list_sales_targets_for_plan", {
+    p_sales_plan_id: salesPlanId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new PipelineQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseSalesTarget(row));
 }
 
-/** Snapshot history for one target, most recent first -- RLS (forecast_snapshots_select_scoped) is the real scope gate. */
-export async function listForecastSnapshotsForTarget(client: PipelineQueryTableClient, salesTargetId: string): Promise<ForecastSnapshot[]> {
-  const { data, error } = await client
-    .from("forecast_snapshots")
-    .select("*")
-    .eq("sales_target_id", salesTargetId)
-    .order("snapshot_at", { ascending: false });
+/** Snapshot history for one target, most recent first -- app.list_forecast_snapshots_for_target (SECURITY DEFINER) is the real scope gate. */
+export async function listForecastSnapshotsForTarget(client: PipelineQueryRpcClient, salesTargetId: string, actorAuthUserId: string): Promise<ForecastSnapshot[]> {
+  const { data, error } = await client.rpc("list_forecast_snapshots_for_target", {
+    p_sales_target_id: salesTargetId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new PipelineQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseForecastSnapshot(row));
 }
 
-/** Active pipeline categories for a tenant, in display order -- tenant-membership-scoped reference data (see COM-146's build log). */
-export async function listPipelineCategories(client: PipelineQueryTableClient, tenantId: string): Promise<PipelineCategory[]> {
-  const { data, error } = await client
-    .from("pipeline_categories")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("sort_order", { ascending: true });
+/** Active pipeline categories for a tenant, in display order -- app.list_pipeline_categories (SECURITY DEFINER) is the real scope gate (see COM-146's build log). */
+export async function listPipelineCategories(client: PipelineQueryRpcClient, tenantId: string, actorAuthUserId: string): Promise<PipelineCategory[]> {
+  const { data, error } = await client.rpc("list_pipeline_categories", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new PipelineQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parsePipelineCategory(row));
 }
 
-/** Win/loss reasons for a tenant -- tenant-membership-scoped reference data. */
-export async function listWinLossReasons(client: PipelineQueryTableClient, tenantId: string): Promise<WinLossReason[]> {
-  const { data, error } = await client
-    .from("win_loss_reasons")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("label", { ascending: true });
+/** Win/loss reasons for a tenant -- app.list_win_loss_reasons (SECURITY DEFINER) is the real scope gate. */
+export async function listWinLossReasons(client: PipelineQueryRpcClient, tenantId: string, actorAuthUserId: string): Promise<WinLossReason[]> {
+  const { data, error } = await client.rpc("list_win_loss_reasons", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new PipelineQueryError(error.message);
   }

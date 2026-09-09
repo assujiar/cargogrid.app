@@ -89,7 +89,7 @@ export default async function QuotationDetailPage({
     listQuotationAcceptanceTokens(supabase, quotation.id),
   ]);
 
-  const calculationsByRequest = await Promise.all(costingRequests.map((request) => listMarginCalculationsForRequest(supabase, request.id)));
+  const calculationsByRequest = await Promise.all(costingRequests.map((request) => listMarginCalculationsForRequest(supabase, request.id, access.authUserId)));
   const availableCalculations: MarginCalculation[] = calculationsByRequest.flat().filter((calc) => calc.isCurrent);
 
   const editable = quotation.status === "draft" && quotation.isCurrent;

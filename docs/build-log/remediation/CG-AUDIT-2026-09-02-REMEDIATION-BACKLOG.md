@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batch 1 of 4+ **DONE**, see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batches 1-2 of 4+ **DONE**, see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -715,3 +715,44 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   call sites across finance/identity/dispatch/tracking/documents/analytics/misc) — the same
   Design→Verify→Fix pipeline with RULE A/B/C baked in is the established, working pattern for the
   remaining batches, not a new approach to derive.
+- 2026-09-09 — Ø1-query-layer cluster 0 batch 2 closed (this commit), continuing the same
+  user-directed ("lanjut sampe siap launching") mandate. Closes 9 of the remaining 24 tables:
+  `app.margin_rule_versions`, `app.margin_calculations_directory`, `app.opportunities_directory`,
+  `app.opportunity_stage_history`, `app.sales_plans`, `app.sales_targets`, `app.forecast_snapshots`,
+  `app.pipeline_categories`, `app.win_loss_reasons` (`server/queries/margin.ts`, `opportunity.ts`,
+  `pipeline.ts`). New migration
+  `20260909000000_close_o1_query_layer_cluster0_batch2_pipeline_margin_opportunity.sql` adds 12 new
+  `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix pipeline batch
+  1 established (RULE A/B/C baked into both the design and verify prompts). 8 of 9 tables passed
+  independent re-verification against the live repo on the first draft; `app.opportunities_directory`
+  had a documentation/audit-trail-integrity defect caught and fixed before commit (a false "never
+  replaced" RULE C claim in its own header comment, citing 4 sibling functions as unreplaced when 4 of
+  5 actually have later rewrites — the authority predicate itself, independently re-read against every
+  current body, was unaffected and remained correct; this was a citation-accuracy defect, not a live
+  security bug).
+  A genuine, live-verified finding surfaced by this pass's own db-test
+  (`scripts/db-tests/o1-query-layer-cluster0-batch2.sql`), not by the design/verify pipeline: a first
+  version of the test wrongly assumed `app.pipeline_categories`/`app.win_loss_reasons` (whose own
+  predicates carry no separate `is_supreme_admin()` clause) would deny a global Supreme Admin with
+  zero tenant membership. In fact `app.has_active_tenant_membership`'s own CURRENT body
+  (`20260907110000_fix_suspended_user_retains_access_iss_d3b.sql`) already ORs in
+  `app.is_supreme_admin(...)` internally, so a Supreme Admin transitively passes EVERY function gated
+  by that helper — including these two, just via a different path than `app.margin_rule_versions`'s
+  own explicit outer `OR is_supreme_admin()`. The test's assertions and two migration header comments
+  that had claimed "no supreme-admin bypass" were both corrected to describe this transitive behavior
+  accurately, confirmed live against a real disposable database rather than assumed either way. All 3
+  affected TS query files and every real call site (8 `page.tsx` files) switched from `.from()` to
+  `.rpc()` in this same commit. Full Tier A gate suite re-run clean: `typecheck`, `lint` (0 errors),
+  the 5,992-test unit suite — including a fixed false positive in `check-rls-initplan.ts`'s own
+  regression guard, whose naive "match `create|alter policy`, then take everything up to the next
+  semicolon as the policy body" heuristic misread this migration's own header/comment prose (which
+  happened to contain the literal phrase "alter policy" followed by a bare `auth.uid()`/
+  `app.is_supreme_admin(p_auth_user_id)`-shaped mention within the same `comment on function ... is
+  '...'` string) as a live RLS policy clause; reworded the prose (never suppressed or weakened the
+  guard itself), reverified 0 findings — a full `pnpm run db:test` (`ALL PASSED`, 516 migrations / 260
+  db-test files), `git:check-paths`, `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-NINETEENTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
+  Still `IN_PROGRESS`, not `DONE`: 15 of cluster 0's 32 tables remain (credit/approval/costing-
+  response reads, leads/prospects/quotations, vendor-rate directory reads), plus clusters 1-7 (104
+  more call sites across finance/identity/dispatch/tracking/documents/analytics/misc).

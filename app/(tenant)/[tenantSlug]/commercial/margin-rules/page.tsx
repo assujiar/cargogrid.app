@@ -31,7 +31,7 @@ export default async function MarginRulesPage({ params }: { params: Promise<{ te
   let rules: MarginRuleVersion[];
   let loadFailed = false;
   try {
-    rules = await listMarginRuleVersions(supabase, access.tenant.id);
+    rules = await listMarginRuleVersions(supabase, access.tenant.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof MarginQueryError)) {
       throw error;

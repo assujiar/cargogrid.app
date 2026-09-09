@@ -13,6 +13,7 @@ const RULE_ID = "323e4567-e89b-12d3-a456-426614174000";
 const RATE_SELECTION_ID = "423e4567-e89b-12d3-a456-426614174000";
 const REQUEST_ID = "523e4567-e89b-12d3-a456-426614174000";
 const CALC_ID = "623e4567-e89b-12d3-a456-426614174000";
+const ACTOR_ID = "723e4567-e89b-12d3-a456-426614174000";
 
 const VALID_RULE_ROW = {
   id: RULE_ID,
@@ -60,54 +61,31 @@ const VALID_CALC_ROW = {
   updated_at: "2026-07-24T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): MarginQueryTableClient {
-  function chain(): Record<string, unknown> {
-    return {
-      eq(column: string, value: unknown) {
-        const eqCalls = (capture.calls.eqCalls ?? []) as { column: string; value: unknown }[];
-        eqCalls.push({ column, value });
-        capture.calls.eqCalls = eqCalls;
-        return chain();
-      },
-      order(column: string, opts: { ascending: boolean }) {
-        capture.calls.orderColumn = column;
-        capture.calls.ascending = opts.ascending;
-        return response;
-      },
-      async maybeSingle() {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return { data: row, error: response.error };
-      },
-    };
-  }
-
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: { fn: string; args: Record<string, unknown> }[] }): MarginQueryTableClient {
   const fake = {
-    from(table: string) {
-      capture.calls.table = table;
-      return { select: () => chain() };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.push({ fn, args });
+      return response;
     },
   };
   return fake as unknown as MarginQueryTableClient;
 }
 
 describe("getPublishedMarginRule", () => {
-  test("filters by tenant_id and status=published, returns null when none exists", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null }, capture);
-    const rule = await getPublishedMarginRule(client, TENANT_ID);
-    const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
-    assert.deepEqual(eqCalls, [
-      { column: "tenant_id", value: TENANT_ID },
-      { column: "status", value: "published" },
-    ]);
+  test("calls get_published_margin_rule with tenant/actor, returns null when none exists", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    const rule = await getPublishedMarginRule(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "get_published_margin_rule");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(rule, null);
   });
 
   test("wraps a query error", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: null, error: { message: "boom" } }, capture);
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } }, capture);
     await assert.rejects(
-      () => getPublishedMarginRule(client, TENANT_ID),
+      () => getPublishedMarginRule(client, TENANT_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof MarginQueryError);
         return true;
@@ -117,21 +95,23 @@ describe("getPublishedMarginRule", () => {
 });
 
 describe("listMarginRuleVersions", () => {
-  test("maps rows to the contract shape, newest first", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_RULE_ROW], error: null }, capture);
-    const rules = await listMarginRuleVersions(client, TENANT_ID);
-    assert.equal(capture.calls.ascending, false);
+  test("maps rows to the contract shape", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_RULE_ROW], error: null }, capture);
+    const rules = await listMarginRuleVersions(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_margin_rule_versions");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(rules.length, 1);
   });
 });
 
 describe("listMarginCalculationsForRequest", () => {
-  test("queries the field-masked margin_calculations_directory view", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_CALC_ROW], error: null }, capture);
-    const calcs = await listMarginCalculationsForRequest(client, REQUEST_ID);
-    assert.equal(capture.calls.table, "margin_calculations_directory");
+  test("calls list_margin_calculations_for_request with request/actor", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_CALC_ROW], error: null }, capture);
+    const calcs = await listMarginCalculationsForRequest(client, REQUEST_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_margin_calculations_for_request");
+    assert.deepEqual(capture.calls[0]?.args, { p_costing_request_id: REQUEST_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(calcs[0]?.marginPct, 33.33);
   });
 });
