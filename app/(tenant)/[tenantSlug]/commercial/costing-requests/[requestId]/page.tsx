@@ -52,13 +52,13 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
 
   const [components, responses] = await Promise.all([
     listCostingRequestComponents(supabase, request.id, access.authUserId),
-    listCostingResponsesForRequest(supabase, request.id),
+    listCostingResponsesForRequest(supabase, request.id, access.authUserId),
   ]);
 
   const responseComponentsByResponse = await Promise.all(
     responses.map(async (response) => ({
       response,
-      components: response.costMasked ? [] : await listCostingResponseComponents(supabase, response.id),
+      components: response.costMasked ? [] : await listCostingResponseComponents(supabase, response.id, access.authUserId),
     })),
   );
 

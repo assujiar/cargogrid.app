@@ -12,7 +12,7 @@ import { parseCreditProfile, parseCreditProfileOverride, type CreditProfile, typ
 import { getApprovalRequestHistory, listPendingApprovalStepsForActor, type ApprovalQueryRpcClient } from "./approval.ts";
 import type { ApprovalRequestHistoryEntry } from "../contracts/approval/approval.ts";
 
-export type CreditQueryClient = Pick<SupabaseClient, "from" | "rpc">;
+export type CreditQueryClient = Pick<SupabaseClient, "rpc">;
 
 /** Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict `Promise`) -- structurally incompatible with server/queries/approval.ts's hand-written `ApprovalQueryRpcClient` interface. The same adapter every other cross-module RPC composition in this repository already uses for that exact mismatch. */
 function toApprovalQueryRpcClient(client: CreditQueryClient): ApprovalQueryRpcClient {
@@ -26,9 +26,13 @@ export class CreditQueryError extends Error {
   }
 }
 
-/** Every credit profile for one tenant (any status), most recently created first -- tenant-wide reference data, RLS-scoped by tenant membership only (not record-scoped, mirrors app.accounts). */
-export async function listCreditProfiles(client: CreditQueryClient, tenantId: string): Promise<CreditProfile[]> {
-  const { data, error } = await client.from("credit_profiles_directory").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+/** Every credit profile for one tenant (any status), most recently created first -- app.list_credit_profiles (SECURITY DEFINER) is the real scope/masking gate (tenant membership, excluding the customer_user layer). */
+export async function listCreditProfiles(client: CreditQueryClient, tenantId: string, actorAuthUserId: string): Promise<CreditProfile[]> {
+  const { data, error } = await client.rpc("list_credit_profiles", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new CreditQueryError(error.message);
   }
@@ -36,8 +40,11 @@ export async function listCreditProfiles(client: CreditQueryClient, tenantId: st
 }
 
 /** The current (most recently created) credit profile for one account, or null if it has never had one. */
-export async function getCreditProfileForAccount(client: CreditQueryClient, accountId: string): Promise<CreditProfile | null> {
-  const { data, error } = await client.from("credit_profiles_directory").select("*").eq("account_id", accountId).order("created_at", { ascending: false }).limit(1);
+export async function getCreditProfileForAccount(client: CreditQueryClient, accountId: string, actorAuthUserId: string): Promise<CreditProfile | null> {
+  const { data, error } = await client.rpc("get_credit_profile_for_account", {
+    p_account_id: accountId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CreditQueryError(error.message);
   }
@@ -48,20 +55,27 @@ export async function getCreditProfileForAccount(client: CreditQueryClient, acco
   return parseCreditProfile(row as Record<string, unknown>);
 }
 
-export async function getCreditProfileById(client: CreditQueryClient, profileId: string): Promise<CreditProfile | null> {
-  const { data, error } = await client.from("credit_profiles_directory").select("*").eq("id", profileId).maybeSingle();
+export async function getCreditProfileById(client: CreditQueryClient, profileId: string, actorAuthUserId: string): Promise<CreditProfile | null> {
+  const { data, error } = await client.rpc("get_credit_profile_by_id", {
+    p_profile_id: profileId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CreditQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? (data[0] ?? null) : data;
+  if (!row) {
     return null;
   }
-  return parseCreditProfile(data as Record<string, unknown>);
+  return parseCreditProfile(row as Record<string, unknown>);
 }
 
 /** Currently-valid (not yet expired) overrides for one profile, most recent first. */
-export async function listCreditProfileOverrides(client: CreditQueryClient, profileId: string): Promise<CreditProfileOverride[]> {
-  const { data, error } = await client.from("credit_profile_overrides_directory").select("*").eq("credit_profile_id", profileId).order("created_at", { ascending: false });
+export async function listCreditProfileOverrides(client: CreditQueryClient, profileId: string, actorAuthUserId: string): Promise<CreditProfileOverride[]> {
+  const { data, error } = await client.rpc("list_credit_profile_overrides", {
+    p_credit_profile_id: profileId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CreditQueryError(error.message);
   }
@@ -110,7 +124,10 @@ export async function listCreditProfileApprovalInboxForActor(client: CreditQuery
   }
 
   const requestIds = [...new Set(steps.map((step) => step.requestId))];
-  const { data, error } = await client.from("approval_requests").select("id, entity_type, entity_id").in("id", requestIds);
+  const { data, error } = await client.rpc("get_approval_requests_entity_refs", {
+    p_ids: requestIds,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CreditQueryError(error.message);
   }

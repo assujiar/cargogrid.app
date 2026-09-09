@@ -49,7 +49,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
     listSubsidiaryAccounts(supabase, account.id, access.authUserId),
   ]);
 
-  const creditProfile = await getCreditProfileForAccount(supabase, account.id);
+  const creditProfile = await getCreditProfileForAccount(supabase, account.id, access.authUserId);
   const creditApprovalOverview = creditProfile ? await getCreditProfileApprovalOverview(supabase, creditProfile, access.authUserId) : null;
 
   return (

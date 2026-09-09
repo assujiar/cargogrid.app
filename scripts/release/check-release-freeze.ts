@@ -4013,7 +4013,39 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // heuristic misread as a live policy clause -- reworded, not suppressed, and reverified
   // 0 findings), a full `pnpm run db:test` (ALL PASSED, 516 migrations / 260 db-test
   // files), git:check-paths, security:check, and `next build`.
-  migrationSetSha256: "61119938892522671dec527c7f4a474bed49aaf50f76e3e46c30776a15762167",
+  // HUNDRED-AND-TWENTIETH PASS (2026-09-09, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 517 files (+1) -- new migration
+  // 20260909010000_close_o1_query_layer_cluster0_batch3_costing_credit_approval.sql.
+  // Closes cluster 0 batch 3 of ~4 (costing-response/credit/approval-inbox reads, 5 of the
+  // remaining 15 tables): app.costing_responses_directory (list_costing_responses_for_
+  // request), app.costing_response_components_directory (list_costing_response_
+  // components -- COM:View-cost-lacking callers get zero rows for every line item, an
+  // all-or-nothing mask, never a masked-but-visible row), app.credit_profiles_directory
+  // (list_credit_profiles, get_credit_profile_for_account, get_credit_profile_by_id),
+  // app.credit_profile_overrides (list_credit_profile_overrides), and a single shared
+  // app.approval_requests entity-ref lookup (get_approval_requests_entity_refs, taking
+  // p_ids uuid[]) used by both the credit-profile and quotation approval inboxes --
+  // avoiding two near-identical single-purpose functions for the same underlying table.
+  // 7 new app.*/public.* function pairs, each drafted via the same adversarial
+  // Design->Verify->Fix pipeline established in batches 1-2: this batch's own db-test
+  // (scripts/db-tests/o1-query-layer-cluster0-batch3.sql) passed completely on the first
+  // write, with zero issues found across all 5 tables in the independent verify stage --
+  // notably cleaner than either prior batch. All 3 affected TS query files (server/
+  // queries/costing.ts, credit.ts, quotation-approval.ts) and every real call site (3
+  // page.tsx files) switched from `.from()` to `.rpc()` in this same commit; quotation-
+  // approval.ts's own `QuotationApprovalQueryClient` type is left carrying both `"from"`
+  // and `"rpc"` since its sibling `listQuotationApprovalRuleVersions` still legitimately
+  // reads app.quotation_approval_rules directly (an out-of-scope table for this batch).
+  // This pass again proactively reworded migration-comment prose that would otherwise
+  // have tripped check-rls-initplan.ts's known "alter policy"/bare-auth-call false-
+  // positive class (established in the HUNDRED-AND-NINETEENTH PASS note below) before
+  // writing the db-test, and reverified 0 findings. Full Tier A gate suite re-run clean
+  // before this digest was changed: typecheck, lint (0 errors), the 5,992-test unit
+  // suite, a full `pnpm run db:test` (ALL PASSED, 517 migrations / 261 db-test files),
+  // git:check-paths, security:check, check-rls-initplan.ts, and `next build`.
+  migrationSetSha256: "fe289e21bf5e6a0bec67e9e81155dec3b17586a9467a8d301c5166141bec3995",
+  // History: 61119938892522671dec527c7f4a474bed49aaf50f76e3e46c30776a15762167
+  // (516 files, HUNDRED-AND-NINETEENTH PASS).
   // History: c4812e14488d0730a6a105798a6491ce672b21dc2ea3be6f2e657f475a913807
   // (515 files, HUNDRED-AND-EIGHTEENTH PASS).
   // History: db524d7f5447f005c191fe338d340a54bf92869e767a00febea684421a756936
@@ -5036,7 +5068,29 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // app.opportunities/app.sales_plans/app.sales_targets/app.forecast_snapshots -- mirroring
   // batch 1's own established "seed the row directly, prove the new READ path" scope
   // boundary against these tables' own already-tested mutation RPCs.
-  dbTestSetSha256: "13ffa858b00fddb16b39c12f3e4f60becef9b09c17c2f6812d925a4a13574600",
+  // HUNDRED-AND-TWENTIETH PASS (2026-09-09, same ruling as migrationSetSha256 above): 261
+  // files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch3.sql. Proves,
+  // against a real disposable database, every one of the 7 new function pairs this pass's
+  // migration adds: real data for a tenant member/record owner; RULE A genuinely rejects a
+  // claimed actor that does not match the real session identity; RULE B's authority
+  // predicates match each table's current (latest ALTER POLICY) RLS predicate;
+  // COM:View-cost-lacking callers get cost_masked=true (list_costing_responses_for_
+  // request) and zero rows for every component (list_costing_response_components -- the
+  // all-or-nothing mask, confirmed distinct from column-level masking); credit-profile
+  // amount masking confirmed via amount_masked flags on real rows; cross-tenant denial and
+  // the not-found/denied zero-rows-vs-raise contract confirmed per function, matching each
+  // one's documented posture; and get_approval_requests_entity_refs confirmed shared
+  // correctly between the credit-profile and quotation approval inboxes with per-request
+  // authority enforced (a request this actor cannot access is silently excluded, not
+  // raised). Fixture rows for app.rate_selections/app.config_objects/app.config_versions
+  // (needed for app.margin_calculations and app.approval_requests without a full vendor-
+  // rate-version or approval-engine setup chain) are seeded via direct insert, mirroring
+  // batches 1-2's own established "seed the row directly, prove the new READ path" scope
+  // boundary. Also confirmed against public-api-wrapper-regression.sql (no cross-file
+  // grant-parity or RULE A/B/C regression from any of this batch's 7 new function pairs).
+  dbTestSetSha256: "168c7f2166bfd81642019a55f3003d2bc4adfeabb10b304a458b1fb7acd07391",
+  // History: 13ffa858b00fddb16b39c12f3e4f60becef9b09c17c2f6812d925a4a13574600
+  // (260 files, HUNDRED-AND-NINETEENTH PASS).
   // History: aab4daf2d27cf92ec2b2dad47be04d587771695de95fa6a8526da301324c49a0
   // (259 files, HUNDRED-AND-EIGHTEENTH PASS).
   // History: 422d3401dc38f86407617b132c88adeaa5b907ca20eeb8ec7e14b5fceeb9c751

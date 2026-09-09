@@ -31,38 +31,12 @@ const PROFILE_ROW = {
   updated_at: "2026-07-24T00:00:00.000Z",
 };
 
-function fakeClient(opts: {
-  tableResponse?: { data: unknown; error: { message: string } | null };
-  rpcResponse?: { data: unknown; error: { message: string } | null };
-  approvalRequestsResponse?: { data: unknown; error: { message: string } | null };
-}): CreditQueryClient & { calls: { table: string[]; rpc: { fn: string; args: Record<string, unknown> }[]; eqCalls: { column: string; value: unknown }[] } } {
-  const calls = { table: [] as string[], rpc: [] as { fn: string; args: Record<string, unknown> }[], eqCalls: [] as { column: string; value: unknown }[] };
+function fakeClient(opts: { rpcResponse?: { data: unknown; error: { message: string } | null } }): CreditQueryClient & {
+  calls: { rpc: { fn: string; args: Record<string, unknown> }[] };
+} {
+  const calls = { rpc: [] as { fn: string; args: Record<string, unknown> }[] };
   const fake = {
     calls,
-    from(table: string) {
-      calls.table.push(table);
-      if (table === "approval_requests") {
-        const response = opts.approvalRequestsResponse ?? { data: [], error: null };
-        return { select: () => ({ in: async () => response }) };
-      }
-      const response = opts.tableResponse ?? { data: [], error: null };
-      const chain = {
-        eq(column: string, value: unknown) {
-          calls.eqCalls.push({ column, value });
-          return chain;
-        },
-        order: () => chain,
-        limit: () => chain,
-        maybeSingle: async () => ({ data: Array.isArray(response.data) ? (response.data[0] ?? null) : response.data, error: response.error }),
-        // Thenable, mirroring Supabase's own query builder -- resolves to the response at
-        // whichever point in the chain the caller awaits it (after .order() alone, or
-        // after .order().limit()).
-        then(resolve: (value: typeof response) => void) {
-          resolve(response);
-        },
-      };
-      return { select: () => chain };
-    },
     async rpc(fn: string, args: Record<string, unknown>) {
       calls.rpc.push({ fn, args });
       return opts.rpcResponse ?? { data: [], error: null };
@@ -72,33 +46,34 @@ function fakeClient(opts: {
 }
 
 describe("listCreditProfiles", () => {
-  test("reads from credit_profiles_directory filtered by tenant_id, newest first", async () => {
-    const client = fakeClient({ tableResponse: { data: [PROFILE_ROW], error: null } });
-    const profiles = await listCreditProfiles(client, TENANT_ID);
-    assert.equal(client.calls.table[0], "credit_profiles_directory");
+  test("calls list_credit_profiles with tenant/actor/limit", async () => {
+    const client = fakeClient({ rpcResponse: { data: [PROFILE_ROW], error: null } });
+    const profiles = await listCreditProfiles(client, TENANT_ID, ACTOR_ID);
+    assert.equal(client.calls.rpc[0]?.fn, "list_credit_profiles");
+    assert.deepEqual(client.calls.rpc[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(profiles[0]?.status, "active");
   });
 });
 
 describe("getCreditProfileForAccount", () => {
   test("returns null when the account has never had a profile", async () => {
-    const client = fakeClient({ tableResponse: { data: [], error: null } });
-    const profile = await getCreditProfileForAccount(client, ACCOUNT_ID);
+    const client = fakeClient({ rpcResponse: { data: [], error: null } });
+    const profile = await getCreditProfileForAccount(client, ACCOUNT_ID, ACTOR_ID);
     assert.equal(profile, null);
   });
 
   test("returns the most recently created profile row", async () => {
-    const client = fakeClient({ tableResponse: { data: [PROFILE_ROW], error: null } });
-    const profile = await getCreditProfileForAccount(client, ACCOUNT_ID);
+    const client = fakeClient({ rpcResponse: { data: [PROFILE_ROW], error: null } });
+    const profile = await getCreditProfileForAccount(client, ACCOUNT_ID, ACTOR_ID);
     assert.equal(profile?.id, PROFILE_ID);
   });
 });
 
 describe("getCreditProfileById", () => {
   test("wraps a query error", async () => {
-    const client = fakeClient({ tableResponse: { data: null, error: { message: "boom" } } });
+    const client = fakeClient({ rpcResponse: { data: null, error: { message: "boom" } } });
     await assert.rejects(
-      () => getCreditProfileById(client, PROFILE_ID),
+      () => getCreditProfileById(client, PROFILE_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof CreditQueryError);
         return true;
@@ -108,10 +83,11 @@ describe("getCreditProfileById", () => {
 });
 
 describe("listCreditProfileOverrides", () => {
-  test("reads from the masked overrides directory view", async () => {
-    const client = fakeClient({ tableResponse: { data: [], error: null } });
-    await listCreditProfileOverrides(client, PROFILE_ID);
-    assert.equal(client.calls.table[0], "credit_profile_overrides_directory");
+  test("calls list_credit_profile_overrides with profile/actor", async () => {
+    const client = fakeClient({ rpcResponse: { data: [], error: null } });
+    await listCreditProfileOverrides(client, PROFILE_ID, ACTOR_ID);
+    assert.equal(client.calls.rpc[0]?.fn, "list_credit_profile_overrides");
+    assert.deepEqual(client.calls.rpc[0]?.args, { p_credit_profile_id: PROFILE_ID, p_actor_auth_user_id: ACTOR_ID });
   });
 });
 

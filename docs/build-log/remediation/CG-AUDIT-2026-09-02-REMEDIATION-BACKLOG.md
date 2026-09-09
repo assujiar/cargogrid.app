@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batches 1-2 of 4+ **DONE**, see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batches 1-3 of 4+ **DONE**, see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -756,3 +756,46 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   Still `IN_PROGRESS`, not `DONE`: 15 of cluster 0's 32 tables remain (credit/approval/costing-
   response reads, leads/prospects/quotations, vendor-rate directory reads), plus clusters 1-7 (104
   more call sites across finance/identity/dispatch/tracking/documents/analytics/misc).
+- 2026-09-09 — Ø1-query-layer cluster 0 batch 3 closed (this commit), continuing the same
+  user-directed ("lanjut sampe siap launching") mandate. Closes 5 of the remaining 15 tables:
+  `app.costing_responses_directory` (`list_costing_responses_for_request`),
+  `app.costing_response_components_directory` (`list_costing_response_components`),
+  `app.credit_profiles_directory` (`list_credit_profiles`, `get_credit_profile_for_account`,
+  `get_credit_profile_by_id`), `app.credit_profile_overrides` (`list_credit_profile_overrides`), and
+  a single `app.approval_requests` entity-ref lookup (`get_approval_requests_entity_refs`, taking
+  `p_ids uuid[]`) deliberately shared by both the credit-profile approval inbox
+  (`server/queries/credit.ts`) and the pre-existing quotation approval inbox
+  (`server/queries/quotation-approval.ts`) rather than adding two near-identical single-purpose
+  functions for the same table. New migration
+  `20260909010000_close_o1_query_layer_cluster0_batch3_costing_credit_approval.sql` adds 7 new
+  `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix pipeline
+  batches 1-2 established (RULE A/B/C baked into both the design and verify prompts). Unlike either
+  prior batch, this one's independent verify stage found zero issues across all 5 tables on the
+  first draft, and this pass's own db-test (`scripts/db-tests/o1-query-layer-cluster0-batch3.sql`,
+  287 lines) passed completely on its first full run against a real disposable database — no
+  defect surfaced by testing that the design/verify pipeline had missed, the first batch of this
+  cluster where that held true. `list_costing_response_components` preserves the pre-existing
+  "all-or-nothing" masking posture for cost-restricted callers (zero rows for every line item on a
+  cost-masked response, never a masked-but-visible row), distinct from the column-level
+  `*_masked` flag pattern used by the credit-profile and margin functions. Proactively reworded
+  this migration's own header/comment prose before writing the db-test (learning applied from the
+  HUNDRED-AND-NINETEENTH PASS) to avoid `check-rls-initplan.ts`'s known "alter policy"/bare-auth-
+  call false-positive class — caught one instance at `list_costing_responses_for_request`'s own
+  comment ("no later ALTER POLICY exists" + bare `auth.uid()` mentions) before it was ever run
+  against the guard, reworded, reverified 0 findings. All 3 affected TS query files
+  (`server/queries/costing.ts`, `credit.ts`, `quotation-approval.ts`) and every real call site (3
+  `page.tsx` files) switched from `.from()` to `.rpc()` in this same commit;
+  `quotation-approval.ts`'s own `QuotationApprovalQueryClient` type intentionally keeps both
+  `"from"` and `"rpc"` since its sibling `listQuotationApprovalRuleVersions` still legitimately
+  reads `app.quotation_approval_rules` directly (an out-of-scope table for this batch). Full Tier A
+  gate suite re-run clean: `typecheck`, `lint` (0 errors), the 5,992-test unit suite,
+  `check-rls-initplan.ts` (0 findings), a full `pnpm run db:test` (`ALL PASSED`, 517 migrations /
+  261 db-test files), `git:check-paths`, `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTIETH PASS,
+  `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
+  Still `IN_PROGRESS`, not `DONE`: 10 of cluster 0's 32 tables remain (leads, prospects,
+  quotations_directory, quotation_lines_directory, quotation_approval_rules,
+  quotation_acceptance_tokens, vendor_rate_versions_directory, v_active_vendor_rates,
+  rate_selections_directory, vendor_rate_tiers_directory — args already prepared for batches 4 and
+  5), plus clusters 1-7 (104 more call sites across finance/identity/dispatch/tracking/documents/
+  analytics/misc).

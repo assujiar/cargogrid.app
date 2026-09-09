@@ -75,30 +75,6 @@ const ACTOR_ID = "823e4567-e89b-12d3-a456-426614174000";
 
 function fakeTableClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): CostingQueryTableClient {
   const fake = {
-    from(table: string) {
-      capture.calls.table = table;
-      return {
-        select() {
-          return {
-            eq(column: string, value: unknown) {
-              capture.calls.eqColumn = column;
-              capture.calls.eqValue = value;
-              return {
-                order(column2: string, opts: { ascending: boolean }) {
-                  capture.calls.orderColumn = column2;
-                  capture.calls.ascending = opts.ascending;
-                  return response;
-                },
-                async maybeSingle() {
-                  const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-                  return { data: row, error: response.error };
-                },
-              };
-            },
-          };
-        },
-      };
-    },
     async rpc(fn: string, args: Record<string, unknown>) {
       capture.calls.rpcFn = fn;
       capture.calls.rpcArgs = args;
@@ -152,20 +128,23 @@ describe("listCostingRequestComponents", () => {
 });
 
 describe("listCostingResponsesForRequest", () => {
-  test("queries the field-masked costing_responses_directory view", async () => {
+  test("calls list_costing_responses_for_request with request/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: [VALID_RESPONSE_ROW], error: null }, capture);
-    const responses = await listCostingResponsesForRequest(client, REQUEST_ID);
-    assert.equal(capture.calls.table, "costing_responses_directory");
+    const responses = await listCostingResponsesForRequest(client, REQUEST_ID, ACTOR_ID);
+    assert.equal(capture.calls.rpcFn, "list_costing_responses_for_request");
+    assert.deepEqual(capture.calls.rpcArgs, { p_request_id: REQUEST_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(responses[0]?.totalAmount, 17500000);
   });
 });
 
 describe("listCostingResponseComponents", () => {
-  test("maps rows to the contract shape", async () => {
+  test("calls list_costing_response_components with response/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
     const client = fakeTableClient({ data: [VALID_RESPONSE_COMPONENT_ROW], error: null }, capture);
-    const components = await listCostingResponseComponents(client, RESPONSE_ID);
+    const components = await listCostingResponseComponents(client, RESPONSE_ID, ACTOR_ID);
+    assert.equal(capture.calls.rpcFn, "list_costing_response_components");
+    assert.deepEqual(capture.calls.rpcArgs, { p_response_id: RESPONSE_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(components.length, 1);
     assert.equal(components[0]?.amount, 15000000);
   });

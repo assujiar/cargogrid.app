@@ -17,7 +17,7 @@ import {
   type CostingResponseComponent,
 } from "../contracts/costing/costing.ts";
 
-export type CostingQueryTableClient = Pick<SupabaseClient, "from" | "rpc">;
+export type CostingQueryTableClient = Pick<SupabaseClient, "rpc">;
 
 export class CostingQueryError extends Error {
   constructor(message: string) {
@@ -66,26 +66,24 @@ export async function listCostingRequestComponents(client: CostingQueryTableClie
   return (data ?? []).map((row: Record<string, unknown>) => parseCostingRequestComponent(row));
 }
 
-/** Field-masked responses for one costing request, most recently created first -- reads through app.costing_responses_directory, never the base table directly. */
-export async function listCostingResponsesForRequest(client: CostingQueryTableClient, requestId: string): Promise<CostingResponse[]> {
-  const { data, error } = await client
-    .from("costing_responses_directory")
-    .select("*")
-    .eq("costing_request_id", requestId)
-    .order("created_at", { ascending: false });
+/** Field-masked responses for one costing request, most recently created first -- app.list_costing_responses_for_request (SECURITY DEFINER) is the real scope/masking gate. */
+export async function listCostingResponsesForRequest(client: CostingQueryTableClient, requestId: string, actorAuthUserId: string): Promise<CostingResponse[]> {
+  const { data, error } = await client.rpc("list_costing_responses_for_request", {
+    p_request_id: requestId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CostingQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseCostingResponse(row));
 }
 
-/** Priced line items for one response -- zero rows (not an error) for a caller lacking COM:View cost (costing_response_components_select_scoped denies entirely, no masked-but-visible state). */
-export async function listCostingResponseComponents(client: CostingQueryTableClient, responseId: string): Promise<CostingResponseComponent[]> {
-  const { data, error } = await client
-    .from("costing_response_components")
-    .select("*")
-    .eq("costing_response_id", responseId)
-    .order("created_at", { ascending: true });
+/** Priced line items for one response -- zero rows (not an error) for a caller lacking COM:View cost (app.list_costing_response_components denies entirely, no masked-but-visible state). */
+export async function listCostingResponseComponents(client: CostingQueryTableClient, responseId: string, actorAuthUserId: string): Promise<CostingResponseComponent[]> {
+  const { data, error } = await client.rpc("list_costing_response_components", {
+    p_response_id: responseId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new CostingQueryError(error.message);
   }

@@ -78,7 +78,10 @@ export async function listQuotationApprovalInboxForActor(client: QuotationApprov
   }
 
   const requestIds = [...new Set(steps.map((step) => step.requestId))];
-  const { data, error } = await client.from("approval_requests").select("id, entity_type, entity_id").in("id", requestIds);
+  const { data, error } = await client.rpc("get_approval_requests_entity_refs", {
+    p_ids: requestIds,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new QuotationApprovalQueryError(error.message);
   }
