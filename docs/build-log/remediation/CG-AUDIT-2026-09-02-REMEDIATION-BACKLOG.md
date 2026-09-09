@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0 batches 1-4 of 4+ **DONE**, see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0, 32/32 tables, **DONE**; clusters 1-7, 104 call sites, remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -859,3 +859,57 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   directory, v_active_vendor_rates, rate_selections_directory, vendor_rate_tiers_directory —
   args already prepared for batch 5), plus clusters 1-7 (104 more call sites across finance/
   identity/dispatch/tracking/documents/analytics/misc).
+
+- 2026-09-09 — Ø1-query-layer cluster 0 batch 5 closed (this commit), continuing the same
+  user-directed ("lanjut sampe siap launching") mandate. Closes the **last** 4 tables of
+  cluster 0's 32: `app.vendor_rate_versions_directory` (`list_rate_versions_for_master_record`,
+  `get_rate_version_by_id`, `list_pending_rate_versions`,
+  `list_procurement_linked_vendor_rate_versions`, `list_vendor_rate_versions_for_vendor`),
+  `app.v_active_vendor_rates` (`list_active_vendor_rates`), `app.rate_selections_directory`
+  (`list_rate_selections_for_request`), and `app.vendor_rate_tiers_directory`
+  (`list_vendor_rate_tiers`). New migration
+  `20260909030000_close_o1_query_layer_cluster0_batch5_vendor_rate_directories.sql` adds 8 new
+  `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix pipeline
+  batches 1-4 established (RULE A/B/C baked into both stages), again completed via parallel
+  Agent-tool design/verify calls rather than the Workflow tool (whose subagent-spawning path
+  remained broken this session — same infra defect noted in batch 4's entry above).
+  `list_active_vendor_rates` is a deliberately **new** function rather than a thin wrapper
+  reusing `app.search_vendor_rates`: that RPC requires `app.evaluate_permission(actor, tenant,
+  'COM', 'View')`, a dynamically tenant-configured permission not guaranteed for every
+  actively-membered staff role, and has different ordering/default-limit behavior — reusing it
+  would have either over- or under-restricted this read relative to the view's own real RLS
+  predicate. This decision was independently re-derived and confirmed by the verify stage, not
+  assumed from the design draft.
+  Two comment-only issues were found and fixed during the independent verify pass, before this
+  migration was ever applied to any database: (1) `app.vendor_rate_versions_directory`'s header
+  comment justified keeping `list_procurement_linked_vendor_rate_versions`/
+  `list_vendor_rate_versions_for_vendor` as two separate functions with a factually false claim
+  ("not nested/subset forms of each other" — `vendor_master_id = value` mathematically **does**
+  imply `vendor_master_id IS NOT NULL` under SQL three-valued logic). Corrected to state the
+  true reasoning (this codebase's own convention of preferring distinct, self-documenting
+  single-purpose RPCs over one function whose row set pivots on an optional parameter) while
+  keeping the actual decision (5 separate functions, not merged) unchanged — no SQL logic in
+  any of the 8 functions needed correction beyond this one comment. (2) A third occurrence of
+  the established `check-rls-initplan.ts` "ALTER POLICY"/bare-auth-call false-positive class
+  (first seen in batch 3, recurring in batch 4's own migration prose too), this time in
+  `app.list_rate_selections_for_request`'s own `comment on function` string ("no later ALTER
+  POLICY exists on this policy" plus bare `auth.uid()` mentions). Reworded, not suppressed
+  ("no later ALTER POLICY exists" → "no later rewrite of this policy exists"; bare
+  `auth.uid()` mentions de-parenthesized), and reverified 0 findings.
+  This pass's own db-test (`scripts/db-tests/o1-query-layer-cluster0-batch5.sql`) passed
+  completely on the first full run against a real disposable database — no defect surfaced by
+  testing that the design/verify pipeline had missed.
+  Both affected TS query files (`server/queries/rate.ts`, `procurement-rate.ts`) and every real
+  call site (5 `page.tsx` files: `commercial/costing-requests/[requestId]`,
+  `commercial/rates`, `commercial/rates/[rateVersionId]`, `procurement/rates`,
+  `procurement/rates/[rateVersionId]`) switched from `.from()` to `.rpc()` in this same commit.
+  `listVendorRateVersionsForVendor` has no live `page.tsx` caller today (test-only) but was
+  converted for consistency and to keep the whole file on one calling convention.
+  Full Tier A gate suite re-run clean: `typecheck`, `lint` (0 errors), the 5,993-test unit
+  suite, `check-rls-initplan.ts` (0 findings), a full `pnpm run db:test` (`ALL PASSED`, 519
+  migrations / 263 db-test files), `git:check-paths`, `security:check`, and a real `next
+  build`. `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-SECOND PASS,
+  `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
+  **Cluster 0 (CRM/commercial, 32/32 tables) is now fully `DONE`.** Still open: clusters 1-7
+  (104 more call sites across finance/identity/dispatch/tracking/documents/analytics/misc) —
+  next up under the same "lanjut sampe siap launching" mandate.

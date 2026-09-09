@@ -26,7 +26,7 @@ export default async function ProcurementRateDirectoryPage({ params }: { params:
   let loadFailed = false;
   let rows: Record<string, unknown>[] = [];
   try {
-    rows = await listProcurementLinkedVendorRateVersions(supabase, access.tenant.id);
+    rows = await listProcurementLinkedVendorRateVersions(supabase, access.tenant.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof ProcurementRateQueryError)) throw error;
     loadFailed = true;

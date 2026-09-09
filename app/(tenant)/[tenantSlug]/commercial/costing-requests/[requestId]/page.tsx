@@ -66,8 +66,8 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
   let candidateRates: RateVersion[];
   try {
     [rateSelections, candidateRates] = await Promise.all([
-      listRateSelectionsForRequest(supabase, request.id),
-      listActiveVendorRates(supabase, access.tenant.id),
+      listRateSelectionsForRequest(supabase, request.id, access.authUserId),
+      listActiveVendorRates(supabase, access.tenant.id, access.authUserId),
     ]);
   } catch (error) {
     if (!(error instanceof RateQueryError)) {

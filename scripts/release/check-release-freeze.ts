@@ -4093,7 +4093,51 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // typecheck, lint (0 errors), the 5,993-test unit suite, check-rls-initplan.ts (0
   // findings), a full `pnpm run db:test` (ALL PASSED, 518 migrations / 262 db-test
   // files), git:check-paths, security:check, and `next build`.
-  migrationSetSha256: "9b225ba6030a7bf4d82369b48e21ed732de32111c92e1d372307b05eb76c480d",
+  // HUNDRED-AND-TWENTY-SECOND PASS (2026-09-09, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 519 files (+1) --
+  // new migration 20260909030000_close_o1_query_layer_cluster0_batch5_vendor_rate_
+  // directories.sql. Closes cluster 0 batch 5, the LAST batch -- all 32/32 tables
+  // are now fully DONE: app.vendor_rate_versions_directory
+  // (list_rate_versions_for_master_record, get_rate_version_by_id,
+  // list_pending_rate_versions, list_procurement_linked_vendor_rate_versions,
+  // list_vendor_rate_versions_for_vendor), app.v_active_vendor_rates
+  // (list_active_vendor_rates, a NEW function rather than reusing
+  // app.search_vendor_rates -- that RPC requires a dynamically tenant-configured
+  // COM:View permission not guaranteed for every actively-membered staff role, and
+  // has different ordering/default-limit behavior), app.rate_selections_directory
+  // (list_rate_selections_for_request), and app.vendor_rate_tiers_directory
+  // (list_vendor_rate_tiers). 8 new app.*/public.* Option-2 wrapper function pairs
+  // via the same adversarial Design->Verify->Fix pipeline batches 1-4 established
+  // (RULE A/B/C baked into every draft and every independent verify pass), again
+  // completed via parallel Agent-tool design/verify calls rather than the Workflow
+  // tool (whose subagent-spawning path remained broken this session). Two
+  // comment-only issues were found and fixed during the independent verify pass,
+  // before this migration was ever applied to any database: (1)
+  // app.vendor_rate_versions_directory's header comment justified keeping
+  // list_procurement_linked_vendor_rate_versions/list_vendor_rate_versions_for_
+  // vendor as separate functions with a factually false claim ("not nested/subset
+  // forms of each other" -- vendor_master_id = value DOES imply vendor_master_id
+  // IS NOT NULL under SQL three-valued logic); corrected to state the true
+  // reasoning (this codebase's own convention of preferring distinct,
+  // self-documenting single-purpose RPCs over one function whose row set pivots on
+  // an optional parameter) while keeping the actual decision (5 separate
+  // functions) unchanged -- no SQL logic in any of the 8 functions needed
+  // correction beyond this one comment. (2) A third occurrence of the established
+  // check-rls-initplan.ts "ALTER POLICY"/bare-auth-call false-positive class, this
+  // time in app.list_rate_selections_for_request's own comment-on-function string
+  // ("no later ALTER POLICY exists on this policy" plus bare auth.uid() mentions);
+  // reworded, not suppressed, and reverified 0 findings. This batch's own db-test
+  // (scripts/db-tests/o1-query-layer-cluster0-batch5.sql) passed completely on the
+  // first full run against a real disposable database. Both affected TS query
+  // files (server/queries/rate.ts, procurement-rate.ts) and every real call site
+  // (5 page.tsx files) switched from `.from()` to `.rpc()` in this same commit.
+  // Full Tier A gate suite re-run clean before this digest was changed: typecheck,
+  // lint (0 errors), the 5,993-test unit suite, check-rls-initplan.ts (0
+  // findings), a full `pnpm run db:test` (ALL PASSED, 519 migrations / 263
+  // db-test files), git:check-paths, security:check, and `next build`.
+  migrationSetSha256: "08804b3a9424603612e59207bd28f3872381503b899d6530c228650a35a64127",
+  // History: 9b225ba6030a7bf4d82369b48e21ed732de32111c92e1d372307b05eb76c480d
+  // (518 files, HUNDRED-AND-TWENTY-FIRST PASS).
   // History: fe289e21bf5e6a0bec67e9e81155dec3b17586a9467a8d301c5166141bec3995
   // (517 files, HUNDRED-AND-TWENTIETH PASS).
   // History: 61119938892522671dec527c7f4a474bed49aaf50f76e3e46c30776a15762167
@@ -5163,7 +5207,41 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // failed twice with a permission-handler bug, itself caught and fixed the app.prospects
   // column-exclusion and app.quotations_directory documentation-count defects before this
   // db-test was ever written -- see migrationSetSha256's own note above).
-  dbTestSetSha256: "38188accb3c759278a82ef49b68ea43e693396b833619f322e9936c7cf6400e5",
+  // HUNDRED-AND-TWENTY-SECOND PASS (2026-09-09, same ruling as migrationSetSha256
+  // above): 263 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-
+  // batch5.sql. Proves, against a real disposable database, every one of the 8 new
+  // function pairs this pass's migration adds (the LAST batch of cluster 0's 32
+  // tables): real data for a tenant member/record owner across all 5
+  // app.vendor_rate_versions_directory functions, app.list_active_vendor_rates,
+  // app.list_rate_selections_for_request, and app.list_vendor_rate_tiers; RULE A
+  // genuinely rejects a claimed actor that does not match the real session
+  // identity (checked against app.list_rate_versions_for_master_record); RULE B
+  // excludes a customer_user-layer principal throughout; a global Supreme Admin
+  // with ZERO tenant membership bypasses every function, including
+  // list_active_vendor_rates (its own explicit is_supreme_admin() branch); a
+  // genuine non-member is denied via the RAISE posture for
+  // list_active_vendor_rates (matching app.list_accounts/app.list_credit_
+  // profiles' "list for one named tenant" convention) and via zero rows for every
+  // record-scoped function (get_rate_version_by_id,
+  // list_rate_versions_for_master_record, all vendor_rate_versions_directory
+  // functions, list_rate_selections_for_request, list_vendor_rate_tiers); cost
+  // masking confirmed via cost_masked flags on real rows for both
+  // app.rate_selections_directory and app.vendor_rate_tiers_directory; and
+  // cross-tenant denial throughout all 8 functions. This batch's db-test passed
+  // completely on the first full run against a real disposable database -- no
+  // defect surfaced by testing that the design/verify pipeline had missed (the
+  // Agent-tool-based design/verify pipeline itself caught and fixed the
+  // vendor_rate_versions_directory header-comment defect and the
+  // check-rls-initplan.ts false positive before this db-test was ever written --
+  // see migrationSetSha256's own note above). Also confirmed against
+  // public-api-wrapper-regression.sql (no cross-file grant-parity or RULE A/B/C
+  // regression from any of this batch's 8 new function pairs). Cluster 0
+  // (CRM/commercial, 32 tables) of the CG-AUDIT-2026-09-02 Ø1-query-layer
+  // remediation is now FULLY DONE; clusters 1-7 (104 remaining call sites across
+  // finance/identity/dispatch/tracking/documents/analytics/misc) remain open.
+  dbTestSetSha256: "1d46b64cca8d7ae135515ca910f651f385daa111f31912502ce6c6f5edb9374e",
+  // History: 38188accb3c759278a82ef49b68ea43e693396b833619f322e9936c7cf6400e5
+  // (262 files, HUNDRED-AND-TWENTY-FIRST PASS).
   // History: 168c7f2166bfd81642019a55f3003d2bc4adfeabb10b304a458b1fb7acd07391
   // (261 files, HUNDRED-AND-TWENTIETH PASS).
   // History: 13ffa858b00fddb16b39c12f3e4f60becef9b09c17c2f6812d925a4a13574600
