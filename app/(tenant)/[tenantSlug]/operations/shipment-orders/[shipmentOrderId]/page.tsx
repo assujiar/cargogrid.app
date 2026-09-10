@@ -241,7 +241,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   let actualCostComponents: Awaited<ReturnType<typeof listActualCostComponents>> = [];
   let actualCostVariance = null;
   try {
-    actualCost = await getShipmentActualCost(supabase, shipment.id);
+    actualCost = await getShipmentActualCost(supabase, shipment.id, access.authUserId);
     if (actualCost && !actualCost.costMasked) {
       actualCostComponents = await listActualCostComponents(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
       actualCostVariance = await evaluateActualCostVariance(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });

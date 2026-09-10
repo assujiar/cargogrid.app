@@ -8,7 +8,6 @@ import {
   listFinancePeriodChecklistItems,
   FiscalPeriodQueryError,
   type FiscalPeriodQueryRpcClient,
-  type FiscalPeriodChecklistTableClient,
 } from "./fiscal-period.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -82,20 +81,22 @@ describe("getFinancePeriodTransitionHistory", () => {
 });
 
 describe("listFinancePeriodChecklistItems", () => {
-  function fakeTableClient(rows: unknown[]): FiscalPeriodChecklistTableClient {
-    const chain = {
-      select: () => chain,
-      eq: () => chain,
-      order: async () => ({ data: rows, error: null }),
-    };
-    return { from: () => chain } as unknown as FiscalPeriodChecklistTableClient;
-  }
+  test("calls list_finance_period_checklist_items with period_id/actor, maps every checklist-item row", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
+    const client = {
+      async rpc(fn: string, args: Record<string, unknown>) {
+        capture.calls.fn = fn;
+        capture.calls.args = args;
+        return {
+          data: [{ id: "723e4567-e89b-12d3-a456-426614174000", period_id: PERIOD_ID, item_key: "ar_aging_reconciled", label: "AR aging reconciled", required: true, source_capability: "FIN-210", satisfied: false, satisfied_reason: null, satisfied_by: null, satisfied_at: null, created_at: "2026-07-28T00:00:00.000Z" }],
+          error: null,
+        };
+      },
+    } as unknown as FiscalPeriodQueryRpcClient;
 
-  test("maps every checklist-item row", async () => {
-    const client = fakeTableClient([
-      { id: "723e4567-e89b-12d3-a456-426614174000", period_id: PERIOD_ID, item_key: "ar_aging_reconciled", label: "AR aging reconciled", required: true, source_capability: "FIN-210", satisfied: false, satisfied_reason: null, satisfied_by: null, satisfied_at: null, created_at: "2026-07-28T00:00:00.000Z" },
-    ]);
-    const items = await listFinancePeriodChecklistItems(client, PERIOD_ID);
+    const items = await listFinancePeriodChecklistItems(client, PERIOD_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_finance_period_checklist_items");
+    assert.deepEqual(capture.calls.args, { p_period_id: PERIOD_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(items.length, 1);
     assert.equal(items[0]?.itemKey, "ar_aging_reconciled");
   });

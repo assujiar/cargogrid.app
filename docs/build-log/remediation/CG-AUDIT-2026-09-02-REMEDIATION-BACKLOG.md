@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (cluster 0, 32/32 tables, **DONE**; clusters 1-7, 104 call sites, remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-1, 38 tables, **DONE**; clusters 2-7, 96 call sites, remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -913,3 +913,73 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   **Cluster 0 (CRM/commercial, 32/32 tables) is now fully `DONE`.** Still open: clusters 1-7
   (104 more call sites across finance/identity/dispatch/tracking/documents/analytics/misc) —
   next up under the same "lanjut sampe siap launching" mandate.
+
+- 2026-09-10 — Ø1-query-layer cluster 1 (finance) batch 1 closed (this commit), continuing the
+  same user-directed ("lanjut sampe siap launching") mandate. Opens cluster 1 and closes it
+  **completely** in this single batch — all 8 of cluster 1's call sites across 6 tables/views:
+  `app.shipment_actual_costs_directory` (`get_shipment_actual_cost`),
+  `app.billing_readiness_evaluations` (`get_current_billing_readiness_evaluation`,
+  `list_billing_readiness_evaluations` — kept as two separate functions, matching the existing
+  TS layer's own two-function shape rather than merging via an `only_current` flag),
+  `app.billing_readiness_handoffs` (`list_billing_readiness_handoffs`),
+  `app.finance_currencies` (`list_finance_currencies`), `app.finance_rounding_modes`
+  (`list_finance_rounding_modes`), `app.finance_period_close_checklist_items`
+  (`list_finance_period_checklist_items`), and `app.job_profitability_directory`
+  (`get_job_profitability_directory`). New migration
+  `20260910000000_close_o1_query_layer_cluster1_batch1_finance_reads.sql` adds 8 new
+  `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix pipeline
+  cluster 0's batches established (RULE A/B/C baked into both stages), again completed via
+  parallel Agent-tool design/verify calls rather than the Workflow tool (whose
+  subagent-spawning path remained broken this session — the design stage was interrupted twice
+  by session/weekly rate limits mid-run and resumed via `SendMessage` from each agent's own
+  prior transcript, preserving all research already done, exactly as established in cluster 0's
+  batch 4).
+  **Notable design decision, independently re-verified**: `app.list_finance_currencies`/
+  `app.list_finance_rounding_modes` are declared `SECURITY INVOKER` (the unmarked default),
+  not `SECURITY DEFINER` like every other function in this remediation series — both tables
+  carry a bare `using (true)` SELECT policy for role `authenticated` plus a direct table-level
+  grant, matching the established live precedent for this exact "global reference table, zero
+  actor param" shape (`app.list_api_versions`/`app.list_webhook_event_types`). The independent
+  verify pass confirmed this decision against the real table grants (not merely the precedent
+  functions' own declarations) and proved it under a real `authenticated`-role session in the
+  db-test, before this migration was ever applied to any database.
+  One citation-only defect was found and fixed during verify (before the migration was ever
+  applied): a precedent citation for `app.list_webhook_event_types` pointed at the migration
+  that creates the underlying TABLE, not the one that declares the function itself.
+  **Disclosed, out-of-scope findings** (a different table/cluster; recorded so they are not
+  silently rediscovered): a dangling forward citation to `app.list_finance_currencies` in
+  `20260830140000_create_incident_communication.sql` (now retroactively true), and a genuinely
+  broken `app.list_incident_communication_audiences`/`public.list_incident_communication_
+  audiences` pair — both declared invoker, but the underlying table has RLS enabled with NO
+  create policy at all and revokes SELECT from `authenticated` — an `authenticated` caller
+  would hit a real Postgres permission-denied error, not return rows. Neither fixed here
+  (different table, different cluster of this same Ø1 effort).
+  This pass also reworded one header-comment citation of
+  `app.evaluate_permission(..., 'OPS', 'View cost')` (a pre-existing, Operations-only call,
+  quoted only for RULE C citation, not new enforcement) after it tripped
+  `scripts/data-classification/check-registry.test.ts`'s own quoted-literal scan of every
+  "finance"-named migration file for the FIN action "View cost" — the same reword-not-suppress
+  discipline this series already applies to `check-rls-initplan.ts`'s comment-prose false
+  positives, applied here to a different, sibling static-analysis guard that this migration's
+  own filename (containing "finance") happened to make newly reachable.
+  This pass's own db-test (`scripts/db-tests/o1-query-layer-cluster1-batch1.sql`) passed on the
+  second full run — the first run surfaced two real fixture-setup gaps (a missing NOT NULL
+  `duplicate_fingerprint` column on the fixture's own `app.accounts` insert, and a missing
+  `tenant_admin` layer grant needed only to publish the `finance_close_policy` config/generate
+  the fiscal calendar, per `app.check_config_object_authority`'s own real requirement), neither
+  a defect in any of the 8 new functions themselves.
+  All 6 affected TS query files (`server/queries/actual-cost.ts`, `billing-readiness.ts`,
+  `currency-exchange-rate.ts`, `finance-config.ts`, `fiscal-period.ts`,
+  `job-profitability.ts`) and every real call site (4 `page.tsx` files:
+  `operations/job-orders/[jobOrderId]`, `operations/shipment-orders/[shipmentOrderId]`,
+  `finance/fiscal-periods/[periodId]`, plus `finance/exchange-rates` which needed no code
+  change since `listFinanceCurrencies`'s own signature is unchanged) switched from `.from()`
+  to `.rpc()` in this same commit. Full Tier A gate suite re-run clean: `typecheck`, `lint` (0
+  errors), the 5,993-test unit suite, `check-rls-initplan.ts` (0 findings), a full
+  `pnpm run db:test` (`ALL PASSED`, 520 migrations / 264 db-test files), `git:check-paths`,
+  `security:check`, and a real `next build`. `scripts/release/check-release-freeze.ts` amended
+  (HUNDRED-AND-TWENTY-THIRD PASS, `migrationSetSha256`/`dbTestSetSha256`) per this same
+  ADR-0027 Part A authority.
+  **Cluster 1 (finance, 6/6 tables, 8/8 call sites) is now fully `DONE`.** Still open: clusters
+  2-7 (96 more call sites across identity/dispatch/tracking/documents/analytics/misc) — next up
+  under the same "lanjut sampe siap launching" mandate.

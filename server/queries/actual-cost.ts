@@ -26,12 +26,16 @@ export class ActualCostQueryError extends Error {
 }
 
 /** Direct RLS-scoped read of the field-masked directory view -- total_amount/estimated_amount are null for an actor lacking OPS:View cost. */
-export async function getShipmentActualCost(client: ActualCostQueryClient, shipmentOrderId: string): Promise<ShipmentActualCostDirectoryRow | null> {
-  const { data, error } = await client.from("shipment_actual_costs_directory").select("*").eq("shipment_order_id", shipmentOrderId).eq("is_current", true).maybeSingle();
+export async function getShipmentActualCost(client: ActualCostQueryClient, shipmentOrderId: string, actorAuthUserId: string): Promise<ShipmentActualCostDirectoryRow | null> {
+  const { data, error } = await client.rpc("get_shipment_actual_cost", {
+    p_shipment_order_id: shipmentOrderId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new ActualCostQueryError(error.message);
   }
-  return data ? parseShipmentActualCostDirectoryRow(data as Record<string, unknown>) : null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? parseShipmentActualCostDirectoryRow(row as Record<string, unknown>) : null;
 }
 
 /** Denies outright (no partial result) to an actor lacking OPS:View cost -- every column of a cost component is itself cost-shaped. */

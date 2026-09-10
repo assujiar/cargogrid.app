@@ -47,11 +47,11 @@ function fakeRpcClient(response: { data: unknown; error: { message: string } | n
 
 describe("listFinanceCurrencies", () => {
   function fakeTableClient(rows: unknown[]): FinanceCurrencyTableClient {
-    const chain = {
-      select: () => chain,
-      order: async () => ({ data: rows, error: null }),
-    };
-    return { from: () => chain } as unknown as FinanceCurrencyTableClient;
+    return {
+      async rpc() {
+        return { data: rows, error: null };
+      },
+    } as unknown as FinanceCurrencyTableClient;
   }
 
   test("maps every currency row", async () => {

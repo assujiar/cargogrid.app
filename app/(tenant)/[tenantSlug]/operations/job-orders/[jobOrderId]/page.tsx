@@ -60,7 +60,7 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
 
   let profitabilitySnapshot;
   try {
-    profitabilitySnapshot = await getJobProfitability(supabase, jobOrder.id);
+    profitabilitySnapshot = await getJobProfitability(supabase, jobOrder.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof JobProfitabilityQueryError)) {
       throw error;
@@ -71,8 +71,8 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
   let billingReadinessEvaluation;
   let billingReadinessHandoffs;
   try {
-    billingReadinessEvaluation = await getCurrentBillingReadinessEvaluation(supabase, jobOrder.id);
-    billingReadinessHandoffs = await listBillingReadinessHandoffs(supabase, jobOrder.id);
+    billingReadinessEvaluation = await getCurrentBillingReadinessEvaluation(supabase, jobOrder.id, access.authUserId);
+    billingReadinessHandoffs = await listBillingReadinessHandoffs(supabase, jobOrder.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof BillingReadinessQueryError)) {
       throw error;

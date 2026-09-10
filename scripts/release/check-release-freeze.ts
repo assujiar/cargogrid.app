@@ -4135,7 +4135,69 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // lint (0 errors), the 5,993-test unit suite, check-rls-initplan.ts (0
   // findings), a full `pnpm run db:test` (ALL PASSED, 519 migrations / 263
   // db-test files), git:check-paths, security:check, and `next build`.
-  migrationSetSha256: "08804b3a9424603612e59207bd28f3872381503b899d6530c228650a35a64127",
+  // HUNDRED-AND-TWENTY-THIRD PASS (2026-09-10, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 520 files (+1)
+  // -- new migration 20260910000000_close_o1_query_layer_cluster1_batch1_
+  // finance_reads.sql. Opens cluster 1 (finance) and closes it completely in
+  // this single batch -- all 8 of cluster 1's call sites across 6 tables/views:
+  // app.shipment_actual_costs_directory (get_shipment_actual_cost),
+  // app.billing_readiness_evaluations (get_current_billing_readiness_evaluation,
+  // list_billing_readiness_evaluations -- kept as two separate functions,
+  // matching the existing TS layer's own two-function shape),
+  // app.billing_readiness_handoffs (list_billing_readiness_handoffs),
+  // app.finance_currencies (list_finance_currencies), app.finance_rounding_modes
+  // (list_finance_rounding_modes), app.finance_period_close_checklist_items
+  // (list_finance_period_checklist_items), and app.job_profitability_directory
+  // (get_job_profitability_directory). 8 new app.*/public.* Option-2 wrapper
+  // function pairs via the same adversarial Design->Verify->Fix pipeline cluster
+  // 0's batches established (RULE A/B/C baked into every draft and every
+  // independent verify pass), completed via parallel Agent-tool design/verify
+  // calls (the Workflow tool's own subagent-spawning path remained broken this
+  // session). Notable design decision, independently re-verified: app.list_
+  // finance_currencies/app.list_finance_rounding_modes are declared SECURITY
+  // INVOKER (the unmarked default), not SECURITY DEFINER like every other
+  // function in this remediation series -- both tables carry a bare `using
+  // (true)` SELECT policy for role authenticated plus a direct table-level
+  // grant, matching the established live precedent for this exact
+  // "global reference table, zero actor param" shape (app.list_api_versions/
+  // app.list_webhook_event_types). The independent verify pass confirmed this
+  // decision against the real table grants (not merely the precedent
+  // functions' own declarations) and proved it under a real authenticated-role
+  // session in the db-test, before this migration was ever applied to any
+  // database. One citation-only defect was found and fixed during verify: a
+  // precedent citation for app.list_webhook_event_types pointed at the
+  // migration that creates the underlying TABLE, not the one that declares the
+  // function itself. Two disclosed, out-of-scope findings from a different
+  // table/cluster were surfaced and recorded, not fixed: a dangling forward
+  // citation to app.list_finance_currencies in
+  // 20260830140000_create_incident_communication.sql (now retroactively true),
+  // and a genuinely broken app.list_incident_communication_audiences pair
+  // (invoker mode against a table with RLS-enabled-zero-policy and no table
+  // grant to authenticated -- a live permission-denied bug on a different
+  // table, flagged for whoever owns that read path). This pass also reworded
+  // one header-comment citation of `app.evaluate_permission(..., 'OPS', 'View
+  // cost')` (a pre-existing Operations-only call, quoted here only for RULE C
+  // citation, not new enforcement) to avoid tripping
+  // scripts/data-classification/check-registry.test.ts's own quoted-literal
+  // scan of every "finance"-named migration file for the FIN action "View
+  // cost" -- the same reword-not-suppress discipline this series already
+  // applies to check-rls-initplan.ts's comment-prose false positives, applied
+  // here to a different, sibling static-analysis guard. All 6 affected TS
+  // query files (server/queries/actual-cost.ts, billing-readiness.ts,
+  // currency-exchange-rate.ts, finance-config.ts, fiscal-period.ts,
+  // job-profitability.ts) and every real page.tsx call site (4 files) switched
+  // from `.from()` to `.rpc()` in this same commit; listFinanceCurrencies'
+  // own page.tsx call site needed no change (its signature is unchanged, zero
+  // actor param). Full Tier A gate suite re-run clean: typecheck, lint (0
+  // errors), the 5,993-test unit suite, check-rls-initplan.ts (0 findings), a
+  // full `pnpm run db:test` (ALL PASSED, 520 migrations / 264 db-test files),
+  // git:check-paths, security:check, and a real `next build`. Cluster 1
+  // (finance, 6 tables / 8 call sites) is now fully DONE. Clusters 2-7 (96 more
+  // call sites across identity/dispatch/tracking/documents/analytics/misc)
+  // remain open.
+  migrationSetSha256: "a03ac483e76c44c7c23a31a33bd7ad7f08d236d9710bfc5b657f796a36f49e12",
+  // History: 08804b3a9424603612e59207bd28f3872381503b899d6530c228650a35a64127
+  // (519 files, HUNDRED-AND-TWENTY-SECOND PASS).
   // History: 9b225ba6030a7bf4d82369b48e21ed732de32111c92e1d372307b05eb76c480d
   // (518 files, HUNDRED-AND-TWENTY-FIRST PASS).
   // History: fe289e21bf5e6a0bec67e9e81155dec3b17586a9467a8d301c5166141bec3995
@@ -5239,7 +5301,50 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (CRM/commercial, 32 tables) of the CG-AUDIT-2026-09-02 Ø1-query-layer
   // remediation is now FULLY DONE; clusters 1-7 (104 remaining call sites across
   // finance/identity/dispatch/tracking/documents/analytics/misc) remain open.
-  dbTestSetSha256: "1d46b64cca8d7ae135515ca910f651f385daa111f31912502ce6c6f5edb9374e",
+  // HUNDRED-AND-TWENTY-THIRD PASS (2026-09-10, same ruling as migrationSetSha256
+  // above): 264 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster1-
+  // batch1.sql. Proves, against a real disposable database, every one of the 8
+  // new function pairs this pass's migration adds (the FIRST and, in this same
+  // pass, LAST batch of cluster 1's 6 tables): real data for the fixture-row
+  // owner and a shared-org-unit viewer; OPS:View cost/OPS:View margin masking
+  // confirmed via cost_masked/margin_masked flags AND real vs. null amounts on
+  // both app.get_shipment_actual_cost and app.get_job_profitability_directory
+  // (ownership alone is proven insufficient -- the owner without the
+  // permission sees a masked row, a non-owning shared-org-unit viewer WITH the
+  // permission sees the real amounts); a global Supreme Admin with ZERO tenant
+  // membership bypasses every can_access_record-gated function; RULE A
+  // genuinely rejects a claimed actor that does not match the real session
+  // identity (checked against app.get_shipment_actual_cost); RULE B is
+  // enforced by app.list_finance_period_checklist_items (a customer_user-layer
+  // principal in the SAME tenant sees zero items, a plain org_user member sees
+  // both, a zero-membership Supreme Admin bypasses); app.billing_readiness_
+  // evaluations' deliberate overridden_by_auth_user_id exclusion confirmed via
+  // a to_jsonb key check on a real, actually-overridden fixture row (not a
+  // static read of the migration's own column list); app.list_finance_
+  // currencies/app.list_finance_rounding_modes proven to genuinely return rows
+  // under a real `authenticated`-role session (proving the SECURITY INVOKER
+  // design decision is correct in practice, not merely asserted); the
+  // app.finance_period_close_checklist_items fixture itself is seeded via the
+  // real, already-tested app.generate_finance_fiscal_calendar mutation RPC
+  // (through a real published finance_close_policy config), not a direct
+  // insert, mirroring this series' own "seed via an already-tested mutation
+  // RPC where one exists" convention; and cross-tenant denial throughout all 8
+  // functions. This batch's db-test passed on the second full run (the first
+  // run surfaced two real fixture-setup gaps, both fixed before any function
+  // logic was ever in question: a missing NOT NULL duplicate_fingerprint
+  // column on the fixture's own app.accounts insert, and a missing tenant_admin
+  // layer grant needed only to publish the finance_close_policy config/
+  // generate the fiscal calendar, per app.check_config_object_authority's own
+  // real requirement -- neither was a defect in any of the 8 new functions
+  // themselves). Also confirmed against public-api-wrapper-regression.sql (no
+  // cross-file grant-parity or RULE A/B/C regression from any of this batch's
+  // 8 new function pairs). Cluster 1 (finance, 6 tables / 8 call sites) of the
+  // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY DONE; clusters
+  // 2-7 (96 remaining call sites across identity/dispatch/tracking/documents/
+  // analytics/misc) remain open.
+  dbTestSetSha256: "49fa584c817a1f3ceb75dbf6a1c0ed6456b360119de8264de9ea30a1910f2473",
+  // History: 1d46b64cca8d7ae135515ca910f651f385daa111f31912502ce6c6f5edb9374e
+  // (263 files, HUNDRED-AND-TWENTY-SECOND PASS).
   // History: 38188accb3c759278a82ef49b68ea43e693396b833619f322e9936c7cf6400e5
   // (262 files, HUNDRED-AND-TWENTY-FIRST PASS).
   // History: 168c7f2166bfd81642019a55f3003d2bc4adfeabb10b304a458b1fb7acd07391
