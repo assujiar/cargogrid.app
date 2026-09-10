@@ -23,7 +23,7 @@ import {
 } from "../contracts/leave/leave.ts";
 import { listPendingApprovalStepsForActor, type ApprovalQueryRpcClient } from "./approval.ts";
 
-export type LeaveQueryClient = Pick<SupabaseClient, "rpc" | "from">;
+export type LeaveQueryClient = Pick<SupabaseClient, "rpc">;
 
 export class LeaveQueryError extends Error {
   constructor(message: string) {
@@ -121,7 +121,7 @@ export interface LeaveApprovalInboxItem {
   readonly leaveRequestId: string;
 }
 
-/** The pending-approver inbox, filtered to leave_request-entity requests only -- app.list_pending_approval_steps_for_actor (PLT-123) is entity-agnostic, so this resolves each pending step's own request via a direct, RLS-scoped select on app.approval_requests (no new SQL), mirroring listCreditProfileApprovalInboxForActor (COM-157) exactly. */
+/** The pending-approver inbox, filtered to leave_request-entity requests only -- app.list_pending_approval_steps_for_actor (PLT-123) is entity-agnostic, so this resolves each pending step's own request via app.get_approval_requests_entity_refs (CG-AUDIT-2026-09-02 O1 cluster 0 batch 3 -- shared with listCreditProfileApprovalInboxForActor/listQuotationApprovalInboxForActor, no new SQL needed here), mirroring listCreditProfileApprovalInboxForActor (COM-157) exactly. */
 export async function listLeaveApprovalInboxForActor(client: LeaveQueryClient, tenantId: string, actorAuthUserId: string): Promise<LeaveApprovalInboxItem[]> {
   const steps = await listPendingApprovalStepsForActor(toApprovalQueryRpcClient(client), { tenantId, actorAuthUserId });
   if (steps.length === 0) {
@@ -129,7 +129,10 @@ export async function listLeaveApprovalInboxForActor(client: LeaveQueryClient, t
   }
 
   const requestIds = [...new Set(steps.map((step) => step.requestId))];
-  const { data, error } = await client.from("approval_requests").select("id, entity_type, entity_id").in("id", requestIds);
+  const { data, error } = await client.rpc("get_approval_requests_entity_refs", {
+    p_ids: requestIds,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) throw new LeaveQueryError(error.message);
 
   const leaveRequestIdByRequestId = new Map<string, string>();

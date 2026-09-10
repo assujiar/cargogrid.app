@@ -66,7 +66,7 @@ import {
 import type { EssHomeSummary, ManagerApprovalQueueItem, MssTeamWorkspace } from "../contracts/self-service/self-service.ts";
 import type { PerformanceCycleRow } from "../contracts/kpi-performance/kpi-performance.ts";
 
-export type SelfServiceQueryClient = Pick<SupabaseClient, "rpc" | "from">;
+export type SelfServiceQueryClient = Pick<SupabaseClient, "rpc">;
 
 export class SelfServiceQueryError extends Error {
   constructor(message: string) {

@@ -15,14 +15,10 @@ type RpcResponse = { data: unknown; error: { message: string } | null };
 function fakeClient(rpcResponses: Record<string, RpcResponse>, approvalRequestRows: Record<string, unknown>[] = []): SelfServiceQueryClient {
   return {
     async rpc(fn: string) {
+      if (fn === "get_approval_requests_entity_refs") {
+        return { data: approvalRequestRows, error: null };
+      }
       return rpcResponses[fn] ?? { data: [], error: null };
-    },
-    from() {
-      return {
-        select() {
-          return { in: async () => ({ data: approvalRequestRows, error: null }) };
-        },
-      };
     },
   } as unknown as SelfServiceQueryClient;
 }
@@ -256,14 +252,10 @@ function recordingClient(
   return {
     async rpc(fn: string, args: Record<string, unknown>) {
       calls.push({ fn, args });
+      if (fn === "get_approval_requests_entity_refs") {
+        return { data: approvalRequestRows, error: null };
+      }
       return rpcResponses[fn] ?? { data: [], error: null };
-    },
-    from() {
-      return {
-        select() {
-          return { in: async () => ({ data: approvalRequestRows, error: null }) };
-        },
-      };
     },
   } as unknown as SelfServiceQueryClient;
 }
