@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-1, 38 tables, **DONE**; cluster 2 batch 1, 5 tables / 10 call sites, **DONE**; clusters 2 remainder-7, 86 call sites, remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-2, 43 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; clusters 3-7, 86 call sites, remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1056,6 +1056,14 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   265 db-test files), `git:check-paths`, `security:check`, and a real `next build`.
   `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-FOURTH PASS,
   `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
-  **Cluster 2 batch 1 (identity/HRIS access, 5 tables, 10 call sites) is now fully `DONE`.** Still
-  open: clusters 2 remainder-7 (86 more call sites across dispatch/tracking/documents/
-  analytics/misc) — next up under the same "lanjut sampe siap launching" mandate.
+  **Cluster 2 (`hris-identity-access`, identity/HRIS access, 5 tables, 10 call sites) is now
+  fully `DONE` — in its entirety, not merely a first batch**: cross-checked against
+  `CG-AUDIT-2026-09-02-O1-QUERY-LAYER-RECON.json`'s own 10-row manifest for this cluster, of
+  which 2 rows needed no action (`server/queries/employee.ts` was already fully RPC-backed;
+  `server/queries/field-access.ts`'s `can_access_record` call was already `.rpc()`, never
+  `.from()`) and the other 8 (this batch's 7 plus `server/queries/leave.ts`'s
+  `app.approval_requests` read, already closed by the earlier `34dada1` commit reusing cluster
+  0's `get_approval_requests_entity_refs`) are now all fixed — no remaining `hris-identity-access`
+  call site needs a second batch. Still open: clusters 3-7 (86 more call sites across
+  operations-tms-core/telematics-tracking/procurement-document/platform-intelligence-reports/
+  page-level-direct-reads) — next up under the same "lanjut sampe siap launching" mandate.
