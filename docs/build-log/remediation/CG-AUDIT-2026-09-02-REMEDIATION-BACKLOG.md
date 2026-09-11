@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-2, 43 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core` batches 1-2, 10 tables / 13 call sites, **DONE**; cluster 3's other 10 tables (15 call sites) plus clusters 4-7 (58 call sites), 73 call sites total, remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-3, 63 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 3 batches, 20 tables / 28 call sites, **FULLY DONE**; clusters 4-7 (58 call sites) remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1236,3 +1236,63 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   carries this same bare-composite-return defect. Full Tier A gate suite re-run clean, including
   `git:check-paths` (now clean). `scripts/release/check-release-freeze.ts` amended
   (HUNDRED-AND-TWENTY-SEVENTH PASS, `migrationSetSha256` only — `dbTestSetSha256` unchanged).
+
+- 2026-09-11 — Ø1-query-layer cluster 3 (`operations-tms-core`) batch 3 closed (this commit),
+  continuing the same "lanjut sampe siap launching" mandate. Closes the LAST 8 broken `.from()`
+  call sites in `server/queries/route-load-planning.ts` (ATW-224, CG-S10-ATW-005): new migration
+  `20260911030000_close_o1_query_layer_cluster3_batch3_route_planning.sql` adds 8 new
+  app.\*/public.\* Option-2 wrapper pairs (16 functions) against `app.route_planning_scenarios` /
+  `app.route_planning_constraints` / `app.route_planning_candidate_plans` /
+  `app.route_planning_score_components` / `app.route_planning_selected_plans` /
+  `app.route_planning_replan_events` (6 tables). Assembled from two independently designed and
+  independently verified scratchpad drafts, cross-checked before assembly to confirm no
+  function-name collisions and 6 distinct target tables between them. All 8 functions are SECURITY
+  INVOKER with ZERO actor parameter, independently re-derived by BOTH drafts against this exact
+  table family's own two already-live sibling reads in the same underlying migration
+  (`app.get_route_planning_stops` / `app.get_canonical_position_for_planning`) — the decisive test
+  in both cases was tracing every real call site's actual Supabase client construction code (all
+  use `createSupabaseServerClient()`, none use `createSupabaseServiceRoleClient()` to claim an
+  actor decoupled from its own session identity), not merely an appeal to a shared security mode.
+  This batch independently caught and fixed, BEFORE this migration was ever written or committed,
+  the identical non-SETOF bare-composite-return defect class the prior commit's corrective
+  migration fixed in already-pushed code: `app.get_route_planning_scenario` was found and fixed by
+  its own draft's own adversarial verify pass; `app.get_current_route_planning_selection`'s
+  identical defect was initially MISSED by its own draft's verify pass — despite the sibling
+  draft's verify catching the analogous case in the very same batch — and was caught during a
+  final cross-draft review before assembly, with the fix's own comment explicitly citing
+  `20260911020000`'s corrective migration as precedent. Both 0-or-1-row lookups (bounded
+  respectively by the table's own primary key and by a partial unique index on `(scenario_id)
+  WHERE is_current`) are declared `returns setof app.<table>`. Because both instances of this
+  defect class were fixed before this migration's first commit, no corrective follow-up migration
+  was needed for this batch, unlike batch 2's own history — itself now a standing lesson this
+  session applies going forward: every future single-row lookup's return type is explicitly
+  double-checked for `returns setof` (never a bare composite) as part of every verify pass, since
+  this defect class has now appeared three times in one session.
+  `server/queries/route-load-planning.ts`: all 8 functions converted from `.from()` to `.rpc()`,
+  all 8 signatures unchanged (non-breaking). `RouteLoadPlanningQueryTableClient` deliberately stays
+  `Pick<SupabaseClient, "from" | "rpc">` (unlike cluster 3 batch 2's file-wide narrowing to
+  `Pick<SupabaseClient, "rpc">`), since the file's other functions (the 2 pre-existing RPC-backed
+  reads) remain in the file. A repo-wide grep confirmed the one real call site
+  (`app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/route-planning/page.tsx`,
+  all 6 of its call sites) needed no change beyond the internal client-method swap (all signatures
+  non-breaking), and that `listRoutePlanningSelections`/`listRoutePlanningReplanEvents` have zero
+  current callers anywhere in the app. `server/queries/route-load-planning.test.ts`: the existing
+  `listRoutePlanningScenarios` block converted from `.from()` to `.rpc()` mocking; 7 new describe
+  blocks added for the other 7 functions (none had any prior coverage), mirroring this file's own
+  established fake-`.rpc()`-client pattern.
+  Full Tier A gate suite re-run clean: `typecheck`, `lint` (0 errors), the 6,017-test unit suite (14
+  new tests for this file), `check-rls-initplan.ts` (0 findings — this migration adds no RLS
+  policy), a full `pnpm run db:test` (`ALL PASSED`, 525 migrations / 268 db-test files, including
+  the new `o1-query-layer-cluster3-batch3.sql`: owner/shared-org-unit/denied-member/cross-tenant/
+  Supreme-Admin visibility across all 8 functions' 1/2/3-hop RLS join depths, both 0-or-1-row
+  getters proven to return a genuinely empty result — never a row of nulls — on their miss case,
+  ordering fidelity for all 3 ordered functions proven against deliberately out-of-order fixture
+  inserts, the replan-events column-semantics derivation (`scenario_id` vs `previous_scenario_id`)
+  proven directly, anon denial on all 16 functions via real call attempts, and a service_role
+  BYPASSRLS smoke check), `git:check-paths` (clean, 4 files checked), `security:check`, and a real
+  `next build`. `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-EIGHTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  **Cluster 3 (`operations-tms-core`) is now FULLY `DONE`: all 20 tables, all 28 call sites closed**
+  (batches 1-3). Remaining across the whole Ø1-query-layer effort: clusters 4-7 (58 call sites
+  across telematics-tracking/procurement-document/platform-intelligence-reports/page-level-direct-
+  reads) — next up under the same "lanjut sampe siap launching" mandate.

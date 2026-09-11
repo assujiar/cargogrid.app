@@ -4485,7 +4485,79 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // this same defect -- every other single-row lookup in this series uses
   // `returns table (...)` (implicitly SETOF-safe) instead, confirmed by a
   // dedicated grep sweep before moving on.
-  migrationSetSha256: "8d0657c0003b1d025e233c6e63edf7326104286f2cc8b360dcab882db1ab7231",
+  // HUNDRED-AND-TWENTY-EIGHTH PASS (2026-09-11, cluster 3 batch 3): 525 files
+  // (+1) -- new migration
+  // 20260911030000_close_o1_query_layer_cluster3_batch3_route_planning.sql.
+  // Closes the LAST 8 broken `.from()` call sites in
+  // server/queries/route-load-planning.ts (ATW-224, CG-S10-ATW-005): 8 new
+  // app.*/public.* Option-2 wrapper pairs (16 functions) against
+  // app.route_planning_scenarios / app.route_planning_constraints /
+  // app.route_planning_candidate_plans / app.route_planning_score_components /
+  // app.route_planning_selected_plans / app.route_planning_replan_events (6
+  // tables), assembled from two independently designed and independently
+  // verified scratchpad drafts (confirmed to share no function-name collisions
+  // and to target 6 distinct tables between them before assembly). All 8
+  // functions are SECURITY INVOKER with ZERO actor parameter, independently
+  // re-derived by BOTH drafts against this exact table family's own two
+  // already-live sibling reads in the same migration (app.get_route_planning_
+  // stops / app.get_canonical_position_for_planning) -- the decisive test in
+  // both cases was tracing every real call site's actual Supabase client
+  // construction (all use createSupabaseServerClient(), none use
+  // createSupabaseServiceRoleClient() to claim a decoupled actor), not merely
+  // an appeal to a shared security mode.
+  // This batch independently caught, and fixed BEFORE this migration was ever
+  // written or committed, the identical non-SETOF bare-composite-return defect
+  // class the HUNDRED-AND-TWENTY-SEVENTH PASS corrected in already-pushed
+  // code: (1) app.get_route_planning_scenario was found and fixed by its own
+  // draft's own adversarial verify pass; (2) app.get_current_route_planning_
+  // selection's identical defect was MISSED by its own draft's verify pass
+  // despite the sibling draft's verify catching the analogous case in the same
+  // batch -- caught during final cross-draft review before assembly, citing
+  // 20260911020000's own corrective migration as precedent in the fix's own
+  // comment. Both 0-or-1-row lookups (bounded respectively by the table's own
+  // primary key and by a partial unique index on (scenario_id) WHERE
+  // is_current) are declared `returns setof app.<table>`. Because both defects
+  // were fixed before this migration's first commit, no corrective follow-up
+  // migration was needed for this batch (unlike batch 2's own history).
+  // server/queries/route-load-planning.ts: all 8 functions converted from
+  // `.from()` to `.rpc()`, all 8 signatures unchanged (non-breaking) -- the
+  // client type `RouteLoadPlanningQueryTableClient` stays `Pick<SupabaseClient,
+  // "from" | "rpc">` (unlike cluster 3 batch 2's file-wide narrowing) because
+  // the file's other 4 functions (scenarios/constraints/candidate-plans reads
+  // already closed by THIS SAME migration, plus the 2 pre-existing RPC-backed
+  // reads) share the file; a repo-wide grep confirmed the one real call site
+  // (app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/
+  // route-planning/page.tsx, all 6 of its call sites) needed no changes beyond
+  // the internal client-method swap, and that listRoutePlanningSelections/
+  // listRoutePlanningReplanEvents have zero current callers anywhere in the
+  // app. server/queries/route-load-planning.test.ts: existing
+  // listRoutePlanningScenarios block converted from `.from()` to `.rpc()`
+  // mocking; 7 new describe blocks added for the other 7 functions (none had
+  // any prior coverage), all using the fake-`.rpc()`-client pattern already
+  // established by this file's own listRoutePlanningStops/
+  // getCanonicalPositionForPlanning blocks.
+  // Full Tier A gate suite run clean: typecheck, lint (0 errors), the
+  // 6,017-test unit suite (14 new tests for this file), `check-rls-
+  // initplan.ts` (0 findings -- this migration adds no RLS policy), a full
+  // `pnpm run db:test` (`ALL PASSED`, 525 migrations / 268 db-test files,
+  // including the new o1-query-layer-cluster3-batch3.sql: owner/shared-org-
+  // unit/denied-member/cross-tenant/Supreme-Admin visibility across all 8
+  // functions, both 0-or-1-row getters proven to return a genuinely empty
+  // result rather than a row of nulls on their respective miss case, ordering
+  // fidelity for all 3 ordered functions proven against deliberately
+  // out-of-order fixture inserts, the replan-events column-semantics
+  // derivation proven directly, anon denial on all 16 functions, and a
+  // service_role BYPASSRLS smoke check), `git:check-paths` (clean, 4 files
+  // checked), `security:check`, and a real `next build`.
+  // **Cluster 3 (`operations-tms-core`) is now FULLY `DONE`: all 20 tables, all
+  // 28 call sites closed** (batches 1-3). Remaining across the whole
+  // Ø1-query-layer effort: clusters 4-7 (58 call sites across telematics-
+  // tracking/procurement-document/platform-intelligence-reports/page-level-
+  // direct-reads) -- next up under the same "lanjut sampe siap launching"
+  // mandate.
+  migrationSetSha256: "9bad708c944fa6a348e0b57f82274d0c1941d984002ceebe0d69cb934d2f3ed2",
+  // History: 8d0657c0003b1d025e233c6e63edf7326104286f2cc8b360dcab882db1ab7231
+  // (524 files, HUNDRED-AND-TWENTY-SEVENTH PASS).
   // History: c0ada24912c2a318d4e597a9df330701722ab48da3d8bbb268c8feb3f7d2630c
   // (523 files, HUNDRED-AND-TWENTY-SIXTH PASS).
   // History: 00a24141eff134e525ec386b70590a0362e2a1e602d0b8ebe0229d7aa17ed051
@@ -5741,7 +5813,45 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // sites) of the CG-AUDIT-2026-09-02 Ø1-query-layer remediation is DONE;
   // cluster 3's remaining 10 tables (15 call sites) plus clusters 4-7 (58 more
   // call sites) remain open.
-  dbTestSetSha256: "1a22232c00325d80ca4834666eed87e13326d4ac5bf55e9d071417a89d9379a1",
+  // HUNDRED-AND-TWENTY-EIGHTH PASS (2026-09-11, same ruling as
+  // migrationSetSha256 above): 268 files (+1) -- new file scripts/db-tests/
+  // o1-query-layer-cluster3-batch3.sql. Proves, against a real disposable
+  // database, every one of the 8 new SECURITY INVOKER, zero-actor-param
+  // functions this pass's migration adds, all authority tests genuinely
+  // forcing a real session identity (`set local role authenticated; set local
+  // request.jwt.claims`), never an actor-parameter substitute: owner,
+  // shared-org-unit member (same org unit, not the owner), denied same-tenant
+  // member (no owner/org-unit/customer-account relationship), cross-tenant
+  // member, and a zero-membership Supreme Admin (via app.can_access_record's
+  // own is_supreme_admin branch) all see exactly the rows RLS should let them
+  // see, spot-checked and full-checked across the 8 functions' 1/2/3-hop RLS
+  // join depths. Both 0-or-1-row getters (get_route_planning_scenario,
+  // get_current_route_planning_selection) are proven to return a GENUINELY
+  // EMPTY result on their miss case -- `count(*) = 0` AND `exists(select 1
+  // from fn(...))` false -- never one row of all-NULL columns, the exact
+  // defect class the HUNDRED-AND-TWENTY-SEVENTH PASS corrected elsewhere.
+  // Ordering fidelity for all 3 ordered functions (list_route_planning_
+  // scenarios: created_at desc; list_route_planning_candidate_plans: plan_rank
+  // asc; list_route_planning_selections: selected_at desc) is proven against
+  // fixture rows deliberately inserted OUT of that order, with no ORDER BY
+  // added at the call site, so the assertion genuinely exercises the function
+  // body's own ORDER BY. The route_planning_replan_events column-semantics
+  // derivation (filters on scenario_id, the freshly created replan target, not
+  // previous_scenario_id, the old scenario) is proven directly: the same
+  // fixture row resolves under scenario_id and returns zero rows under
+  // previous_scenario_id. Also confirmed schema-privilege defense in depth:
+  // anon holds zero EXECUTE across all 16 new functions in either schema (a
+  // real call attempt against every one of the 8 public.* wrappers, not
+  // merely an information_schema read), authenticated/service_role grant
+  // parity spot-checked on 3 of 8 function pairs, and a service_role
+  // (BYPASSRLS) smoke check on 2 of 8 functions confirms it can read via the
+  // function too. **Cluster 3 (operations-tms-core) of the CG-AUDIT-2026-09-02
+  // Ø1-query-layer remediation is now FULLY DONE: all 20 tables, all 28 call
+  // sites** (batches 1-3). Remaining across the whole effort: clusters 4-7 (58
+  // call sites).
+  dbTestSetSha256: "712197db6e6c80f96000f8c7f51cf44ad76c7c4cdb1cabfa774b080c52df9b15",
+  // History: 1a22232c00325d80ca4834666eed87e13326d4ac5bf55e9d071417a89d9379a1
+  // (267 files, HUNDRED-AND-TWENTY-SIXTH PASS).
   // History: 2614ff5ce2fd973d6bdfb343e703e07466be278488f061a7ef4e44b1b0ddad99
   // (266 files, HUNDRED-AND-TWENTY-FIFTH PASS).
   // History: f136ff5d6b8ebfd9afc1af1679038b7b26210a9ad021f5775ca13919c5d71b97

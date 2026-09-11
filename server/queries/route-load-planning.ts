@@ -1,10 +1,14 @@
 /**
  * Route and Load Planning Using Canonical Position read queries (ATW-224,
- * CG-S10-ATW-005). No masked column exists on any of these tables, so reads go
- * directly against the base tables (RLS-scoped) except for stops (a computed
- * GeoJSON projection, app.get_route_planning_stops) and the canonical-position
- * read (app.get_canonical_position_for_planning, a computed projection over
- * app.shipment_tracking_health).
+ * CG-S10-ATW-005). CG-AUDIT-2026-09-02 O1 remediation (cluster 3 batch 3,
+ * 20260911030000_close_o1_query_layer_cluster3_batch3_route_planning.sql):
+ * every read in this file now goes through a thin, security-invoker RPC
+ * wrapper (app is not exposed to PostgREST, so a `.from()` call against any
+ * `app.*` table has never worked in production) -- scenarios, constraints,
+ * candidate plans, score components, selections, and replan events via that
+ * migration, plus the pre-existing app.get_route_planning_stops (a computed
+ * GeoJSON projection) and app.get_canonical_position_for_planning (a computed
+ * projection over app.shipment_tracking_health).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -38,7 +42,7 @@ export class RouteLoadPlanningQueryError extends Error {
 
 /** Every planning scenario for one Shipment Order, newest first. */
 export async function listRoutePlanningScenarios(client: RouteLoadPlanningQueryTableClient, shipmentOrderId: string): Promise<RoutePlanningScenario[]> {
-  const { data, error } = await client.from("route_planning_scenarios").select("*").eq("shipment_order_id", shipmentOrderId).order("created_at", { ascending: false });
+  const { data, error } = await client.rpc("list_route_planning_scenarios", { p_shipment_order_id: shipmentOrderId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
@@ -46,14 +50,12 @@ export async function listRoutePlanningScenarios(client: RouteLoadPlanningQueryT
 }
 
 export async function getRoutePlanningScenario(client: RouteLoadPlanningQueryTableClient, scenarioId: string): Promise<RoutePlanningScenario | null> {
-  const { data, error } = await client.from("route_planning_scenarios").select("*").eq("id", scenarioId).maybeSingle();
+  const { data, error } = await client.rpc("get_route_planning_scenario", { p_scenario_id: scenarioId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
-  if (!data) {
-    return null;
-  }
-  return parseRoutePlanningScenario(data as Record<string, unknown>);
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? parseRoutePlanningScenario(row as Record<string, unknown>) : null;
 }
 
 /** Every stop for one scenario, ordered by stop_sequence ascending, with location serialized as GeoJSON. */
@@ -67,7 +69,7 @@ export async function listRoutePlanningStops(client: RouteLoadPlanningQueryTable
 
 /** Every constraint for one scenario. */
 export async function listRoutePlanningConstraints(client: RouteLoadPlanningQueryTableClient, scenarioId: string): Promise<RoutePlanningConstraint[]> {
-  const { data, error } = await client.from("route_planning_constraints").select("*").eq("scenario_id", scenarioId);
+  const { data, error } = await client.rpc("list_route_planning_constraints", { p_scenario_id: scenarioId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
@@ -76,7 +78,7 @@ export async function listRoutePlanningConstraints(client: RouteLoadPlanningQuer
 
 /** Every candidate plan for one scenario, ranked best-first -- the "compare" read (Prompt 224 §14). */
 export async function listRoutePlanningCandidatePlans(client: RouteLoadPlanningQueryTableClient, scenarioId: string): Promise<RoutePlanningCandidatePlan[]> {
-  const { data, error } = await client.from("route_planning_candidate_plans").select("*").eq("scenario_id", scenarioId).order("plan_rank", { ascending: true });
+  const { data, error } = await client.rpc("list_route_planning_candidate_plans", { p_scenario_id: scenarioId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
@@ -85,7 +87,7 @@ export async function listRoutePlanningCandidatePlans(client: RouteLoadPlanningQ
 
 /** The explainability breakdown for one candidate plan. */
 export async function listRoutePlanningScoreComponents(client: RouteLoadPlanningQueryTableClient, candidatePlanId: string): Promise<RoutePlanningScoreComponent[]> {
-  const { data, error } = await client.from("route_planning_score_components").select("*").eq("candidate_plan_id", candidatePlanId);
+  const { data, error } = await client.rpc("list_route_planning_score_components", { p_candidate_plan_id: candidatePlanId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
@@ -94,19 +96,17 @@ export async function listRoutePlanningScoreComponents(client: RouteLoadPlanning
 
 /** The current selection for one scenario, if any human decision has been recorded yet. */
 export async function getCurrentRoutePlanningSelection(client: RouteLoadPlanningQueryTableClient, scenarioId: string): Promise<RoutePlanningSelectedPlan | null> {
-  const { data, error } = await client.from("route_planning_selected_plans").select("*").eq("scenario_id", scenarioId).eq("is_current", true).maybeSingle();
+  const { data, error } = await client.rpc("get_current_route_planning_selection", { p_scenario_id: scenarioId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
-  if (!data) {
-    return null;
-  }
-  return parseRoutePlanningSelectedPlan(data as Record<string, unknown>);
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? parseRoutePlanningSelectedPlan(row as Record<string, unknown>) : null;
 }
 
 /** Full selection history for one scenario, newest first (never overwritten in place -- is_current/superseded_by_id). */
 export async function listRoutePlanningSelections(client: RouteLoadPlanningQueryTableClient, scenarioId: string): Promise<RoutePlanningSelectedPlan[]> {
-  const { data, error } = await client.from("route_planning_selected_plans").select("*").eq("scenario_id", scenarioId).order("selected_at", { ascending: false });
+  const { data, error } = await client.rpc("list_route_planning_selections", { p_scenario_id: scenarioId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
@@ -115,7 +115,7 @@ export async function listRoutePlanningSelections(client: RouteLoadPlanningQuery
 
 /** Replan lineage for one scenario (rows where this scenario is the freshly created one). */
 export async function listRoutePlanningReplanEvents(client: RouteLoadPlanningQueryTableClient, scenarioId: string): Promise<RoutePlanningReplanEvent[]> {
-  const { data, error } = await client.from("route_planning_replan_events").select("*").eq("scenario_id", scenarioId);
+  const { data, error } = await client.rpc("list_route_planning_replan_events", { p_scenario_id: scenarioId });
   if (error) {
     throw new RouteLoadPlanningQueryError(error.message);
   }
