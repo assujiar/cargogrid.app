@@ -1,49 +1,26 @@
 /**
- * User lifecycle lookup (PLT-110, CG-S6-PLT-007). Read path (server/queries/, per
- * docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md §8) wrapping a direct table read --
- * app.users has no bespoke lookup RPC, matching PLT-107's listIdentityTenantLinks
- * precedent (a plain filtered select is the correct shape for a simple lookup).
+ * User lifecycle lookup (PLT-110, CG-S6-PLT-007). RPC-backed read of app.list_tenant_users
+ * / app.list_user_directory_email_projections (CG-AUDIT-2026-09-02 O1 cluster 2) -- the
+ * app schema is not exposed to PostgREST, so a direct app.users / app.users_directory read
+ * never worked.
  *
- * ATW-032 (post-Prompt-248 audit, ISS-2026-034): this used to be
- * `.from("users").select("*")`, which could never succeed for the `authenticated` role.
- * `20260716110430_create_field_record_access.sql` deliberately does
- * `revoke select on app.users from authenticated` and re-grants SELECT on an explicit
- * 17-column list that omits `email`, precisely so a column-level revoke cannot be undone
- * by PLT-113's broader table-level grant. Postgres denies `SELECT *` outright when ANY
- * column lacks a grant -- verified against the applied schema:
- *
- *     set role authenticated; select * from app.users limit 1;
- *       -> ERROR: permission denied for table users
- *     set role authenticated; select id, tenant_id from app.users limit 1;   -> ok
- *
- * so every call returned `{ error }` and threw. This is the same defect class as the
- * already-fixed `getThirdPartyProviderConnection` select("*") (ISS-2026-026); the rule is
- * documented at server/queries/third-party-provider-adapter.ts:36-42 and this call site
- * was missed.
- *
- * Narrowing the column list alone would not have been enough: the address itself is
- * ungranted, and the field-masking design (PLT-114) says the ONLY read path to it for a
- * tenant-layer caller is `app.users_directory`, which redacts it per row unless the caller
- * holds the real `HRS:View personal data` permission. So the lifecycle columns come from
- * `app.users` (explicit list, exactly the granted 17) and the address comes from the
- * directory view, merged by id -- the masking decision stays server-side where it belongs.
+ * The lifecycle columns come from app.list_tenant_users (explicit list, exactly the 17
+ * columns PLT-114's own column-level grant covers -- never a raw `email`) and the address
+ * comes from app.list_user_directory_email_projections, merged by id -- the masking
+ * decision stays server-side where it belongs (PLT-114).
  */
 
 import { parseTenantUser, type TenantUser } from "../contracts/user-lifecycle/user-lifecycle.ts";
 
-/**
- * Exactly the columns `20260716110430_create_field_record_access.sql` grants SELECT on to
- * `authenticated`. Never `*` -- see the module header.
- */
-const USERS_GRANTED_COLUMNS =
-  "id, tenant_id, auth_user_id, display_name, status, org_unit_id, invited_by, invited_at, invite_expires_at, activated_at, suspended_at, suspended_reason, revoked_at, revoked_reason, record_version, created_at, updated_at";
-
 export interface UserLookupClient {
-  from(table: "users" | "users_directory"): {
-    select(columns: string): {
-      eq(column: string, value: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
+  rpc(
+    fn: "list_tenant_users",
+    args: { p_tenant_id: string; p_actor_auth_user_id: string },
+  ): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+  rpc(
+    fn: "list_user_directory_email_projections",
+    args: { p_tenant_id: string; p_actor_auth_user_id: string },
+  ): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 }
 
 export class UserLookupError extends Error {
@@ -58,10 +35,10 @@ export class UserLookupError extends Error {
  * users are wanted). `email` is the masked projection unless the caller holds
  * `HRS:View personal data`; `emailMasked` says which of the two it is.
  */
-export async function listTenantUsers(client: UserLookupClient, tenantId: string): Promise<TenantUser[]> {
+export async function listTenantUsers(client: UserLookupClient, tenantId: string, actorAuthUserId: string): Promise<TenantUser[]> {
   const [users, directory] = await Promise.all([
-    client.from("users").select(USERS_GRANTED_COLUMNS).eq("tenant_id", tenantId),
-    client.from("users_directory").select("id, email, email_masked").eq("tenant_id", tenantId),
+    client.rpc("list_tenant_users", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId }),
+    client.rpc("list_user_directory_email_projections", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId }),
   ]);
 
   if (users.error) {
@@ -81,7 +58,7 @@ export async function listTenantUsers(client: UserLookupClient, tenantId: string
     const row = entry as Record<string, unknown>;
     const projection = emailById.get(String(row.id));
     if (!projection) {
-      // The directory view is a plain projection of app.users, so a row present in one and
+      // The directory RPC is a plain projection of app.users, so a row present in one and
       // absent from the other means the two reads saw different snapshots. Failing loudly
       // beats inventing an address or silently dropping a user from an admin list.
       throw new UserLookupError(`user ${String(row.id)} has no app.users_directory projection`);

@@ -4195,7 +4195,100 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (finance, 6 tables / 8 call sites) is now fully DONE. Clusters 2-7 (96 more
   // call sites across identity/dispatch/tracking/documents/analytics/misc)
   // remain open.
-  migrationSetSha256: "a03ac483e76c44c7c23a31a33bd7ad7f08d236d9710bfc5b657f796a36f49e12",
+  // HUNDRED-AND-TWENTY-FOURTH PASS (2026-09-10, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 521 files (+1) --
+  // new migration 20260910010000_close_o1_query_layer_cluster2_batch1_identity_
+  // access.sql. Opens cluster 2 (identity/HRIS access) and closes its first batch
+  // completely: all 10 call sites across 5 tables/views --
+  // app.tenant_user_identities (list_identity_tenant_links), app.users
+  // (list_tenant_users), app.users_directory (list_user_directory_email_
+  // projections, list_portal_users, list_user_directory -- 3 separate call sites
+  // onto the same view, matching the existing TS layer's own 3-caller shape),
+  // app.permissions (list_permissions_for_module), and app.roles
+  // (list_tenant_roles). 7 new app.*/public.* Option-2 wrapper function pairs via
+  // the same adversarial Design->Verify->Fix pipeline established in clusters 0-1
+  // (RULE A/B/C baked into every draft and every independent verify pass), again
+  // completed via parallel Agent-tool design/verify calls rather than the Workflow
+  // tool (whose subagent-spawning path remained broken this session).
+  // **Real, previously-latent security drift found and closed by the independent
+  // verify pass, before this migration was ever applied to any database**:
+  // app.users_directory's own WHERE clause had never been patched with the
+  // customer_user-layer exclusion its sibling table app.users received in an
+  // earlier hardening pass -- a customer_user-layer principal would have been
+  // able to see internal staff directory rows (including the email-masking
+  // decision) through all 3 of this view's new RPCs. Fixed by adding
+  // `and not app.actor_holds_customer_user_layer(u.tenant_id,
+  // p_actor_auth_user_id)` to all 3 functions' WHERE clauses -- the CURRENT,
+  // most-hardened predicate (RULE B), not the view's own stale one, since this
+  // read path was never reachable in production (app schema not exposed to
+  // PostgREST) and so has no live behavior to preserve.
+  // **Two genuinely novel design categories, resolved through evidence-based
+  // research and independently re-derived at verify, not assumed**: (1)
+  // app.permissions had NEVER had any grant beyond service_role (repo-wide grep
+  // confirmed zero create-policy/grant-to-authenticated ever existed) --
+  // exposing it to authenticated for the first time is a genuine widening
+  // decision, not a reproduction of existing RLS. Resolved by requiring an
+  // active app.principal_memberships row for the caller (reusing the exact
+  // "does this identity hold any real standing" primitive app.
+  // resolve_access_context's own unscoped-request branch already relies on) --
+  // closing the gap where a revoked/never-onboarded identity could otherwise
+  // retain a live JWT with zero current standing (app.revoke_auth_identity only
+  // flips app.tenant_user_identities.status, it never bans the underlying
+  // auth.users row). (2) app.list_identity_tenant_links' self-lookup-only design
+  // (single p_actor_auth_user_id parameter, no separate subject parameter) was
+  // confirmed via (a) zero production callers found by repo-wide grep, (b) the
+  // function's own doc-comment framing, (c) app.tenant_user_identities' own
+  // current RLS predicate having no auth_user_id axis at all (ruling out a
+  // built-in admin/support envelope), and (d) direct precedent from the
+  // app.get_self_employee/app.get_my_employee_profile self-service function
+  // family -- independently re-verified against app.resolve_access_context's own
+  // real login-time resolver, which uses the identical bare
+  // `auth_user_id = p_auth_user_id` row filter shape for this exact table.
+  // **Full-suite regression caught and fixed by `pnpm run db:test` itself, not
+  // by design/verify**: scripts/db-tests/rbac-enforcement.sql's ATW-032 SECURITY
+  // DEFINER authority-surface sweep flagged both app.list_identity_tenant_links
+  // and app.list_permissions_for_module as granted to authenticated with no
+  // authority check its closure query could detect. Both are genuinely
+  // correct-by-design (re-verified independently, not merely asserted): the
+  // former is the identical "raw self-row-identity equality shape"
+  // app.get_self_employee/app.is_ticket_queue_member/app.
+  // accept_customer_portal_invite already document and are exempted for; the
+  // latter carries a real, load-bearing standing gate (the active
+  // app.principal_memberships check above) that is simply inlined as a direct
+  // `exists` rather than expressed through one of the sweep's own named keyword
+  // primitives, so the closure does not credit it automatically. Both added to
+  // rbac-enforcement.sql's own v_expected reviewed-and-justified list with full
+  // written reasons, matching this file's own established escape-hatch
+  // convention -- no gate weakened, no check removed.
+  // 2 minor comment-only defects were found and fixed during the independent
+  // verify pass, before this migration was ever applied: (1) app.
+  // list_permissions_for_module's own draft omitted the RULE A guard and the
+  // active-standing filter entirely (added during verify, see the widening
+  // decision above); (2) a scratchpad path typo caused 2 of 4 design drafts to
+  // be written to the wrong directory -- caught while locating the files for
+  // verify, no content was lost.
+  // Batch's own db-test (scripts/db-tests/o1-query-layer-cluster2-batch1.sql)
+  // passed on the third full run -- two fixture-setup gaps (a self-escalation
+  // rejection from having an identity grant a protected-permission role to
+  // itself, and a wrong role-count assertion that forgot a second,
+  // masking-setup role also counts) were fixed first, neither a defect in any
+  // of the 7 new functions themselves.
+  // All 5 affected TS query files (server/queries/auth-identity.ts,
+  // user-lifecycle.ts, portal-users.ts, field-access.ts, role-permission.ts)
+  // and every real call site (auth-identity.ts/user-lifecycle.ts/field-access.ts/
+  // role-permission.ts have none in production; portal-users.ts's one real
+  // caller, app/(tenant)/[tenantSlug]/admin/users/page.tsx, switched to pass the
+  // new actorAuthUserId argument) switched from `.from()` to `.rpc()` in this
+  // same commit. Full Tier A gate suite re-run clean: `typecheck`, `lint` (0
+  // errors), the unit test suite, `check-rls-initplan.ts` (0 findings), a full
+  // `pnpm run db:test` (`ALL PASSED`, 521 migrations / 265 db-test files),
+  // `git:check-paths`, `security:check`, and a real `next build`.
+  // **Cluster 2 batch 1 (identity/HRIS access, 5 tables, 10 call sites) is now
+  // fully `DONE`.** Clusters 3-7 (86 more call sites across dispatch/tracking/
+  // documents/analytics/misc) remain open.
+  migrationSetSha256: "44c43e891da151da3b12b9ff3ffa2e168d4418e15518abc7d9a074f63dc7ba4c",
+  // History: a03ac483e76c44c7c23a31a33bd7ad7f08d236d9710bfc5b657f796a36f49e12
+  // (520 files, HUNDRED-AND-TWENTY-THIRD PASS).
   // History: 08804b3a9424603612e59207bd28f3872381503b899d6530c228650a35a64127
   // (519 files, HUNDRED-AND-TWENTY-SECOND PASS).
   // History: 9b225ba6030a7bf4d82369b48e21ed732de32111c92e1d372307b05eb76c480d
@@ -5342,7 +5435,48 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY DONE; clusters
   // 2-7 (96 remaining call sites across identity/dispatch/tracking/documents/
   // analytics/misc) remain open.
-  dbTestSetSha256: "49fa584c817a1f3ceb75dbf6a1c0ed6456b360119de8264de9ea30a1910f2473",
+  // HUNDRED-AND-TWENTY-FOURTH PASS (2026-09-10, same ruling as migrationSetSha256
+  // above): 265 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster2-
+  // batch1.sql, plus scripts/db-tests/rbac-enforcement.sql widened (2 new
+  // v_expected entries, no test logic weakened -- see migrationSetSha256's own
+  // note above). Proves, against a real disposable database, every one of the 7
+  // new function pairs this pass's migration adds (cluster 2's first batch):
+  // self-lookup aggregation across multiple tenants for
+  // app.list_identity_tenant_links (any status, cross-tenant by design since it
+  // is genuinely self-scoped); RULE A genuinely rejects a forged actor
+  // (app.list_identity_tenant_links); the RAISE-vs-silent-zero-rows distinction
+  // holds throughout (app.list_tenant_users RAISEs insufficient_authority for
+  // zero standing in the named tenant, matching the established "list for one
+  // named tenant" convention, while every record/child-collection-scoped
+  // function -- the 3 app.users_directory callers, app.list_tenant_roles --
+  // returns zero rows silently for the identical denied-access case); email
+  // masking toggle proven via real HRS:View personal data grant/revoke, not a
+  // static read of the migration's own column list; the customer_user-layer
+  // exclusion fix (see migrationSetSha256's own note on the app.users_directory
+  // drift) proven to actually exclude a real customer_user-layer fixture row
+  // across all 3 affected functions; the app.permissions active-standing gate
+  // proven both ways (an active app.principal_memberships row admits, zero
+  // standing anywhere denies via zero rows); a global Supreme Admin with ZERO
+  // tenant membership bypasses throughout; and cross-tenant denial confirmed for
+  // every one of the 7 functions. This batch's db-test passed on the third full
+  // run -- the first two runs surfaced two real fixture-setup gaps (a
+  // self-escalation rejection from having an identity grant itself a
+  // protected-permission role, fixed by using a separate granting actor; and a
+  // role-count assertion that forgot the masking-setup "PII Viewer" role also
+  // counts alongside the intentionally-created "Ops Coordinator" role), neither
+  // a defect in any of the 7 new functions themselves. Also confirmed against
+  // public-api-wrapper-regression.sql (no cross-file grant-parity or RULE A/B/C
+  // regression from any of this batch's 7 new function pairs) and against
+  // rbac-enforcement.sql's own widened ATW-032 sweep (the 2 new v_expected
+  // entries, independently re-verified as genuinely correct-by-design -- see
+  // migrationSetSha256's own note above -- not a weakened check). Cluster 2
+  // batch 1 (identity/HRIS access, 5 tables / 10 call sites) of the
+  // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY DONE; clusters
+  // 3-7 (86 remaining call sites across dispatch/tracking/documents/analytics/
+  // misc) remain open.
+  dbTestSetSha256: "f136ff5d6b8ebfd9afc1af1679038b7b26210a9ad021f5775ca13919c5d71b97",
+  // History: 49fa584c817a1f3ceb75dbf6a1c0ed6456b360119de8264de9ea30a1910f2473
+  // (264 files, HUNDRED-AND-TWENTY-THIRD PASS).
   // History: 1d46b64cca8d7ae135515ca910f651f385daa111f31912502ce6c6f5edb9374e
   // (263 files, HUNDRED-AND-TWENTY-SECOND PASS).
   // History: 38188accb3c759278a82ef49b68ea43e693396b833619f322e9936c7cf6400e5

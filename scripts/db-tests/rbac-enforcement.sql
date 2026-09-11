@@ -526,7 +526,48 @@ declare
     -- config-disclosure gap) and were fixed with an app.has_active_tenant_membership
     -- check instead of being exempted; see 20260810900000_harden_finance_authority_
     -- chain_tierc_completeness.sql's own header.
-    'list_n8n_action_allowlist', 'validate_automation_rule_definition'
+    'list_n8n_action_allowlist', 'validate_automation_rule_definition',
+    -- CG-AUDIT-2026-09-02 O1 remediation, cluster 2 batch 1 (2026-09-10,
+    -- 20260910010000_close_o1_query_layer_cluster2_batch1_identity_access.sql):
+    -- app.list_identity_tenant_links is the identical "raw self-row-identity
+    -- equality shape" app.get_self_employee/app.is_ticket_queue_member/app.
+    -- accept_customer_portal_invite/app.verify_mfa_step_up_challenge above already
+    -- document and are exempted for -- its own WHERE clause
+    -- (`tui.auth_user_id = p_actor_auth_user_id`) can only ever return the ONE
+    -- identity''s own linkage rows, and app.assert_actor_is_session_identity (RULE A)
+    -- is called first to prove the caller genuinely IS that identity, not merely
+    -- claims to be. There is no authority question left to ask once identity is
+    -- proven -- the self-scoping predicate IS the complete authority envelope, the
+    -- same structural reasoning app.get_self_employee''s own entry above documents
+    -- at length. Independently re-verified during this batch''s adversarial verify
+    -- pass, not accepted from the migration''s own header alone.
+    'list_identity_tenant_links',
+    -- app.list_permissions_for_module is a genuinely NEW, deliberate widening
+    -- decision (the first-ever grant of read access to app.permissions for any role
+    -- but service_role -- repo-wide grep confirmed zero prior create-policy/grant to
+    -- authenticated ever existed for this table) rather than a "no check needed"
+    -- exemption: it requires an active app.principal_memberships row for the caller
+    -- (`exists (select 1 from app.principal_memberships where auth_user_id =
+    -- p_actor_auth_user_id and status = ''active'')`) -- the same "does this identity
+    -- hold any real standing on the platform at all" primitive app.
+    -- resolve_access_context''s own unscoped-request branch already relies on --
+    -- before admitting any row. The check is a real, load-bearing authority gate
+    -- (closes the gap where app.revoke_auth_identity only flips app.
+    -- tenant_user_identities.status and never bans the underlying auth.users row, so
+    -- a revoked identity could otherwise retain a live JWT with zero current
+    -- standing); it is simply inlined as a direct `exists` against app.
+    -- principal_memberships rather than expressed through one of this sweep''s own
+    -- named keyword primitives, so the closure query above does not credit it
+    -- automatically. What it additionally discloses once admitted is bounded: app.
+    -- permissions carries no tenant_id/owner/org-unit column, and its 19
+    -- permission-action names x 9 module codes are already published in
+    -- docs/architecture/06_RLS_RBAC_WORKSTREAM.md sections 5.1/5.2 -- every row is
+    -- identical for every admitted caller, so this is a standing gate on WHO may
+    -- read the catalogue at all, not a per-row scope decision the closure''s
+    -- authority keywords are built to detect. Independently re-verified during this
+    -- batch''s adversarial verify pass against the table''s own real grant history,
+    -- not accepted from the migration''s own header alone.
+    'list_permissions_for_module'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor

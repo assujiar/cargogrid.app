@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-1, 38 tables, **DONE**; clusters 2-7, 96 call sites, remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-1, 38 tables, **DONE**; cluster 2 batch 1, 5 tables / 10 call sites, **DONE**; clusters 2 remainder-7, 86 call sites, remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -983,3 +983,79 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   **Cluster 1 (finance, 6/6 tables, 8/8 call sites) is now fully `DONE`.** Still open: clusters
   2-7 (96 more call sites across identity/dispatch/tracking/documents/analytics/misc) — next up
   under the same "lanjut sampe siap launching" mandate.
+
+- 2026-09-10 — Ø1-query-layer cluster 2 (identity/HRIS access) batch 1 closed (this commit),
+  continuing the same user-directed ("lanjut sampe siap launching") mandate. Opens cluster 2 and
+  closes its first batch **completely** — all 10 of this batch's call sites across 5
+  tables/views: `app.tenant_user_identities` (`list_identity_tenant_links`), `app.users`
+  (`list_tenant_users`), `app.users_directory` (`list_user_directory_email_projections`,
+  `list_portal_users`, `list_user_directory` — 3 separate call sites onto the same view, matching
+  the existing TS layer's own 3-caller shape), `app.permissions` (`list_permissions_for_module`),
+  and `app.roles` (`list_tenant_roles`). New migration
+  `20260910010000_close_o1_query_layer_cluster2_batch1_identity_access.sql` adds 7 new
+  `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix pipeline
+  clusters 0-1 established (RULE A/B/C baked into both stages), again completed via parallel
+  Agent-tool design/verify calls rather than the Workflow tool (whose subagent-spawning path
+  remained broken this session).
+  **Real, previously-latent security drift found and closed by the independent verify pass,
+  before this migration was ever applied to any database**: `app.users_directory`'s own WHERE
+  clause had never been patched with the `customer_user`-layer exclusion its sibling table
+  `app.users` received in an earlier hardening pass — a `customer_user`-layer principal would
+  have been able to see internal staff directory rows (including the email-masking decision)
+  through all 3 of this view's new RPCs. Fixed by adding
+  `and not app.actor_holds_customer_user_layer(u.tenant_id, p_actor_auth_user_id)` to all 3
+  functions' WHERE clauses — the CURRENT, most-hardened predicate (RULE B), not the view's own
+  stale one, since this read path was never reachable in production (`app` schema not exposed to
+  PostgREST) and so has no live behavior to preserve.
+  **Two genuinely novel design categories, resolved through evidence-based research and
+  independently re-derived at verify, not assumed**: (1) `app.permissions` had NEVER had any
+  grant beyond `service_role` (repo-wide grep confirmed zero create-policy/grant-to-authenticated
+  ever existed) — exposing it to `authenticated` for the first time is a genuine widening
+  decision, not a reproduction of existing RLS. Resolved by requiring an active
+  `app.principal_memberships` row for the caller (reusing the exact "does this identity hold any
+  real standing" primitive `app.resolve_access_context`'s own unscoped-request branch already
+  relies on) — closing the gap where a revoked/never-onboarded identity could otherwise retain a
+  live JWT with zero current standing (`app.revoke_auth_identity` only flips
+  `tenant_user_identities.status`, it never bans the underlying `auth.users` row). (2)
+  `app.list_identity_tenant_links`'s self-lookup-only design (single `p_actor_auth_user_id`
+  parameter, no separate subject parameter) was confirmed via (a) zero production callers found
+  by repo-wide grep, (b) the function's own doc-comment framing, (c) `app.tenant_user_identities`'
+  own current RLS predicate having no `auth_user_id` axis at all (ruling out a built-in
+  admin/support envelope), and (d) direct precedent from the `app.get_self_employee`/`app.
+  get_my_employee_profile` self-service function family — independently re-verified against
+  `app.resolve_access_context`'s own real login-time resolver, which uses the identical bare
+  `auth_user_id = p_auth_user_id` row filter shape for this exact table.
+  **Full-suite regression caught and fixed by `pnpm run db:test` itself, not by design/verify**:
+  `scripts/db-tests/rbac-enforcement.sql`'s ATW-032 SECURITY DEFINER authority-surface sweep
+  flagged both `app.list_identity_tenant_links` and `app.list_permissions_for_module` as granted
+  to `authenticated` with no authority check its closure query could detect. Both are genuinely
+  correct-by-design (re-verified independently, not merely asserted): the former is the identical
+  "raw self-row-identity equality shape" `app.get_self_employee`/`app.is_ticket_queue_member`/
+  `app.accept_customer_portal_invite` already document and are exempted for; the latter carries a
+  real, load-bearing standing gate (the active `app.principal_memberships` check above) that is
+  simply inlined as a direct `exists` rather than expressed through one of the sweep's own named
+  keyword primitives, so the closure does not credit it automatically. Both added to
+  `rbac-enforcement.sql`'s own `v_expected` reviewed-and-justified list with full written reasons,
+  matching this file's own established escape-hatch convention — no gate weakened, no check
+  removed.
+  This batch's own db-test (`scripts/db-tests/o1-query-layer-cluster2-batch1.sql`) passed on the
+  third full run — the first two runs surfaced two real fixture-setup gaps (a self-escalation
+  rejection from having an identity grant itself a protected-permission role, fixed by using a
+  separate granting actor; and a role-count assertion that forgot the masking-setup "PII Viewer"
+  role also counts alongside the intentionally-created "Ops Coordinator" role), neither a defect
+  in any of the 7 new functions themselves.
+  All 5 affected TS query files (`server/queries/auth-identity.ts`, `user-lifecycle.ts`,
+  `portal-users.ts`, `field-access.ts`, `role-permission.ts`) switched from `.from()` to `.rpc()`
+  in this same commit. Only `portal-users.ts` has a real production call site
+  (`app/(tenant)/[tenantSlug]/admin/users/page.tsx`, updated to pass the new `actorAuthUserId`
+  argument) — the other 4 functions have zero live callers today (repo-wide grep, confirmed by
+  both the design and verify passes), converted for consistency and to keep every file on one
+  calling convention.
+  Full Tier A gate suite re-run clean: `typecheck`, `lint` (0 errors), the 5,993-test unit suite,
+  `check-rls-initplan.ts` (0 findings), a full `pnpm run db:test` (`ALL PASSED`, 521 migrations /
+  265 db-test files), `git:check-paths`, `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-FOURTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027 Part A authority.
+  **Cluster 2 batch 1 (identity/HRIS access, 5 tables, 10 call sites) is now fully `DONE`.** Still
+  open: clusters 2 remainder-7 (86 more call sites across dispatch/tracking/documents/
+  analytics/misc) — next up under the same "lanjut sampe siap launching" mandate.

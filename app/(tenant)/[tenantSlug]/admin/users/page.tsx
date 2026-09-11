@@ -46,7 +46,7 @@ export default async function TenantAdminUsersPage({
   let result: ListPortalUsersResult | null = null;
   let loadFailed = false;
   try {
-    result = await listPortalUsers(supabase, { tenantId: access.tenant.id, page, pageSize: PAGE_SIZE });
+    result = await listPortalUsers(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page, pageSize: PAGE_SIZE });
   } catch (error) {
     if (!(error instanceof PortalUsersQueryError)) {
       throw error;

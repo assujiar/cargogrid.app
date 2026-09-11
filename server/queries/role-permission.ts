@@ -1,18 +1,21 @@
 /**
- * Permission catalogue and role lookup (PLT-111, CG-S6-PLT-008). Read path
- * (server/queries/, per docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md §8) wrapping
- * direct table reads -- neither the catalogue nor a tenant's role list needs bespoke RPC
- * logic, matching PLT-107's listIdentityTenantLinks precedent.
+ * Permission catalogue and role lookup (PLT-111, CG-S6-PLT-008). RPC-backed read of
+ * app.list_permissions_for_module / app.list_tenant_roles (CG-AUDIT-2026-09-02 O1
+ * cluster 2) -- the app schema is not exposed to PostgREST, so a direct
+ * app.permissions / app.roles read never worked.
  */
 
 import { parsePermission, parseRole, type Permission, type Role } from "../contracts/role-permission/role-permission.ts";
 
 export interface RolePermissionLookupClient {
-  from(table: "permissions" | "roles"): {
-    select(columns: string): {
-      eq(column: string, value: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
+  rpc(
+    fn: "list_permissions_for_module",
+    args: { p_resource_module_code: string; p_actor_auth_user_id: string },
+  ): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+  rpc(
+    fn: "list_tenant_roles",
+    args: { p_tenant_id: string; p_actor_auth_user_id: string },
+  ): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 }
 
 export class RolePermissionLookupError extends Error {
@@ -23,8 +26,11 @@ export class RolePermissionLookupError extends Error {
 }
 
 /** The full canonical permission catalogue for one business-domain module. */
-export async function listPermissionsForModule(client: RolePermissionLookupClient, moduleCode: string): Promise<Permission[]> {
-  const { data, error } = await client.from("permissions").select("*").eq("resource_module_code", moduleCode);
+export async function listPermissionsForModule(client: RolePermissionLookupClient, moduleCode: string, actorAuthUserId: string): Promise<Permission[]> {
+  const { data, error } = await client.rpc("list_permissions_for_module", {
+    p_resource_module_code: moduleCode,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
 
   if (error) {
     throw new RolePermissionLookupError(error.message);
@@ -33,8 +39,11 @@ export async function listPermissionsForModule(client: RolePermissionLookupClien
 }
 
 /** Every role (any status) a tenant has created. */
-export async function listTenantRoles(client: RolePermissionLookupClient, tenantId: string): Promise<Role[]> {
-  const { data, error } = await client.from("roles").select("*").eq("tenant_id", tenantId);
+export async function listTenantRoles(client: RolePermissionLookupClient, tenantId: string, actorAuthUserId: string): Promise<Role[]> {
+  const { data, error } = await client.rpc("list_tenant_roles", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
 
   if (error) {
     throw new RolePermissionLookupError(error.message);

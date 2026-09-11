@@ -4,6 +4,7 @@ import { listTenantUsers, UserLookupError, type UserLookupClient } from "./user-
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const USER_ID = "323e4567-e89b-12d3-a456-426614174000";
+const ACTOR_AUTH_USER_ID = "523e4567-e89b-12d3-a456-426614174000";
 
 const ROW = {
   id: USER_ID,
@@ -30,34 +31,27 @@ const MASKED_DIRECTORY_ROW = { id: USER_ID, email: "a***@example.test", email_ma
 
 type Response = { data: unknown[] | null; error: { message: string } | null };
 
-/** Records which columns each table was asked for, so the grant contract can be asserted. */
+/** Records the args each RPC was called with, so the tenant/actor scoping can be asserted. */
 function fakeClient(
-  responses: { users: Response; users_directory: Response },
-  requested?: Record<string, string>,
+  responses: { users: Response; directory: Response },
+  captured?: Record<string, Record<string, unknown>>,
 ): UserLookupClient {
   return {
-    from(table) {
-      return {
-        select(columns) {
-          if (requested) requested[table] = columns;
-          return {
-            async eq() {
-              return responses[table];
-            },
-          };
-        },
-      };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      if (captured) captured[fn] = args;
+      if (fn === "list_tenant_users") return responses.users;
+      return responses.directory;
     },
-  };
+  } as UserLookupClient;
 }
 
 describe("listTenantUsers", () => {
-  test("merges the granted app.users columns with the app.users_directory email", async () => {
+  test("merges the app.list_tenant_users columns with the directory-projection email", async () => {
     const client = fakeClient({
       users: { data: [ROW], error: null },
-      users_directory: { data: [DIRECTORY_ROW], error: null },
+      directory: { data: [DIRECTORY_ROW], error: null },
     });
-    const users = await listTenantUsers(client, TENANT_ID);
+    const users = await listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID);
     assert.equal(users.length, 1);
     assert.equal(users[0]?.status, "active");
     assert.equal(users[0]?.email, "admin@example.test");
@@ -67,55 +61,53 @@ describe("listTenantUsers", () => {
   test("accepts the masked projection, which is not a syntactically valid address", async () => {
     const client = fakeClient({
       users: { data: [ROW], error: null },
-      users_directory: { data: [MASKED_DIRECTORY_ROW], error: null },
+      directory: { data: [MASKED_DIRECTORY_ROW], error: null },
     });
-    const users = await listTenantUsers(client, TENANT_ID);
+    const users = await listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID);
     assert.equal(users[0]?.email, "a***@example.test");
     assert.equal(users[0]?.emailMasked, true);
   });
 
-  test("never asks app.users for `*` -- authenticated has no grant on the email column", async () => {
-    const requested: Record<string, string> = {};
+  test("calls both RPCs with the tenant id and the actor's own id", async () => {
+    const captured: Record<string, Record<string, unknown>> = {};
     const client = fakeClient(
-      { users: { data: [], error: null }, users_directory: { data: [], error: null } },
-      requested,
+      { users: { data: [], error: null }, directory: { data: [], error: null } },
+      captured,
     );
-    await listTenantUsers(client, TENANT_ID);
-    assert.equal(requested.users?.includes("*"), false);
-    assert.equal(requested.users?.includes("email"), false);
-    // Exactly the 17 columns 20260716110430_create_field_record_access.sql re-grants.
-    assert.equal(requested.users?.split(",").length, 17);
+    await listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID);
+    assert.deepEqual(captured.list_tenant_users, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_AUTH_USER_ID });
+    assert.deepEqual(captured.list_user_directory_email_projections, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_AUTH_USER_ID });
   });
 
   test("returns an empty array rather than throwing when a tenant has no users", async () => {
     const client = fakeClient({
       users: { data: [], error: null },
-      users_directory: { data: [], error: null },
+      directory: { data: [], error: null },
     });
-    assert.deepEqual(await listTenantUsers(client, TENANT_ID), []);
+    assert.deepEqual(await listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID), []);
   });
 
   test("wraps a database error into a typed error", async () => {
     const client = fakeClient({
       users: { data: null, error: { message: "connection reset" } },
-      users_directory: { data: [], error: null },
+      directory: { data: [], error: null },
     });
-    await assert.rejects(() => listTenantUsers(client, TENANT_ID), UserLookupError);
+    await assert.rejects(() => listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID), UserLookupError);
   });
 
   test("wraps a directory-side database error too", async () => {
     const client = fakeClient({
       users: { data: [ROW], error: null },
-      users_directory: { data: null, error: { message: "permission denied" } },
+      directory: { data: null, error: { message: "permission denied" } },
     });
-    await assert.rejects(() => listTenantUsers(client, TENANT_ID), UserLookupError);
+    await assert.rejects(() => listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID), UserLookupError);
   });
 
   test("fails loudly rather than inventing an address when the two reads disagree", async () => {
     const client = fakeClient({
       users: { data: [ROW], error: null },
-      users_directory: { data: [], error: null },
+      directory: { data: [], error: null },
     });
-    await assert.rejects(() => listTenantUsers(client, TENANT_ID), UserLookupError);
+    await assert.rejects(() => listTenantUsers(client, TENANT_ID, ACTOR_AUTH_USER_ID), UserLookupError);
   });
 });
