@@ -46,7 +46,7 @@ export default async function JobOrderDetailPage({ params }: { params: Promise<{
 
   let jobOrder;
   try {
-    jobOrder = await getJobOrder(supabase, jobOrderId);
+    jobOrder = await getJobOrder(supabase, jobOrderId, access.authUserId);
   } catch (error) {
     if (!(error instanceof JobOrderQueryError)) {
       throw error;

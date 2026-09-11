@@ -39,12 +39,13 @@ const BASE_ROW = {
   created_by: "rep",
   created_at: "2026-07-27T00:00:00.000Z",
   updated_at: "2026-07-27T00:00:00.000Z",
+  leg_network_status: null,
   is_ready: true,
   blockers: [],
 };
 
 function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): BasicDispatchQueryClient {
-  return { rpc: () => Promise.resolve(response), from: () => ({}) } as unknown as BasicDispatchQueryClient;
+  return { rpc: () => Promise.resolve(response) } as unknown as BasicDispatchQueryClient;
 }
 
 describe("getDispatchReadiness", () => {
@@ -71,50 +72,33 @@ describe("getDispatchReadiness", () => {
 });
 
 /**
- * CG-AUDIT-2026-09-02 F5: listDispatchReadyQueue now issues two separate queries -- a
- * plain HEAD count against `shipment_orders` (awaited directly, no `.range()` call), and
- * the enriched data page against `dispatch_ready_queue` (resolved via `.range()`, exactly
- * as before). This mock routes by table name: the `shipment_orders` chain is itself
- * thenable at every step (simulating a real supabase-js query builder, which resolves on
- * `await` without needing a terminal method call) and answers with `countResponse`; the
- * `dispatch_ready_queue` chain resolves via `.range()` exactly as the single-query mock
- * used to, answering with `dataResponse`.
+ * CG-AUDIT-2026-09-02 O1 cluster 3 batch 1: listDispatchReadyQueue issues two separate
+ * RPC calls -- count_dispatch_ready_shipment_orders (a bare scalar) and
+ * list_dispatch_ready_queue (a row set) -- preserving F5's own count/data split intent.
+ * This mock routes by function name.
  */
-function fakeTableClient(
-  countResponse: { count: number | null; error: { message: string } | null },
+function fakeRpcRoutedClient(
+  countResponse: { data: unknown; error: { message: string } | null },
   dataResponse: { data: unknown; error: { message: string } | null },
-  captureRange?: (from: number, to: number) => void,
+  captureArgs?: (fn: string, args: Record<string, unknown>) => void,
 ): BasicDispatchQueryClient {
-  function dataChain(): unknown {
-    return {
-      select: () => dataChain(),
-      eq: () => dataChain(),
-      order: () => dataChain(),
-      range: (from: number, to: number) => {
-        captureRange?.(from, to);
-        return Promise.resolve(dataResponse);
-      },
-    };
-  }
-  function countChain(): PromiseLike<unknown> {
-    return {
-      select: () => countChain(),
-      eq: () => countChain(),
-      then: (onFulfilled: (value: unknown) => unknown) => Promise.resolve(countResponse).then(onFulfilled),
-    } as unknown as PromiseLike<unknown>;
-  }
   return {
-    from: (table: string) => (table === "shipment_orders" ? countChain() : dataChain()),
-    rpc: () => Promise.resolve(dataResponse),
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      captureArgs?.(fn, args);
+      return Promise.resolve(fn === "count_dispatch_ready_shipment_orders" ? countResponse : dataResponse);
+    },
   } as unknown as BasicDispatchQueryClient;
 }
 
 describe("listDispatchReadyQueue", () => {
-  test("bounds the query to one 50-row default page and maps every row", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ count: 1, error: null }, { data: [BASE_ROW], error: null }, (from, to) => ranges.push([from, to]));
-    const result = await listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 });
-    assert.deepEqual(ranges[0], [0, 49]);
+  test("passes the default page/pageSize through and maps every row", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcRoutedClient({ data: 1, error: null }, { data: [BASE_ROW], error: null }, (fn, args) => calls.push({ fn, args }));
+    const result = await listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
+    const listCall = calls.find((c) => c.fn === "list_dispatch_ready_queue");
+    assert.equal(listCall?.args.p_page, 1);
+    assert.equal(listCall?.args.p_page_size, 50);
+    assert.equal(listCall?.args.p_actor_auth_user_id, ACTOR_ID);
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0]?.isReady, true);
     assert.equal(result.totalCount, 1);
@@ -122,25 +106,27 @@ describe("listDispatchReadyQueue", () => {
     assert.equal(result.pageSize, 50);
   });
 
-  test("advances the page offset correctly for page 2 and clamps an oversized pageSize", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ count: 0, error: null }, { data: [], error: null }, (from, to) => ranges.push([from, to]));
-    await listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
-    assert.deepEqual(ranges[0], [100, 199]);
+  test("clamps an oversized pageSize and advances page 2's p_page", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcRoutedClient({ data: 0, error: null }, { data: [], error: null }, (fn, args) => calls.push({ fn, args }));
+    await listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 2, pageSize: 500 });
+    const listCall = calls.find((c) => c.fn === "list_dispatch_ready_queue");
+    assert.equal(listCall?.args.p_page, 2);
+    assert.equal(listCall?.args.p_page_size, 100);
   });
 
-  test("wraps an error from the count query", async () => {
-    const client = fakeTableClient({ count: null, error: { message: "boom" } }, { data: [], error: null });
+  test("wraps an error from the count RPC", async () => {
+    const client = fakeRpcRoutedClient({ data: null, error: { message: "boom" } }, { data: [], error: null });
     await assert.rejects(
-      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 }),
+      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 }),
       (err: unknown) => err instanceof BasicDispatchQueryError,
     );
   });
 
-  test("wraps an error from the data query", async () => {
-    const client = fakeTableClient({ count: 0, error: null }, { data: null, error: { message: "boom" } });
+  test("wraps an error from the data RPC", async () => {
+    const client = fakeRpcRoutedClient({ data: 0, error: null }, { data: null, error: { message: "boom" } });
     await assert.rejects(
-      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 }),
+      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 }),
       (err: unknown) => err instanceof BasicDispatchQueryError,
     );
   });

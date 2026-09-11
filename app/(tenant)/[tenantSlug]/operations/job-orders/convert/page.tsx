@@ -37,7 +37,7 @@ export default async function ConvertJobOrderPage({
   let handoffs: JobOrderHandoff[];
   let loadFailed = false;
   try {
-    handoffs = await listJobOrderHandoffs(supabase, access.tenant.id);
+    handoffs = await listJobOrderHandoffs(supabase, access.tenant.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof JobOrderLineageQueryError)) {
       throw error;

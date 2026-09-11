@@ -8,23 +8,21 @@ const JOB_ORDER_ID = "423e4567-e89b-12d3-a456-426614174000";
 const ACCOUNT_ID = "523e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "623e4567-e89b-12d3-a456-426614174000";
 
-function fakeClient(response: { data: unknown; error: { message: string } | null; count: number | null }): DispatchBoardQueryClient {
+/**
+ * CG-AUDIT-2026-09-02 O1 cluster 3 batch 1: listDispatchBoard issues two separate RPC
+ * calls -- count_dispatch_board_shipment_orders (a bare scalar) and list_dispatch_board
+ * (a row set), mirroring listDispatchReadyQueue's own count/data split. This mock routes
+ * by function name.
+ */
+function fakeClient(
+  countResponse: { data: unknown; error: { message: string } | null },
+  dataResponse: { data: unknown; error: { message: string } | null },
+  captureArgs?: (fn: string, args: Record<string, unknown>) => void,
+): DispatchBoardQueryClient {
   return {
-    from() {
-      return {
-        select() {
-          return this;
-        },
-        eq() {
-          return this;
-        },
-        order() {
-          return this;
-        },
-        range() {
-          return Promise.resolve(response);
-        },
-      };
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      captureArgs?.(fn, args);
+      return Promise.resolve(fn === "count_dispatch_board_shipment_orders" ? countResponse : dataResponse);
     },
   } as unknown as DispatchBoardQueryClient;
 }
@@ -59,6 +57,7 @@ const ROW = {
   created_by: "rep",
   created_at: "2026-07-29T00:00:00.000Z",
   updated_at: "2026-07-29T00:00:00.000Z",
+  leg_network_status: null,
   is_ready: true,
   blockers: [],
   has_active_assignment: true,
@@ -74,15 +73,24 @@ const ROW = {
 
 describe("listDispatchBoard", () => {
   test("maps rows and pagination metadata", async () => {
-    const client = fakeClient({ data: [ROW], error: null, count: 1 });
-    const result = await listDispatchBoard(client, { tenantId: TENANT_ID, page: 1 });
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeClient({ data: 1, error: null }, { data: [ROW], error: null }, (fn, args) => calls.push({ fn, args }));
+    const result = await listDispatchBoard(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
     assert.equal(result.rows.length, 1);
     assert.equal(result.totalCount, 1);
     assert.equal(result.rows[0]?.trackingStatus, "not_tracked");
+    const listCall = calls.find((c) => c.fn === "list_dispatch_board");
+    assert.equal(listCall?.args.p_actor_auth_user_id, ACTOR_ID);
+    assert.equal(listCall?.args.p_tenant_id, TENANT_ID);
   });
 
-  test("surfaces a real query error as DispatchBoardQueryError", async () => {
-    const client = fakeClient({ data: null, error: { message: "connection reset" }, count: null });
-    await assert.rejects(() => listDispatchBoard(client, { tenantId: TENANT_ID, page: 1 }), DispatchBoardQueryError);
+  test("surfaces a count RPC error as DispatchBoardQueryError", async () => {
+    const client = fakeClient({ data: null, error: { message: "connection reset" } }, { data: [], error: null });
+    await assert.rejects(() => listDispatchBoard(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 }), DispatchBoardQueryError);
+  });
+
+  test("surfaces a data RPC error as DispatchBoardQueryError", async () => {
+    const client = fakeClient({ data: 0, error: null }, { data: null, error: { message: "connection reset" } });
+    await assert.rejects(() => listDispatchBoard(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 }), DispatchBoardQueryError);
   });
 });

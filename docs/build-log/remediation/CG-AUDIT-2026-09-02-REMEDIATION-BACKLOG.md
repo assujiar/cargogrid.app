@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-2, 43 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; clusters 3-7, 86 call sites, remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-2, 43 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core` batch 1, 4 tables / 7 call sites, **DONE**; cluster 3's other 16 tables (21 call sites) plus clusters 4-7 (58 call sites), 79 call sites total, remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1066,4 +1066,69 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   0's `get_approval_requests_entity_refs`) are now all fixed — no remaining `hris-identity-access`
   call site needs a second batch. Still open: clusters 3-7 (86 more call sites across
   operations-tms-core/telematics-tracking/procurement-document/platform-intelligence-reports/
+  page-level-direct-reads) — next up under the same "lanjut sampe siap launching" mandate.
+
+- 2026-09-11 — Ø1-query-layer cluster 3 (`operations-tms-core`) batch 1 closed (this commit),
+  continuing the same user-directed ("lanjut sampe siap launching") mandate. Opens cluster 3 (28
+  call sites across 20 tables/views, per the recon's own manifest) and closes its first batch — 7
+  call sites across 4 tables/views: `app.shipment_orders` (count only) + `app.dispatch_ready_queue`
+  (view) in `server/queries/basic-dispatch.ts`'s `listDispatchReadyQueue`,
+  `app.dispatch_board_queue` (view) in `dispatch-board.ts`'s `listDispatchBoard`,
+  `app.job_orders_directory` (view, 3 call sites: `getJobOrder`, `getJobOrderForHandoff`,
+  `listJobOrders`) in `job-order.ts`, and `app.job_order_handoffs_directory` (view, 2 call sites:
+  `getJobOrderHandoffForQuotation`, `listJobOrderHandoffs`) in `job-order-lineage.ts`. New
+  migration `20260911000000_close_o1_query_layer_cluster3_batch1_dispatch_job_order_views.sql`
+  adds 9 new `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix
+  pipeline clusters 0-2 established (RULE A/B/C baked into both stages), completed via parallel
+  Agent-tool design/verify calls (the Workflow tool's own subagent-spawning path remained broken
+  this session).
+  **Real cross-tenant-leak risk found and fixed by the independent verify pass, before this
+  migration was ever applied to any database**: `app.get_job_order_for_handoff` and
+  `app.get_job_order_handoff_for_quotation` both originally used a silent
+  `order by created_at desc limit 1` fallback for a hypothetical (schema-legal but
+  application-unreachable today) multi-row match on a non-bare-unique lookup column
+  (`source_handoff_id`/`quotation_id`, each only part of a composite unique constraint). Since
+  such a match would mean two rows disagreeing about which TENANT a handoff/quotation belongs to,
+  silently picking "the newest" risked handing a caller a different tenant's data — not merely a
+  nondeterministic pick. Both functions now COUNT matches and RAISE `ambiguous_context`
+  (`check_violation`) instead, matching `.maybeSingle()`'s own throw-on-conflict contract and this
+  codebase's established count-then-raise idiom (`app.resolve_access_context`, PLT-108). The
+  db-test's own adversarial fixture (a raw, service_role-bypass insert producing a genuine
+  duplicate row) confirmed this RAISE actually fires against a real database, on two independent
+  fresh-database runs.
+  **Notable design decision, independently re-verified**: `app.list_dispatch_ready_queue`/
+  `app.list_dispatch_board` keep their exact count as a SEPARATE, lateral-free function
+  (`app.count_dispatch_ready_shipment_orders`/`app.count_dispatch_board_shipment_orders`) rather
+  than the `count(*) over()` single-query shape `app.list_portal_users` established — both
+  underlying views cross-join the ~40-line `app.evaluate_dispatch_readiness` per row, so a
+  window-function count would reintroduce the exact O(N) lateral-evaluation cost
+  CG-AUDIT-2026-09-02 F5 (`20260907170000`) already eliminated for this same screen; this
+  migration extends that same fix to `app.dispatch_board_queue` for the first time (never itself
+  named by F5, but sharing the identical LATERAL join, confirmed by reading the view body
+  directly, not merely trusting its own header's "RLS-scoped identically" claim).
+  Two minor documentation-accuracy defects were found and fixed during verify (no SQL logic
+  changed): a RULE B citation undercount (two files → three, one of them prose-only) and an
+  off-by-one in the `dispatch_board_queue` projection-column count (10 → 11) in a header comment.
+  This batch's own db-test (`scripts/db-tests/o1-query-layer-cluster3-batch1.sql`) passed cleanly
+  on two independent fresh-database runs — no fixture-setup defect indicated any bug in the
+  migration's own function logic (three minor fixture issues, e.g. a nonexistent `min(uuid)`
+  aggregate and a unique-constraint collision needing two distinct driver `master_records`, were
+  fixed in the test file only).
+  All 4 affected TS query files (`server/queries/basic-dispatch.ts`, `dispatch-board.ts`,
+  `job-order.ts`, `job-order-lineage.ts`) and every real call site (7 `page.tsx` files:
+  `operations/dispatch`, `operations/dispatch-board`, `operations/job-orders`,
+  `operations/job-orders/[jobOrderId]`, `operations/job-orders/convert`,
+  `operations/shipment-orders/create`, `commercial/quotations/[quotationId]`) switched from
+  `.from()` to `.rpc()` in this same commit. Full Tier A gate suite re-run clean: `typecheck`,
+  `lint` (0 errors), the 6,000-test unit suite, `check-rls-initplan.ts` (0 findings), a full
+  `pnpm run db:test` (`ALL PASSED`, 522 migrations / 266 db-test files), `git:check-paths`,
+  `security:check`, and a real `next build`. `scripts/release/check-release-freeze.ts` amended
+  (HUNDRED-AND-TWENTY-FIFTH PASS, `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027
+  Part A authority.
+  **Cluster 3 (`operations-tms-core`) batch 1 (4/20 tables, 7/28 call sites) is now `DONE`.**
+  Still open: this cluster's other 16 tables (21 call sites: dispatch board/job order lineage's
+  own remaining tables — milestone codes, shipment-leg tracking policies/sessions, multi-leg
+  shipment legs/cargo/custody, route-load-planning's 6 tables, shipment orders, shipment mode
+  profiles, vehicle capacity reservations, exceptions directory), plus clusters 4-7 (58 more call
+  sites across telematics-tracking/procurement-document/platform-intelligence-reports/
   page-level-direct-reads) — next up under the same "lanjut sampe siap launching" mandate.

@@ -4286,7 +4286,78 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // **Cluster 2 batch 1 (identity/HRIS access, 5 tables, 10 call sites) is now
   // fully `DONE`.** Clusters 3-7 (86 more call sites across dispatch/tracking/
   // documents/analytics/misc) remain open.
-  migrationSetSha256: "44c43e891da151da3b12b9ff3ffa2e168d4418e15518abc7d9a074f63dc7ba4c",
+  // HUNDRED-AND-TWENTY-FIFTH PASS (2026-09-11, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 522 files (+1) --
+  // new migration 20260911000000_close_o1_query_layer_cluster3_batch1_dispatch_job_
+  // order_views.sql. Opens cluster 3 (operations-tms-core) and closes its first
+  // batch: all 7 call sites across 4 tables/views -- app.shipment_orders (count
+  // only) + app.dispatch_ready_queue (view) in server/queries/basic-dispatch.ts,
+  // app.dispatch_board_queue (view) in dispatch-board.ts, app.job_orders_directory
+  // (view, 3 call sites) in job-order.ts, and app.job_order_handoffs_directory
+  // (view, 2 call sites) in job-order-lineage.ts. 9 new app.*/public.* Option-2
+  // wrapper function pairs via the same adversarial Design->Verify->Fix pipeline
+  // clusters 0-2 established (RULE A/B/C baked into every draft and every
+  // independent verify pass), completed via parallel Agent-tool design/verify
+  // calls (the Workflow tool's own subagent-spawning path remained broken this
+  // session).
+  // **Real cross-tenant-leak risk found and fixed by the independent verify
+  // pass, before this migration was ever applied to any database**: app.
+  // get_job_order_for_handoff and app.get_job_order_handoff_for_quotation both
+  // originally used a silent `order by created_at desc limit 1` fallback for a
+  // hypothetical (schema-legal but application-unreachable today) multi-row
+  // match on a non-bare-unique lookup column (source_handoff_id /
+  // quotation_id, each only part of a composite unique constraint). Since such
+  // a match would mean two rows disagreeing about which TENANT a
+  // handoff/quotation belongs to, silently picking "the newest" risked handing
+  // a caller a different tenant's data -- not merely a nondeterministic pick.
+  // Both functions now COUNT matches and RAISE `ambiguous_context`
+  // (`check_violation`) instead, matching `.maybeSingle()`'s own
+  // throw-on-conflict contract and this codebase's established count-then-raise
+  // idiom (app.resolve_access_context, PLT-108). The db-test's own adversarial
+  // fixture (a raw, service_role-bypass insert producing a genuine duplicate
+  // row) confirmed this RAISE actually fires against a real database, on two
+  // independent fresh-database runs.
+  // Notable design decision, independently re-verified: app.list_dispatch_
+  // ready_queue/app.list_dispatch_board keep their exact count as a SEPARATE,
+  // lateral-free function (app.count_dispatch_ready_shipment_orders/app.count_
+  // dispatch_board_shipment_orders) rather than the `count(*) over()` single-
+  // query shape app.list_portal_users established -- both underlying views
+  // cross-join the ~40-line app.evaluate_dispatch_readiness per row, so a
+  // window-function count would reintroduce the exact O(N) lateral-evaluation
+  // cost CG-AUDIT-2026-09-02 F5 (20260907170000) already eliminated for this
+  // same screen; this migration extends that same fix to app.dispatch_board_
+  // queue for the first time (never itself named by F5, but sharing the
+  // identical LATERAL join, confirmed by reading the view body directly, not
+  // merely trusting its own header's "RLS-scoped identically" claim).
+  // Two minor documentation-accuracy defects were found and fixed during
+  // verify (no SQL logic changed): a RULE B citation undercount (two files ->
+  // three, one of them prose-only) and an off-by-one in the dispatch_board_
+  // queue projection-column count (10 -> 11) in a header comment.
+  // This batch's own db-test (scripts/db-tests/o1-query-layer-cluster3-
+  // batch1.sql) passed cleanly on two independent fresh-database runs (no
+  // fixture-setup defect indicated any bug in the migration's own function
+  // logic -- three minor fixture issues, e.g. a nonexistent `min(uuid)`
+  // aggregate and a unique-constraint collision needing two distinct driver
+  // master_records, were fixed in the test file only).
+  // All 4 affected TS query files (server/queries/basic-dispatch.ts, dispatch-
+  // board.ts, job-order.ts, job-order-lineage.ts) and every real call site (7
+  // page.tsx files: operations/dispatch, operations/dispatch-board,
+  // operations/job-orders, operations/job-orders/[jobOrderId],
+  // operations/job-orders/convert, operations/shipment-orders/create,
+  // commercial/quotations/[quotationId]) switched from `.from()` to `.rpc()`
+  // in this same commit. Full Tier A gate suite re-run clean: `typecheck`,
+  // `lint` (0 errors), the 6,000-test unit suite, `check-rls-initplan.ts` (0
+  // findings), a full `pnpm run db:test` (`ALL PASSED`, 522 migrations / 266
+  // db-test files), `git:check-paths`, `security:check`, and a real `next
+  // build`. Cluster 3 (operations-tms-core, 4/20 tables, 7/28 call sites) has
+  // its first batch DONE; 21 more call sites across dispatch remaining tables
+  // (milestone/leg-tracking/multi-leg/route-planning/shipment-order/mode-
+  // baseline/capacity/exception-escalation) plus clusters 4-7 (58 more call
+  // sites across telematics-tracking/procurement-document/platform-
+  // intelligence-reports/page-level-direct-reads) remain open.
+  migrationSetSha256: "00a24141eff134e525ec386b70590a0362e2a1e602d0b8ebe0229d7aa17ed051",
+  // History: 44c43e891da151da3b12b9ff3ffa2e168d4418e15518abc7d9a074f63dc7ba4c
+  // (521 files, HUNDRED-AND-TWENTY-FOURTH PASS).
   // History: a03ac483e76c44c7c23a31a33bd7ad7f08d236d9710bfc5b657f796a36f49e12
   // (520 files, HUNDRED-AND-TWENTY-THIRD PASS).
   // History: 08804b3a9424603612e59207bd28f3872381503b899d6530c228650a35a64127
@@ -5474,7 +5545,40 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY DONE; clusters
   // 3-7 (86 remaining call sites across dispatch/tracking/documents/analytics/
   // misc) remain open.
-  dbTestSetSha256: "f136ff5d6b8ebfd9afc1af1679038b7b26210a9ad021f5775ca13919c5d71b97",
+  // HUNDRED-AND-TWENTY-FIFTH PASS (2026-09-11, same ruling as migrationSetSha256
+  // above): 266 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster3-
+  // batch1.sql. Proves, against a real disposable database, every one of the 9
+  // new function pairs this pass's migration adds: dispatch ready-queue/board
+  // count+list for an owner and a shared-org-unit viewer, with correct
+  // is_ready/blockers cross-checked against a live app.evaluate_dispatch_
+  // readiness call and honest coalesce-to-default board tracking columns for a
+  // shipment with no app.shipment_tracking_health row; a tenant member with no
+  // owner/org-unit/customer-account relationship gets zero rows/a zero count
+  // from every function, never an exception; cross-tenant denial and a
+  // zero-membership Supreme Admin bypass hold throughout; page_size=1
+  // pagination is exact over 2 matching rows; RULE A rejects a forged actor
+  // (spot-checked on 2 of 4 dispatch functions, 2 of 5 job-order functions);
+  // job order/handoff masking toggles correctly on real COM:View selling
+  // price/COM:View cost role grants (owner lacking both -> masked, a
+  // shared-org-unit viewer holding both -> unmasked); list_job_orders'
+  // pagination has an exact total_count; list_job_order_handoffs' p_limit
+  // clamp does not break normal use; and -- the single most safety-critical
+  // assertion in this batch -- app.get_job_order_for_handoff and app.get_job_
+  // order_handoff_for_quotation both genuinely RAISE an exception whose
+  // message contains `ambiguous_context` once a second, duplicate row is
+  // inserted via a raw service_role-bypass insert (the exact scenario the
+  // independent verify pass's own fix targets), confirmed on two independent
+  // fresh-database runs -- while an ordinary single-tenant actor querying the
+  // same key still resolves to exactly one row, unaffected. Also confirmed
+  // schema-privilege defense in depth (anon holds zero EXECUTE across both
+  // app.*/public.* schemas; authenticated/service_role grant parity
+  // spot-checked on 3 of 9 function pairs). Cluster 3 (operations-tms-core)
+  // batch 1 (4 tables / 7 call sites) of the CG-AUDIT-2026-09-02 Ø1-query-layer
+  // remediation is DONE; 21 more call sites remain in this cluster's other 16
+  // tables, plus 58 more across clusters 4-7.
+  dbTestSetSha256: "2614ff5ce2fd973d6bdfb343e703e07466be278488f061a7ef4e44b1b0ddad99",
+  // History: f136ff5d6b8ebfd9afc1af1679038b7b26210a9ad021f5775ca13919c5d71b97
+  // (265 files, HUNDRED-AND-TWENTY-FOURTH PASS).
   // History: 49fa584c817a1f3ceb75dbf6a1c0ed6456b360119de8264de9ea30a1910f2473
   // (264 files, HUNDRED-AND-TWENTY-THIRD PASS).
   // History: 1d46b64cca8d7ae135515ca910f651f385daa111f31912502ce6c6f5edb9374e

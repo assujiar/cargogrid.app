@@ -38,7 +38,7 @@ export default async function JobOrdersPage({
   let result: ListJobOrdersResult | null = null;
   let loadFailed = false;
   try {
-    result = await listJobOrders(supabase, { tenantId: access.tenant.id, page });
+    result = await listJobOrders(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page });
   } catch (error) {
     if (!(error instanceof JobOrderQueryError)) {
       throw error;

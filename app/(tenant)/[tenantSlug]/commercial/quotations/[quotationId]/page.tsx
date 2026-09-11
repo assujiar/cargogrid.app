@@ -109,7 +109,7 @@ export default async function QuotationDetailPage({
   }
 
   const existingContract = existingConversion ? await getCustomerContractForQuotation(supabase, quotation.id, access.authUserId) : null;
-  const existingHandoff = existingConversion ? await getJobOrderHandoffForQuotation(supabase, quotation.id) : null;
+  const existingHandoff = existingConversion ? await getJobOrderHandoffForQuotation(supabase, quotation.id, access.authUserId) : null;
 
   let comparisonPanel = null;
   if (compareWith) {
