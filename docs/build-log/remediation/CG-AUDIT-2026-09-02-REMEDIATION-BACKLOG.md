@@ -1204,3 +1204,35 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   plus clusters 4-7 (58 more call sites across telematics-tracking/procurement-document/
   platform-intelligence-reports/page-level-direct-reads) — next up under the same "lanjut sampe
   siap launching" mandate.
+
+- 2026-09-11 — Corrective fix (this commit) to the batch 2 migration above, found by cluster 3
+  batch 3's own adversarial verify pass before that batch's own migration was ever written.
+  `app.get_shipment_leg_tracking_policy`/`app.get_current_shipment_leg_tracking_session` (both
+  app.*/public.* pairs) were declared `returns app.<table>` (a bare, non-SETOF composite return)
+  on the incorrect premise that a non-SETOF SQL function returns NULL for a zero-row match.
+  Empirically verified against a live Postgres 16 instance: it instead returns ONE row with every
+  column NULL, which the TS layer's `row ? parse(row) : null` unwrap treats as truthy — both
+  functions would have thrown an uncaught `ZodError` for the ordinary "no policy/session defined
+  yet" case, a real functional regression in already-pushed code (`075a0eb`).
+  An initial attempt fixed this by editing the already-committed migration file in place,
+  reasoning that since it had never been applied to any real/hosted database (only disposable
+  local test databases), doing so was safe. That attempt was itself corrected before being
+  committed: `pnpm run git:check-paths` is a machine-enforced, no-exceptions gate that flags ANY
+  edit to an already-committed migration file, independent of whether a real database has
+  consumed it — `AGENTS.md` states this as a bright line ("Never edit an applied migration; add a
+  new migration") specifically to remove this exact kind of case-by-case judgment call. The
+  in-place edit was reverted and a genuine new migration
+  (`20260911020000_fix_o1_cluster3_batch2_composite_return_null_bug.sql`) authored instead. Since
+  Postgres's `CREATE OR REPLACE FUNCTION` does not allow changing a function's return type, this
+  migration DROPs and recreates all 4 declarations (`returns setof app.<table>` instead of
+  `returns app.<table>`), every function body/authority reasoning/grant otherwise byte-for-byte
+  identical to the original. No TS code change was needed: the existing
+  `Array.isArray(data) ? data[0] : data` unwrap already handles a SETOF-returning function's
+  empty-array result correctly. Independently re-verified: applied the new migration to a fresh
+  disposable database on top of the full existing migration set (clean apply), empirically
+  confirmed all 4 functions now return 0 rows on a miss, re-ran cluster 3 batch 2's own full
+  db-test (`ALL PASSED`, no other assertion affected), and confirmed via a dedicated repo-wide
+  grep that no other function in the entire Ø1-query-layer series (clusters 0 through 3 batch 2)
+  carries this same bare-composite-return defect. Full Tier A gate suite re-run clean, including
+  `git:check-paths` (now clean). `scripts/release/check-release-freeze.ts` amended
+  (HUNDRED-AND-TWENTY-SEVENTH PASS, `migrationSetSha256` only — `dbTestSetSha256` unchanged).

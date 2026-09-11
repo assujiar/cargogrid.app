@@ -4424,7 +4424,70 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // orders/3, shipment mode profiles/1, vehicle capacity reservations/2,
   // exceptions directory/1) plus clusters 4-7 (58 more call sites) remain
   // open.
-  migrationSetSha256: "c0ada24912c2a318d4e597a9df330701722ab48da3d8bbb268c8feb3f7d2630c",
+  // HUNDRED-AND-TWENTY-SEVENTH PASS (2026-09-11, corrective): 524 files (+1) --
+  // new migration 20260911020000_fix_o1_cluster3_batch2_composite_return_null_
+  // bug.sql. CORRECTS a real defect the HUNDRED-AND-TWENTY-SIXTH PASS itself
+  // introduced, found by this same "lanjut sampe siap launching" effort's own
+  // adversarial verify pass for the very next batch (cluster 3 batch 3), before
+  // that batch's own migration was ever written. `app.get_shipment_leg_tracking_
+  // policy` and `app.get_current_shipment_leg_tracking_session` (both
+  // app.*/public.* pairs, 4 functions total,
+  // 20260911010000_close_o1_query_layer_cluster3_batch2_milestone_leg_tracking_
+  // multileg.sql) were declared `returns app.<table>` (a bare, non-SETOF
+  // composite return), on the premise that "a non-SETOF SQL function's
+  // underlying query returning zero rows yields a NULL result." That premise is
+  // WRONG -- empirically verified against a live Postgres 16 instance (both by
+  // the discovering verify agent and independently re-confirmed here before
+  // touching anything): a non-SETOF SQL function whose body query matches zero
+  // rows returns exactly ONE row with every column NULL, not zero rows. Against
+  // the TS layer's own `row ? parse(row) : null` unwrap (`Array.isArray(data) ?
+  // data[0] : data`), that all-NULL object is truthy, so both functions would
+  // have THROWN AN UNCAUGHT ZodError for the ordinary, expected "no
+  // policy/session defined yet" case -- a genuine, previously-undetected
+  // functional regression in already-pushed code (commit 075a0eb), worse than
+  // the `.maybeSingle()` -> null behavior it replaced.
+  // An initial attempt fixed this by editing the already-committed
+  // 20260911010000 migration file in place, reasoning that since it had never
+  // been applied to any real/hosted database (only disposable local test
+  // databases), doing so was safe. That attempt was ITSELF corrected before
+  // being committed: `pnpm run git:check-paths` (scripts/git/check-protected-
+  // paths.ts) is a machine-enforced, no-exceptions gate that flags ANY edit to
+  // an already-committed migration file, independent of whether a real database
+  // has consumed it -- AGENTS.md states this rule as a bright line ("Never edit
+  // an applied migration; add a new migration") specifically to remove this
+  // exact kind of case-by-case judgment call, not merely to protect real,
+  // already-deployed environments. The in-place edit was reverted
+  // (`git checkout HEAD --`) and this migration authored instead as a genuine
+  // new file. Since Postgres's `CREATE OR REPLACE FUNCTION` does not allow
+  // changing a function's return type, this new migration DROPs and recreates
+  // all 4 declarations (`returns setof app.<table>` instead of `returns
+  // app.<table>`), with every function body, RULE A/B/C authority reasoning,
+  // and grant otherwise byte-for-byte identical to the original. `returns
+  // setof` correctly yields zero rows on a miss. No TS code change was needed:
+  // the existing `Array.isArray(data) ? data[0] : data` unwrap in
+  // server/queries/mile-orchestration.ts already handles a SETOF-returning
+  // function's empty-array result correctly. Independently re-verified after
+  // the fix: applied this new migration to a fresh disposable database on top
+  // of the full existing migration set (clean apply, 0 SQL errors, DROP
+  // FUNCTION/CREATE FUNCTION/COMMENT/REVOKE/GRANT in the expected sequence),
+  // empirically confirmed `select count(*) from
+  // app.get_shipment_leg_tracking_policy(<nonexistent-uuid>)` and its 3 sibling
+  // declarations (app.*/public.* x 2 functions) all now return 0 rows (was 1,
+  // all-NULL), and re-ran cluster 3 batch 2's own full db-test
+  // (o1-query-layer-cluster3-batch2.sql) against the corrected schema -- ALL
+  // PASSED, no other assertion affected (dbTestSetSha256 unchanged, no db-test
+  // file was itself modified). Full Tier A gate suite re-run clean: typecheck,
+  // `check-rls-initplan.ts` (0 findings), `git:check-paths` (now clean -- no
+  // forbidden paths touched), `security:check`, a full `pnpm run db:test`, and
+  // a real `next build`. No other function in the entire Ø1-query-layer
+  // remediation series (clusters 0-3 batch 2, repo-wide grepped for the
+  // identical `returns app\.[a-z_]+$` bare-composite-return pattern) carries
+  // this same defect -- every other single-row lookup in this series uses
+  // `returns table (...)` (implicitly SETOF-safe) instead, confirmed by a
+  // dedicated grep sweep before moving on.
+  migrationSetSha256: "8d0657c0003b1d025e233c6e63edf7326104286f2cc8b360dcab882db1ab7231",
+  // History: c0ada24912c2a318d4e597a9df330701722ab48da3d8bbb268c8feb3f7d2630c
+  // (523 files, HUNDRED-AND-TWENTY-SIXTH PASS).
   // History: 00a24141eff134e525ec386b70590a0362e2a1e602d0b8ebe0229d7aa17ed051
   // (522 files, HUNDRED-AND-TWENTY-FIFTH PASS).
   // History: 44c43e891da151da3b12b9ff3ffa2e168d4418e15518abc7d9a074f63dc7ba4c
