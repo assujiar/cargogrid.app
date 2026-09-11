@@ -4355,7 +4355,78 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // baseline/capacity/exception-escalation) plus clusters 4-7 (58 more call
   // sites across telematics-tracking/procurement-document/platform-
   // intelligence-reports/page-level-direct-reads) remain open.
-  migrationSetSha256: "00a24141eff134e525ec386b70590a0362e2a1e602d0b8ebe0229d7aa17ed051",
+  // HUNDRED-AND-TWENTY-SIXTH PASS (2026-09-11, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 523 files (+1) --
+  // new migration 20260911010000_close_o1_query_layer_cluster3_batch2_milestone_
+  // leg_tracking_multileg.sql. Continues cluster 3 (operations-tms-core) with its
+  // second batch: 6 call sites across 6 tables -- app.milestone_codes
+  // (list_milestone_codes) in server/queries/milestone-management.ts, app.
+  // shipment_leg_tracking_policies (get_shipment_leg_tracking_policy) and app.
+  // shipment_leg_tracking_sessions (get_current_shipment_leg_tracking_session)
+  // in mile-orchestration.ts, and app.shipment_legs (list_shipment_legs), app.
+  // shipment_leg_cargo_allocations (get_shipment_leg_cargo_allocation), app.
+  // shipment_leg_custody_events (list_shipment_leg_custody_events) in
+  // multi-leg-shipment.ts. 6 new app.*/public.* Option-2 wrapper function pairs
+  // via the same adversarial Design->Verify->Fix pipeline clusters 0-2 and
+  // cluster 3 batch 1 established (RULE A/B/C baked into every draft), again
+  // completed via parallel Agent-tool design/verify calls rather than the
+  // Workflow tool (whose subagent-spawning path remained broken this session).
+  // Two independent verify agents hit a session-wide rate limit mid-run this
+  // pass; rather than wait idle, the verify work for both drafts was completed
+  // directly (same rigor: independent case-insensitive repo-wide greps against
+  // primary sources for every RULE A/B/C claim, re-deriving rather than trusting
+  // either draft's own citations) once the rate limit reset.
+  // **Notable design decision, independently re-verified**: this migration
+  // deliberately uses TWO DIFFERENT security postures for its 6 functions,
+  // both correct for their own table's real authority shape. app.list_
+  // milestone_codes (a genuinely non-tenant-scoped, `using (true)`-to-
+  // authenticated reference table, mirroring cluster 1 batch 1's app.list_
+  // finance_currencies precedent) and app.get_shipment_leg_tracking_policy/
+  // app.get_current_shipment_leg_tracking_session (mirroring this exact table
+  // family's own pre-existing, already-live sibling read, app.get_shipment_
+  // leg_tracking_sessions) are all SECURITY INVOKER with NO actor parameter,
+  // relying entirely on the calling session's own real RLS -- independently
+  // confirmed safe against `service_role`'s own BYPASSRLS: `service_role`
+  // already holds a direct SELECT grant on all 3 tables, independent of these
+  // new functions, so no new capability is created, and for a genuine
+  // `authenticated` caller INVOKER is the MOST faithful reproduction of the
+  // original (never-reachable) RLS-scoped read, with no separate "claimed
+  // actor" decoupled from session identity for RULE A to protect against --
+  // unlike cluster 3 batch 1's dispatch functions, which take an EXPLICIT
+  // actor parameter specifically because `service_role` calls those ON BEHALF
+  // OF an arbitrary end user with no session identity of its own. app.list_
+  // shipment_legs/app.get_shipment_leg_cargo_allocation/app.list_shipment_leg_
+  // custody_events, by contrast, ARE SECURITY DEFINER + explicit p_actor_
+  // auth_user_id (the dominant convention), since their own RLS varies
+  // per-shipment-order and an INVOKER function would leak unfiltered rows to a
+  // `service_role` caller under BYPASSRLS -- exactly cluster 3 batch 1's own
+  // already-identified failure mode.
+  // A domain investigation (not a defect fix) determined `listShipmentLegs`'
+  // own "non-cancelled-first" TS comment describes neither an exclusion nor a
+  // same-slot reordering rule (a cancelled leg permanently reserves its own
+  // sequence_no under a plain, non-partial unique constraint, making a
+  // same-slot replacement schema-impossible) -- the new function reproduces
+  // the original `.from()` call byte-for-byte (every leg, including
+  // cancelled ones, in plain ascending sequence_no order). Two pre-existing,
+  // out-of-scope gaps were disclosed, not fixed: app.get_shipment_leg_stops
+  // (SECURITY INVOKER, no actor param) is called from inside a SECURITY
+  // DEFINER public wrapper with no table in this family carrying FORCE ROW
+  // LEVEL SECURITY, a plausible already-shipped RLS-bypass gap; and app.
+  // add_shipment_leg's own pre-flight duplicate-sequence check tests
+  // `leg_status <> 'cancelled'` against a base unique constraint that carries
+  // no such carve-out.
+  // Full Tier A gate suite re-run clean: `typecheck`, `lint` (0 errors), the
+  // 6,008-test unit suite, `check-rls-initplan.ts` (0 findings), a full
+  // `pnpm run db:test` (`ALL PASSED`, 523 migrations / 267 db-test files),
+  // `git:check-paths`, `security:check`, and a real `next build`. Cluster 3
+  // batch 2 (6 tables / 6 call sites) is DONE; cluster 3's remaining 10 tables
+  // (15 call sites: route-load-planning's 6 tables/8 call sites, shipment
+  // orders/3, shipment mode profiles/1, vehicle capacity reservations/2,
+  // exceptions directory/1) plus clusters 4-7 (58 more call sites) remain
+  // open.
+  migrationSetSha256: "c0ada24912c2a318d4e597a9df330701722ab48da3d8bbb268c8feb3f7d2630c",
+  // History: 00a24141eff134e525ec386b70590a0362e2a1e602d0b8ebe0229d7aa17ed051
+  // (522 files, HUNDRED-AND-TWENTY-FIFTH PASS).
   // History: 44c43e891da151da3b12b9ff3ffa2e168d4418e15518abc7d9a074f63dc7ba4c
   // (521 files, HUNDRED-AND-TWENTY-FOURTH PASS).
   // History: a03ac483e76c44c7c23a31a33bd7ad7f08d236d9710bfc5b657f796a36f49e12
@@ -5576,7 +5647,40 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // batch 1 (4 tables / 7 call sites) of the CG-AUDIT-2026-09-02 Ø1-query-layer
   // remediation is DONE; 21 more call sites remain in this cluster's other 16
   // tables, plus 58 more across clusters 4-7.
-  dbTestSetSha256: "2614ff5ce2fd973d6bdfb343e703e07466be278488f061a7ef4e44b1b0ddad99",
+  // HUNDRED-AND-TWENTY-SIXTH PASS (2026-09-11, same ruling as migrationSetSha256
+  // above): 267 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster3-
+  // batch2.sql. Proves, against a real disposable database, every one of the 6
+  // new function pairs this pass's migration adds. For the SECURITY INVOKER
+  // functions (get_shipment_leg_tracking_policy/get_current_shipment_leg_
+  // tracking_session): the authority test genuinely forces a real session
+  // identity (`set local role authenticated; set local request.jwt.claims`),
+  // never merely an actor-parameter substitute, since these two functions take
+  // no actor parameter at all -- confirmed for owner, shared-org-unit member,
+  // denied same-tenant member, cross-tenant member, and a zero-membership
+  // Supreme Admin, plus the current-session-only filter (2 session rows, one
+  // is_current=true/false, proving the filter genuinely narrows). For app.list_
+  // milestone_codes: confirmed against an independently-computed order-by-name
+  // reference, and that anon is genuinely rejected (`insufficient_privilege`)
+  // while authenticated succeeds. For the SECURITY DEFINER functions (list_
+  // shipment_legs/get_shipment_leg_cargo_allocation/list_shipment_leg_custody_
+  // events): a cancelled second leg proves unfiltered inclusion in correct
+  // sequence order; a cargo allocation seeded on only one of two legs proves
+  // NULL-not-error for the unallocated leg; 2 custody events with different
+  // sequence_no prove oldest-first ordering; RULE A genuinely rejects a forged
+  // actor under a real forced session identity on all 3 functions; and
+  // owner/denied/cross-tenant/Supreme-Admin visibility holds throughout. Also
+  // confirmed schema-privilege defense in depth (anon holds zero EXECUTE
+  // across all 12 functions in both schemas; grant parity spot-checked on 3 of
+  // 6 pairs). One fixture issue (a nonexistent created_by column on the
+  // append-only app.shipment_leg_custody_events table, should have been
+  // recorded_by) was fixed in the test file only -- no defect in the
+  // migration's own function logic. Cluster 3 batch 2 (6 tables / 6 call
+  // sites) of the CG-AUDIT-2026-09-02 Ø1-query-layer remediation is DONE;
+  // cluster 3's remaining 10 tables (15 call sites) plus clusters 4-7 (58 more
+  // call sites) remain open.
+  dbTestSetSha256: "1a22232c00325d80ca4834666eed87e13326d4ac5bf55e9d071417a89d9379a1",
+  // History: 2614ff5ce2fd973d6bdfb343e703e07466be278488f061a7ef4e44b1b0ddad99
+  // (266 files, HUNDRED-AND-TWENTY-FIFTH PASS).
   // History: f136ff5d6b8ebfd9afc1af1679038b7b26210a9ad021f5775ca13919c5d71b97
   // (265 files, HUNDRED-AND-TWENTY-FOURTH PASS).
   // History: 49fa584c817a1f3ceb75dbf6a1c0ed6456b360119de8264de9ea30a1910f2473

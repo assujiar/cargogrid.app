@@ -266,15 +266,15 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   let legNetworkEntries: LegNetworkEntry[];
   let legNetworkAggregateState;
   try {
-    const legs = await listShipmentLegs(supabase, shipment.id);
+    const legs = await listShipmentLegs(supabase, shipment.id, access.authUserId);
     legNetworkEntries = await Promise.all(
       legs.map(async (leg) => {
         const trackingPolicy = await getShipmentLegTrackingPolicy(supabase, leg.id);
         return {
           leg,
           stops: await listShipmentLegStops(supabase, leg.id),
-          cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id),
-          custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id),
+          cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id, access.authUserId),
+          custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id, access.authUserId),
           trackingPolicy,
           resolvedTrackingPolicy: trackingPolicy?.trackingRequired ? await resolveLegTrackingPolicy(supabase, { shipmentLegId: leg.id, actorAuthUserId: access.authUserId }) : null,
           currentTrackingSession: await getCurrentShipmentLegTrackingSession(supabase, leg.id),

@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-2, 43 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core` batch 1, 4 tables / 7 call sites, **DONE**; cluster 3's other 16 tables (21 call sites) plus clusters 4-7 (58 call sites), 79 call sites total, remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-2, 43 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core` batches 1-2, 10 tables / 13 call sites, **DONE**; cluster 3's other 10 tables (15 call sites) plus clusters 4-7 (58 call sites), 73 call sites total, remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1126,9 +1126,81 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   (HUNDRED-AND-TWENTY-FIFTH PASS, `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027
   Part A authority.
   **Cluster 3 (`operations-tms-core`) batch 1 (4/20 tables, 7/28 call sites) is now `DONE`.**
-  Still open: this cluster's other 16 tables (21 call sites: dispatch board/job order lineage's
-  own remaining tables — milestone codes, shipment-leg tracking policies/sessions, multi-leg
-  shipment legs/cargo/custody, route-load-planning's 6 tables, shipment orders, shipment mode
-  profiles, vehicle capacity reservations, exceptions directory), plus clusters 4-7 (58 more call
-  sites across telematics-tracking/procurement-document/platform-intelligence-reports/
-  page-level-direct-reads) — next up under the same "lanjut sampe siap launching" mandate.
+  Still open: this cluster's other 16 tables (21 call sites: milestone codes, shipment-leg
+  tracking policies/sessions, multi-leg shipment legs/cargo/custody, route-load-planning's 6
+  tables, shipment orders, shipment mode profiles, vehicle capacity reservations, exceptions
+  directory), plus clusters 4-7 (58 more call sites across telematics-tracking/
+  procurement-document/platform-intelligence-reports/page-level-direct-reads) — next up under
+  the same "lanjut sampe siap launching" mandate.
+
+- 2026-09-11 — Ø1-query-layer cluster 3 (`operations-tms-core`) batch 2 closed (this commit),
+  continuing the same user-directed ("lanjut sampe siap launching") mandate. Closes 6 call sites
+  across 6 tables: `app.milestone_codes` (`list_milestone_codes`) in
+  `server/queries/milestone-management.ts`, `app.shipment_leg_tracking_policies`
+  (`get_shipment_leg_tracking_policy`) and `app.shipment_leg_tracking_sessions`
+  (`get_current_shipment_leg_tracking_session`) in `mile-orchestration.ts`, and
+  `app.shipment_legs` (`list_shipment_legs`), `app.shipment_leg_cargo_allocations`
+  (`get_shipment_leg_cargo_allocation`), `app.shipment_leg_custody_events`
+  (`list_shipment_leg_custody_events`) in `multi-leg-shipment.ts`. New migration
+  `20260911010000_close_o1_query_layer_cluster3_batch2_milestone_leg_tracking_multileg.sql` adds
+  6 new `app.*`+`public.*` Option-2 wrapper pairs via the same adversarial Design→Verify→Fix
+  pipeline clusters 0-2 and cluster 3 batch 1 established (RULE A/B/C baked into every draft),
+  completed via parallel Agent-tool design/verify calls (the Workflow tool's own
+  subagent-spawning path remained broken this session). Two independent verify agents hit a
+  session-wide rate limit mid-run this pass; rather than wait idle, the verify work for both
+  drafts was completed directly with the same rigor (independent case-insensitive repo-wide
+  greps against primary sources for every RULE A/B/C claim) once the rate limit reset.
+  **Notable design decision, independently re-verified**: this migration deliberately uses TWO
+  DIFFERENT security postures for its 6 functions, both correct for their own table's real
+  authority shape. `app.list_milestone_codes` (a genuinely non-tenant-scoped, `using (true)`-to-
+  authenticated reference table, mirroring cluster 1 batch 1's `app.list_finance_currencies`
+  precedent) and `app.get_shipment_leg_tracking_policy`/`app.get_current_shipment_leg_tracking_
+  session` (mirroring this exact table family's own pre-existing, already-live sibling read,
+  `app.get_shipment_leg_tracking_sessions`) are all `SECURITY INVOKER` with NO actor parameter,
+  relying entirely on the calling session's own real RLS — independently confirmed safe against
+  `service_role`'s own BYPASSRLS: `service_role` already holds a direct SELECT grant on all 3
+  tables, independent of these new functions, so no new capability is created, and for a genuine
+  `authenticated` caller INVOKER is the MOST faithful reproduction of the original
+  (never-reachable) RLS-scoped read, with no separate "claimed actor" decoupled from session
+  identity for RULE A to protect against — unlike cluster 3 batch 1's dispatch functions, which
+  take an EXPLICIT actor parameter specifically because `service_role` calls those ON BEHALF OF
+  an arbitrary end user with no session identity of its own. `app.list_shipment_legs`/
+  `app.get_shipment_leg_cargo_allocation`/`app.list_shipment_leg_custody_events`, by contrast,
+  ARE `SECURITY DEFINER` + explicit `p_actor_auth_user_id` (the dominant convention), since their
+  own RLS varies per-shipment-order and an INVOKER function would leak unfiltered rows to a
+  `service_role` caller under BYPASSRLS — exactly cluster 3 batch 1's own already-identified
+  failure mode.
+  A domain investigation (not a defect fix) determined `listShipmentLegs`' own "non-cancelled-
+  first" TS comment describes neither an exclusion nor a same-slot reordering rule (a cancelled
+  leg permanently reserves its own sequence_no under a plain, non-partial unique constraint,
+  making a same-slot replacement schema-impossible) — the new function reproduces the original
+  `.from()` call byte-for-byte (every leg, including cancelled ones, in plain ascending
+  sequence_no order). Two pre-existing, out-of-scope gaps were disclosed, not fixed: `app.
+  get_shipment_leg_stops` (SECURITY INVOKER, no actor param) is called from inside a SECURITY
+  DEFINER public wrapper with no table in this family carrying `FORCE ROW LEVEL SECURITY`, a
+  plausible already-shipped RLS-bypass gap; and `app.add_shipment_leg`'s own pre-flight
+  duplicate-sequence check tests `leg_status <> 'cancelled'` against a base unique constraint
+  that carries no such carve-out.
+  This batch's own db-test (`scripts/db-tests/o1-query-layer-cluster3-batch2.sql`) genuinely
+  forces a real session identity (`set local role authenticated; set local request.jwt.claims`)
+  to test the two SECURITY INVOKER functions, never merely an actor-parameter substitute, since
+  neither takes an actor parameter at all — confirmed for owner, shared-org-unit member, denied
+  same-tenant member, cross-tenant member, and a zero-membership Supreme Admin. One fixture issue
+  (a nonexistent `created_by` column on the append-only `app.shipment_leg_custody_events` table,
+  should have been `recorded_by`) was fixed in the test file only — no defect in the migration's
+  own function logic.
+  All 3 affected TS query files (`server/queries/milestone-management.ts`, `mile-orchestration.ts`,
+  `multi-leg-shipment.ts`) and every real call site (1 `page.tsx` file,
+  `operations/shipment-orders/[shipmentOrderId]`, covering all 6 call sites) switched from
+  `.from()` to `.rpc()` in this same commit. Full Tier A gate suite re-run clean: `typecheck`,
+  `lint` (0 errors), the 6,008-test unit suite, `check-rls-initplan.ts` (0 findings), a full
+  `pnpm run db:test` (`ALL PASSED`, 523 migrations / 267 db-test files), `git:check-paths`,
+  `security:check`, and a real `next build`. `scripts/release/check-release-freeze.ts` amended
+  (HUNDRED-AND-TWENTY-SIXTH PASS, `migrationSetSha256`/`dbTestSetSha256`) per this same ADR-0027
+  Part A authority.
+  **Cluster 3 batches 1-2 (10/20 tables, 13/28 call sites) are now `DONE`.** Still open: this
+  cluster's other 10 tables (15 call sites: route-load-planning's 6 tables/8 call sites, shipment
+  orders/3, shipment mode profiles/1, vehicle capacity reservations/2, exceptions directory/1),
+  plus clusters 4-7 (58 more call sites across telematics-tracking/procurement-document/
+  platform-intelligence-reports/page-level-direct-reads) — next up under the same "lanjut sampe
+  siap launching" mandate.
