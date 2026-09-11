@@ -55,68 +55,78 @@ describe("getExceptionEscalationHistory", () => {
   });
 });
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): ExceptionEscalationQueryTableClient {
+function fakeRpcTableClient(
+  response: { data: unknown; error: { message: string } | null },
+  capture?: (fn: string, args: Record<string, unknown>) => void,
+): ExceptionEscalationQueryTableClient {
   return {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: () => Promise.resolve(response),
-        }),
-      }),
-    }),
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      capture?.(fn, args);
+      return Promise.resolve(response);
+    },
   } as unknown as ExceptionEscalationQueryTableClient;
 }
 
 describe("listShipmentExceptions", () => {
   test("maps every row, including the masking flag", async () => {
-    const client = fakeTableClient({
-      data: [
-        {
-          id: EXCEPTION_ID,
-          tenant_id: TENANT_ID,
-          shipment_order_id: SHIPMENT_ID,
-          milestone_event_id: null,
-          type: "delay",
-          severity: "high",
-          status: "open",
-          owner_user_id: null,
-          sla_policy_version_id: null,
-          sla_hours: null,
-          due_at: null,
-          escalation_level: 0,
-          source: "manual",
-          correlation_key: null,
-          description: "test",
-          internal_notes: null,
-          damage_loss_details: null,
-          claim_amount: null,
-          claim_currency: null,
-          sensitive_masked: true,
-          resolution_evidence: null,
-          resolved_at: null,
-          reopened_at: null,
-          closed_at: null,
-          record_version: 1,
-          created_by: "rep",
-          created_at: "2026-07-27T08:00:00.000Z",
-          updated_at: "2026-07-27T08:00:00.000Z",
-        },
-      ],
-      error: null,
-    });
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcTableClient(
+      {
+        data: [
+          {
+            id: EXCEPTION_ID,
+            tenant_id: TENANT_ID,
+            shipment_order_id: SHIPMENT_ID,
+            milestone_event_id: null,
+            type: "delay",
+            severity: "high",
+            status: "open",
+            owner_user_id: null,
+            sla_policy_version_id: null,
+            sla_hours: null,
+            due_at: null,
+            escalation_level: 0,
+            source: "manual",
+            correlation_key: null,
+            description: "test",
+            internal_notes: null,
+            damage_loss_details: null,
+            claim_amount: null,
+            claim_currency: null,
+            sensitive_masked: true,
+            resolution_evidence: null,
+            resolved_at: null,
+            reopened_at: null,
+            closed_at: null,
+            record_version: 1,
+            created_by: "rep",
+            created_at: "2026-07-27T08:00:00.000Z",
+            updated_at: "2026-07-27T08:00:00.000Z",
+          },
+        ],
+        error: null,
+      },
+      (fn, args) => {
+        capturedFn = fn;
+        capturedArgs = args;
+      },
+    );
     const exceptions = await listShipmentExceptions(client, SHIPMENT_ID);
+    assert.equal(capturedFn, "list_shipment_exceptions");
+    assert.equal(capturedArgs?.p_shipment_order_id, SHIPMENT_ID);
     assert.equal(exceptions.length, 1);
     assert.equal(exceptions[0]?.sensitiveMasked, true);
   });
 
   test("returns an empty array (never an error) when nothing has been reported yet", async () => {
-    const client = fakeTableClient({ data: [], error: null });
+    const client = fakeRpcTableClient({ data: [], error: null });
     const exceptions = await listShipmentExceptions(client, SHIPMENT_ID);
     assert.deepEqual(exceptions, []);
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const client = fakeRpcTableClient({ data: null, error: { message: "boom" } });
     await assert.rejects(() => listShipmentExceptions(client, SHIPMENT_ID), (err: unknown) => err instanceof ExceptionEscalationQueryError);
   });
 });

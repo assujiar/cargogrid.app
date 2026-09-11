@@ -1,8 +1,12 @@
 /**
  * Exception and Escalation read queries (OPS-174, CG-S8-OPS-008). Thin, typed
- * wrappers around app.get_exception_escalation_history and a plain, RLS-scoped
- * app.exceptions_directory table read (masked -- no RPC needed, the same posture
- * OPS-171's app.shipment_mode_profiles read established).
+ * wrappers around app.get_exception_escalation_history and
+ * app.list_shipment_exceptions. CG-AUDIT-2026-09-02 O1 remediation (cluster 3
+ * batch 4,
+ * 20260911040000_close_o1_query_layer_cluster3_batch4_shipment_order_capacity_exceptions.sql):
+ * the field-masked app.exceptions_directory read also now goes through a
+ * thin, security-invoker RPC wrapper (app is not exposed to PostgREST, so a
+ * `.from()` call against it has never worked in production).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,7 +20,7 @@ import {
 } from "../contracts/exception-escalation/exception-escalation.ts";
 
 export type ExceptionEscalationQueryRpcClient = Pick<SupabaseClient, "rpc">;
-export type ExceptionEscalationQueryTableClient = Pick<SupabaseClient, "from">;
+export type ExceptionEscalationQueryTableClient = Pick<SupabaseClient, "rpc">;
 
 export class ExceptionEscalationQueryError extends Error {
   constructor(message: string) {
@@ -46,7 +50,7 @@ export async function getExceptionEscalationHistory(
 
 /** The field-masked list of exceptions for one Shipment Order, RLS-scoped, ordered newest-first. */
 export async function listShipmentExceptions(client: ExceptionEscalationQueryTableClient, shipmentOrderId: string): Promise<ExceptionDirectoryRow[]> {
-  const { data, error } = await client.from("exceptions_directory").select("*").eq("shipment_order_id", shipmentOrderId).order("created_at", { ascending: false });
+  const { data, error } = await client.rpc("list_shipment_exceptions", { p_shipment_order_id: shipmentOrderId });
   if (error) {
     throw new ExceptionEscalationQueryError(error.message);
   }

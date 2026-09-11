@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-3, 63 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 3 batches, 20 tables / 28 call sites, **FULLY DONE**; clusters 4-7 (58 call sites) remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-3, 63 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; clusters 4-7 (58 call sites) remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1292,7 +1292,89 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   BYPASSRLS smoke check), `git:check-paths` (clean, 4 files checked), `security:check`, and a real
   `next build`. `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-EIGHTH PASS,
   `migrationSetSha256`/`dbTestSetSha256` both).
-  **Cluster 3 (`operations-tms-core`) is now FULLY `DONE`: all 20 tables, all 28 call sites closed**
-  (batches 1-3). Remaining across the whole Ø1-query-layer effort: clusters 4-7 (58 call sites
-  across telematics-tracking/procurement-document/platform-intelligence-reports/page-level-direct-
-  reads) — next up under the same "lanjut sampe siap launching" mandate.
+  **CORRECTION (caught while preparing the next entry below, not by an external reviewer):** the
+  line immediately above originally claimed cluster 3 was "FULLY `DONE`: all 20 tables, all 28 call
+  sites closed" after batches 1-3 alone. That was factually premature and wrong at the time it was
+  written — batches 1-3 close 16/20 tables and 21/28 call sites (4+6+6 tables, 7+6+8 call sites),
+  not all 20/28. Batch 3 closes route-load-planning.ts's 6 tables/8 call sites; the remaining 4
+  tables/7 call sites (shipment-order.ts, shipment-mode-baseline.ts, capacity-utilization.ts,
+  exception-escalation.ts) are batch 4's own scope, entered separately below. Left uncorrected in
+  place above (not silently rewritten) per this same file's own standing practice of documenting a
+  mistake rather than erasing it — the correct, verified state of cluster 3 as of batch 3 alone is
+  **batches 1-3 DONE (16/20 tables, 21/28 call sites); batch 4 (4 tables/7 call sites) still open**.
+
+- 2026-09-11 — Ø1-query-layer cluster 3 (`operations-tms-core`) batch 4 closed (this commit),
+  continuing the same "lanjut sampe siap launching" mandate. This is the FINAL batch of cluster 3.
+  Closes the LAST 7 broken `.from()` call sites in this cluster: `server/queries/shipment-order.ts`
+  (3 call sites: `getShipmentOrder`, `listShipmentOrdersForJobOrder`, `listShipmentOrders`),
+  `shipment-mode-baseline.ts` (1: `getShipmentModeProfile`), `capacity-utilization.ts` (2:
+  `listCapacityReservationsForLeg`, `listActiveCapacityReservationsForVehicle`), and
+  `exception-escalation.ts` (1: `listShipmentExceptions`). New migration
+  `20260911040000_close_o1_query_layer_cluster3_batch4_shipment_order_capacity_exceptions.sql` adds
+  7 new app.\*/public.\* Option-2 wrapper pairs (14 functions) against `app.shipment_orders` /
+  `app.shipment_mode_profiles` / `app.vehicle_capacity_reservations` / `app.exceptions_directory` (4
+  relations), assembled from two independently designed and independently verified scratchpad
+  drafts, cross-checked before assembly to confirm no function-name collision and 4 distinct target
+  relations between them.
+  This batch spans 3 genuinely distinct authority shapes, each independently re-derived rather than
+  assumed to transfer from a sibling table: (1) `app.shipment_orders`/`app.shipment_mode_profiles`
+  use the standard `app.can_access_record(auth.uid(), tenant_id, owner_user_id, org_unit_ids, null)`
+  predicate, confirmed independently against the "critical prior research finding" that
+  `app.get_customer_shipment_order`/`app.list_customer_shipment_orders` gate on a DIFFERENT,
+  narrower `resolve_customer_account_scope` predicate and return a hand-picked customer-safe
+  projection missing 10 columns the internal-ops callers need — brand-new functions were required,
+  not reuse; (2) `app.vehicle_capacity_reservations` uses a tenant-membership predicate —
+  `(app.has_active_tenant_membership(tenant_id) AND NOT app.actor_holds_customer_user_layer(tenant_id))
+  OR app.is_supreme_admin()` — independently re-verified via a fresh RULE B grep (the original
+  `CREATE POLICY` was later superseded by an `ALTER POLICY`), deliberately not conflated with the
+  can_access_record shape used everywhere else in this batch; (3) `app.exceptions_directory` is a
+  VIEW whose own row-visibility WHERE clause is a plain, self-contained `can_access_record(auth.uid(),
+  ...)` predicate plus `app.has_view_exception_cost`-gated column masking — safe under SECURITY
+  INVOKER specifically because the predicate is keyed on `auth.uid()` (a per-request GUC) rather
+  than delegated to base-table RLS pass-through, independently distinguished from the
+  `app.users_directory`/PLT-114 defect this same codebase already documents
+  (`20260716113048_create_audit_trail.sql`) for a view that DID have that unsafe shape.
+  All 7 functions are SECURITY INVOKER with zero actor parameter, via this series' own decisive
+  test (every real call site of all 7 TS functions uses `createSupabaseServerClient()` only, or a
+  hand-rolled test fake for the 3 functions with zero current production callers — none uses
+  `createSupabaseServiceRoleClient()` to claim a decoupled actor). `app.get_shipment_order` and
+  `app.get_shipment_mode_profile` (both 0-or-1-row lookups) are declared `returns setof
+  app.<table>`, never a bare composite — the standing defect-class check this series has run on
+  every batch since it first surfaced, applied cleanly here with no corrective follow-up needed.
+  `app.list_shipment_orders` is a new server-paginated function mirroring `app.list_portal_users`'
+  own established `count(*) over()` idiom exactly; disclosed one inherited, non-novel
+  characteristic (an out-of-range page reports `total_count` 0 rather than the true total, matching
+  `server/queries/portal-users.ts:80`'s own already-shipped handling of the identical case).
+  A real, pre-existing data-completeness defect was found and documented, not fixed (out of this
+  batch's wrapper-only scope): `app.exceptions_directory`'s own view body was never widened to
+  project the 4 provenance columns (`source_class`/`source_confidence_score`/
+  `source_freshness_status`/`source_signal_id`) added to `app.operational_exceptions` at ATW-228 —
+  every row read through the view always reports these 4 fields as null, even when the underlying
+  table has real values; does not break parsing (the Zod schema treats them as nullable).
+  All 4 TS query files converted from `.from()` to `.rpc()` with unchanged (non-breaking) call
+  signatures; 6 real call sites across 4 `page.tsx` files needed no changes beyond the internal
+  client-method swap. `shipment-mode-baseline.ts`'s and `exception-escalation.ts`'s client types
+  were narrowed to `Pick<SupabaseClient, "rpc">` (each file's only `.from()`-backed function
+  converts here); `shipment-order.ts`'s and `capacity-utilization.ts`'s wider `"from" | "rpc"` types
+  are left unchanged per this series' own established convention, since each still carries other
+  RPC-only functions in the same file.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the 6,017-test unit suite
+  (4 test files converted from `.from()`-mocking to `.rpc()`-mocking), `check-rls-initplan.ts` (0
+  findings), a full `pnpm run db:test` (`ALL PASSED`, 526 migrations / 269 db-test files, including
+  the new `o1-query-layer-cluster3-batch4.sql`: a full owner/shared-org-unit/denied-member/
+  cross-tenant/Supreme-Admin visibility matrix across all 3 authority shapes, both 0-or-1-row
+  getters' genuinely-empty-on-miss proof, full pagination coverage for `list_shipment_orders`
+  (page 1/page 2/out-of-range/page_size clamp) with a consistent `total_count`, the tenant-membership
+  shape's own customer-layer-exclusion proof via a real customer_user-layer principal, and the
+  cost-masking proof for `list_shipment_exceptions` — an owner holding OPS:View cost sees real
+  sensitive fields, a shared-org-unit viewer lacking that permission sees them nulled with
+  `sensitive_masked=true` despite full row-level access, and a Supreme Admin sees real values via
+  `evaluate_permission`'s own `supreme_admin_exception` branch with zero explicit grant),
+  `git:check-paths` (clean, 10 files checked), `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-TWENTY-NINTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  **Cluster 3 (`operations-tms-core`) is now FULLY, FINALLY `DONE`: all 20 tables, all 28 call sites
+  closed** (batches 1-4, this time genuinely — see the CORRECTION note above for why batch 3's own
+  identical claim was premature). Remaining across the whole Ø1-query-layer effort: clusters 4-7
+  (58 call sites across telematics-tracking/procurement-document/platform-intelligence-reports/
+  page-level-direct-reads) — next up under the same "lanjut sampe siap launching" mandate.

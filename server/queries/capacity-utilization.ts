@@ -2,9 +2,13 @@
  * Capacity reservation and tracking coverage/utilization read queries (ATW-227,
  * CG-S10-ATW-008). Thin, typed wrappers around app.get_tenant_tracking_coverage/
  * app.get_tenant_tracking_utilization_summary
- * (supabase/migrations/20260730120000_create_advanced_tms_capacity_utilization.sql),
- * plus a direct RLS-scoped read of app.vehicle_capacity_reservations for a leg or
- * vehicle's own reservation history.
+ * (supabase/migrations/20260730120000_create_advanced_tms_capacity_utilization.sql).
+ * CG-AUDIT-2026-09-02 O1 remediation (cluster 3 batch 4,
+ * 20260911040000_close_o1_query_layer_cluster3_batch4_shipment_order_capacity_exceptions.sql):
+ * the leg/vehicle reservation-history reads also now go through thin,
+ * security-invoker RPC wrappers (app is not exposed to PostgREST, so a
+ * `.from()` call against app.vehicle_capacity_reservations has never worked in
+ * production) -- RLS-scoped by tenant membership, never a cross-tenant read.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -33,7 +37,7 @@ function firstRow(data: unknown): Record<string, unknown> | null {
 
 /** Every capacity reservation ever made for one shipment leg, most recent first -- RLS-scoped (tenant membership), never a cross-tenant read. */
 export async function listCapacityReservationsForLeg(client: CapacityUtilizationQueryClient, shipmentLegId: string): Promise<VehicleCapacityReservation[]> {
-  const { data, error } = await client.from("vehicle_capacity_reservations").select("*").eq("shipment_leg_id", shipmentLegId).order("created_at", { ascending: false });
+  const { data, error } = await client.rpc("list_capacity_reservations_for_leg", { p_shipment_leg_id: shipmentLegId });
   if (error) {
     throw new CapacityUtilizationQueryError(error.message);
   }
@@ -42,12 +46,7 @@ export async function listCapacityReservationsForLeg(client: CapacityUtilization
 
 /** Every currently held/consumed reservation against one vehicle, earliest window first -- for a dispatcher checking a vehicle's own committed schedule before assigning another leg. */
 export async function listActiveCapacityReservationsForVehicle(client: CapacityUtilizationQueryClient, vehicleMasterId: string): Promise<VehicleCapacityReservation[]> {
-  const { data, error } = await client
-    .from("vehicle_capacity_reservations")
-    .select("*")
-    .eq("vehicle_master_id", vehicleMasterId)
-    .in("status", ["held", "consumed"])
-    .order("window_start", { ascending: true });
+  const { data, error } = await client.rpc("list_active_capacity_reservations_for_vehicle", { p_vehicle_master_id: vehicleMasterId });
   if (error) {
     throw new CapacityUtilizationQueryError(error.message);
   }

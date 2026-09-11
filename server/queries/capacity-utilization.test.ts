@@ -14,47 +14,19 @@ const LEG_ID = "323e4567-e89b-12d3-a456-426614174000";
 const VEHICLE_ID = "423e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "623e4567-e89b-12d3-a456-426614174000";
 
-function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): CapacityUtilizationQueryClient {
+function fakeRpcClient(
+  response: { data: unknown; error: { message: string } | null },
+  capture?: (fn: string, args: Record<string, unknown>) => void,
+): CapacityUtilizationQueryClient {
   return {
-    rpc: async () => response,
+    rpc: async (fn: string, args: Record<string, unknown>) => {
+      capture?.(fn, args);
+      return response;
+    },
     from() {
       throw new Error("not used in this fake");
     },
   } as unknown as CapacityUtilizationQueryClient;
-}
-
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): {
-  client: CapacityUtilizationQueryClient;
-  calls: { table: string; eqCalls: [string, unknown][]; inCalls: [string, unknown][] }[];
-} {
-  const calls: { table: string; eqCalls: [string, unknown][]; inCalls: [string, unknown][] }[] = [];
-  const client = {
-    from(table: string) {
-      const record = { table, eqCalls: [] as [string, unknown][], inCalls: [] as [string, unknown][] };
-      calls.push(record);
-      const builder = {
-        select() {
-          return this;
-        },
-        eq(column: string, value: unknown) {
-          record.eqCalls.push([column, value]);
-          return this;
-        },
-        in(column: string, value: unknown) {
-          record.inCalls.push([column, value]);
-          return this;
-        },
-        order() {
-          return response;
-        },
-      };
-      return builder;
-    },
-    rpc() {
-      throw new Error("not used in this fake");
-    },
-  } as unknown as CapacityUtilizationQueryClient;
-  return { client, calls };
 }
 
 const RESERVATION_ROW = {
@@ -76,33 +48,44 @@ const RESERVATION_ROW = {
 };
 
 describe("listCapacityReservationsForLeg", () => {
-  test("filters by shipment_leg_id and parses rows", async () => {
-    const { client, calls } = fakeTableClient({ data: [RESERVATION_ROW], error: null });
+  test("calls list_capacity_reservations_for_leg with the shipment_leg_id and parses rows", async () => {
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [RESERVATION_ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const reservations = await listCapacityReservationsForLeg(client, LEG_ID);
+    assert.equal(capturedFn, "list_capacity_reservations_for_leg");
+    assert.equal(capturedArgs?.p_shipment_leg_id, LEG_ID);
     assert.equal(reservations.length, 1);
     assert.equal(reservations[0]?.shipmentLegId, LEG_ID);
-    assert.deepEqual(calls[0]?.eqCalls, [["shipment_leg_id", LEG_ID]]);
   });
 
   test("returns an empty array when no reservation exists", async () => {
-    const { client } = fakeTableClient({ data: null, error: null });
+    const client = fakeRpcClient({ data: null, error: null });
     const reservations = await listCapacityReservationsForLeg(client, LEG_ID);
     assert.deepEqual(reservations, []);
   });
 
   test("throws on a query error", async () => {
-    const { client } = fakeTableClient({ data: null, error: { message: "boom" } });
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(() => listCapacityReservationsForLeg(client, LEG_ID), CapacityUtilizationQueryError);
   });
 });
 
 describe("listActiveCapacityReservationsForVehicle", () => {
-  test("filters by vehicle_master_id and held/consumed status", async () => {
-    const { client, calls } = fakeTableClient({ data: [RESERVATION_ROW], error: null });
+  test("calls list_active_capacity_reservations_for_vehicle with the vehicle_master_id and parses rows", async () => {
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [RESERVATION_ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const reservations = await listActiveCapacityReservationsForVehicle(client, VEHICLE_ID);
+    assert.equal(capturedFn, "list_active_capacity_reservations_for_vehicle");
+    assert.equal(capturedArgs?.p_vehicle_master_id, VEHICLE_ID);
     assert.equal(reservations.length, 1);
-    assert.deepEqual(calls[0]?.eqCalls, [["vehicle_master_id", VEHICLE_ID]]);
-    assert.deepEqual(calls[0]?.inCalls, [["status", ["held", "consumed"]]]);
   });
 });
 

@@ -4555,7 +4555,100 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // tracking/procurement-document/platform-intelligence-reports/page-level-
   // direct-reads) -- next up under the same "lanjut sampe siap launching"
   // mandate.
-  migrationSetSha256: "9bad708c944fa6a348e0b57f82274d0c1941d984002ceebe0d69cb934d2f3ed2",
+  // HUNDRED-AND-TWENTY-NINTH PASS (2026-09-11, cluster 3 batch 4, the FINAL
+  // batch of cluster 3): 526 files (+1) -- new migration
+  // 20260911040000_close_o1_query_layer_cluster3_batch4_shipment_order_capacity_exceptions.sql.
+  // Closes the LAST 7 broken `.from()` call sites in cluster 3
+  // (operations-tms-core): server/queries/shipment-order.ts (3 call sites),
+  // shipment-mode-baseline.ts (1), capacity-utilization.ts (2), and
+  // exception-escalation.ts (1). 7 new app.*/public.* Option-2 wrapper pairs
+  // (14 functions), assembled from two independently designed and
+  // independently verified scratchpad drafts (confirmed to share no
+  // function-name collisions and to target 4 distinct relations between them
+  // before assembly), covering 3 DISTINCT authority shapes:
+  //   * app.shipment_orders / app.shipment_mode_profiles: the standard
+  //     app.can_access_record(auth.uid(), tenant_id, owner_user_id,
+  //     org_unit_ids, null) predicate, directly for shipment_orders and via a
+  //     one-hop exists-join for shipment_mode_profiles.
+  //   * app.vehicle_capacity_reservations: a DIFFERENT, tenant-membership
+  //     predicate -- (app.has_active_tenant_membership(tenant_id) AND NOT
+  //     app.actor_holds_customer_user_layer(tenant_id)) OR
+  //     app.is_supreme_admin() -- independently re-verified via a fresh RULE
+  //     B grep (the original CREATE POLICY superseded by a later ALTER
+  //     POLICY), not conflated with the can_access_record shape used
+  //     elsewhere.
+  //   * app.exceptions_directory: a VIEW whose own row-visibility WHERE
+  //     clause is a plain, self-contained can_access_record(auth.uid(), ...)
+  //     predicate plus app.has_view_exception_cost-gated column masking --
+  //     safe under SECURITY INVOKER specifically because the predicate is
+  //     keyed on auth.uid() (a per-request GUC) rather than delegated to
+  //     base-table RLS pass-through, independently distinguished from the
+  //     app.users_directory/PLT-114 defect this same codebase already
+  //     documented (20260716113048_create_audit_trail.sql) for a view that
+  //     DID have that unsafe shape.
+  // All 7 functions are SECURITY INVOKER with ZERO actor parameter --
+  // independently re-derived via this series' own decisive test (every real
+  // call site of all 7 TS functions uses createSupabaseServerClient() only,
+  // or a hand-rolled test fake for the 3 functions with zero current
+  // production callers; none uses createSupabaseServiceRoleClient() to claim
+  // a decoupled actor). app.get_shipment_order and app.get_shipment_mode_profile
+  // (both 0-or-1-row lookups, bounded by a primary key and a unique
+  // constraint respectively) are declared `returns setof app.<table>`, never
+  // a bare composite -- the standing defect-class check, now applied
+  // cleanly on the first attempt (no corrective follow-up needed).
+  // app.list_shipment_orders is a new server-paginated function (mirroring
+  // app.list_portal_users' own established `count(*) over()` idiom exactly,
+  // not the two-function count/list split cluster 3 batch 1 used for its own
+  // lateral-join dispatch views, since this query has no lateral join and no
+  // per-row function call) -- disclosed one inherited, non-novel
+  // characteristic: an out-of-range page reports total_count 0 rather than
+  // the true total, matching server/queries/portal-users.ts:80's own
+  // already-shipped handling of the identical case.
+  // A real, pre-existing data-completeness defect was found and documented
+  // (not fixed, out of this batch's wrapper-only scope): app.exceptions_directory's
+  // own view body was never widened to project the 4 provenance columns
+  // (source_class/source_confidence_score/source_freshness_status/
+  // source_signal_id) added to app.operational_exceptions at ATW-228 --
+  // every row read through the view always reports these 4 fields as null,
+  // even when the underlying table has real values; does not break parsing
+  // (the Zod schema treats them as nullable, not optional).
+  // All 4 TS query files converted from `.from()` to `.rpc()` with unchanged
+  // (non-breaking) call signatures; 6 real call sites across 4 page.tsx files
+  // needed no changes beyond the internal client-method swap.
+  // shipment-mode-baseline.ts's and exception-escalation.ts's client types
+  // were narrowed to `Pick<SupabaseClient, "rpc">` (both files' only
+  // .from()-backed function converts here, leaving no other .from() call in
+  // either file); shipment-order.ts's and capacity-utilization.ts's wider
+  // `"from" | "rpc"` types are left unchanged per this series' own
+  // established convention (narrowing deferred to whoever next touches
+  // those files, since each already carries other RPC-only functions).
+  // Full Tier A gate suite run clean: `typecheck`, `lint` (0 errors), the
+  // 6,017-test unit suite (4 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking, no net new test count change), `check-rls-initplan.ts`
+  // (0 findings -- this migration adds no RLS policy), a full `pnpm run
+  // db:test` (`ALL PASSED`, 526 migrations / 269 db-test files, including
+  // the new `o1-query-layer-cluster3-batch4.sql`: a full owner/shared-org-unit/
+  // denied-member/cross-tenant/Supreme-Admin visibility matrix across all 3
+  // authority shapes, both 0-or-1-row getters' genuinely-empty-on-miss proof,
+  // full pagination coverage for list_shipment_orders (page 1/page 2/
+  // out-of-range/page_size clamp) with a consistent total_count, the
+  // tenant-membership shape's own customer-layer-exclusion proof via a real
+  // customer_user-layer principal, and the cost-masking proof for
+  // list_shipment_exceptions -- an owner holding OPS:View cost sees real
+  // sensitive fields, a shared-org-unit viewer lacking that permission sees
+  // them nulled with sensitive_masked=true despite full row-level access, and
+  // a Supreme Admin sees real values via evaluate_permission's own
+  // supreme_admin_exception branch with zero explicit grant), `git:check-paths`
+  // (clean, 10 files checked), `security:check`, and a real `next build`.
+  // **Cluster 3 (`operations-tms-core`) is now FULLY, FINALLY `DONE`: all 20
+  // tables, all 28 call sites closed** (batches 1-4). Remaining across the
+  // whole Ø1-query-layer effort: clusters 4-7 (58 call sites across
+  // telematics-tracking/procurement-document/platform-intelligence-reports/
+  // page-level-direct-reads) -- next up under the same "lanjut sampe siap
+  // launching" mandate.
+  migrationSetSha256: "e9f38e1d4161d4927e29ed30859600d35c230a702ea7ddec00aed8e9f44f6c77",
+  // History: 9bad708c944fa6a348e0b57f82274d0c1941d984002ceebe0d69cb934d2f3ed2
+  // (525 files, HUNDRED-AND-TWENTY-EIGHTH PASS).
   // History: 8d0657c0003b1d025e233c6e63edf7326104286f2cc8b360dcab882db1ab7231
   // (524 files, HUNDRED-AND-TWENTY-SEVENTH PASS).
   // History: c0ada24912c2a318d4e597a9df330701722ab48da3d8bbb268c8feb3f7d2630c
@@ -5849,7 +5942,48 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // Ø1-query-layer remediation is now FULLY DONE: all 20 tables, all 28 call
   // sites** (batches 1-3). Remaining across the whole effort: clusters 4-7 (58
   // call sites).
-  dbTestSetSha256: "712197db6e6c80f96000f8c7f51cf44ad76c7c4cdb1cabfa774b080c52df9b15",
+  // HUNDRED-AND-TWENTY-NINTH PASS (2026-09-11, same ruling as
+  // migrationSetSha256 above): 269 files (+1) -- new file scripts/db-tests/
+  // o1-query-layer-cluster3-batch4.sql. Proves, against a real disposable
+  // database, all 7 new SECURITY INVOKER, zero-actor-param functions across
+  // all 3 distinct authority shapes in this batch: the standard
+  // can_access_record shape (shipment_orders/shipment_mode_profiles), the
+  // tenant-membership shape (vehicle_capacity_reservations -- a real
+  // customer_user-layer principal is built and proven denied despite an
+  // active tenant membership, proving the customer-layer exclusion genuinely
+  // fires, not merely asserted), and the view-based can_access_record +
+  // cost-masking shape (exceptions_directory -- an owner holding OPS:View
+  // cost sees real sensitive fields, a shared-org-unit viewer lacking that
+  // permission sees the same row with all 4 sensitive fields nulled and
+  // sensitive_masked=true, and a Supreme Admin sees real values via
+  // evaluate_permission's own supreme_admin_exception branch with zero
+  // explicit grant -- row-level access and field-level masking proven as
+  // genuinely independent checks). Both 0-or-1-row getters
+  // (get_shipment_order, get_shipment_mode_profile) are proven to return a
+  // GENUINELY EMPTY result on their miss case, never a row of nulls.
+  // list_shipment_orders' full pagination contract is proven end to end:
+  // page 1 and page 2 partition a 3+-row fixture correctly in `created_at
+  // desc, id desc` order with a consistent total_count on every row, an
+  // out-of-range page returns zero rows, and an oversized page_size request
+  // is clamped. Ordering fidelity is proven against fixture rows
+  // deliberately inserted out of order for every ordered function. Also
+  // confirmed schema-privilege defense in depth: anon holds zero EXECUTE
+  // across all 14 new functions in either schema (real call attempts against
+  // every public.* wrapper, not merely an information_schema read), grant
+  // parity spot-checked across all 3 authority families, and a service_role
+  // BYPASSRLS smoke check on the 3 real-table-backed functions (deliberately
+  // excluding list_shipment_exceptions from that specific check, with an
+  // inline comment explaining why: its view's row-visibility WHERE clause is
+  // keyed on auth.uid(), which is null under a claims-free service_role
+  // session, so BYPASSRLS would not help it there -- a real, disclosed
+  // limitation of that one function's own authority shape, not a gap in this
+  // test file's own coverage). **Cluster 3 (operations-tms-core) of the
+  // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY, FINALLY
+  // DONE: all 20 tables, all 28 call sites** (batches 1-4). Remaining across
+  // the whole effort: clusters 4-7 (58 call sites).
+  dbTestSetSha256: "2a9f56452658005ac1632c17fefacdd2862b0e1b7ee9a0807a2c4795a76dc023",
+  // History: 712197db6e6c80f96000f8c7f51cf44ad76c7c4cdb1cabfa774b080c52df9b15
+  // (268 files, HUNDRED-AND-TWENTY-EIGHTH PASS).
   // History: 1a22232c00325d80ca4834666eed87e13326d4ac5bf55e9d071417a89d9379a1
   // (267 files, HUNDRED-AND-TWENTY-SIXTH PASS).
   // History: 2614ff5ce2fd973d6bdfb343e703e07466be278488f061a7ef4e44b1b0ddad99

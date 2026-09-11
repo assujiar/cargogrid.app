@@ -47,49 +47,44 @@ const BASE_ROW = {
   updated_at: "2026-07-27T00:00:00.000Z",
 };
 
-function fakeTableClient(
-  response: { data: unknown; error: { message: string } | null; count?: number },
-  rpcResponse?: { data: unknown; error: { message: string } | null },
-  captureRange?: (from: number, to: number) => void,
+function fakeRpcClient(
+  response: { data: unknown; error: { message: string } | null },
+  capture?: (fn: string, args: Record<string, unknown>) => void,
 ): ShipmentOrderQueryTableClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      range: (from: number, to: number) => {
-        captureRange?.(from, to);
-        return Promise.resolve(response);
-      },
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
   return {
-    from: () => chainNode(),
-    rpc: () => Promise.resolve(rpcResponse ?? response),
+    from: () => {
+      throw new Error("not used in this fake");
+    },
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      capture?.(fn, args);
+      return Promise.resolve(response);
+    },
   } as unknown as ShipmentOrderQueryTableClient;
 }
 
 describe("getShipmentOrder", () => {
   test("returns null (never an error) when no such row exists or RLS excludes it", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const client = fakeRpcClient({ data: [], error: null });
     const shipment = await getShipmentOrder(client, SHIPMENT_ID);
     assert.equal(shipment, null);
   });
 
   test("maps a row", async () => {
-    const client = fakeTableClient({ data: BASE_ROW, error: null });
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [BASE_ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const shipment = await getShipmentOrder(client, SHIPMENT_ID);
+    assert.equal(capturedFn, "get_shipment_order");
+    assert.equal(capturedArgs?.p_shipment_order_id, SHIPMENT_ID);
     assert.equal(shipment?.mode, "sea");
     assert.equal(shipment?.basisQuantity, 15);
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => getShipmentOrder(client, SHIPMENT_ID),
       (err: unknown) => err instanceof ShipmentOrderQueryError,
@@ -99,81 +94,91 @@ describe("getShipmentOrder", () => {
 
 describe("listShipmentOrdersForJobOrder", () => {
   test("maps rows", async () => {
-    const client = fakeTableClient({ data: [BASE_ROW], error: null });
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [BASE_ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const shipments = await listShipmentOrdersForJobOrder(client, JOB_ORDER_ID);
+    assert.equal(capturedFn, "list_shipment_orders_for_job_order");
+    assert.equal(capturedArgs?.p_job_order_id, JOB_ORDER_ID);
     assert.equal(shipments.length, 1);
     assert.equal(shipments[0]?.jobOrderId, JOB_ORDER_ID);
   });
 });
 
 describe("listShipmentOrders", () => {
-  test("bounds the query to one 50-row default page, ordered by created_at descending", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [BASE_ROW], error: null, count: 1 }, undefined, (from, to) => ranges.push([from, to]));
+  test("passes page 1 with the default pageSize (50) to the RPC and maps total_count off the row", async () => {
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [{ ...BASE_ROW, total_count: 1 }], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const result = await listShipmentOrders(client, { tenantId: TENANT_ID, page: 1 });
-    assert.deepEqual(ranges[0], [0, 49]);
+    assert.equal(capturedFn, "list_shipment_orders");
+    assert.deepEqual(capturedArgs, { p_tenant_id: TENANT_ID, p_page: 1, p_page_size: 50 });
     assert.equal(result.shipmentOrders.length, 1);
     assert.equal(result.totalCount, 1);
     assert.equal(result.page, 1);
     assert.equal(result.pageSize, 50);
   });
 
-  test("advances the page offset correctly for page 2 and clamps an oversized pageSize", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [], error: null, count: 0 }, undefined, (from, to) => ranges.push([from, to]));
-    await listShipmentOrders(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
-    assert.deepEqual(ranges[0], [100, 199]);
+  test("clamps an oversized pageSize and passes page 2 to the RPC", async () => {
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [], error: null }, (_fn, args) => {
+      capturedArgs = args;
+    });
+    const result = await listShipmentOrders(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
+    assert.deepEqual(capturedArgs, { p_tenant_id: TENANT_ID, p_page: 2, p_page_size: 100 });
+    assert.equal(result.shipmentOrders.length, 0);
+    assert.equal(result.totalCount, 0);
   });
 });
 
 describe("getJobShipmentAllocationBalance", () => {
   test("maps a null-basis row (advisory-only) distinct from a zero basis", async () => {
-    const client = fakeTableClient(
-      { data: null, error: null },
-      {
-        data: {
-          basis_quantity: null,
-          basis_weight_kg: null,
-          basis_volume_cbm: null,
-          allocated_quantity: 0,
-          allocated_weight_kg: 0,
-          allocated_volume_cbm: 0,
-          remaining_quantity: null,
-          remaining_weight_kg: null,
-          remaining_volume_cbm: null,
-        },
-        error: null,
+    const client = fakeRpcClient({
+      data: {
+        basis_quantity: null,
+        basis_weight_kg: null,
+        basis_volume_cbm: null,
+        allocated_quantity: 0,
+        allocated_weight_kg: 0,
+        allocated_volume_cbm: 0,
+        remaining_quantity: null,
+        remaining_weight_kg: null,
+        remaining_volume_cbm: null,
       },
-    );
+      error: null,
+    });
     const balance = await getJobShipmentAllocationBalance(client, { jobOrderId: JOB_ORDER_ID, actorAuthUserId: ACTOR_ID });
     assert.equal(balance.basisQuantity, null);
     assert.equal(balance.allocatedQuantity, 0);
   });
 
   test("maps a real established basis with remaining headroom", async () => {
-    const client = fakeTableClient(
-      { data: null, error: null },
-      {
-        data: {
-          basis_quantity: 15,
-          basis_weight_kg: 1500,
-          basis_volume_cbm: 30,
-          allocated_quantity: 13,
-          allocated_weight_kg: 1300,
-          allocated_volume_cbm: 26,
-          remaining_quantity: 2,
-          remaining_weight_kg: 200,
-          remaining_volume_cbm: 4,
-        },
-        error: null,
+    const client = fakeRpcClient({
+      data: {
+        basis_quantity: 15,
+        basis_weight_kg: 1500,
+        basis_volume_cbm: 30,
+        allocated_quantity: 13,
+        allocated_weight_kg: 1300,
+        allocated_volume_cbm: 26,
+        remaining_quantity: 2,
+        remaining_weight_kg: 200,
+        remaining_volume_cbm: 4,
       },
-    );
+      error: null,
+    });
     const balance = await getJobShipmentAllocationBalance(client, { jobOrderId: JOB_ORDER_ID, actorAuthUserId: ACTOR_ID });
     assert.equal(balance.remainingQuantity, 2);
   });
 
   test("wraps an rpc error", async () => {
-    const client = fakeTableClient({ data: null, error: null }, { data: null, error: { message: "boom" } });
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => getJobShipmentAllocationBalance(client, { jobOrderId: JOB_ORDER_ID, actorAuthUserId: ACTOR_ID }),
       (err: unknown) => err instanceof ShipmentOrderQueryError,
