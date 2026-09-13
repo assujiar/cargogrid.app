@@ -28,28 +28,6 @@ function fakeRpcClient(response: { data: unknown; error: { message: string } | n
   return { client, calls };
 }
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): TrackingSourcePolicyQueryClient {
-  return {
-    from(table: string) {
-      assert.equal(table, "tenant_tracking_source_policies");
-      return {
-        select() {
-          return this;
-        },
-        eq() {
-          return this;
-        },
-        async maybeSingle() {
-          return response;
-        },
-      };
-    },
-    rpc() {
-      throw new Error("not used in this fake");
-    },
-  } as unknown as TrackingSourcePolicyQueryClient;
-}
-
 describe("resolveTenantTrackingPackage", () => {
   test("parses a scalar composite-type response (not wrapped in an array)", async () => {
     const { client, calls } = fakeRpcClient({
@@ -105,28 +83,32 @@ describe("resolveTenantTrackingSourcePolicy", () => {
 
 describe("getTenantTrackingSourcePolicy", () => {
   test("returns null when no explicit row exists", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const policy = await getTenantTrackingSourcePolicy(client, TENANT_ID);
     assert.equal(policy, null);
   });
 
   test("parses an explicit row when one exists", async () => {
-    const client = fakeTableClient({
-      data: {
-        id: TENANT_ID,
-        tenant_id: TENANT_ID,
-        default_source_priority: ["direct_device", "driver_mobile"],
-        freshness_threshold_seconds: 180,
-        accuracy_threshold_meters: 50,
-        switch_hysteresis_seconds: 90,
-        record_version: 1,
-        created_by: "tenant admin",
-        created_at: "2026-08-03T00:00:00.000Z",
-        updated_at: "2026-08-03T00:00:00.000Z",
-      },
+    const { client, calls } = fakeRpcClient({
+      data: [
+        {
+          id: TENANT_ID,
+          tenant_id: TENANT_ID,
+          default_source_priority: ["direct_device", "driver_mobile"],
+          freshness_threshold_seconds: 180,
+          accuracy_threshold_meters: 50,
+          switch_hysteresis_seconds: 90,
+          record_version: 1,
+          created_by: "tenant admin",
+          created_at: "2026-08-03T00:00:00.000Z",
+          updated_at: "2026-08-03T00:00:00.000Z",
+        },
+      ],
       error: null,
     });
     const policy = await getTenantTrackingSourcePolicy(client, TENANT_ID);
+    assert.equal(calls[0]?.fn, "get_tenant_tracking_source_policy");
+    assert.equal(calls[0]?.args.p_tenant_id, TENANT_ID);
     assert.ok(policy);
     assert.equal(policy?.freshnessThresholdSeconds, 180);
   });

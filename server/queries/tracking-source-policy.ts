@@ -3,10 +3,15 @@
  * CG-S10-ATW-006's own child). Thin, typed wrappers around
  * app.resolve_tenant_tracking_package / app.is_shipment_tracking_entitled /
  * app.resolve_tenant_tracking_source_policy
- * (supabase/migrations/20260729340000_create_advanced_tms_tracking_entitlement_source_policy.sql),
- * plus a direct RLS-scoped read of the raw app.tenant_tracking_source_policies row for
- * callers that need to know whether an explicit row exists at all (e.g. an edit form
- * pre-fill) rather than the always-present resolved-with-defaults shape.
+ * (supabase/migrations/20260729340000_create_advanced_tms_tracking_entitlement_source_policy.sql).
+ * CG-AUDIT-2026-09-02 O1 remediation (cluster 4 batch 2,
+ * 20260911060000_close_o1_query_layer_cluster4_batch2_tracking_security.sql):
+ * the raw-row read also now goes through a thin, security-invoker RPC wrapper
+ * (app.get_tenant_tracking_source_policy -- app is not exposed to PostgREST,
+ * so a `.from()` call against app.tenant_tracking_source_policies has never
+ * worked in production) for callers that need to know whether an explicit row
+ * exists at all (e.g. an edit form pre-fill) rather than the always-present
+ * resolved-with-defaults shape.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -73,9 +78,10 @@ export async function resolveTenantTrackingSourcePolicy(client: TrackingSourcePo
 
 /** The raw explicit policy row for one tenant, or null when the tenant has never set one (use resolveTenantTrackingSourcePolicy when a default fallback is acceptable -- this is for admin-form pre-fill, which needs to distinguish "never set" from "set to the same values as the default"). */
 export async function getTenantTrackingSourcePolicy(client: TrackingSourcePolicyQueryClient, tenantId: string): Promise<TenantTrackingSourcePolicy | null> {
-  const { data, error } = await client.from("tenant_tracking_source_policies").select("*").eq("tenant_id", tenantId).maybeSingle();
+  const { data, error } = await client.rpc("get_tenant_tracking_source_policy", { p_tenant_id: tenantId });
   if (error) {
     throw new TrackingSourcePolicyQueryError(error.message);
   }
-  return data ? parseTenantTrackingSourcePolicy(data as Record<string, unknown>) : null;
+  const row = firstRow(data);
+  return row ? parseTenantTrackingSourcePolicy(row) : null;
 }

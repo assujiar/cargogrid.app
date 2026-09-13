@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-3, 63 tables, **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; clusters 4-7 (58 call sites) remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-4 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; clusters 5-7 (46 call sites) remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1378,3 +1378,96 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   identical claim was premature). Remaining across the whole Ø1-query-layer effort: clusters 4-7
   (58 call sites across telematics-tracking/procurement-document/platform-intelligence-reports/
   page-level-direct-reads) — next up under the same "lanjut sampe siap launching" mandate.
+
+- 2026-09-13 — Ø1-query-layer cluster 4 (`telematics-tracking`), both batches, closed in the same
+  working session (this commit), continuing the same "lanjut sampe siap launching" mandate. This is
+  the FIRST cluster in this whole series where two batches are closed together under one commit and
+  one release-freeze pass, since both were designed, verified, and bug-fixed before either was
+  individually committed. Closes all 12 broken `.from()` call sites in this cluster: `server/queries/
+  fleet-driver-device.ts` (7 call sites, batch 1) and `driver-mobile-tracking.ts` (1) /
+  `gps-device-installation.ts` (2) / `tracking-source-policy.ts` (1) / `public-tracking.ts` (1) (5
+  call sites across 4 files, batch 2). Two new migrations —
+  `20260911050000_close_o1_query_layer_cluster4_batch1_fleet_driver_device.sql` and
+  `20260911060000_close_o1_query_layer_cluster4_batch2_tracking_security.sql` — add 12 new
+  `app.*`/`public.*` Option-2 wrapper pairs (24 functions), each assembled from two independently
+  designed and independently verified scratchpad drafts, one per batch.
+  Batch 1 (7 functions over `app.vehicle_operational_profiles`/`driver_operational_profiles`/
+  `gps_devices`/`sim_cards`/`device_vehicle_assignments`/`provider_vehicle_mappings`/
+  `vehicle_tracking_source_priorities`) are all SECURITY INVOKER, zero actor parameter, sharing one
+  tenant-membership RLS predicate — `(app.has_active_tenant_membership(tenant_id) AND NOT
+  app.actor_holds_customer_user_layer(tenant_id)) OR app.is_supreme_admin()` — the same shape cluster
+  3 batch 4's own `app.vehicle_capacity_reservations` functions already established as INVOKER-safe.
+  A genuine KEY FINDING corrected a plausible-but-wrong first-pass assumption: 3 of the 7 tables
+  (`device_vehicle_assignments`/`provider_vehicle_mappings`/`vehicle_tracking_source_priorities`) are
+  filtered in their own RPC call by `device_id`/`vehicle_master_id`, not `tenant_id` — independently
+  re-derived from each table's own `create table`/`create policy` statements that this is NOT a
+  join-derived authority chain: all 3 carry their own, physically independent `tenant_id` column, and
+  their RLS predicate is a plain check on that column, with no `EXISTS`/join to `app.gps_devices` or
+  `app.master_records` anywhere in any of their 14 policy statements.
+  Batch 2 (5 functions over `app.driver_mobile_tracking_sessions`/`gps_device_installations`/
+  `tenant_tracking_source_policies`/`shipment_tracking_tokens`) spans 3 distinct authority shapes: 2
+  SECURITY DEFINER functions (`app.get_driver_mobile_tracking_session`, `app.get_active_shipment_
+  tracking_token`) taking an explicit `p_actor_auth_user_id` + RULE A guard, required because
+  ISS-2026-232 already revoked `authenticated`'s table-level SELECT on both underlying tables in
+  favor of an explicit column-level grant excluding `token_hash` — both new functions use `returns
+  table (...)` with the same explicit safe-column list their original `.from()` calls used, never
+  `returns setof app.<table>` (which would leak `token_hash` back into the composite); and 3 SECURITY
+  INVOKER functions (`app.list_gps_device_installations`, `app.get_gps_device_installation_for_
+  assignment`, `app.get_tenant_tracking_source_policy`) over 2 tables never touched by ISS-2026-232,
+  sharing the same tenant-membership predicate as batch 1. An adversarial verify pass surfaced and
+  corrected the batch brief's own overstated mechanism for why DEFINER was required (Postgres grants
+  SELECT per-column, not only per-table, so a same-column-list INVOKER function would in fact pass
+  the privilege check today) — DEFINER was retained anyway for two independent, still-valid reasons
+  (drift protection against a future bare-grant regression re-opening the exact gap ISS-2026-232
+  closed, and consistency with this table family's own write-side DEFINER precedent), with the
+  corrected reasoning documented rather than the overstated claim repeated uncritically.
+  Both 0-or-1-row lookups outside the DEFINER pair (`app.get_gps_device_installation_for_assignment`,
+  `app.get_tenant_tracking_source_policy`) are declared `returns setof app.<table>`, never a bare
+  composite — the standing defect-class check, applied cleanly with no corrective follow-up needed in
+  either batch.
+  All 5 TS query files converted from `.from()` to `.rpc()`. `fleet-driver-device.ts`'s and
+  `gps-device-installation.ts`'s client types were narrowed to `Pick<SupabaseClient, "rpc">` (each
+  file's entire `.from()`-backed surface converts in this pass); `driver-mobile-tracking.ts`,
+  `tracking-source-policy.ts`, and `public-tracking.ts` already carried `"rpc"` in their client types
+  and are left unchanged per this series' own established convention. Two genuinely NEW, disclosed
+  breaking parameters were added (RULE A, batch 2 only): `getDriverMobileTrackingSession` and
+  `getActiveShipmentTrackingToken` both gained an `actorAuthUserId` parameter — the former has zero
+  real production callers today (only a unit test), the latter has exactly one real call site
+  (`app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/page.tsx:258`), updated to
+  pass the page's own already-in-scope `access.authUserId`, already threaded into every one of that
+  page's ~12 sibling query calls.
+  A real, independently-caught db-test bug was found and fixed during this pass's own verification,
+  not merely accepted from the drafting agent's self-report: cluster 4 batch 1's own db-test file
+  initially resolved several fixture-row ids via subqueries filtered ONLY by an enum-shaped column
+  (`source_type`/`provider_code`/a free-text `reason` string) with no scoping to the specific
+  `vehicle_master_id`/`device_id` under test — this passed cleanly when the file was run standalone
+  (the only rows of that shape in an otherwise-empty disposable database) but failed with a genuine
+  `more than one row returned by a subquery` error the first time it ran inside the FULL `pnpm run
+  db:test` suite, where other db-test files' own fixtures share one database and can carry rows with
+  the same enum value on a different vehicle/device. Fixed by adding the missing `vehicle_master_id`/
+  `device_id` scope to every one of the 8 affected subqueries (both the tenant-member and Supreme
+  Admin test sessions) — re-verified with a full `pnpm run db:test` run afterward, ALL PASSED. This is
+  a new failure mode for this series (prior batches' db-test files happened not to trigger it) and is
+  flagged here as a standing lesson, applied going forward: a db-test file passing in isolation is NOT
+  sufficient evidence it is correct under the shared-database full-suite run — the full suite must be
+  run before considering a batch's db-test file verified, not merely the standalone `psql -f`
+  invocation used during iteration.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the 6,022-test unit suite (5
+  test files converted from `.from()`-mocking to `.rpc()`-mocking, 2 new describe blocks added for
+  `fleet-driver-device.ts`'s previously-untested functions), `check-rls-initplan.ts` (0 findings —
+  neither migration adds an RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 528 migrations / 271
+  db-test files, including both new cluster-4 db-test files: a full owner/customer-user-layer/
+  cross-tenant/Supreme-Admin visibility matrix across all 12 functions and both authority shapes, the
+  RULE A forged-actor-rejection proof for both SECURITY DEFINER functions — a session authenticated
+  as one actor claiming a different actor's identity is genuinely rejected via
+  `actor_identity_mismatch` before any lookup runs — explicit `to_jsonb(row) ? 'token_hash'` proofs
+  that neither DEFINER function's own response shape ever carries the sensitive column,
+  genuinely-empty-on-miss proofs for every 0-or-1-row lookup, and ordering-fidelity proofs against
+  fixture rows deliberately inserted out of order), `git:check-paths` (clean, 16 files checked),
+  `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTIETH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  **Cluster 4 (`telematics-tracking`) is now FULLY `DONE`: all 12 call sites closed** (batches 1-2).
+  Remaining across the whole Ø1-query-layer effort: clusters 5-7 (46 call sites across
+  procurement-document/platform-intelligence-reports/page-level-direct-reads) — next up under the
+  same "lanjut sampe siap launching" mandate.

@@ -16,33 +16,6 @@ function fakeRpcClient(response: { data: unknown; error: { message: string } | n
   return { client, calls };
 }
 
-function fakeFromClient(response: { data: unknown; error: { message: string } | null }): {
-  client: PublicTrackingQueryClient;
-  calls: { table: string; eqs: [string, unknown][] }[];
-} {
-  const calls: { table: string; eqs: [string, unknown][] }[] = [];
-  const client = {
-    from(table: string) {
-      const eqs: [string, unknown][] = [];
-      const builder = {
-        select() {
-          return builder;
-        },
-        eq(column: string, value: unknown) {
-          eqs.push([column, value]);
-          return builder;
-        },
-        async maybeSingle() {
-          calls.push({ table, eqs });
-          return response;
-        },
-      };
-      return builder;
-    },
-  } as unknown as PublicTrackingQueryClient;
-  return { client, calls };
-}
-
 const OK_ROW = {
   lookup_status: "ok",
   shipment_number: "SHP-0001",
@@ -86,32 +59,34 @@ describe("lookupPublicShipmentTracking", () => {
 
 describe("getActiveShipmentTrackingToken", () => {
   test("returns null when no active token exists", async () => {
-    const { client, calls } = fakeFromClient({ data: null, error: null });
-    const token = await getActiveShipmentTrackingToken(client, "323e4567-e89b-12d3-a456-426614174000");
+    const { client, calls } = fakeRpcClient({ data: [], error: null });
+    const token = await getActiveShipmentTrackingToken(client, "323e4567-e89b-12d3-a456-426614174000", "623e4567-e89b-12d3-a456-426614174000");
     assert.equal(token, null);
-    assert.equal(calls[0]?.table, "shipment_tracking_tokens");
-    assert.deepEqual(calls[0]?.eqs, [
-      ["shipment_order_id", "323e4567-e89b-12d3-a456-426614174000"],
-      ["status", "active"],
-    ]);
+    assert.equal(calls[0]?.fn, "get_active_shipment_tracking_token");
+    assert.deepEqual(calls[0]?.args, {
+      p_shipment_order_id: "323e4567-e89b-12d3-a456-426614174000",
+      p_actor_auth_user_id: "623e4567-e89b-12d3-a456-426614174000",
+    });
   });
 
   test("maps the active token row", async () => {
-    const { client } = fakeFromClient({
-      data: {
-        id: "423e4567-e89b-12d3-a456-426614174000",
-        tenant_id: "223e4567-e89b-12d3-a456-426614174000",
-        shipment_order_id: "323e4567-e89b-12d3-a456-426614174000",
-        status: "active",
-        expires_at: "2026-08-27T09:00:00.000Z",
-        revoked_at: null,
-        revoked_reason: null,
-        created_by: "rep",
-        created_at: "2026-07-28T09:00:00.000Z",
-      },
+    const { client } = fakeRpcClient({
+      data: [
+        {
+          id: "423e4567-e89b-12d3-a456-426614174000",
+          tenant_id: "223e4567-e89b-12d3-a456-426614174000",
+          shipment_order_id: "323e4567-e89b-12d3-a456-426614174000",
+          status: "active",
+          expires_at: "2026-08-27T09:00:00.000Z",
+          revoked_at: null,
+          revoked_reason: null,
+          created_by: "rep",
+          created_at: "2026-07-28T09:00:00.000Z",
+        },
+      ],
       error: null,
     });
-    const token = await getActiveShipmentTrackingToken(client, "323e4567-e89b-12d3-a456-426614174000");
+    const token = await getActiveShipmentTrackingToken(client, "323e4567-e89b-12d3-a456-426614174000", "623e4567-e89b-12d3-a456-426614174000");
     assert.equal(token?.status, "active");
   });
 });

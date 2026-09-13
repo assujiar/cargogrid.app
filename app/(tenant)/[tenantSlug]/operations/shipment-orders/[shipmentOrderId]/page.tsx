@@ -255,7 +255,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
 
   let trackingToken;
   try {
-    trackingToken = await getActiveShipmentTrackingToken(supabase, shipment.id);
+    trackingToken = await getActiveShipmentTrackingToken(supabase, shipment.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof PublicTrackingQueryError)) {
       throw error;
