@@ -4760,7 +4760,83 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // effort: clusters 5-7 (procurement-document/platform-intelligence-reports/
   // page-level-direct-reads) -- next up under the same "lanjut sampe siap
   // launching" mandate.
-  migrationSetSha256: "6d5d054b2b20701115c899434d9487d17eef07afa7d92ac629f3f9f130134716",
+  // HUNDRED-AND-THIRTY-FIRST PASS (2026-09-13, cluster 5/procurement-document, the
+  // FULL cluster in one migration): 529 files (+1) -- new migration
+  // 20260913000000_close_o1_query_layer_cluster5_procurement_document.sql. Closes 4
+  // of this cluster's 5 broken `.from()` call sites: server/queries/procurement-
+  // approval.ts:49 (listProcurementApprovalPolicyVersions), server/queries/
+  // procurement-dashboard.ts:110 (listActiveProcurementMetricDefinitions),
+  // server/queries/document-requirement.ts:77 (listDocumentRequirementDefinitions),
+  // server/queries/document.ts:94 (listDocumentTypes). 4 new app.*/public.* Option-2
+  // wrapper pairs (8 functions) across 4 relations, spanning 2 authority shapes: 2
+  // SECURITY DEFINER functions (list_procurement_approval_policy_versions,
+  // list_document_requirement_definitions) taking an explicit p_tenant_id +
+  // p_actor_auth_user_id, RULE A-guarded, reproducing each table's own CURRENT
+  // tenant-membership RLS predicate and RAISING insufficient_authority on total
+  // denial (mirroring app.list_quotation_approval_rule_versions' own established
+  // precedent, cluster 0 batch 4) rather than a silent empty list; and 2 SECURITY
+  // INVOKER, zero-actor-param functions (list_active_procurement_metric_definitions,
+  // list_document_types) over tables with either no RLS at all (a plain
+  // `grant select ... to authenticated, service_role`) or a genuinely open
+  // `using (true)` policy, mirroring app.list_milestone_codes' own established
+  // precedent (cluster 3 batch 2).
+  // The fifth call site (procurement-approval.ts:136, listProcurementApprovalInbox
+  // ForActor) needed NO new SQL: an adversarial re-check of the recon manifest's own
+  // NEEDS_NEW_FUNCTION classification for this call site found it stale --
+  // app.get_approval_requests_entity_refs(uuid[], uuid), shipped by cluster 0 batch
+  // 3 for the byte-for-byte identical read shape on the same table, already covers
+  // it (confirmed via a fresh RULE C grep: still that function's own only body).
+  // This is a pure TS-side swap (`.from("approval_requests")` -> the existing RPC),
+  // not a new function -- the recon was run before cluster 0 batch 3 existed and
+  // could not have known.
+  // A second genuine, independently-caught defect was found and fixed during this
+  // pass's own db-test verification (documented in full on dbTestSetSha256 below):
+  // app.procurement_metric_definitions is a platform-wide shared table that
+  // scripts/db-tests/procurement-vendor-dashboard-reports.sql already asserts an
+  // EXACT count of is_current rows against (11) -- an early draft of this pass's own
+  // db-test file committed 2 new is_current=true fixture rows into that same shared
+  // table, which broke that sibling assertion the moment the full `pnpm run db:test`
+  // suite ran (not the standalone file). Fixed by wrapping that one test block in an
+  // explicit `begin ... rollback` instead of committing its fixture rows -- a NEW
+  // shape of the cross-file fixture-collision defect class cluster 4 batch 1 first
+  // identified (there it was an underscoped subquery in this file; here it is an
+  // exact-count assertion in ANOTHER file), reinforcing that same pass's own
+  // standing lesson: the full `pnpm run db:test` suite must always be run before
+  // considering a batch's db-test file verified, never the standalone `psql -f`
+  // invocation alone.
+  // All 4 TS query files converted from `.from()` to `.rpc()`; the fifth
+  // (procurement-approval.ts) converts its one remaining `.from()` call site too
+  // (the entity-refs swap above), so ProcurementApprovalQueryClient,
+  // ProcurementDashboardQueryClient, and DocumentRequirementQueryClient all narrow
+  // from `Pick<SupabaseClient, "from" | "rpc">` to `Pick<SupabaseClient, "rpc">` --
+  // each file's own only "from" usage(s) converted here. document.ts's own
+  // DocumentTypeLookupClient (a hand-written interface, not a SupabaseClient pick)
+  // changes from a `from()`-shaped interface to an `rpc()`-shaped one. One
+  // disclosed, non-breaking-in-practice signature change: listProcurementApproval
+  // PolicyVersions gains a required actorAuthUserId parameter -- its one real call
+  // site (app/(tenant)/[tenantSlug]/procurement/approvals/page.tsx:36) already had
+  // access.authUserId in scope (passed to the inbox call on the line above).
+  // listDocumentRequirementDefinitions' input gains a required actorAuthUserId field
+  // -- zero real production callers today (only a unit test), a safe addition.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the
+  // 6,023-test unit suite (5 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking; procurement-dashboard.test.ts's now-dead `recordingFromClient`
+  // helper removed, not left unused), `check-rls-initplan.ts` (0 findings -- this
+  // migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 529
+  // migrations / 272 db-test files, including the new cluster-5 db-test file: a full
+  // member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix on both
+  // DEFINER functions including the insufficient_authority-raises-on-denial proof,
+  // the RULE A forged-actor-rejection proof for both, and existence-based (never
+  // exact-count) proofs for both INVOKER functions' filter/ordering/exclusion
+  // behavior against the shared platform-wide tables), `git:check-paths` (clean, 11
+  // files checked), `security:check`, and a real `next build`.
+  // **Cluster 5 (`procurement-document`) is now FULLY `DONE`: all 5 call sites
+  // closed** in one migration. Remaining across the whole Ø1-query-layer effort:
+  // clusters 6-7 (platform-intelligence-reports/page-level-direct-reads) -- next up
+  // under the same "lanjut sampe siap launching" mandate.
+  migrationSetSha256: "27a9f9b97442831d21e82f7bc3ad5c8f6dfc953b91b1511f4667ed0bedf1f3ef",
+  // History: 6d5d054b2b20701115c899434d9487d17eef07afa7d92ac629f3f9f130134716
+  // (528 files, HUNDRED-AND-THIRTIETH PASS).
   // History: e9f38e1d4161d4927e29ed30859600d35c230a702ea7ddec00aed8e9f44f6c77
   // (527 files, HUNDRED-AND-TWENTY-NINTH PASS).
   // History: 9bad708c944fa6a348e0b57f82274d0c1941d984002ceebe0d69cb934d2f3ed2
@@ -6138,7 +6214,48 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // batch's db-test file verified. **Cluster 4 (telematics-tracking) db-test
   // coverage is now FULLY DONE: all 12 functions across both batches**.
   // Remaining across the whole effort: clusters 5-7 (46 call sites).
-  dbTestSetSha256: "6511bc0e3b1053aa6ab8e51abc3bf76fd385d0faefd3730a6667bad831ccfdb6",
+  // HUNDRED-AND-THIRTY-FIRST PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 272 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster5-
+  // procurement-document.sql. Proves, against a real disposable database, all 4 new
+  // function pairs (8 functions) across both authority shapes: the DEFINER +
+  // explicit-actor shape (list_procurement_approval_policy_versions, list_document_
+  // requirement_definitions) -- a real active tenant member sees the real fixture
+  // rows in the documented order, a customer_user-layer principal and a cross-tenant
+  // admin both genuinely RAISE insufficient_authority (never a silent empty list,
+  // the deliberate behavior this pass's migration chose), and a Supreme Admin with
+  // zero membership still sees every row via the explicit bypass -- plus the RULE A
+  // forged-actor-rejection proof for both, under a real forced session identity; and
+  // the INVOKER, zero-actor-param shape (list_active_procurement_metric_definitions,
+  // list_document_types) -- proven entirely through existence checks against
+  // uniquely-named fixture rows and known always-seeded platform codes, NEVER an
+  // exact `count(*)`, because both target tables are platform-wide and shared with
+  // every other db-test file in the full suite.
+  // A real, independently-caught defect was found and fixed during this pass's own
+  // verification, not merely accepted from a first draft: an early version of this
+  // file committed 2 new is_current=true rows into app.procurement_metric_
+  // definitions to test the is_current/status filter, which broke scripts/db-tests/
+  // procurement-vendor-dashboard-reports.sql's own pre-existing `expected exactly 11
+  // current metric definitions, got 14` assertion the moment the FULL `pnpm run
+  // db:test` suite ran (the standalone single-file run never surfaces this, since it
+  // never runs that other file in the same database) -- a genuinely new shape of the
+  // cross-file fixture-collision defect class cluster 4 batch 1 first identified for
+  // this series (there, an underscoped subquery inside the SAME file; here, an
+  // exact-count assertion inside a DIFFERENT file entirely). Fixed by wrapping that
+  // one test block's fixture inserts and assertions in an explicit `begin ...
+  // rollback` instead of letting them commit -- the block still proves the exclusion
+  // behavior fully (it reads its own uncommitted fixture rows before rolling them
+  // back), but leaves app.procurement_metric_definitions exactly as every other
+  // db-test file in the suite expects it, in any run order. Re-verified with a full
+  // `pnpm run db:test` run afterward, ALL PASSED (both this file and the previously-
+  // broken sibling). This is now the second entry in what this series treats as a
+  // standing lesson, restated here for emphasis: the full `pnpm run db:test` suite,
+  // never a standalone `psql -f` invocation, is the only real verification for a
+  // shared-database db-test file -- and the collision can run in EITHER direction
+  // (this file's own fixtures breaking a sibling's assertion, not only a sibling's
+  // fixtures breaking this file's own).
+  dbTestSetSha256: "fe7a7aa3660bc0031036d3068429c40f66712288a37ebb0d610e5c7ed487ce15",
+  // History: 6511bc0e3b1053aa6ab8e51abc3bf76fd385d0faefd3730a6667bad831ccfdb6
+  // (271 files, HUNDRED-AND-THIRTIETH PASS).
   // History: 2a9f56452658005ac1632c17fefacdd2862b0e1b7ee9a0807a2c4795a76dc023
   // (269 files, HUNDRED-AND-TWENTY-NINTH PASS).
   // History: 712197db6e6c80f96000f8c7f51cf44ad76c7c4cdb1cabfa774b080c52df9b15

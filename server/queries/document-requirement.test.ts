@@ -89,33 +89,16 @@ describe("evaluateShipmentDocumentChecklistCompleteness", () => {
 });
 
 describe("listDocumentRequirementDefinitions", () => {
-  test("filters by tenant_id and optional status", async () => {
-    const calls: { table: string; filters: [string, unknown][] }[] = [];
-    const client = {
-      from(table: string) {
-        const filters: [string, unknown][] = [];
-        const builder = {
-          select() {
-            return builder;
-          },
-          eq(column: string, value: unknown) {
-            filters.push([column, value]);
-            return builder;
-          },
-          then(resolve: (result: { data: unknown[]; error: null }) => void) {
-            calls.push({ table, filters });
-            resolve({ data: [], error: null });
-          },
-        };
-        return builder;
-      },
-    } as unknown as DocumentRequirementQueryClient;
+  test("calls list_document_requirement_definitions with tenant/actor/status", async () => {
+    const { client, calls } = fakeRpcClient({ data: [], error: null });
+    await listDocumentRequirementDefinitions(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, status: "published" });
+    assert.equal(calls[0]?.fn, "list_document_requirement_definitions");
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_status: "published" });
+  });
 
-    await listDocumentRequirementDefinitions(client, { tenantId: TENANT_ID, status: "published" });
-    assert.equal(calls[0]?.table, "document_requirement_definitions");
-    assert.deepEqual(calls[0]?.filters, [
-      ["tenant_id", TENANT_ID],
-      ["status", "published"],
-    ]);
+  test("defaults p_status to null when the caller omits it (any status)", async () => {
+    const { client, calls } = fakeRpcClient({ data: [], error: null });
+    await listDocumentRequirementDefinitions(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID });
+    assert.equal(calls[0]?.args.p_status, null);
   });
 });

@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-4 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; clusters 5-7 (46 call sites) remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; clusters 6-7 (46 call sites) remain — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1471,3 +1471,81 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   Remaining across the whole Ø1-query-layer effort: clusters 5-7 (46 call sites across
   procurement-document/platform-intelligence-reports/page-level-direct-reads) — next up under the
   same "lanjut sampe siap launching" mandate.
+
+- 2026-09-13 — Ø1-query-layer cluster 5 (`procurement-document`), the FULL cluster, closed in one
+  migration (this commit), continuing the same "lanjut sampe siap launching" mandate. Closes 4 of
+  this cluster's 5 broken `.from()` call sites: `server/queries/procurement-approval.ts:49`
+  (`listProcurementApprovalPolicyVersions`), `server/queries/procurement-dashboard.ts:110`
+  (`listActiveProcurementMetricDefinitions`), `server/queries/document-requirement.ts:77`
+  (`listDocumentRequirementDefinitions`), `server/queries/document.ts:94` (`listDocumentTypes`). New
+  migration `20260913000000_close_o1_query_layer_cluster5_procurement_document.sql` adds 4 new
+  `app.*`/`public.*` Option-2 wrapper pairs (8 functions) across 4 relations, spanning 2 distinct
+  authority shapes: 2 SECURITY DEFINER functions (`list_procurement_approval_policy_versions`,
+  `list_document_requirement_definitions`) taking an explicit `p_tenant_id` + `p_actor_auth_user_id`,
+  RULE A-guarded, reproducing each table's own CURRENT tenant-membership RLS predicate and RAISING
+  `insufficient_authority` on total denial — mirroring `app.list_quotation_approval_rule_versions`'
+  own established precedent (cluster 0 batch 4) rather than a silent empty list, a deliberate,
+  disclosed tightening over the original RLS-filtered `.from()` reads' own behavior; and 2 SECURITY
+  INVOKER, zero-actor-param functions (`list_active_procurement_metric_definitions`,
+  `list_document_types`) over tables with either no RLS at all (a plain `grant select ... to
+  authenticated, service_role`) or a genuinely open `using (true)` policy, mirroring
+  `app.list_milestone_codes`' own established precedent (cluster 3 batch 2).
+  The fifth call site (`procurement-approval.ts:136`, `listProcurementApprovalInboxForActor`) needed
+  NO new SQL at all: an adversarial re-check of the `CG-AUDIT-2026-09-02-O1-QUERY-LAYER-RECON.json`
+  manifest's own `NEEDS_NEW_FUNCTION` classification for this call site found it stale —
+  `app.get_approval_requests_entity_refs(uuid[], uuid)`, already shipped by cluster 0 batch 3 for the
+  byte-for-byte identical read shape on the exact same table (same 3-column projection, same
+  "no `p_tenant_id`, authority evaluated per-row against each candidate row's own `tenant_id`" contract),
+  already covers it — confirmed via a fresh RULE C grep that it is still that function's own only
+  body. This is a pure TS-side swap (`.from("approval_requests")` → the existing RPC, mirroring
+  `server/queries/quotation-approval.ts`'s own identical `listQuotationApprovalInboxForActor` shape
+  exactly), never a new function — the original recon was run before cluster 0 batch 3 existed and
+  could not have known that function would ship by the time this cluster was closed.
+  A real, independently-caught db-test defect was found and fixed during this pass's own
+  verification, not merely accepted from a first draft: an early version of this pass's own db-test
+  file committed 2 new `is_current=true` rows into `app.procurement_metric_definitions` to exercise
+  the `is_current`/`status` filter — but that table is platform-wide and already has an EXACT
+  `count(*)` assertion against it in `scripts/db-tests/procurement-vendor-dashboard-reports.sql`
+  (`expected exactly 11 current metric definitions`), which broke the moment the FULL `pnpm run
+  db:test` suite ran (`got 14`) — the standalone single-file run never surfaces this, since it never
+  runs that other file in the same shared database. Fixed by wrapping that one test block's fixture
+  inserts and assertions in an explicit `begin ... rollback` instead of letting them commit — the
+  block still fully proves the exclusion behavior (it reads its own uncommitted fixture rows before
+  rolling them back), but leaves the shared table exactly as every other db-test file in the suite
+  expects it, in any run order. Re-verified with a full `pnpm run db:test` run afterward, ALL PASSED
+  (both this file and the previously-broken sibling). This is a genuinely NEW shape of the cross-file
+  fixture-collision defect class cluster 4 batch 1 first identified for this series (there, an
+  underscoped subquery inside the SAME file collided with another file's fixture rows; here, this
+  file's OWN fixture rows broke an exact-count assertion inside a DIFFERENT file) — restated here as
+  the same standing lesson, generalized: the full `pnpm run db:test` suite, never a standalone
+  `psql -f` invocation, is the only real verification for a shared-database db-test file, and the
+  collision can run in either direction.
+  All 4 TS query files converted from `.from()` to `.rpc()`; `procurement-approval.ts` converts its
+  one remaining `.from()` call site too (the entity-refs swap above), so
+  `ProcurementApprovalQueryClient`, `ProcurementDashboardQueryClient`, and
+  `DocumentRequirementQueryClient` all narrow from `Pick<SupabaseClient, "from" | "rpc">` to
+  `Pick<SupabaseClient, "rpc">` — each file's own only `"from"` usage(s) converted here.
+  `document.ts`'s own `DocumentTypeLookupClient` (a hand-written interface, not a `SupabaseClient`
+  pick) changes from a `from()`-shaped interface to an `rpc()`-shaped one. Two disclosed,
+  non-breaking-in-practice signature changes: `listProcurementApprovalPolicyVersions` gains a
+  required `actorAuthUserId` parameter — its one real call site
+  (`app/(tenant)/[tenantSlug]/procurement/approvals/page.tsx:36`) already had `access.authUserId` in
+  scope (passed to the inbox call on the line above); `listDocumentRequirementDefinitions`' input
+  gains a required `actorAuthUserId` field — zero real production callers today (only a unit test), a
+  safe addition.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the 6,023-test unit suite (5
+  test files converted from `.from()`-mocking to `.rpc()`-mocking; `procurement-dashboard.test.ts`'s
+  now-dead `recordingFromClient` helper removed, not left unused), `check-rls-initplan.ts` (0
+  findings — this migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 529
+  migrations / 272 db-test files, including the new cluster-5 db-test file: a full
+  member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix on both DEFINER functions
+  including the `insufficient_authority`-raises-on-denial proof, the RULE A forged-actor-rejection
+  proof for both, and existence-based, never exact-count, proofs for both INVOKER functions'
+  filter/ordering/exclusion behavior against the shared platform-wide tables), `git:check-paths`
+  (clean, 12 files checked), `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-FIRST PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  **Cluster 5 (`procurement-document`) is now FULLY `DONE`: all 5 call sites closed** in one
+  migration. Remaining across the whole Ø1-query-layer effort: clusters 6-7 (46 call sites across
+  platform-intelligence-reports/page-level-direct-reads) — next up under the same "lanjut sampe siap
+  launching" mandate.

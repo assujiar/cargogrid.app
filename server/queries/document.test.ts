@@ -27,14 +27,9 @@ function fakeFileClient(
 
 function fakeDocumentTypeClient(response: { data: unknown[] | null; error: { message: string } | null }): DocumentTypeLookupClient {
   return {
-    from(table) {
-      assert.equal(table, "document_types");
-      return {
-        select(columns) {
-          assert.equal(columns, "*");
-          return Promise.resolve(response);
-        },
-      };
+    rpc(fn) {
+      assert.equal(fn, "list_document_types");
+      return Promise.resolve(response);
     },
   };
 }

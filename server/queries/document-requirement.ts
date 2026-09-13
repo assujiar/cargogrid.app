@@ -1,7 +1,8 @@
 /**
  * Document Requirement read queries (OPS-176, CG-S8-OPS-010). Thin, typed wrappers
  * around app.get_shipment_document_checklist / app.evaluate_shipment_document_checklist_completeness
- * plus a direct RLS-scoped read of app.document_requirement_definitions.
+ * plus app.list_document_requirement_definitions (RPC, SECURITY DEFINER, explicit
+ * actor + RULE A -- O1 remediation, cluster 5).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -16,7 +17,7 @@ import {
   type GetShipmentDocumentChecklistInput,
 } from "../contracts/document-requirement/document-requirement.ts";
 
-export type DocumentRequirementQueryClient = Pick<SupabaseClient, "from" | "rpc">;
+export type DocumentRequirementQueryClient = Pick<SupabaseClient, "rpc">;
 
 export class DocumentRequirementQueryError extends Error {
   constructor(message: string) {
@@ -66,19 +67,20 @@ export async function evaluateShipmentDocumentChecklistCompleteness(
 
 export interface ListDocumentRequirementDefinitionsInput {
   readonly tenantId: string;
+  readonly actorAuthUserId: string;
   readonly status?: "draft" | "published" | "archived";
 }
 
-/** Direct RLS-scoped table read (app.document_requirement_definitions_select_scoped) -- broadly readable within the tenant, mirrors app.exception_sla_policy_versions' own read shape. */
+/** Tenant-membership-gated read (app.document_requirement_definitions_select_scoped's current predicate, reproduced by app.list_document_requirement_definitions) -- broadly readable within the tenant, mirrors app.exception_sla_policy_versions' own read shape. */
 export async function listDocumentRequirementDefinitions(
   client: DocumentRequirementQueryClient,
   input: ListDocumentRequirementDefinitionsInput,
 ): Promise<DocumentRequirementDefinition[]> {
-  let query = client.from("document_requirement_definitions").select("*").eq("tenant_id", input.tenantId);
-  if (input.status) {
-    query = query.eq("status", input.status);
-  }
-  const { data, error } = await query;
+  const { data, error } = await client.rpc("list_document_requirement_definitions", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+    p_status: input.status ?? null,
+  });
   if (error) {
     throw new DocumentRequirementQueryError(error.message);
   }

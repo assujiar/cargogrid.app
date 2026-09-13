@@ -30,7 +30,7 @@ import {
 import { listPendingApprovalStepsForActor, type ApprovalQueryRpcClient } from "./approval.ts";
 import type { ApprovalRequestStep } from "../contracts/approval/approval.ts";
 
-export type ProcurementApprovalQueryClient = Pick<SupabaseClient, "from" | "rpc">;
+export type ProcurementApprovalQueryClient = Pick<SupabaseClient, "rpc">;
 
 /** Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict `Promise`) -- structurally incompatible with server/queries/approval.ts's hand-written `ApprovalQueryRpcClient` interface. The same `async (fn, args) => await client.rpc(fn, args)` adapter every other cross-module RPC composition in this repository already uses for that exact mismatch (mirrors server/queries/quotation-approval.ts). Exported so pages that need to compose the generic Approval Engine's own history/pending-inbox reads directly (e.g. the step detail page) can reuse it rather than redefining it. */
 export function toApprovalQueryRpcClient(client: ProcurementApprovalQueryClient): ApprovalQueryRpcClient {
@@ -45,8 +45,12 @@ export class ProcurementApprovalQueryError extends Error {
 }
 
 /** Every procurement approval policy version for one tenant (any status, any entity_type), most recently created first -- tenant-wide reference/policy data, never field-masked (mirrors app.quotation_approval_rules, COM-153). */
-export async function listProcurementApprovalPolicyVersions(client: ProcurementApprovalQueryClient, tenantId: string): Promise<ProcurementApprovalPolicyVersion[]> {
-  const { data, error } = await client.from("procurement_approval_policies").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+export async function listProcurementApprovalPolicyVersions(client: ProcurementApprovalQueryClient, tenantId: string, actorAuthUserId: string): Promise<ProcurementApprovalPolicyVersion[]> {
+  const { data, error } = await client.rpc("list_procurement_approval_policy_versions", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new ProcurementApprovalQueryError(error.message);
   }
@@ -133,7 +137,10 @@ export async function listProcurementApprovalInboxForActor(client: ProcurementAp
   }
 
   const requestIds = [...new Set(steps.map((step) => step.requestId))];
-  const { data, error } = await client.from("approval_requests").select("id, entity_type, entity_id").in("id", requestIds);
+  const { data, error } = await client.rpc("get_approval_requests_entity_refs", {
+    p_ids: requestIds,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new ProcurementApprovalQueryError(error.message);
   }

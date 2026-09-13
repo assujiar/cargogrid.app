@@ -14,8 +14,14 @@
  * runs as definer and bypasses RLS anyway. This module simply stops being the thing that
  * uses it.
  *
- * listDocumentTypes below is unchanged and stays a direct read: app.document_types is a
- * deliberately broadly-readable registry (app.document_types_select_all), not tenant data.
+ * listDocumentTypes below now goes through the app.list_document_types RPC (O1 remediation,
+ * cluster 5): app.document_types is a deliberately broadly-readable registry
+ * (app.document_types_select_all, a bare `using (true)` policy), but "app" is never exposed
+ * to PostgREST regardless of how permissive its own RLS policy is, so the direct
+ * `.from("document_types")` read this module used before had never actually worked in
+ * production -- the same defect class this whole module's header already documents for
+ * app.files. The new RPC is SECURITY INVOKER, zero actor parameter, matching
+ * app.list_milestone_codes' own identical precedent for a genuinely-open-RLS reference table.
  */
 
 import { parseFileSummary, parseDocumentType, type FileSummary, type DocumentType } from "../contracts/document/document.ts";
@@ -77,9 +83,7 @@ export async function listFilesForTenant(
 }
 
 export interface DocumentTypeLookupClient {
-  from(table: "document_types"): {
-    select(columns: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-  };
+  rpc(fn: "list_document_types"): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 }
 
 export class DocumentTypeLookupError extends Error {
@@ -91,7 +95,7 @@ export class DocumentTypeLookupError extends Error {
 
 /** The full document-type registry -- broadly readable to any authenticated caller (app.document_types_select_all policy). */
 export async function listDocumentTypes(client: DocumentTypeLookupClient): Promise<DocumentType[]> {
-  const { data, error } = await client.from("document_types").select("*");
+  const { data, error } = await client.rpc("list_document_types");
 
   if (error) {
     throw new DocumentTypeLookupError(error.message);
