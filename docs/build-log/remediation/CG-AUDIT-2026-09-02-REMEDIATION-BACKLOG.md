@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; clusters 6-7 (46 call sites) remain — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, batch 1 of N, 9/30 call sites closed, `IN_PROGRESS`; cluster 7 (16 call sites) not yet started — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1549,3 +1549,66 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   migration. Remaining across the whole Ø1-query-layer effort: clusters 6-7 (46 call sites across
   platform-intelligence-reports/page-level-direct-reads) — next up under the same "lanjut sampe siap
   launching" mandate.
+
+- 2026-09-13 — Ø1-query-layer cluster 6 (`platform-intelligence-reports`) batch 1 of N closed
+  (this commit), continuing the same "lanjut sampe siap launching" mandate. Closes 9 of this
+  cluster's 30 broken `.from()` call sites across `server/queries/analytics.ts` (3:
+  `listAnalyticsViews`, `getLatestAnalyticsRefreshRun`, `listAnalyticsRefreshRuns`) and
+  `server/queries/automation-rule.ts` (6: `listAutomationRules`, `getAutomationRuleById`,
+  `listAutomationRuleVersions`, `listAutomationRuleExecutions`,
+  `getLatestAutomationRulePublishApprovalRequest`, `listApprovalRequestSteps`). New migration
+  `20260913010000_close_o1_query_layer_cluster6_batch1_analytics_automation.sql` adds 9 new
+  `app.*`/`public.*` Option-2 wrapper pairs (18 functions), ALL SECURITY INVOKER with ZERO actor
+  parameter — every real call site of all 9 TS functions uses `createSupabaseServerClient()` only,
+  never a decoupled service-role actor.
+  Three distinct grant/RLS shapes, none satisfiable by a bare `select *`: (1) `app.analytics_view_
+  registry` — no RLS at all, a plain, never-narrowed full-row grant; (2) `app.analytics_refresh_runs`
+  — no RLS, but COLUMN-restricted (ISS-2026-174) — an adversarial correction of the recon manifest's
+  own stale "zero grant to authenticated" claim, which cited only the table's original migration and
+  missed a LATER harden migration (`20260827030000_harden_analytics_refresh_runs_grant.sql`) that
+  re-granted a narrower 8-column list after revoking the full-row grant; both new functions select
+  exactly those 8 columns and explicitly cast `row_count_before`/`triggered_by_auth_user_id`/
+  `triggered_by_label` to null — confirmed zero UI regression via a repo-wide grep (none of the 3 is
+  rendered anywhere in `app/**/*.tsx`); (3) `app.automation_rules`/`app.automation_rule_versions`/
+  `app.automation_rule_executions`/`app.approval_requests`/`app.approval_request_steps` — RLS-scoped
+  tenant-membership predicates, with the first 3 carrying NO explicit `OR is_supreme_admin()`
+  disjunct at the policy level (unlike several sibling tables this series already closed) — verified
+  LIVE in this pass's own db-test, not merely cited, that `app.has_active_tenant_membership`'s own
+  current body already admits a Supreme Admin internally via its own `or app.is_supreme_admin(...)`
+  branch, so the policy-level omission carries no functional gap. `app.approval_requests` is
+  additionally COLUMN-restricted (`ended_reason` excluded since `20260731210000`, Finding 5
+  CRITICAL) — the new function selects the exact same explicit 15-column list
+  `server/queries/automation-rule.ts`'s own pre-existing TS code already used. Every 0-or-1-row
+  lookup is declared `returns setof app.<table>`, never a bare composite.
+  All TS signatures are unchanged — zero disclosed breaking parameter additions in this batch (every
+  function already had exactly the parameters its new RPC needs).
+  A real, independently-caught db-test bug was found and fixed during this pass's own verification:
+  an early version of this batch's db-test file resolved `automation_rule_versions` fixture rows via
+  a subquery filtered only by `version_number`, with no `automation_rule_id` scope — this passed
+  standalone but failed with `more than one row returned by a subquery` the first time it ran inside
+  the FULL `pnpm run db:test` suite, because `scripts/db-tests/automation-rule-engine.sql` (the
+  pre-existing sibling test for this exact table) also creates `version_number=1`/`2` rows for its
+  own rules. This is the SAME cross-file fixture-collision defect class cluster 4 batch 1 first
+  identified for this series, in its original shape (an underscoped subquery inside this file, not
+  an exact-count assertion in a different file, which was cluster 5's own instance of it) — fixed by
+  adding the missing `automation_rule_id` scope to all 4 affected subqueries; re-verified with a full
+  `pnpm run db:test` run afterward, ALL PASSED. Restated for a third time as this series' own
+  standing lesson: the full suite, never a standalone `psql -f` invocation, is the only real
+  verification for a shared-database db-test file.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the 6,023-test unit suite (2
+  test files converted from `.from()`-mocking to `.rpc()`-mocking), `check-rls-initplan.ts` (0
+  findings — this migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 530
+  migrations / 273 db-test files, including the new cluster-6-batch-1 db-test file: a full
+  member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix across both RLS shapes,
+  ordering-fidelity proofs against fixture rows deliberately inserted out of order, and explicit
+  proof that a REAL, non-null `ended_reason`/`row_count_before`/`triggered_by_auth_user_id`/
+  `triggered_by_label` written directly to fixture rows all come back genuinely null through the new
+  functions), `git:check-paths` (clean, 7 files checked), `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-SECOND PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  Cluster 6 (`platform-intelligence-reports`) remains `IN_PROGRESS`: 9/30 call sites closed. Still
+  open in this cluster: `server/queries/integration-hub.ts` (4), `server/queries/third-party-
+  provider-adapter.ts` (1), `server/queries/report.ts` (5), `server/queries/saved-report-view.ts`
+  (1), `server/queries/scheduled-report.ts` (4), `server/queries/supreme-tenants.ts` (1),
+  `server/queries/tenant-dashboard.ts` (5) — next up under the same "lanjut sampe siap launching"
+  mandate. Plus cluster 7 (16 call sites) after that.

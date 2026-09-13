@@ -4834,7 +4834,56 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // closed** in one migration. Remaining across the whole Ø1-query-layer effort:
   // clusters 6-7 (platform-intelligence-reports/page-level-direct-reads) -- next up
   // under the same "lanjut sampe siap launching" mandate.
-  migrationSetSha256: "27a9f9b97442831d21e82f7bc3ad5c8f6dfc953b91b1511f4667ed0bedf1f3ef",
+  // HUNDRED-AND-THIRTY-SECOND PASS (2026-09-13, cluster 6/platform-intelligence-
+  // reports batch 1 of N): 530 files (+1) -- new migration 20260913010000_close_
+  // o1_query_layer_cluster6_batch1_analytics_automation.sql. Closes 9 of this
+  // cluster's 30 broken `.from()` call sites across server/queries/analytics.ts (3)
+  // and server/queries/automation-rule.ts (6). 9 new app.*/public.* Option-2 wrapper
+  // pairs (18 functions), ALL SECURITY INVOKER, zero actor parameter -- every real
+  // call site of all 9 TS functions uses `createSupabaseServerClient()` only. Three
+  // grant/RLS shapes: (1) app.analytics_view_registry, no RLS, full-row grant --
+  // `select *` safe; (2) app.analytics_refresh_runs, no RLS but COLUMN-restricted
+  // (ISS-2026-174) -- an adversarial correction of the recon manifest's own stale
+  // "zero grant" claim, which missed a later harden migration
+  // (20260827030000_harden_analytics_refresh_runs_grant.sql) that re-granted a
+  // narrower 8-column list; both new functions select exactly those 8 columns and
+  // cast row_count_before/triggered_by_auth_user_id/triggered_by_label to null
+  // (confirmed zero UI regression: none of the 3 is rendered anywhere in
+  // app/**/*.tsx); (3) app.automation_rules/app.automation_rule_versions/
+  // app.automation_rule_executions/app.approval_requests/app.approval_request_steps,
+  // RLS-scoped tenant-membership (the first 3 with NO explicit `OR is_supreme_
+  // admin()` disjunct at the policy level -- verified live in this pass's own
+  // db-test that app.has_active_tenant_membership's own current body already admits
+  // a Supreme Admin internally, so the policy-level omission is not a functional
+  // gap); app.approval_requests is additionally COLUMN-restricted (ended_reason
+  // excluded since 20260731210000, Finding 5 CRITICAL) -- the new function selects
+  // the same explicit 15-column list server/queries/automation-rule.ts's own
+  // pre-existing TS code already used. Every 0-or-1-row lookup declared `returns
+  // setof app.<table>`, never a bare composite.
+  // Full Tier A gate suite verified clean: `typecheck` (zero signature changes --
+  // every one of the 9 TS functions kept its exact original call shape), `lint` (0
+  // errors), the 6,023-test unit suite (2 test files converted from `.from()`-
+  // mocking to `.rpc()`-mocking), `check-rls-initplan.ts` (0 findings -- this
+  // migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 530
+  // migrations / 273 db-test files, including the new cluster-6-batch-1 db-test
+  // file: a full member/customer-user-layer/cross-tenant/Supreme-Admin visibility
+  // matrix across both RLS shapes -- including live proof that has_active_tenant_
+  // membership's own internal Supreme Admin branch, not a policy-level disjunct,
+  // is what admits the Supreme Admin on 3 of the 5 RLS-scoped tables -- ordering-
+  // fidelity proofs against fixture rows deliberately inserted out of order, and
+  // explicit proof that a REAL, non-null ended_reason/row_count_before/triggered_
+  // by_auth_user_id/triggered_by_label written directly to fixture rows all come
+  // back genuinely null through the new functions), `git:check-paths` (clean, 6
+  // files checked), `security:check`, and a real `next build`.
+  // Remaining in cluster 6: 21 call sites across server/queries/integration-hub.ts
+  // (4), server/queries/third-party-provider-adapter.ts (1), server/queries/
+  // report.ts (5), server/queries/saved-report-view.ts (1), server/queries/
+  // scheduled-report.ts (4), server/queries/supreme-tenants.ts (1), server/queries/
+  // tenant-dashboard.ts (5) -- next up under the same "lanjut sampe siap launching"
+  // mandate. Plus cluster 7 (16 call sites) after that.
+  migrationSetSha256: "82cc00b3525a7f113be9afbe9fa7e688f27243107b4a451fe021ae20b4b4100a",
+  // History: 27a9f9b97442831d21e82f7bc3ad5c8f6dfc953b91b1511f4667ed0bedf1f3ef
+  // (529 files, HUNDRED-AND-THIRTY-FIRST PASS).
   // History: 6d5d054b2b20701115c899434d9487d17eef07afa7d92ac629f3f9f130134716
   // (528 files, HUNDRED-AND-THIRTIETH PASS).
   // History: e9f38e1d4161d4927e29ed30859600d35c230a702ea7ddec00aed8e9f44f6c77
@@ -6253,7 +6302,47 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // shared-database db-test file -- and the collision can run in EITHER direction
   // (this file's own fixtures breaking a sibling's assertion, not only a sibling's
   // fixtures breaking this file's own).
-  dbTestSetSha256: "fe7a7aa3660bc0031036d3068429c40f66712288a37ebb0d610e5c7ed487ce15",
+  // HUNDRED-AND-THIRTY-SECOND PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 273 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch1.sql. Proves, against a real disposable database, all 9 new function
+  // pairs (18 functions) across the batch's 3 grant/RLS shapes: a plain-authenticated
+  // existence proof for the no-RLS, full-row-grant app.analytics_view_registry; an
+  // explicit null-cast proof for app.analytics_refresh_runs -- a REAL, non-null
+  // row_count_before/triggered_by_auth_user_id/triggered_by_label is written
+  // directly to the fixture rows, and both new functions are proven to return them
+  // as genuinely null anyway (never the real values), plus ordering fidelity
+  // (started_at desc) against rows inserted out of order; and a full member/
+  // customer-user-layer/cross-tenant/Supreme-Admin visibility matrix on the 5
+  // RLS-scoped tables -- critically, LIVE proof (not merely cited) that app.
+  // automation_rules/app.automation_rule_versions/app.automation_rule_executions
+  // admit a Supreme Admin with ZERO explicit tenant membership despite carrying no
+  // policy-level `OR is_supreme_admin()` disjunct, because app.has_active_tenant_
+  // membership's own current body already covers it internally; app.approval_
+  // requests/app.approval_request_steps show the same 4-persona outcome via a
+  // different policy shape (an explicit disjunct); and an explicit null-cast proof
+  // for app.get_latest_automation_rule_publish_approval_request -- a real, non-null,
+  // deliberately sensitive ended_reason is written to the fixture row and proven to
+  // come back null. Ordering-fidelity proofs (version_number desc, executed_at desc,
+  // step_order asc) against fixture rows deliberately inserted out of order for
+  // every list function.
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // verification: an early version of this file resolved automation_rule_versions
+  // fixture rows via a subquery filtered only by `version_number` with no
+  // `automation_rule_id` scope, which passed standalone but failed with `more than
+  // one row returned by a subquery` the first time it ran inside the FULL `pnpm run
+  // db:test` suite (scripts/db-tests/automation-rule-engine.sql, the pre-existing
+  // sibling test for this exact table, also creates version_number=1/2 rows for its
+  // own rules). This is the SAME cross-file fixture-collision defect class cluster 4
+  // batch 1 first identified for this series, in its original shape (an underscoped
+  // subquery in this file, not an exact-count assertion elsewhere as cluster 5's own
+  // instance was) -- fixed by adding the missing `automation_rule_id = v_rule_id`
+  // scope to all 4 affected subqueries; re-verified with a full `pnpm run db:test`
+  // run afterward, ALL PASSED. Restates, for the third time in this series, the same
+  // standing lesson: the full suite, never a standalone `psql -f` invocation, is the
+  // only real verification for a shared-database db-test file.
+  dbTestSetSha256: "79f8f6eafe85eead27379bb4464ebc86a37ea9d2b16591c856a62a8fbdb32ddb",
+  // History: fe7a7aa3660bc0031036d3068429c40f66712288a37ebb0d610e5c7ed487ce15
+  // (272 files, HUNDRED-AND-THIRTY-FIRST PASS).
   // History: 6511bc0e3b1053aa6ab8e51abc3bf76fd385d0faefd3730a6667bad831ccfdb6
   // (271 files, HUNDRED-AND-THIRTIETH PASS).
   // History: 2a9f56452658005ac1632c17fefacdd2862b0e1b7ee9a0807a2c4795a76dc023

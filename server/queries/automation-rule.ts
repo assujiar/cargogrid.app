@@ -1,7 +1,9 @@
 /**
- * Automation Rule Engine read queries (IAE-007, Prompt 335). All direct,
- * RLS-scoped reads -- no wrapper RPC needed, mirroring app.tenant_dashboards'
- * own precedent (IAE-003).
+ * Automation Rule Engine read queries (IAE-007, Prompt 335). All RLS-scoped
+ * reads via RPC (O1 remediation, cluster 6) -- app is not exposed to
+ * PostgREST, so a direct `.from()` read against any app.* table has never
+ * worked in production. All 6 functions are SECURITY INVOKER, zero actor
+ * parameter, relying entirely on the calling role's own live RLS evaluation.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -15,7 +17,7 @@ import {
 } from "../contracts/automation-rule/automation-rule.ts";
 import { parseApprovalRequest, parseApprovalRequestStep, type ApprovalRequest, type ApprovalRequestStep } from "../contracts/approval/approval.ts";
 
-export type AutomationRuleQueryClient = Pick<SupabaseClient, "from">;
+export type AutomationRuleQueryClient = Pick<SupabaseClient, "rpc">;
 
 export class AutomationRuleQueryError extends Error {
   constructor(message: string) {
@@ -26,7 +28,7 @@ export class AutomationRuleQueryError extends Error {
 
 /** Every automation rule for one tenant, most recently updated first. */
 export async function listAutomationRules(client: AutomationRuleQueryClient, tenantId: string): Promise<AutomationRule[]> {
-  const { data, error } = await client.from("automation_rules").select("*").eq("tenant_id", tenantId).order("updated_at", { ascending: false });
+  const { data, error } = await client.rpc("list_automation_rules", { p_tenant_id: tenantId });
   if (error) {
     throw new AutomationRuleQueryError(error.message);
   }
@@ -35,19 +37,20 @@ export async function listAutomationRules(client: AutomationRuleQueryClient, ten
 
 /** A single rule by id -- returns null (never an error) when it does not exist or RLS hides it. */
 export async function getAutomationRuleById(client: AutomationRuleQueryClient, ruleId: string): Promise<AutomationRule | null> {
-  const { data, error } = await client.from("automation_rules").select("*").eq("id", ruleId).maybeSingle();
+  const { data, error } = await client.rpc("get_automation_rule_by_id", { p_rule_id: ruleId });
   if (error) {
     throw new AutomationRuleQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseAutomationRule(data as Record<string, unknown>);
+  return parseAutomationRule(row as Record<string, unknown>);
 }
 
 /** Every version of one rule, newest first -- the currently-open draft is versionNumber === max. */
 export async function listAutomationRuleVersions(client: AutomationRuleQueryClient, ruleId: string): Promise<AutomationRuleVersion[]> {
-  const { data, error } = await client.from("automation_rule_versions").select("*").eq("automation_rule_id", ruleId).order("version_number", { ascending: false });
+  const { data, error } = await client.rpc("list_automation_rule_versions", { p_automation_rule_id: ruleId });
   if (error) {
     throw new AutomationRuleQueryError(error.message);
   }
@@ -56,12 +59,7 @@ export async function listAutomationRuleVersions(client: AutomationRuleQueryClie
 
 /** Execution history for one rule, newest first -- completed/suppressed/failed evidence. */
 export async function listAutomationRuleExecutions(client: AutomationRuleQueryClient, ruleId: string, limit = 25): Promise<AutomationRuleExecution[]> {
-  const { data, error } = await client
-    .from("automation_rule_executions")
-    .select("*")
-    .eq("automation_rule_id", ruleId)
-    .order("executed_at", { ascending: false })
-    .limit(limit);
+  const { data, error } = await client.rpc("list_automation_rule_executions", { p_automation_rule_id: ruleId, p_limit: limit });
   if (error) {
     throw new AutomationRuleQueryError(error.message);
   }
@@ -92,28 +90,20 @@ export async function listAutomationRuleExecutions(client: AutomationRuleQueryCl
  * than working around it.
  */
 export async function getLatestAutomationRulePublishApprovalRequest(client: AutomationRuleQueryClient, automationRuleVersionId: string): Promise<ApprovalRequest | null> {
-  const { data, error } = await client
-    .from("approval_requests")
-    .select(
-      "id, tenant_id, config_version_id, entity_type, entity_id, pattern, status, idempotency_key, requested_by_auth_user_id, requested_by, started_at, ended_at, record_version, created_at, updated_at",
-    )
-    .eq("entity_type", "automation_rule_version")
-    .eq("entity_id", automationRuleVersionId)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await client.rpc("get_latest_automation_rule_publish_approval_request", { p_automation_rule_version_id: automationRuleVersionId });
   if (error) {
     throw new AutomationRuleQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseApprovalRequest({ ...(data as Record<string, unknown>), ended_reason: null });
+  return parseApprovalRequest(row as Record<string, unknown>);
 }
 
 /** Every step of one approval request, in step_order -- a direct, RLS-scoped read of the shared Approval Engine's own table (PLT-123). */
 export async function listApprovalRequestSteps(client: AutomationRuleQueryClient, requestId: string): Promise<ApprovalRequestStep[]> {
-  const { data, error } = await client.from("approval_request_steps").select("*").eq("request_id", requestId).order("step_order", { ascending: true });
+  const { data, error } = await client.rpc("list_approval_request_steps", { p_request_id: requestId });
   if (error) {
     throw new AutomationRuleQueryError(error.message);
   }
