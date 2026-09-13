@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, batch 1 of N, 9/30 call sites closed, `IN_PROGRESS`; cluster 7 (16 call sites) not yet started — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, batches 1-2 of N, 14/30 call sites closed, `IN_PROGRESS`; cluster 7 (16 call sites) not yet started — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1610,5 +1610,46 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   open in this cluster: `server/queries/integration-hub.ts` (4), `server/queries/third-party-
   provider-adapter.ts` (1), `server/queries/report.ts` (5), `server/queries/saved-report-view.ts`
   (1), `server/queries/scheduled-report.ts` (4), `server/queries/supreme-tenants.ts` (1),
+  `server/queries/tenant-dashboard.ts` (5) — next up under the same "lanjut sampe siap launching"
+  mandate. Plus cluster 7 (16 call sites) after that.
+
+- 2026-09-13 — Ø1-query-layer cluster 6 (`platform-intelligence-reports`) batch 2 of N closed
+  (this commit), continuing the same "lanjut sampe siap launching" mandate. Closes 5 more of this
+  cluster's remaining broken `.from()` call sites across `server/queries/integration-hub.ts` (4:
+  `listIntegrationAdapters`, `listIntegrationConnections`, `getIntegrationConnectionById`,
+  `listIntegrationHealthChecks`) and `server/queries/third-party-provider-adapter.ts` (1:
+  `getThirdPartyProviderConnection`) — 14/30 cumulative for the cluster. New migration
+  `20260913020000_close_o1_query_layer_cluster6_batch2_integration_hub.sql` adds 5 new
+  `app.*`/`public.*` Option-2 wrapper pairs (10 functions), ALL SECURITY INVOKER, zero actor
+  parameter.
+  Three grant/RLS shapes: (1) `app.integration_adapters` — no RLS at all, a plain, never-narrowed
+  full-row grant; (2) `app.integration_connections`/`app.integration_health_checks` — RLS-scoped
+  tenant-membership, with NO explicit `OR is_supreme_admin()` disjunct at the policy level — the
+  SAME shape cluster 6 batch 1's own `app.automation_rules` family used — re-verified LIVE in
+  THIS batch's own db-test, not merely assumed to carry over, that `app.has_active_tenant_
+  membership`'s own internal Supreme Admin branch still admits a zero-membership Supreme Admin;
+  (3) `app.third_party_provider_connections` — RLS-scoped with an explicit `OR is_supreme_admin()`
+  disjunct, plus a live schema-evolution wrinkle independently traced rather than assumed from the
+  recon's own 14-column citation: the table's original `webhook_secret_value` column was later
+  DROPPED entirely and replaced by a new `webhook_secret_value_encrypted bytea` column that
+  appears in NO grant statement whatsoever (confirmed via a full grant/revoke history grep across
+  every migration mentioning this table). The new function selects all 15 of the table's current
+  visible columns (structurally required for `returns setof <table>`) and explicitly casts the
+  ungranted 15th to null — proven live against a real, non-null bytea value deliberately written
+  to the fixture row. Every 0-or-1-row lookup declared `returns setof app.<table>`, never a bare
+  composite. Zero disclosed breaking parameter changes.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the 6,023-test unit suite
+  (2 test files converted from `.from()`-mocking to `.rpc()`-mocking), `check-rls-initplan.ts` (0
+  findings — this migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 531
+  migrations / 274 db-test files, including the new cluster-6-batch-2 db-test file: a full
+  member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix across all 3 shapes,
+  ordering-fidelity proofs against fixture rows deliberately inserted out of order, and an
+  explicit null-cast proof for `webhook_secret_value_encrypted`), `git:check-paths` (clean, 7
+  files checked), `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-THIRD PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  Cluster 6 (`platform-intelligence-reports`) remains `IN_PROGRESS`: 14/30 call sites closed. Still
+  open: `server/queries/report.ts` (5), `server/queries/saved-report-view.ts` (1),
+  `server/queries/scheduled-report.ts` (4), `server/queries/supreme-tenants.ts` (1),
   `server/queries/tenant-dashboard.ts` (5) — next up under the same "lanjut sampe siap launching"
   mandate. Plus cluster 7 (16 call sites) after that.

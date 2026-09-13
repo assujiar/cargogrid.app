@@ -11,60 +11,61 @@ const CONN_ID = "723e4567-e89b-12d3-a456-426614174001";
 const TENANT_ID = "723e4567-e89b-12d3-a456-426614174002";
 const VEHICLE_ID = "723e4567-e89b-12d3-a456-426614174003";
 
-function fakeClient(overrides: {
-  fromResponse?: { data: unknown; error: { message: string } | null };
-  rpcResponse?: { data: unknown; error: { message: string } | null };
-}): ThirdPartyProviderAdapterQueryClient {
-  return {
-    from: (_table: string) => ({
-      select: (_cols: string) => ({
-        eq: (_c1: string, _v1: unknown) => ({
-          eq: (_c2: string, _v2: unknown) => ({
-            maybeSingle: async () => overrides.fromResponse,
-          }),
-        }),
-      }),
-    }),
-    rpc: async (_fn: string, _args: Record<string, unknown>) => overrides.rpcResponse,
+function fakeClient(rpcResponses: Record<string, { data: unknown; error: { message: string } | null }>): {
+  client: ThirdPartyProviderAdapterQueryClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
+      calls.push({ fn, args });
+      return rpcResponses[fn] ?? { data: [], error: null };
+    },
   } as unknown as ThirdPartyProviderAdapterQueryClient;
+  return { client, calls };
 }
 
 test("getThirdPartyProviderConnection returns null when no connection exists", async () => {
-  const client = fakeClient({ fromResponse: { data: null, error: null } });
+  const { client } = fakeClient({ get_third_party_provider_connection: { data: [], error: null } });
   const result = await getThirdPartyProviderConnection(client, TENANT_ID, "acmegps");
   assert.equal(result, null);
 });
 
 test("getThirdPartyProviderConnection parses a real row", async () => {
-  const client = fakeClient({
-    fromResponse: {
-      data: {
-        id: CONN_ID,
-        tenant_id: TENANT_ID,
-        provider_code: "acmegps",
-        integration_mode: "webhook",
-        poll_cursor: null,
-        status: "active",
-        consecutive_failure_count: 0,
-        last_successful_ingest_at: null,
-        created_at: "2026-08-03T00:00:00Z",
-        updated_at: "2026-08-03T00:00:00Z",
-      },
+  const { client, calls } = fakeClient({
+    get_third_party_provider_connection: {
+      data: [
+        {
+          id: CONN_ID,
+          tenant_id: TENANT_ID,
+          provider_code: "acmegps",
+          integration_mode: "webhook",
+          poll_cursor: null,
+          status: "active",
+          consecutive_failure_count: 0,
+          last_successful_ingest_at: null,
+          auto_disabled_at: null,
+          disabled_reason: null,
+          created_at: "2026-08-03T00:00:00Z",
+          updated_at: "2026-08-03T00:00:00Z",
+        },
+      ],
       error: null,
     },
   });
   const result = await getThirdPartyProviderConnection(client, TENANT_ID, "acmegps");
+  assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_provider_code: "acmegps" });
   assert.equal(result?.providerCode, "acmegps");
 });
 
-test("getThirdPartyProviderConnection throws on an RPC/query error", async () => {
-  const client = fakeClient({ fromResponse: { data: null, error: { message: "boom" } } });
+test("getThirdPartyProviderConnection throws on an RPC error", async () => {
+  const { client } = fakeClient({ get_third_party_provider_connection: { data: null, error: { message: "boom" } } });
   await assert.rejects(() => getThirdPartyProviderConnection(client, TENANT_ID, "acmegps"), ThirdPartyProviderAdapterQueryError);
 });
 
 test("listThirdPartyTelemetryReports maps every row through the parser", async () => {
-  const client = fakeClient({
-    rpcResponse: {
+  const { client } = fakeClient({
+    get_third_party_telemetry_reports: {
       data: [
         {
           id: CONN_ID,
@@ -91,7 +92,7 @@ test("listThirdPartyTelemetryReports maps every row through the parser", async (
 });
 
 test("listThirdPartyTelemetryReports returns an empty array for null data", async () => {
-  const client = fakeClient({ rpcResponse: { data: null, error: null } });
+  const { client } = fakeClient({ get_third_party_telemetry_reports: { data: null, error: null } });
   const result = await listThirdPartyTelemetryReports(client, CONN_ID);
   assert.deepEqual(result, []);
 });

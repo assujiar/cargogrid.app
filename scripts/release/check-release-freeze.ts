@@ -4881,7 +4881,51 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // scheduled-report.ts (4), server/queries/supreme-tenants.ts (1), server/queries/
   // tenant-dashboard.ts (5) -- next up under the same "lanjut sampe siap launching"
   // mandate. Plus cluster 7 (16 call sites) after that.
-  migrationSetSha256: "82cc00b3525a7f113be9afbe9fa7e688f27243107b4a451fe021ae20b4b4100a",
+  // HUNDRED-AND-THIRTY-THIRD PASS (2026-09-13, cluster 6/platform-intelligence-
+  // reports batch 2 of N): 531 files (+1) -- new migration 20260913020000_close_
+  // o1_query_layer_cluster6_batch2_integration_hub.sql. Closes 5 more of this
+  // cluster's remaining broken `.from()` call sites across server/queries/
+  // integration-hub.ts (4: listIntegrationAdapters, listIntegrationConnections,
+  // getIntegrationConnectionById, listIntegrationHealthChecks) and server/queries/
+  // third-party-provider-adapter.ts (1: getThirdPartyProviderConnection) -- 14/30
+  // cumulative for the cluster. 5 new app.*/public.* Option-2 wrapper pairs (10
+  // functions), ALL SECURITY INVOKER, zero actor parameter. Three grant/RLS shapes:
+  // (1) app.integration_adapters -- no RLS, full-row grant; (2) app.integration_
+  // connections/app.integration_health_checks -- RLS-scoped tenant-membership, NO
+  // explicit OR is_supreme_admin() disjunct at the policy level (the SAME shape
+  // cluster 6 batch 1's own app.automation_rules family used) -- re-verified LIVE
+  // in this batch's own db-test, not merely assumed to carry over from batch 1,
+  // that has_active_tenant_membership's own internal Supreme Admin branch still
+  // admits a zero-membership Supreme Admin; (3) app.third_party_provider_
+  // connections -- RLS-scoped with an explicit OR is_supreme_admin() disjunct,
+  // PLUS a live schema-evolution wrinkle independently traced rather than assumed
+  // from the recon's own 14-column citation: the table's original `webhook_secret_
+  // value` column was later DROPPED entirely and replaced by a new `webhook_
+  // secret_value_encrypted bytea` column that appears in NO grant statement
+  // whatsoever -- the new function selects all 15 of the table's current visible
+  // columns (to structurally satisfy `returns setof <table>`) and explicitly casts
+  // the ungranted 15th to null, proven live against a real, non-null bytea value
+  // deliberately written to the fixture row. Every 0-or-1-row lookup declared
+  // `returns setof app.<table>`, never a bare composite. Zero disclosed breaking
+  // parameter changes -- every function kept its exact original TS call shape.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the
+  // 6,023-test unit suite (2 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking), `check-rls-initplan.ts` (0 findings -- this migration adds
+  // no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 531 migrations / 274
+  // db-test files, including the new cluster-6-batch-2 db-test file: a full
+  // member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix across
+  // all 3 shapes, ordering-fidelity proofs against fixture rows deliberately
+  // inserted out of order, and an explicit null-cast proof for webhook_secret_
+  // value_encrypted), `git:check-paths` (clean, 6 files checked), `security:check`,
+  // and a real `next build`.
+  // Remaining in cluster 6: 16 call sites across server/queries/report.ts (5),
+  // server/queries/saved-report-view.ts (1), server/queries/scheduled-report.ts (4),
+  // server/queries/supreme-tenants.ts (1), server/queries/tenant-dashboard.ts (5) --
+  // next up under the same "lanjut sampe siap launching" mandate. Plus cluster 7
+  // (16 call sites) after that.
+  migrationSetSha256: "c7dc83b91381284f9fd45b6839d67bcc5acf11f58ee141a981269a6f5374f54b",
+  // History: 82cc00b3525a7f113be9afbe9fa7e688f27243107b4a451fe021ae20b4b4100a
+  // (530 files, HUNDRED-AND-THIRTY-SECOND PASS).
   // History: 27a9f9b97442831d21e82f7bc3ad5c8f6dfc953b91b1511f4667ed0bedf1f3ef
   // (529 files, HUNDRED-AND-THIRTY-FIRST PASS).
   // History: 6d5d054b2b20701115c899434d9487d17eef07afa7d92ac629f3f9f130134716
@@ -6340,7 +6384,27 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // run afterward, ALL PASSED. Restates, for the third time in this series, the same
   // standing lesson: the full suite, never a standalone `psql -f` invocation, is the
   // only real verification for a shared-database db-test file.
-  dbTestSetSha256: "79f8f6eafe85eead27379bb4464ebc86a37ea9d2b16591c856a62a8fbdb32ddb",
+  // HUNDRED-AND-THIRTY-THIRD PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 274 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch2.sql. Proves, against a real disposable database, all 5 new function
+  // pairs (10 functions) across the batch's 3 grant/RLS shapes: an existence proof
+  // for the no-RLS, full-row-grant app.integration_adapters (never an exact count,
+  // since this platform-wide table is shared with other db-test files in the full
+  // suite); a full member/customer-user-layer/cross-tenant/Supreme-Admin visibility
+  // matrix on app.integration_connections/app.integration_health_checks --
+  // including a fresh, independent LIVE re-proof (not assumed to carry over from
+  // cluster 6 batch 1) that a Supreme Admin with ZERO explicit tenant membership
+  // is still admitted despite these tables' own policies carrying no
+  // policy-level `OR is_supreme_admin()` disjunct -- plus ordering-fidelity proofs
+  // (updated_at desc, checked_at desc) against fixture rows deliberately inserted
+  // out of order; and the same 4-persona matrix on app.third_party_provider_
+  // connections via its own explicit policy-level disjunct, PLUS an explicit
+  // null-cast proof for webhook_secret_value_encrypted -- a real, non-null bytea
+  // value is written directly to the fixture row and proven to come back null
+  // through the new function regardless.
+  dbTestSetSha256: "9c3f143bab47f9bda68819b09514d2891e653b99f83e589493b1fde46cb6737f",
+  // History: 79f8f6eafe85eead27379bb4464ebc86a37ea9d2b16591c856a62a8fbdb32ddb
+  // (273 files, HUNDRED-AND-THIRTY-SECOND PASS).
   // History: fe7a7aa3660bc0031036d3068429c40f66712288a37ebb0d610e5c7ed487ce15
   // (272 files, HUNDRED-AND-THIRTY-FIRST PASS).
   // History: 6511bc0e3b1053aa6ab8e51abc3bf76fd385d0faefd3730a6667bad831ccfdb6
