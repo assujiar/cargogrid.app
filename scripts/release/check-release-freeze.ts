@@ -4923,7 +4923,64 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // server/queries/supreme-tenants.ts (1), server/queries/tenant-dashboard.ts (5) --
   // next up under the same "lanjut sampe siap launching" mandate. Plus cluster 7
   // (16 call sites) after that.
-  migrationSetSha256: "c7dc83b91381284f9fd45b6839d67bcc5acf11f58ee141a981269a6f5374f54b",
+  // HUNDRED-AND-THIRTY-FOURTH PASS (2026-09-13, cluster 6/platform-intelligence-
+  // reports batch 3 of N): 532 files (+1) -- new migration 20260913030000_close_
+  // o1_query_layer_cluster6_batch3_reports.sql. Closes 6 more of this cluster's
+  // remaining broken `.from()` call sites across server/queries/report.ts (5:
+  // listActiveReportTypes, getReportTypeByCode, listReportRuns,
+  // listReportRunsForType, listReportTypeVersions) and server/queries/
+  // saved-report-view.ts (1: getSavedReportViewById) -- 20/30 cumulative for the
+  // cluster. 5 new app.*/public.* Option-2 wrapper pairs (10 functions), ALL
+  // SECURITY INVOKER, zero actor parameter. listReportRuns/listReportRunsForType
+  // deliberately share ONE new function (app.list_report_runs, a nullable
+  // p_report_type_code parameter) rather than two near-duplicates, a disclosed
+  // implementation choice.
+  // Three grant/RLS shapes: (1) app.report_types/app.report_type_versions -- no
+  // RLS, full-row grant, platform-wide; (2) app.report_runs -- RLS-scoped
+  // tenant-membership WITH an explicit OR is_supreme_admin() disjunct; (3) app.
+  // saved_report_views -- a genuinely 3-branch predicate (supreme-admin bypass,
+  // owner-row-plus-membership, or tenant-shared-row-plus-membership), whose
+  // CURRENT text was traced through a DROP-AND-RECREATE (not an ALTER), a
+  // different RULE B mechanism than every other finding in this series so far
+  // (20260810500000_harden_own_row_rls_membership_gap.sql:83-92). The new function
+  // relies ENTIRELY on live RLS (never re-implementing the 3-branch logic in its
+  // own SQL body) -- proven live with a SECOND real tenant member who is NOT the
+  // view owner, who must see a tenant-shared view but be denied a private one,
+  // the exact distinction a hand-rolled reproduction could get subtly wrong.
+  // A real, independently-caught db-test bug was found and fixed during this
+  // pass's own verification: an early draft's fixture inserted a new app.
+  // report_types row (o1c6b3_retired) with no matching app.report_type_versions
+  // row, which broke scripts/db-tests/reporting-engine.sql's own pre-existing
+  // assertion that every report_types row has a backfilled version 1 -- tracing
+  // the CURRENT app.register_report_type body (20260802010000:182-183) confirmed
+  // this is a real, enforced production invariant ("every report type ... always
+  // has a real version history from the moment it exists"), not merely another
+  // file's own arbitrary assumption -- fixed by adding the missing version row,
+  // matching what the real registration function would always do. Re-verified
+  // with a full `pnpm run db:test` run afterward, ALL PASSED. A third instance of
+  // this series' own standing cross-file-collision lesson, in a third distinct
+  // shape (cluster 4 batch 1: underscoped subquery in this file; cluster 5:
+  // exact-count assertion in another file; here: a cross-table invariant enforced
+  // by another file's own assertion) -- restated once more: the full `pnpm run
+  // db:test` suite, never a standalone `psql -f` invocation, is the only real
+  // verification for a shared-database db-test file.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the
+  // 6,023-test unit suite (2 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking), `check-rls-initplan.ts` (0 findings -- this migration adds
+  // no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 532 migrations / 275
+  // db-test files, including the new cluster-6-batch-3 db-test file: existence
+  // proofs for the platform-wide tables, the get-by-code-vs-list-active
+  // distinction, the p_report_type_code filter narrowing correctly, and the full
+  // 3-branch saved_report_views visibility matrix with a genuine non-owner
+  // tenant member persona), `git:check-paths` (clean, 6 files checked),
+  // `security:check`, and a real `next build`.
+  // Remaining in cluster 6: 10 call sites across server/queries/scheduled-report.ts
+  // (4), server/queries/supreme-tenants.ts (1), server/queries/tenant-dashboard.ts
+  // (5) -- next up under the same "lanjut sampe siap launching" mandate. Plus
+  // cluster 7 (16 call sites) after that.
+  migrationSetSha256: "66e7aa429f477a4d667f002f6e11271a0fc63d371423cdcdd5f67d709b916470",
+  // History: c7dc83b91381284f9fd45b6839d67bcc5acf11f58ee141a981269a6f5374f54b
+  // (531 files, HUNDRED-AND-THIRTY-THIRD PASS).
   // History: 82cc00b3525a7f113be9afbe9fa7e688f27243107b4a451fe021ae20b4b4100a
   // (530 files, HUNDRED-AND-THIRTY-SECOND PASS).
   // History: 27a9f9b97442831d21e82f7bc3ad5c8f6dfc953b91b1511f4667ed0bedf1f3ef
@@ -6402,7 +6459,35 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // null-cast proof for webhook_secret_value_encrypted -- a real, non-null bytea
   // value is written directly to the fixture row and proven to come back null
   // through the new function regardless.
-  dbTestSetSha256: "9c3f143bab47f9bda68819b09514d2891e653b99f83e589493b1fde46cb6737f",
+  // HUNDRED-AND-THIRTY-FOURTH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 275 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch3.sql. Proves, against a real disposable database, all 5 new function
+  // pairs (10 functions): existence proofs for the platform-wide app.report_types/
+  // app.report_type_versions (never an exact count); the get-by-code-vs-
+  // list-active distinction (a retired fixture type excluded from the active
+  // list but still resolving by code); app.list_report_runs' own optional
+  // p_report_type_code filter narrowing correctly against 2 distinct fixture
+  // types, plus the standard member/customer-user-layer/cross-tenant/
+  // Supreme-Admin matrix; ordering-fidelity proofs (version_number desc,
+  // requested_at desc) against fixture rows deliberately inserted out of order;
+  // and the batch's most important proof, app.get_saved_report_view_by_id's own
+  // 3-branch predicate exercised with a SECOND real tenant member who is NOT the
+  // view's owner -- proven to see a tenant-shared view but be genuinely DENIED a
+  // private one, the exact distinction a hand-rolled reproduction of this
+  // predicate could get subtly wrong.
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // verification: an early draft's fixture inserted a new app.report_types row
+  // with no matching app.report_type_versions row, which broke
+  // scripts/db-tests/reporting-engine.sql's own pre-existing assertion that every
+  // report_types row has a backfilled version 1 -- a real, currently-enforced
+  // production invariant (app.register_report_type's own current body always
+  // creates a matching version-1 row), not merely another file's own arbitrary
+  // assumption. Fixed by adding the missing version row; re-verified with a full
+  // `pnpm run db:test` run afterward, ALL PASSED. A third instance, in a third
+  // distinct shape, of this series' own standing cross-file-collision lesson.
+  dbTestSetSha256: "9c3fffab23ebed2ff7089549dde1cdc811ca478a6372bc7ab76e6e654dd072fc",
+  // History: 9c3f143bab47f9bda68819b09514d2891e653b99f83e589493b1fde46cb6737f
+  // (274 files, HUNDRED-AND-THIRTY-THIRD PASS).
   // History: 79f8f6eafe85eead27379bb4464ebc86a37ea9d2b16591c856a62a8fbdb32ddb
   // (273 files, HUNDRED-AND-THIRTY-SECOND PASS).
   // History: fe7a7aa3660bc0031036d3068429c40f66712288a37ebb0d610e5c7ed487ce15

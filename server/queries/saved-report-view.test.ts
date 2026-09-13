@@ -25,24 +25,15 @@ const VALID_VIEW_ROW = {
   updated_at: "2026-08-21T00:00:00.000Z",
 };
 
-function fakeClient(tableResponse: { data: unknown; error: { message: string } | null }, rpcResponse?: { data: unknown; error: { message: string } | null }): {
+function fakeClient(rpcResponses: Record<string, { data: unknown; error: { message: string } | null }>): {
   client: SavedReportViewQueryClient;
   rpcCalls: { fn: string; args: Record<string, unknown> }[];
 } {
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      maybeSingle: () => Promise.resolve(tableResponse),
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(tableResponse).then(resolve, reject),
-    };
-  }
   const client = {
-    from: () => chainNode(),
-    async rpc(fn: string, args: Record<string, unknown>) {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
       rpcCalls.push({ fn, args });
-      return rpcResponse ?? { data: [], error: null };
+      return rpcResponses[fn] ?? { data: [], error: null };
     },
   } as unknown as SavedReportViewQueryClient;
   return { client, rpcCalls };
@@ -50,19 +41,20 @@ function fakeClient(tableResponse: { data: unknown; error: { message: string } |
 
 describe("getSavedReportViewById", () => {
   test("returns null (never an error) when not found", async () => {
-    const { client } = fakeClient({ data: null, error: null });
+    const { client } = fakeClient({ get_saved_report_view_by_id: { data: [], error: null } });
     const view = await getSavedReportViewById(client, VIEW_ID);
     assert.equal(view, null);
   });
 
   test("parses a matched row", async () => {
-    const { client } = fakeClient({ data: VALID_VIEW_ROW, error: null });
+    const { client, rpcCalls } = fakeClient({ get_saved_report_view_by_id: { data: [VALID_VIEW_ROW], error: null } });
     const view = await getSavedReportViewById(client, VIEW_ID);
+    assert.deepEqual(rpcCalls[0]?.args, { p_view_id: VIEW_ID });
     assert.equal(view?.name, "My Billing View");
   });
 
   test("wraps a query error", async () => {
-    const { client } = fakeClient({ data: null, error: { message: "boom" } });
+    const { client } = fakeClient({ get_saved_report_view_by_id: { data: null, error: { message: "boom" } } });
     await assert.rejects(
       () => getSavedReportViewById(client, VIEW_ID),
       (err: unknown) => err instanceof SavedReportViewQueryError,
@@ -72,7 +64,7 @@ describe("getSavedReportViewById", () => {
 
 describe("listSavedReportViews", () => {
   test("calls list_saved_report_views with the exact snake_case params", async () => {
-    const { client, rpcCalls } = fakeClient({ data: null, error: null }, { data: [VALID_VIEW_ROW], error: null });
+    const { client, rpcCalls } = fakeClient({ list_saved_report_views: { data: [VALID_VIEW_ROW], error: null } });
     const views = await listSavedReportViews(client, TENANT_ID, ACTOR_ID, { reportTypeCode: "finance_billing_summary", limit: 10 });
     assert.equal(rpcCalls[0]?.fn, "list_saved_report_views");
     assert.equal(rpcCalls[0]?.args.p_report_type_code, "finance_billing_summary");
@@ -82,7 +74,7 @@ describe("listSavedReportViews", () => {
   });
 
   test("defaults reportTypeCode/cursor to null and limit to 25", async () => {
-    const { client, rpcCalls } = fakeClient({ data: null, error: null }, { data: [], error: null });
+    const { client, rpcCalls } = fakeClient({ list_saved_report_views: { data: [], error: null } });
     await listSavedReportViews(client, TENANT_ID, ACTOR_ID);
     assert.equal(rpcCalls[0]?.args.p_report_type_code, null);
     assert.equal(rpcCalls[0]?.args.p_limit, 25);
@@ -90,7 +82,7 @@ describe("listSavedReportViews", () => {
   });
 
   test("wraps a query error", async () => {
-    const { client } = fakeClient({ data: null, error: null }, { data: null, error: { message: "insufficient_authority: no membership" } });
+    const { client } = fakeClient({ list_saved_report_views: { data: null, error: { message: "insufficient_authority: no membership" } } });
     await assert.rejects(
       () => listSavedReportViews(client, TENANT_ID, ACTOR_ID),
       (err: unknown) => err instanceof SavedReportViewQueryError,

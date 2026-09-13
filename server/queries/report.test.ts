@@ -42,34 +42,31 @@ const VALID_RUN_ROW = {
   completed_at: "2026-07-26T00:00:01.000Z",
 };
 
-/** A chain node is simultaneously "chainable" (select/eq/order/limit each return another node) and "awaitable" (its own `then` resolves to `response`), so it works regardless of which query function's exact chain shape (with or without a trailing .limit()/.maybeSingle()) exercises it -- mirrors server/queries/pipeline.test.ts's own simpler fixed-shape fake, generalized since this file's four query functions each end their chain differently. */
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): ReportQueryTableClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      limit: () => Promise.resolve(response),
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
-  return { from: () => chainNode() } as unknown as ReportQueryTableClient;
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
+  client: ReportQueryTableClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
+      calls.push({ fn, args });
+      return response;
+    },
+  } as unknown as ReportQueryTableClient;
+  return { client, calls };
 }
 
 describe("listActiveReportTypes", () => {
-  test("maps rows", async () => {
-    const client = fakeTableClient({ data: [VALID_TYPE_ROW], error: null });
+  test("calls list_active_report_types and maps rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_TYPE_ROW], error: null });
     const types = await listActiveReportTypes(client);
+    assert.equal(calls[0]?.fn, "list_active_report_types");
     assert.equal(types.length, 1);
     assert.equal(types[0]?.code, "lead_aging");
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const { client } = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => listActiveReportTypes(client),
       (err: unknown) => err instanceof ReportQueryError,
@@ -79,38 +76,41 @@ describe("listActiveReportTypes", () => {
 
 describe("getReportTypeByCode", () => {
   test("returns null (never an error) when not found", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const type = await getReportTypeByCode(client, "unknown_code");
     assert.equal(type, null);
   });
 
   test("parses a matched row", async () => {
-    const client = fakeTableClient({ data: VALID_TYPE_ROW, error: null });
+    const { client, calls } = fakeRpcClient({ data: [VALID_TYPE_ROW], error: null });
     const type = await getReportTypeByCode(client, "lead_aging");
+    assert.deepEqual(calls[0]?.args, { p_code: "lead_aging" });
     assert.equal(type?.sourceFunction, "get_dashboard_lead_aging");
   });
 });
 
 describe("listReportRuns", () => {
-  test("maps run rows", async () => {
-    const client = fakeTableClient({ data: [VALID_RUN_ROW], error: null });
+  test("calls list_report_runs with a null p_report_type_code and maps run rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_RUN_ROW], error: null });
     const runs = await listReportRuns(client, TENANT_ID);
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_report_type_code: null, p_limit: 50 });
     assert.equal(runs.length, 1);
     assert.equal(runs[0]?.rowCount, 4);
   });
 });
 
 describe("listReportRunsForType", () => {
-  test("maps run rows filtered to one report type", async () => {
-    const client = fakeTableClient({ data: [VALID_RUN_ROW], error: null });
+  test("calls list_report_runs with the report type code and maps run rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_RUN_ROW], error: null });
     const runs = await listReportRunsForType(client, TENANT_ID, "lead_aging");
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID, p_report_type_code: "lead_aging", p_limit: 50 });
     assert.equal(runs.length, 1);
     assert.equal(runs[0]?.reportTypeCode, "lead_aging");
   });
 });
 
 describe("listReportTypeVersions", () => {
-  test("maps version-history rows, newest first", async () => {
+  test("calls list_report_type_versions and maps version-history rows, newest first", async () => {
     const versionRow = {
       id: "623e4567-e89b-12d3-a456-426614174000",
       report_type_code: "lead_aging",
@@ -122,8 +122,9 @@ describe("listReportTypeVersions", () => {
       published_by: "system",
       published_at: "2026-07-26T00:00:00.000Z",
     };
-    const client = fakeTableClient({ data: [versionRow], error: null });
+    const { client, calls } = fakeRpcClient({ data: [versionRow], error: null });
     const versions = await listReportTypeVersions(client, "lead_aging");
+    assert.deepEqual(calls[0]?.args, { p_report_type_code: "lead_aging" });
     assert.equal(versions.length, 1);
     assert.equal(versions[0]?.versionNumber, 1);
   });

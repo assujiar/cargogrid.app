@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, batches 1-2 of N, 14/30 call sites closed, `IN_PROGRESS`; cluster 7 (16 call sites) not yet started — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, batches 1-3 of N, 20/30 call sites closed, `IN_PROGRESS`; cluster 7 (16 call sites) not yet started — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1651,5 +1651,52 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   Cluster 6 (`platform-intelligence-reports`) remains `IN_PROGRESS`: 14/30 call sites closed. Still
   open: `server/queries/report.ts` (5), `server/queries/saved-report-view.ts` (1),
   `server/queries/scheduled-report.ts` (4), `server/queries/supreme-tenants.ts` (1),
+  `server/queries/tenant-dashboard.ts` (5) — next up under the same "lanjut sampe siap launching"
+  mandate. Plus cluster 7 (16 call sites) after that.
+
+- 2026-09-13 — Ø1-query-layer cluster 6 (`platform-intelligence-reports`) batch 3 of N closed
+  (this commit), continuing the same "lanjut sampe siap launching" mandate. Closes 6 more of this
+  cluster's remaining broken `.from()` call sites across `server/queries/report.ts` (5:
+  `listActiveReportTypes`, `getReportTypeByCode`, `listReportRuns`, `listReportRunsForType`,
+  `listReportTypeVersions`) and `server/queries/saved-report-view.ts` (1:
+  `getSavedReportViewById`) — 20/30 cumulative for the cluster. New migration
+  `20260913030000_close_o1_query_layer_cluster6_batch3_reports.sql` adds 5 new
+  `app.*`/`public.*` Option-2 wrapper pairs (10 functions), ALL SECURITY INVOKER, zero actor
+  parameter. `listReportRuns`/`listReportRunsForType` deliberately share ONE new function
+  (`app.list_report_runs`, a nullable `p_report_type_code` parameter) rather than two
+  near-duplicates, a disclosed implementation choice.
+  Three grant/RLS shapes: (1) `app.report_types`/`app.report_type_versions` — no RLS, full-row
+  grant, platform-wide; (2) `app.report_runs` — RLS-scoped tenant-membership with an explicit
+  `OR is_supreme_admin()` disjunct; (3) `app.saved_report_views` — a genuinely 3-branch
+  predicate (supreme-admin bypass, owner-row-plus-membership, or tenant-shared-row-plus-
+  membership), whose CURRENT text was traced through a DROP-AND-RECREATE, a different RULE B
+  mechanism than every other finding in this series so far
+  (`20260810500000_harden_own_row_rls_membership_gap.sql:83-92`). The new function relies
+  ENTIRELY on live RLS rather than re-implementing the 3-branch logic — proven live with a
+  SECOND real tenant member who is NOT the view owner, confirmed to see a tenant-shared view
+  but be genuinely denied a private one, the exact distinction a hand-rolled reproduction could
+  get subtly wrong.
+  A real, independently-caught db-test bug was found and fixed during this pass's own
+  verification: an early draft's fixture inserted a new `app.report_types` row with no matching
+  `app.report_type_versions` row, which broke `scripts/db-tests/reporting-engine.sql`'s own
+  pre-existing assertion that every `report_types` row has a backfilled version 1 — tracing the
+  CURRENT `app.register_report_type` body confirmed this is a real, currently-enforced
+  production invariant ("every report type … always has a real version history from the moment
+  it exists"), not merely another file's own arbitrary assumption. Fixed by adding the missing
+  version row, matching what the real registration function would always do. Re-verified with a
+  full `pnpm run db:test` run afterward, ALL PASSED. A third instance of this series' own
+  standing cross-file-collision lesson, in a third distinct shape.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the 6,023-test unit
+  suite (2 test files converted from `.from()`-mocking to `.rpc()`-mocking), `check-rls-initplan.ts`
+  (0 findings — this migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 532
+  migrations / 275 db-test files, including the new cluster-6-batch-3 db-test file: existence
+  proofs for the platform-wide tables, the get-by-code-vs-list-active distinction, the
+  `p_report_type_code` filter narrowing correctly, and the full 3-branch `saved_report_views`
+  visibility matrix with a genuine non-owner tenant member persona), `git:check-paths` (clean, 7
+  files checked), `security:check`, and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-FOURTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  Cluster 6 (`platform-intelligence-reports`) remains `IN_PROGRESS`: 20/30 call sites closed. Still
+  open: `server/queries/scheduled-report.ts` (4), `server/queries/supreme-tenants.ts` (1),
   `server/queries/tenant-dashboard.ts` (5) — next up under the same "lanjut sampe siap launching"
   mandate. Plus cluster 7 (16 call sites) after that.
