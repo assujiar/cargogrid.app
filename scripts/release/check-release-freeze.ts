@@ -4974,11 +4974,74 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // 3-branch saved_report_views visibility matrix with a genuine non-owner
   // tenant member persona), `git:check-paths` (clean, 6 files checked),
   // `security:check`, and a real `next build`.
-  // Remaining in cluster 6: 10 call sites across server/queries/scheduled-report.ts
-  // (4), server/queries/supreme-tenants.ts (1), server/queries/tenant-dashboard.ts
-  // (5) -- next up under the same "lanjut sampe siap launching" mandate. Plus
-  // cluster 7 (16 call sites) after that.
-  migrationSetSha256: "66e7aa429f477a4d667f002f6e11271a0fc63d371423cdcdd5f67d709b916470",
+  // HUNDRED-AND-THIRTY-FIFTH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 533 files (+1) -- new migration 20260913040000_close_o1_query_layer_
+  // cluster6_batch4_scheduled_reports_dashboards.sql. Closes the LAST 10 call
+  // sites of cluster 6 (platform-intelligence-reports): server/queries/
+  // scheduled-report.ts (4: listScheduledReports, getScheduledReportById,
+  // listScheduledReportRecipients, listScheduledReportRuns), server/queries/
+  // supreme-tenants.ts (1: listSupremeTenants), server/queries/tenant-dashboard.ts
+  // (5: listTenantDashboards, getTenantDashboardById, listTenantDashboardVersions,
+  // getTenantDashboardVersionById, listDashboardWidgets). 10 new app.*/public.*
+  // Option-2 wrapper pairs (20 functions), ALL SECURITY INVOKER with ZERO actor
+  // parameter -- every real call site of all 10 TS functions uses
+  // createSupabaseServerClient() only.
+  // Two RLS shapes. SHAPE 1 (6 tables: scheduled_reports/scheduled_report_
+  // recipients/scheduled_report_runs/tenant_dashboards/tenant_dashboard_versions/
+  // tenant_dashboard_widgets): a tenant-membership predicate WITH an explicit OR
+  // is_supreme_admin() disjunct, RULE B re-verified live (fresh grep of both
+  // `create policy` and any later `alter policy` for all 6 -- exactly one hit
+  // each, no later alter). SHAPE 2 (app.list_supreme_tenants over app.tenants):
+  // NO explicit is_supreme_admin() disjunct at the policy level
+  // (tenants_select_own_tenant's CURRENT text, re-verified live post its own
+  // 20260730560000 alter policy: `has_active_tenant_membership(id) AND NOT
+  // actor_holds_customer_user_layer(id)`) -- this migration's own recon flagged
+  // this one function for "extra scrutiny" and suggested a more cautious
+  // SECURITY DEFINER design with an in-function is_supreme_admin() check;
+  // independently re-derived (and confirmed via this query file's own
+  // pre-existing module-header comment) that SECURITY INVOKER with zero actor
+  // param is correct and sufficient, since app.has_active_tenant_membership's
+  // own current body already returns true for ANY tenant_id whenever the caller
+  // is a Supreme Admin -- a disclosed, deliberate departure from the recon's own
+  // more cautious suggestion, documented at length in the migration's own header.
+  // Every 0-or-1-row lookup declared `returns setof app.<table>`, never a bare
+  // composite -- the standing defect-class check this series has run on every
+  // batch since it first surfaced. RULE A does not apply to any of the 10
+  // functions in this batch: none takes an actor parameter.
+  // This is the FINAL batch of cluster 6: cluster 6 (platform-intelligence-
+  // reports) is now FULLY DONE, all 30 call sites closed.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the unit test suite (3 test files converted from
+  // `.from()`-mocking to `.rpc()`-mocking: scheduled-report.test.ts,
+  // supreme-tenants.test.ts, tenant-dashboard.test.ts -- 20/20 tests passing),
+  // `git:check-paths` (clean), `security:check` (clean), and a full `pnpm run
+  // db:test` (`ALL PASSED`, 533 migrations / 276 db-test files, including the
+  // new cluster-6-batch-4 db-test file: ordering-fidelity proofs against
+  // fixture rows deliberately inserted out of order for all 9 SHAPE 1 functions,
+  // a full 5-persona (owner/non-owner-member/customer_user-layer/cross-tenant/
+  // Supreme-Admin-with-zero-membership) visibility matrix across both the
+  // scheduled-report and tenant-dashboard families including the TWO-LEVEL
+  // EXISTS join for tenant_dashboard_widgets, and a dynamic (never hardcoded)
+  // pagination proof for app.list_supreme_tenants that computes its own expected
+  // page count from a live raw count rather than assuming how many of the
+  // shared full-suite database's 267+ other tenant-provisioning db-test files
+  // happen to be present -- plus a genuine non-Supreme-caller-sees-only-their-
+  // own-tenant proof, the one assertion SHAPE 2 actually needs).
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // db-test authoring: app.scheduled_report_runs carries a NOT NULL
+  // `occurrence_at` column (added by 20260802060000_harden_intelligence_batch1_
+  // tier_c_review_fixes.sql, unique on (scheduled_report_id, occurrence_at)) not
+  // present in the table's own original CREATE TABLE -- a RULE C staleness catch
+  // against this series' own fixture INSERT (never against the migration's own
+  // `select *` function bodies, which already pass any such column through
+  // transparently); fixed by adding occurrence_at to the fixture INSERT, then
+  // re-verified with a full `pnpm run db:test` run, ALL PASSED.
+  // Cluster 6 (platform-intelligence-reports, 30/30 call sites) is now FULLY
+  // DONE. Remaining: cluster 7 (16 call sites), not yet started -- next up under
+  // the same "lanjut sampe siap launching" mandate.
+  migrationSetSha256: "2a5424306416032ff0adb5566a5d482d3e05400df4cb06263f15ca80698d7404",
+  // History: 66e7aa429f477a4d667f002f6e11271a0fc63d371423cdcdd5f67d709b916470
+  // (532 files, HUNDRED-AND-THIRTY-FOURTH PASS).
   // History: c7dc83b91381284f9fd45b6839d67bcc5acf11f58ee141a981269a6f5374f54b
   // (531 files, HUNDRED-AND-THIRTY-THIRD PASS).
   // History: 82cc00b3525a7f113be9afbe9fa7e688f27243107b4a451fe021ae20b4b4100a
@@ -6485,7 +6548,40 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // assumption. Fixed by adding the missing version row; re-verified with a full
   // `pnpm run db:test` run afterward, ALL PASSED. A third instance, in a third
   // distinct shape, of this series' own standing cross-file-collision lesson.
-  dbTestSetSha256: "9c3fffab23ebed2ff7089549dde1cdc811ca478a6372bc7ab76e6e654dd072fc",
+  // HUNDRED-AND-THIRTY-FIFTH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 276 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch4.sql, the FINAL batch of cluster 6. Proves, against a real disposable
+  // database, all 10 new function pairs (20 functions): ordering-fidelity proofs
+  // (updated_at desc, created_at asc, started_at desc, version_number desc,
+  // display_order asc) against fixture rows deliberately inserted out of order
+  // for all 9 SHAPE 1 functions; a full 5-persona visibility matrix (owner, a
+  // real non-owner tenant member proving tenant-wide not owner-scoped
+  // visibility, a customer_user-layer principal with real active membership
+  // denied despite membership, a cross-tenant admin denied, a Supreme Admin with
+  // ZERO membership admitted via the explicit policy-level disjunct) across both
+  // the scheduled-report family (including the EXISTS-join recipients/runs
+  // tables) and the tenant-dashboard family (including the TWO-LEVEL EXISTS join
+  // for tenant_dashboard_widgets); and a dynamic pagination proof for
+  // app.list_supreme_tenants that computes its own expected page count from a
+  // live raw count under the Supreme Admin's own session rather than assuming a
+  // fixed global tenant total (267+ other db-test files each provision their own
+  // tenants in the shared full-suite database), plus a genuine
+  // non-Supreme-caller-sees-only-their-own-tenant proof for a real member and a
+  // real cross-tenant admin, and a genuine zero-visibility proof for a
+  // customer_user-layer principal.
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // fixture authoring: an early draft's app.scheduled_report_runs INSERT omitted
+  // the table's own NOT NULL `occurrence_at` column (added by a later migration,
+  // 20260802060000_harden_intelligence_batch1_tier_c_review_fixes.sql, not
+  // present in the table's original CREATE TABLE) -- caught immediately by the
+  // insert's own NOT NULL violation, fixed by adding occurrence_at to the
+  // fixture INSERT; re-verified with a full `pnpm run db:test` run afterward,
+  // ALL PASSED.
+  // Cluster 6 (platform-intelligence-reports, 30/30 call sites) is now FULLY
+  // DONE. Remaining: cluster 7 (16 call sites), not yet started.
+  dbTestSetSha256: "c4c2a6d0e31e51d2f09b104039347b53c6ddd114c5a1eccb4f6784727b05757d",
+  // History: 9c3fffab23ebed2ff7089549dde1cdc811ca478a6372bc7ab76e6e654dd072fc
+  // (275 files, HUNDRED-AND-THIRTY-FOURTH PASS).
   // History: 9c3f143bab47f9bda68819b09514d2891e653b99f83e589493b1fde46cb6737f
   // (274 files, HUNDRED-AND-THIRTY-THIRD PASS).
   // History: 79f8f6eafe85eead27379bb4464ebc86a37ea9d2b16591c856a62a8fbdb32ddb

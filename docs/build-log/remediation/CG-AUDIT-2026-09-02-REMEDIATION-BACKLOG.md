@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, batches 1-3 of N, 20/30 call sites closed, `IN_PROGRESS`; cluster 7 (16 call sites) not yet started — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, all 4 batches, 30/30 call sites, **FULLY DONE**; cluster 7/`page-level-direct-reads` (16 call sites) not yet started — see below) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1700,3 +1700,58 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   open: `server/queries/scheduled-report.ts` (4), `server/queries/supreme-tenants.ts` (1),
   `server/queries/tenant-dashboard.ts` (5) — next up under the same "lanjut sampe siap launching"
   mandate. Plus cluster 7 (16 call sites) after that.
+
+- 2026-09-13 — Ø1-query-layer cluster 6 (`platform-intelligence-reports`) batch 4 of 4 closed
+  (this commit), continuing the same "lanjut sampe siap launching" mandate. Closes the LAST 10
+  call sites of this cluster across `server/queries/scheduled-report.ts` (4: `listScheduledReports`,
+  `getScheduledReportById`, `listScheduledReportRecipients`, `listScheduledReportRuns`),
+  `server/queries/supreme-tenants.ts` (1: `listSupremeTenants`), and
+  `server/queries/tenant-dashboard.ts` (5: `listTenantDashboards`, `getTenantDashboardById`,
+  `listTenantDashboardVersions`, `getTenantDashboardVersionById`, `listDashboardWidgets`) — 30/30
+  cumulative for the cluster, which is now **FULLY DONE**. New migration
+  `20260913040000_close_o1_query_layer_cluster6_batch4_scheduled_reports_dashboards.sql` adds 10
+  new `app.*`/`public.*` Option-2 wrapper pairs (20 functions), ALL SECURITY INVOKER, zero actor
+  parameter — every real call site of all 10 TS functions uses `createSupabaseServerClient()` only.
+  Two grant/RLS shapes: (1) 6 tables (`scheduled_reports`/`scheduled_report_recipients`/
+  `scheduled_report_runs`/`tenant_dashboards`/`tenant_dashboard_versions`/
+  `tenant_dashboard_widgets`) — a tenant-membership predicate WITH an explicit
+  `OR is_supreme_admin()` disjunct, RULE B re-verified live (exactly one `create policy`, no later
+  `alter policy`, for all 6); (2) `app.list_supreme_tenants` over `app.tenants` — NO explicit
+  `is_supreme_admin()` disjunct at the policy level (`tenants_select_own_tenant`'s CURRENT text,
+  re-verified live post its own `20260730560000` `alter policy`:
+  `has_active_tenant_membership(id) AND NOT actor_holds_customer_user_layer(id)`). This migration's
+  own recon flagged `list_supreme_tenants` for "extra scrutiny" and suggested a more cautious
+  SECURITY DEFINER design with an in-function `is_supreme_admin()` check; independently re-derived
+  (and confirmed via this query file's own pre-existing module-header comment) that SECURITY
+  INVOKER with zero actor param is correct and sufficient, since `app.has_active_tenant_membership`'s
+  own current body already returns true for ANY `tenant_id` whenever the caller is a Supreme
+  Admin — a disclosed, deliberate departure from the recon's own more cautious suggestion,
+  documented at length in the migration's own header. Every 0-or-1-row lookup declared
+  `returns setof app.<table>`, never a bare composite. RULE A does not apply to any of the 10
+  functions in this batch: none takes an actor parameter.
+  A real, independently-caught db-test bug was found and fixed during this pass's own fixture
+  authoring: an early draft's `app.scheduled_report_runs` INSERT omitted the table's own NOT NULL
+  `occurrence_at` column (added by a later migration,
+  `20260802060000_harden_intelligence_batch1_tier_c_review_fixes.sql`, not present in the table's
+  original `CREATE TABLE`) — caught immediately by the insert's own NOT NULL violation, fixed by
+  adding `occurrence_at` to the fixture INSERT. Re-verified with a full `pnpm run db:test` run
+  afterward, ALL PASSED.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only pre-existing
+  warnings), the 6,024-test unit suite (3 test files converted from `.from()`-mocking to
+  `.rpc()`-mocking: `scheduled-report.test.ts`, `supreme-tenants.test.ts`,
+  `tenant-dashboard.test.ts`), `git:check-paths` (clean), `security:check` (clean), a full
+  `pnpm run db:test` (`ALL PASSED`, 533 migrations / 276 db-test files, including the new
+  cluster-6-batch-4 db-test file: ordering-fidelity proofs for all 9 SHAPE 1 functions, a full
+  5-persona visibility matrix — owner, a real non-owner tenant member proving tenant-wide not
+  owner-scoped visibility, a customer_user-layer principal denied despite membership, a
+  cross-tenant admin denied, a Supreme Admin with ZERO membership admitted via the explicit
+  policy-level disjunct — across both families including the TWO-LEVEL EXISTS join for
+  `tenant_dashboard_widgets`, and a dynamic pagination proof for `app.list_supreme_tenants` that
+  computes its own expected page count from a live raw count rather than assuming a fixed global
+  tenant total across the shared full-suite database's 267+ other tenant-provisioning db-test
+  files), and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-FIFTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  **Cluster 6 (`platform-intelligence-reports`) is now FULLY DONE: all 30 call sites closed.**
+  Remaining: cluster 7 (`page-level-direct-reads`, 16 call sites), not yet started — next up under
+  the same "lanjut sampe siap launching" mandate.
