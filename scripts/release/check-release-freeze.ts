@@ -6917,7 +6917,34 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (original freeze value, unchanged since RGL-392, first amended 2026-09-02
   // (fifty-fifth pass) by the browserslist@<4.28.7 pnpm.overrides fix. See the
   // class-level doc comment above and RGL-415.md.
-  lockfileSha256: "39bf980f84a6775a0e8d4448820772659cfa2612dfc885720f025b4460052b02",
+  // HUNDRED-AND-THIRTY-EIGHTH PASS, lockfileSha256 only: audit
+  // remediation A7 (docs/audit/2026-09-02-independent-launch-readiness-audit.md
+  // finding A7, "package.json carries no PDF/print/document library... no
+  // invoice, faktur pajak, delivery order, surat jalan, packing list, POD or
+  // purchase order can be produced") adds `@react-pdf/renderer` (a genuinely
+  // new runtime dependency, `pnpm add`, 53 resolved packages) -- the first
+  // printable document, surat jalan (delivery note), per the audit's own §6
+  // dependency-ordered remediation step 4 ("the printable document set, surat
+  // jalan first"). Pure JS (pdfkit-based), no headless-browser/native-binary
+  // dependency, chosen specifically because the production deployment target
+  // is Vercel serverless (verified: this repository's own `vercel.json`) --
+  // `@playwright/test`, this repository's only other browser-adjacent
+  // dependency, is a devDependency for `test:e2e` only, never meant to ship to
+  // a serverless function. Verified genuinely renders a real PDF (not merely
+  // typechecks): a standalone `renderToBuffer` smoke test against the new
+  // `SuratJalanDocument` component produced a real buffer whose first 5 bytes
+  // are the literal `%PDF-` magic bytes, run outside this repository's own
+  // test suite (`node --experimental-strip-types` cannot load a `.tsx` file's
+  // JSX at all -- confirmed live, ERR_UNKNOWN_FILE_EXTENSION -- so this file's
+  // own pure, JSX-free logic (`toLabeledValues`) was split into a sibling
+  // `.ts` file specifically so it could gain real unit coverage without that
+  // limitation; the smoke test itself used the TypeScript compiler directly
+  // to pre-transpile the `.tsx` file, since Next.js's own SWC pipeline
+  // already proved it compiles cleanly via a full `next build`).
+  lockfileSha256: "f19d44037ec573040252479d4999849615e7590d1c0e725e916d537a78879a89",
+  // History: 39bf980f84a6775a0e8d4448820772659cfa2612dfc885720f025b4460052b02
+  // (RGL-392's original freeze value, unchanged until this pass -- see the
+  // fifty-fifth-pass note immediately above for its own full history).
 };
 
 export type DriftKind = "MIGRATION_SET" | "DB_TEST_SET" | "LOCKFILE";

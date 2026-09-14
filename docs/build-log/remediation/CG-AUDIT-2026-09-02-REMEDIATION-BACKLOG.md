@@ -107,7 +107,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | user-directed, part 2 of 2: a real private Storage bucket, a real `malware_scan` job type/worker, and a real VirusTotal scan adapter now exist, and one of the 3 named deadlocked flows (vendor compliance document submission/renewal) is wired end to end. Still bounded, not DONE: ticket-reply attachments and shipment document checklists are not wired (the pattern now exists for them to reuse); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
-| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | DEFERRED_LARGE | weeks |
+| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and the first printable document, surat jalan (delivery note), now exist end to end (`server/documents/`, a new Route Handler, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). Still open: invoice, faktur pajak, packing list, POD, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
@@ -1910,3 +1910,47 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   and a real `next build`.
   `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-SEVENTH PASS,
   `migrationSetSha256`/`dbTestSetSha256` both).
+- 2026-09-14 — A7 partially closed (this commit): the first printable document, surat jalan
+  (Indonesian delivery note), per the audit's own §6 dependency-ordered remediation step 4 ("the
+  printable document set, surat jalan first"). `package.json` genuinely carried zero PDF/print
+  library before this pass, confirmed live (grep, not assumed).
+  Library choice: `@react-pdf/renderer` (pure JS, pdfkit-based, no headless-browser dependency) --
+  the production deployment target is Vercel serverless (confirmed: this repository's own
+  `vercel.json`), where a Playwright/Puppeteer-style headless-Chromium approach would risk
+  serverless function size/cold-start limits; this repository's only other browser-adjacent
+  dependency, `@playwright/test`, is a devDependency for `test:e2e` only, never meant to ship.
+  Architecture: `server/documents/surat-jalan-labeled-values.ts` (pure, JSX-free logic —
+  `toLabeledValues`, converting an arbitrary JSON object's own keys into a label/value list, real
+  unit-tested) + `server/documents/surat-jalan-document.tsx` (the `@react-pdf/renderer` JSX layout,
+  a pure presentation component taking an already-assembled plain data object, zero database/RPC
+  knowledge) + `server/documents/generate-surat-jalan.server.ts` (assembles that data from three
+  already-existing, already-tested read queries — `getShipmentOrder`, `getAccountById`,
+  `getResourceAssignmentHistory` for the current vehicle/driver assignment — no new schema, no new
+  RPC at all) + a new Route Handler
+  (`app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/surat-jalan/route.ts`,
+  not a Server Action, since a Server Action cannot return a raw binary HTTP response with a
+  `Content-Type`/`Content-Disposition` header — reuses the exact same
+  `resolveOperationsAccessForRequest` guard the sibling `page.tsx` already uses) + a "Print surat
+  jalan" link wired into the shipment order detail page.
+  `consigneeSnapshot`/`cargoServiceSnapshot`/the shipper account's `billingAddress` are rendered as
+  a generic label/value list rather than named fields: all three are deliberately unstructured
+  JSONB with no fixed schema anywhere in this codebase (confirmed against
+  `20260727100000_create_operations_shipment_order.sql`'s own header) — hardcoding specific field
+  names would silently drop whatever a caller actually stored.
+  Genuinely verified, not merely typechecked: `node --experimental-strip-types` cannot load a
+  `.tsx` file's JSX at all (confirmed live, `ERR_UNKNOWN_FILE_EXTENSION`) — a standalone
+  `renderToBuffer` smoke test was run by pre-transpiling the component with the TypeScript compiler
+  directly, producing a real PDF buffer whose first 5 bytes are the literal `%PDF-` magic bytes.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only pre-existing
+  warnings), the unit test suite (6,057 tests passing — a new `surat-jalan-document.test.ts` for
+  `toLabeledValues`), `git:check-paths` (clean), `security:check` (clean), and a real `next build`
+  (confirms the new route). No migration/db-test change — `db:test` unaffected.
+  A real, independently-caught bug was found and fixed during this pass's own test authoring: an
+  early draft test asserted `"Contact phone"` for the label derived from `contactPhone`, but the
+  implementation's own (correct) Title-Case-per-camelCase-boundary behavior produces `"Contact
+  Phone"` — the test's own expectation was wrong, not the code; fixed by correcting the assertion.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-EIGHTH PASS,
+  `lockfileSha256` only — `pnpm add @react-pdf/renderer` changed `pnpm-lock.yaml`).
+  Still open under A7: invoice, faktur pajak, packing list, POD, and purchase order printables —
+  each is now a bounded "one new document template + generator + route" slice over the same
+  infrastructure, not a from-scratch build.
