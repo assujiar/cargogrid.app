@@ -86,6 +86,7 @@ export default async function PurchaseOrderDetailPage({ params }: { params: Prom
 
   return (
     <PurchaseOrderDetailPanel
+      tenantSlug={tenantSlug}
       purchaseOrder={purchaseOrder}
       lines={lines}
       history={history}

@@ -107,7 +107,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 3 of the audit's own named deadlocked flows now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal (plus its signed download), shipment document checklist uploads (previously a fully fake filename/MIME/size text-entry form with zero real File object anywhere in the flow), and ticket-reply attachments (previously worse than the other two -- an outright, reproducible hard failure, not a silent gap: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning for ticket attachments, so every real reply with an attachment failed). All three now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Still bounded, not DONE: shipment document checklist, ePOD evidence, and ticket attachments all still lack signed download (vendor compliance's own signed-download RPC is a directly reusable pattern for each); ePOD evidence capture's own UI is a separate, larger gap -- it never even collects a real File today; every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
-| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and two printable documents, surat jalan (delivery note) and POD (proof of delivery), now exist end to end (`server/documents/`, two new Route Handlers, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, packing list, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
+| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and three printable documents, surat jalan (delivery note), POD (proof of delivery), and purchase order, now exist end to end (`server/documents/`, three new Route Handlers, wired into their respective detail pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); invoice and faktur pajak both need new backend RPC work (no single-invoice-by-id read exists) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
@@ -2209,3 +2209,36 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   "needs a load-bearing-function redesign" framing. No code changed for this
   finding; recommendation is to leave it deferred rather than attempt a partial
   fix that does not address the measured pathological case.
+- 2026-09-14 — A7 third printable document: purchase order, built on a parallel
+  research pass that confirmed it needed zero new backend, unlike invoice/faktur
+  pajak (no single-invoice-by-id read exists) or packing list (a real, tested
+  backend domain, `server/queries/wms-packing.ts`, but with zero pages/actions
+  anywhere in `app/` -- nothing for a user to have ever created a packing task
+  through, so nothing would exist to print in the live system).
+  Architecture, mirroring the surat-jalan/POD precedent exactly:
+  `server/documents/purchase-order-document.tsx` (the `@react-pdf/renderer` JSX
+  layout -- PO data is already flat/typed via `PurchaseOrderSchema`, no generic
+  label/value transform needed) + `server/documents/generate-purchase-order.server.ts`
+  (assembles the data from `getPurchaseOrder` + `listPurchaseOrderLines` +
+  `getVendorProfile` + `listVendorAddresses` -- all already-existing,
+  already-tested reads, zero new RPC) + a new Route Handler
+  (`app/(tenant)/[tenantSlug]/procurement/purchase-orders/[purchaseOrderId]/print/route.ts`)
+  + a "Print purchase order" link on the detail page.
+  `costMasked` (PRC-260's own access rule 26: a viewer without `PRC:View cost`
+  authority never sees amounts/payment terms/commercial terms) is honored
+  exactly the way `purchase-order-detail-panel.tsx` already renders it
+  on-screen -- "Masked" text, never a blank or a substituted zero. Vendor
+  address picks the vendor's own `legal` address (falling back to `billing`,
+  then any address on file, then "—") -- `app.vendor_addresses` carries no
+  single "primary" flag.
+  Genuinely verified, not merely typechecked: the same pre-transpile-then-run
+  technique used for surat jalan/POD produced two real PDF buffers (one with
+  full line-item/cost data, one with `costMasked: true` and every nullable
+  field null), both starting with the literal `%PDF-` magic bytes.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,061 tests passing, unchanged
+  count -- no pure-logic helper needed extracting this time), `git:check-paths`
+  (clean), `security:check` (clean), and a real `next build` (confirms the new
+  `/print` route). No migration/db-test/lockfile change — `db:test` and
+  `check-release-freeze` both unaffected.
+  Still open under A7: invoice, faktur pajak, and packing list printables.
