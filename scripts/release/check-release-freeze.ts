@@ -5186,7 +5186,26 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "ebfd10ca535e62f410d58a76d036e56676eee0f3e5ee97a9cd00833b4dc03622",
+  migrationSetSha256: "48f48ed157986318ebe5caf8e1854fa12bffe16e08b72c1c4c78c8154c1e32e7",
+  // HUNDRED-AND-FORTY-THIRD PASS: CG-AUDIT-2026-09-02 E5 ("Telematics: device
+  // can never reach `installed`, blocked by A6"). app.record_gps_device_
+  // installation (ATW-226B) and its own db-test already fully build and
+  // exercise the evidenced-installation RPC -- the real blocker was that NO
+  // real migration ever registered the 'gps_device_installation' document
+  // type (app.document_types/app.config_types), only six different db-test
+  // fixtures' own throwaway app.register_document_type calls did, confirmed
+  // via a repo-wide grep before writing this migration. Every real tenant's
+  // first upload attempt would have failed document_type_not_configured
+  // immediately, before ever reaching its own per-tenant publish step. New
+  // migration 20260914060000_register_gps_device_installation_document_
+  // type.sql mirrors 20260901020000's own loyalty-reward-terms precedent
+  // exactly: two additive, idempotent catalogue inserts, code/name/
+  // owner_primitive_code ('DOC') matching every one of those six db-test
+  // fixtures' own identical call byte-for-byte. No new RPC. 540 tracked
+  // migration files (539 -> 540). Re-verified with a full `pnpm run
+  // db:test`, ALL PASSED.
+  // History: ebfd10ca535e62f410d58a76d036e56676eee0f3e5ee97a9cd00833b4dc03622
+  // (539 files, HUNDRED-AND-FORTY-SECOND PASS).
   // HUNDRED-AND-FORTY-SECOND PASS: CG-AUDIT-2026-09-02 A6, signed download for
   // ticket-reply attachments -- upload+scan for this record type was already
   // wired (20260914030000), so an attachment posted to a reply is real,
@@ -6842,7 +6861,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "00caebe52c3ffe1ead32a7162ff4d4a965c34fc0c353bffe02723d863f55e8e1",
+  dbTestSetSha256: "90b779127fe49187420ed722cf48d06b9575d8ce298613c95e57341493f3c35e",
+  // HUNDRED-AND-FORTY-THIRD PASS: same CG-AUDIT-2026-09-02 E5 slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/advanced-tms-device-installation-evidence.sql (no new
+  // file, 277 files unchanged) with a regression proof that the migration's
+  // own idempotent gps_device_installation/document:gps_device_installation
+  // catalogue insert agrees byte-for-byte with this fixture's own
+  // independent app.register_document_type call (and is a genuine no-op
+  // against whichever writer ran first). Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 00caebe52c3ffe1ead32a7162ff4d4a965c34fc0c353bffe02723d863f55e8e1
+  // (277 files, HUNDRED-AND-FORTY-SECOND PASS).
   // HUNDRED-AND-FORTY-SECOND PASS: same CG-AUDIT-2026-09-02 A6 ticket-attachment
   // signed-download slice as migrationSetSha256's own note immediately above --
   // extends the existing scripts/db-tests/ticketing-internal.sql with a new

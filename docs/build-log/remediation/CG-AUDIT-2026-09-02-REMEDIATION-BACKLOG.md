@@ -117,7 +117,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` | NEEDS_PRODUCT_DECISION |
 | E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
-| E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE-BIG` | DEFERRED_LARGE |
+| E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap |
 | E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | DEFERRED_LARGE |
 
 ## New findings discovered during remediation (not in the original audit)
@@ -2414,3 +2414,89 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   RPC is ready, `customer-ticket-detail-panel.tsx` still has no attachment UI
   at all); D4's own GUC gap still fails every scan closed until an operator
   configures both the encryption key and a real VirusTotal API key.
+- 2026-09-14 — E5 (installation-evidence half only): "Telematics: device can
+  never reach `installed` (blocked by A6)". Scoped by a parallel research
+  pass before writing any code: `app.record_gps_device_installation`
+  (ATW-226B, `20260729350000_create_advanced_tms_device_installation_
+  evidence.sql`) and its own db-test
+  (`scripts/db-tests/advanced-tms-device-installation-evidence.sql`, 326
+  lines) already fully build and exercise the evidenced-installation RPC end
+  to end -- malware-scan gating, OPS:Edit authority (reused from
+  `app.transition_gps_device_status`), the ATW-031/ISS-2026-028 bypass
+  closure (the generic status-transition control cannot reach `installed`
+  directly). The DB layer needed zero new RPC.
+  The actual, concrete blocker: no real migration ever registered the
+  `gps_device_installation` document type. `app.resolve_document_type_
+  definition` (PLT-128, called by every `app.initiate_file_upload`) raises
+  `document_type_not_configured` whenever no tenant has ever published a
+  `document:<code>` config_object for that type -- and a tenant can never
+  publish one until the matching `app.config_types` catalogue row exists.
+  Confirmed via repo-wide grep before writing the fix: SIX different db-test
+  fixtures (`advanced-tms-device-installation-evidence.sql`,
+  `advanced-tms-canonical-telemetry-arbitration.sql`,
+  `advanced-tms-geofence-route-deviation-signals.sql`,
+  `advanced-tms-gps-gateway-ingestion.sql`,
+  `advanced-tms-wms-integrated-verification.sql`, and a related-but-different
+  code in `advanced-tms-claim-incident-operations.sql`) each independently
+  call `app.register_document_type('gps_device_installation', ...,
+  'DOC', ...)` against their own disposable databases, but zero real
+  migration ever did the same -- every real tenant's first upload attempt
+  would have failed immediately, before its own per-tenant publish step.
+  Also confirmed: no Server Action or UI anywhere ever called the
+  upload+store+scan sequence at all (`fleet-panel.tsx` rendered a dead-end
+  message instead), even though the typed mutation wrapper
+  (`recordGpsDeviceInstallation`) already existed with zero callers.
+  New migration
+  `20260914060000_register_gps_device_installation_document_type.sql`
+  mirrors `20260901020000_register_loyalty_reward_terms_document_type.sql`'s
+  own precedent exactly: two additive, idempotent catalogue inserts
+  (`app.document_types`/`app.config_types`), `owner_primitive_code='DOC'`
+  matching every one of those six db-test fixtures' own identical call
+  byte-for-byte (the generic Document and File Engine primitive, like
+  `epod`/`pod`, not a single business-module owner like `ticket_attachment`'s
+  `TKT`).
+  App layer: `server/mutations/gps-device-installation.ts` gained
+  `uploadGpsDeviceInstallationEvidenceFile`, calling the shared
+  `app.initiate_file_upload` (PLT-128) primitive directly (service_role
+  only, `record_type='gps_device'`/`document_type_code='gps_device_
+  installation'` fixed server-side) -- unlike the ticket/shipment-checklist
+  `*_upload` RPCs built earlier this session, this raw primitive already
+  returns the file's real `storage_path` (it is service_role-only itself),
+  so no separate storage-path lookup RPC was needed before
+  `storeFileBytesAndEnqueueScan`.
+  `recordGpsDeviceInstallationAction`
+  (`app/(tenant)/[tenantSlug]/operations/fleet/actions.ts`) wires
+  upload -> `storeFileBytesAndEnqueueScan` -> `recordGpsDeviceInstallation`
+  (the latter is `authenticated`-callable and re-checks OPS:Edit itself via
+  the reused `app.transition_gps_device_status` gate, so it runs through the
+  ordinary RLS-scoped client like every other write in that file).
+  `fleet-panel.tsx`'s `DeviceRow` gained a real "Record installation" upload
+  form (evidence photo + technician name + optional notes) replacing the
+  previous dead-end message, gated on the device's real CURRENT
+  `device_vehicle_assignment_id` (fetched fresh via the existing
+  `listDeviceVehicleAssignmentHistory` query in `page.tsx` -- `GpsDevice`
+  itself carries no such field, since `app.gps_devices` and
+  `app.device_vehicle_assignments` are deliberately separate,
+  append-only-history tables).
+  `scripts/db-tests/advanced-tms-device-installation-evidence.sql` gained a
+  regression section proving the migration's own idempotent insert agrees
+  byte-for-byte with the fixture's own independent registration call
+  (mirroring the loyalty precedent's own identical regression-test shape).
+  `server/mutations/gps-device-installation.test.ts` gained 2 new unit tests
+  for the upload wrapper.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,063 tests passing, +2 from
+  this slice), a full `pnpm run db:test` (`ALL PASSED`, 540 migrations / 277
+  db-test files), `git:check-paths` (clean, 9 files checked), `security:check`
+  (clean), and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-FORTY-THIRD
+  PASS, `migrationSetSha256`/`dbTestSetSha256` both).
+  E5's own ETA half ("straight-line/40kmh") remains DEFERRED_LARGE, confirmed
+  correct by the same research pass: the 40 km/h constant
+  (`app.route_planning_default_speed_kmh()`) is an explicitly disclosed
+  coarse fallback, reused verbatim across 3+ existing capabilities (route
+  planning, route-deviation geofencing, leg-remaining-stop ETA) alongside a
+  separate, already-built AI-governed predictive-ETA path -- replacing it
+  with a real road-network/traffic-aware calculation is a genuine, separate
+  algorithmic undertaking with no relationship to A6's storage/malware-scan
+  gap.

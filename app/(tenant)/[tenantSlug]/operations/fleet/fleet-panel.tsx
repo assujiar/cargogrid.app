@@ -266,18 +266,22 @@ export function DeviceSection({
   devices,
   vehicles,
   vehicleMasterById,
+  currentAssignmentIdByDeviceId,
   registerAction,
   transitionActionFor,
   assignActionFor,
   unassignActionFor,
+  recordInstallationActionFor,
 }: {
   devices: readonly GpsDevice[];
   vehicles: readonly VehicleOperationalProfile[];
   vehicleMasterById: ReadonlyMap<string, MasterRecord>;
+  currentAssignmentIdByDeviceId: ReadonlyMap<string, string>;
   registerAction: FleetFormAction;
   transitionActionFor: (deviceId: string, expectedVersion: number) => FleetFormAction;
   assignActionFor: (deviceId: string) => FleetFormAction;
   unassignActionFor: (deviceId: string) => FleetFormAction;
+  recordInstallationActionFor: (deviceId: string, assignmentId: string, expectedDeviceVersion: number) => FleetFormAction;
 }) {
   return (
     <section className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4">
@@ -292,9 +296,11 @@ export function DeviceSection({
               device={device}
               vehicles={vehicles}
               vehicleMasterById={vehicleMasterById}
+              currentAssignmentId={currentAssignmentIdByDeviceId.get(device.id) ?? null}
               transitionAction={transitionActionFor(device.id, device.recordVersion)}
               assignAction={assignActionFor(device.id)}
               unassignAction={unassignActionFor(device.id)}
+              recordInstallationActionFor={recordInstallationActionFor}
             />
           ))}
         </ol>
@@ -312,16 +318,20 @@ function DeviceRow({
   device,
   vehicles,
   vehicleMasterById,
+  currentAssignmentId,
   transitionAction,
   assignAction,
   unassignAction,
+  recordInstallationActionFor,
 }: {
   device: GpsDevice;
   vehicles: readonly VehicleOperationalProfile[];
   vehicleMasterById: ReadonlyMap<string, MasterRecord>;
+  currentAssignmentId: string | null;
   transitionAction: FleetFormAction;
   assignAction: FleetFormAction;
   unassignAction: FleetFormAction;
+  recordInstallationActionFor: (deviceId: string, assignmentId: string, expectedDeviceVersion: number) => FleetFormAction;
 }) {
   const [transitionState, transitionFormAction, transitionPending] = useActionState(transitionAction, INITIAL_STATE);
   const [assignState, assignFormAction, assignPending] = useActionState(assignAction, INITIAL_STATE);
@@ -345,10 +355,13 @@ function DeviceRow({
         <span className="text-xs text-neutral-500">{device.ownershipType}</span>
       </div>
 
-      {device.status === "assigned" ? (
+      {device.status === "assigned" && currentAssignmentId ? (
+        <RecordInstallationForm deviceId={device.id} action={recordInstallationActionFor(device.id, currentAssignmentId, device.recordVersion)} />
+      ) : device.status === "assigned" ? (
         <p className="text-xs text-neutral-500">
           To mark this device installed, record the installation evidence (evidence file and technician) — a device cannot be
-          moved to <span className="font-medium">installed</span> without it.
+          moved to <span className="font-medium">installed</span> without it. (No current vehicle assignment could be found for
+          this device.)
         </p>
       ) : null}
 
@@ -440,6 +453,55 @@ function DeviceRow({
         <ValidationMessage id={errorId}>{transitionState.error ?? assignState.error ?? unassignState.error ?? ""}</ValidationMessage>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * CG-AUDIT-2026-09-02 E5: the previously dead-end "record installation
+ * evidence" message replaced with a genuine upload form. app.record_gps_
+ * device_installation itself remains the real gate (malware-scan-clean
+ * evidence required, OPS:Edit authority, device-version optimistic
+ * concurrency) -- this form only stages the request; a rejected upload or
+ * scan failure surfaces here as a plain error, never a silent no-op.
+ */
+function RecordInstallationForm({ deviceId, action }: { deviceId: string; action: FleetFormAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const rowId = useId();
+  const evidenceId = `${rowId}-install-evidence`;
+  const technicianId = `${rowId}-install-technician`;
+  const notesId = `${rowId}-install-notes`;
+  const errorId = `${rowId}-install-error`;
+  const describedBy = state.error ? errorId : undefined;
+
+  return (
+    <form action={formAction} className="flex flex-col gap-2 rounded bg-neutral-50 p-2" noValidate>
+      <p className="text-xs text-neutral-500">
+        Record installation evidence — a device cannot be moved to <span className="font-medium">installed</span> without it
+        (a clean-scanned photo plus the installing technician&apos;s name).
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <FormField id={evidenceId} label="Evidence photo">
+          <input id={evidenceId} type="file" name="evidenceFile" required accept="image/*,application/pdf" className="text-xs" aria-describedby={describedBy} />
+        </FormField>
+        <FormField id={technicianId} label="Technician">
+          <Input id={technicianId} name="technicianLabel" type="text" required placeholder="Technician name" className="w-40 text-xs" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+        </FormField>
+        <div className="min-w-[10rem] flex-1">
+          <FormField id={notesId} label={<span className="sr-only">Installation notes</span>}>
+            <Input id={notesId} name="installationNotes" type="text" placeholder="Notes (optional)" invalid={Boolean(state.error)} aria-describedby={describedBy} />
+          </FormField>
+        </div>
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Recording…" className="w-fit text-xs">
+          Record installation
+        </Button>
+      </div>
+      {state.error ? <ValidationMessage id={errorId}>{state.error}</ValidationMessage> : null}
+      <p className="text-xs text-neutral-500">
+        Every scan fails closed until an operator configures a real VirusTotal API key and the platform integration
+        encryption key (CG-AUDIT-2026-09-02 D4&apos;s own still-open gap) — so recording an installation will keep failing in
+        an unconfigured environment, not because device {deviceId} or the evidence itself is broken.
+      </p>
+    </form>
   );
 }
 
