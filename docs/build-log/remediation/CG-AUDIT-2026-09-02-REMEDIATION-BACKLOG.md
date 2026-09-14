@@ -107,7 +107,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
-| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and three printable documents, surat jalan (delivery note), POD (proof of delivery), and purchase order, now exist end to end (`server/documents/`, three new Route Handlers, wired into their respective detail pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); invoice and faktur pajak both need new backend RPC work (no single-invoice-by-id read exists) |
+| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
@@ -2580,3 +2580,71 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   count), `git:check-paths` (clean, 4 files checked), `security:check`
   (clean), and a real `next build`. No migration/db-test/lockfile change --
   `check-release-freeze` unaffected.
+- 2026-09-14 — A7 fourth printable document: invoice, the last of the three
+  documents this finding's own entry named as needing new backend RPC work
+  (invoice, faktur pajak; packing list separately needs UI/mutation wiring
+  first). No single-invoice-by-id read existed before this slice --
+  `listFinanceInvoices` was the only invoice query in the codebase.
+  New `app.get_finance_invoice(p_invoice_id, p_actor_auth_user_id)` mirrors
+  `app.get_finance_invoice_lines`'s CURRENT (hardened) shape byte-for-byte,
+  not its original creation-migration shape: SECURITY DEFINER (added by
+  `20260810900000_harden_finance_authority_chain_tierc_completeness.sql`)
+  with the not-found branch folding `app.has_active_tenant_membership`
+  (added by `20260902100000_harden_tenant_id_disclosure_finance.sql`,
+  the ISS-2026-146 pattern) so a cross-tenant caller and a nonexistent id
+  both raise the same `finance_invoice_not_found`, never leaking which case
+  applied. Authority is gated behind a single `FIN:View` predicate via
+  `app.check_finance_invoice_authority` -- confirmed by re-reading that
+  function's body that, unlike purchase orders' `PRC:View cost` split,
+  invoices have no cost-masking concept; a caller either has `FIN:View` for
+  the tenant or gets nothing. Plus a matching `public.get_finance_invoice`
+  SQL wrapper (verified against the new
+  `scripts/db-tests/public-api-wrapper-regression.sql` security-mode-match
+  test added earlier this session) and a `server/queries/invoice.ts`
+  `getFinanceInvoice` wrapper (handles both plain-row and
+  Postgres-composite-array-wrapped return shapes, matching
+  `getFinanceInvoiceLines`'s established pattern).
+  `server/documents/invoice-document.tsx` + `generate-invoice.server.ts`
+  follow the surat-jalan/POD/purchase-order precedent exactly (assembling
+  `getFinanceInvoice` + `getFinanceInvoiceLines` + `getAccountById`, all
+  already-existing, already-tested reads beyond the one new RPC). The
+  totals block needed a correction mid-design: `app.finance_invoices.
+  total_amount` is a GENERATED column (`subtotal_amount + tax_amount`) --
+  it is NOT reduced by `withholding_tax_amount` (this session's own earlier
+  B5 fix), because withholding is cash withheld by the customer at source
+  and remitted directly to the tax authority, a separate deduction applied
+  only at actual cash collection, never baked into the invoice's own face
+  value. The document therefore renders Subtotal/Tax/Total first, and only
+  when `withholdingTaxAmount > 0` adds two further lines after Total:
+  "Less: withholding tax" and "Net amount due" (`total - withholding`),
+  with a footnote about bukti potong certificates -- never folding
+  withholding into Total itself.
+  No invoice detail page exists in this codebase (unlike surat-jalan/POD/
+  purchase-order's own precedents, which print from a detail page) --
+  printing wires directly from a new "Print" column on the existing
+  invoice list row (`finance/invoices/page.tsx`), the narrowest fix that
+  closes the finding without building a new detail page nobody asked for.
+  New Route Handler `finance/invoices/[invoiceId]/print/route.ts` maps
+  `finance_invoice_not_found` to a 404, mirroring the other three print
+  routes' own error-mapping shape.
+  Genuinely verified, not merely typechecked: the same pre-transpile-then-run
+  technique used for surat jalan/POD/purchase order produced a real PDF
+  buffer (including a withholding-tax line) starting with the literal
+  `%PDF-` magic bytes.
+  New `scripts/db-tests/finance-invoice.sql` section covers
+  `app.get_finance_invoice`: a plain user without `FIN:View` is denied
+  `insufficient_authority`; the tenant's own Finance Manager gets the real
+  unmasked row; a cross-tenant Finance Manager and a nonexistent invoice id
+  both get the identical `finance_invoice_not_found`; `get_finance_invoice`
+  was added to the existing schema-privilege anon-EXECUTE-zero function
+  list.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,067 tests passing, +4 for
+  `getFinanceInvoice`), `db:test` (`ALL PASSED`, run twice), `git:check-paths`
+  (clean, 9 files checked), `security:check` (clean), and a real
+  `next build` (confirms the new `/finance/invoices/[invoiceId]/print`
+  route). `check-release-freeze`'s self-test digests updated for the new
+  migration and db-test file (HUNDRED-AND-FORTY-FOURTH PASS).
+  Still open under A7: faktur pajak and packing list printables (packing
+  list still blocked on the same zero-UI gap noted in the third-document
+  entry above).

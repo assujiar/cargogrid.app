@@ -5186,7 +5186,26 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "48f48ed157986318ebe5caf8e1854fa12bffe16e08b72c1c4c78c8154c1e32e7",
+  migrationSetSha256: "c2185515d281ab0fc8735e7c9dd8ed02a2399e1bf19cdf4538a0aa013adefbef",
+  // HUNDRED-AND-FORTY-FOURTH PASS: CG-AUDIT-2026-09-02 A7, invoice PDF, the
+  // fourth printable document after surat jalan/POD/purchase order. Only
+  // list_finance_invoices/get_finance_invoice_lines existed before -- no
+  // single-invoice-by-id HEADER read, confirmed by repo-wide grep and by
+  // server/queries/invoice.ts wrapping exactly those two RPCs. New migration
+  // 20260914070000_create_get_finance_invoice.sql adds app.get_finance_invoice,
+  // mirroring app.get_finance_invoice_lines' own CURRENT hardened shape
+  // byte-for-byte (SECURITY DEFINER, FIN:View gate via app.check_finance_
+  // invoice_authority, the ISS-2026-146 not-found-folds-membership fix
+  // already applied to that sibling). No cost-masking concept exists for
+  // invoices (unlike purchase orders' PRC:View-cost split) -- every column
+  // returns unmasked to any FIN:View holder. A basic single-currency PDF
+  // deliberately does not touch B3 (credit notes)/B4 (multi-currency,
+  // DEFERRED_LARGE): finance_invoices.currency is schema-constrained to one
+  // 3-letter code per row, so there is nothing to decide. 541 tracked
+  // migration files (540 -> 541). Re-verified with a full `pnpm run
+  // db:test`, ALL PASSED.
+  // History: 48f48ed157986318ebe5caf8e1854fa12bffe16e08b72c1c4c78c8154c1e32e7
+  // (540 files, HUNDRED-AND-FORTY-THIRD PASS).
   // HUNDRED-AND-FORTY-THIRD PASS: CG-AUDIT-2026-09-02 E5 ("Telematics: device
   // can never reach `installed`, blocked by A6"). app.record_gps_device_
   // installation (ATW-226B) and its own db-test already fully build and
@@ -6861,7 +6880,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "90b779127fe49187420ed722cf48d06b9575d8ce298613c95e57341493f3c35e",
+  dbTestSetSha256: "667c43fe1e5d370dcc3b2b8d6b65addb248494679fc8650be9f29070e18708df",
+  // HUNDRED-AND-FORTY-FOURTH PASS: same CG-AUDIT-2026-09-02 A7 invoice-PDF
+  // slice as migrationSetSha256's own note immediately above -- extends the
+  // existing scripts/db-tests/finance-invoice.sql (no new file, 277 files
+  // unchanged) with a new section covering app.get_finance_invoice:
+  // FIN:View-gated (Plain User A denied insufficient_authority), returns the
+  // real unmasked row for Finance Manager A (id/invoice_number/total_amount
+  // verified), and folds both a cross-tenant stranger (Finance Manager B)
+  // and a genuinely nonexistent invoice id into the identical
+  // finance_invoice_not_found. Also added to the file's own existing
+  // schema-privilege anon-EXECUTE-zero sweep. Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 90b779127fe49187420ed722cf48d06b9575d8ce298613c95e57341493f3c35e
+  // (277 files, HUNDRED-AND-FORTY-THIRD PASS).
   // HUNDRED-AND-FORTY-THIRD PASS: same CG-AUDIT-2026-09-02 E5 slice as
   // migrationSetSha256's own note immediately above -- extends the existing
   // scripts/db-tests/advanced-tms-device-installation-evidence.sql (no new

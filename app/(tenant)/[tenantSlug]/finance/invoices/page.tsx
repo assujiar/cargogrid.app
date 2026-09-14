@@ -110,6 +110,20 @@ export default async function InvoicesPage({ params }: { params: Promise<{ tenan
         return "—";
       },
     },
+    {
+      /* CG-AUDIT-2026-09-02 A7: the fourth printable document. No invoice
+         detail page exists (only this list, unlike surat-jalan/POD/purchase-
+         order's own precedents) -- printing directly from this list row is
+         the narrowest fix that closes the finding without building a new UI
+         page. */
+      key: "print",
+      header: "Print",
+      render: (invoice) => (
+        <a href={`/${tenantSlug}/finance/invoices/${invoice.id}/print`} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary underline">
+          Print
+        </a>
+      ),
+    },
   ];
 
   return (

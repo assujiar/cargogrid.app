@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { listFinanceInvoices, getFinanceInvoiceLines, InvoiceQueryError, type InvoiceQueryRpcClient } from "./invoice.ts";
+import { listFinanceInvoices, getFinanceInvoice, getFinanceInvoiceLines, InvoiceQueryError, type InvoiceQueryRpcClient } from "./invoice.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const INVOICE_ID = "623e4567-e89b-12d3-a456-426614174000";
@@ -41,6 +41,32 @@ describe("listFinanceInvoices", () => {
       () => listFinanceInvoices(client, { tenantId: TENANT_ID, companyId: null, customerAccountId: null, status: null, actorAuthUserId: ACTOR_ID }),
       InvoiceQueryError,
     );
+  });
+});
+
+describe("getFinanceInvoice", () => {
+  test("maps the single returned row", async () => {
+    const client = fakeRpcClient({ data: INVOICE_ROW, error: null });
+    const invoice = await getFinanceInvoice(client, { invoiceId: INVOICE_ID, actorAuthUserId: ACTOR_ID });
+    assert.equal(invoice.id, INVOICE_ID);
+    assert.equal(invoice.status, "draft");
+    assert.equal(invoice.subtotalAmount, 15000000);
+  });
+
+  test("handles an array-wrapped single row (Postgres composite-return shape)", async () => {
+    const client = fakeRpcClient({ data: [INVOICE_ROW], error: null });
+    const invoice = await getFinanceInvoice(client, { invoiceId: INVOICE_ID, actorAuthUserId: ACTOR_ID });
+    assert.equal(invoice.id, INVOICE_ID);
+  });
+
+  test("wraps a database error into a typed InvoiceQueryError", async () => {
+    const client = fakeRpcClient({ data: null, error: { message: "finance_invoice_not_found: " + INVOICE_ID } });
+    await assert.rejects(() => getFinanceInvoice(client, { invoiceId: INVOICE_ID, actorAuthUserId: ACTOR_ID }), InvoiceQueryError);
+  });
+
+  test("raises InvoiceQueryError when no row is returned at all", async () => {
+    const client = fakeRpcClient({ data: null, error: null });
+    await assert.rejects(() => getFinanceInvoice(client, { invoiceId: INVOICE_ID, actorAuthUserId: ACTOR_ID }), InvoiceQueryError);
   });
 });
 

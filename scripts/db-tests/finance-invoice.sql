@@ -417,6 +417,54 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 A7: app.get_finance_invoice -- the single-invoice-by-id read this checkpoint adds (only list_finance_invoices/get_finance_invoice_lines existed before). FIN:View-gated like its sibling reads; Plain User A (no FIN grant) is denied; Finance Manager A reads their own tenant''s invoice in full (no cost-masking concept exists for invoices, unlike purchase orders); a genuine stranger to the invoice''s tenant (Finance Manager B) gets the same finance_invoice_not_found a nonexistent id would produce'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmeinva');
+  v_invoice app.finance_invoices;
+  v_read app.finance_invoices;
+begin
+  select * into v_invoice from app.finance_invoices where tenant_id = v_tenant_a and status = 'issued';
+
+  begin
+    perform app.get_finance_invoice(v_invoice.id, '00000000-0000-0000-0000-000000027505');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User A (no FIN grant)';
+  exception
+    when insufficient_privilege then
+      if sqlerrm not like 'insufficient_authority%' then
+        raise exception 'assertion failed: expected insufficient_authority, got %', sqlerrm;
+      end if;
+  end;
+
+  v_read := app.get_finance_invoice(v_invoice.id, '00000000-0000-0000-0000-000000027503');
+  if v_read.id <> v_invoice.id or v_read.invoice_number is distinct from v_invoice.invoice_number or v_read.total_amount <> v_invoice.total_amount then
+    raise exception 'assertion failed: expected app.get_finance_invoice to return the real, unmasked invoice row for Finance Manager A, got %', v_read;
+  end if;
+
+  begin
+    perform app.get_finance_invoice(v_invoice.id, '00000000-0000-0000-0000-000000027506');
+    raise exception 'assertion failed: expected finance_invoice_not_found -- Finance Manager B has zero relationship to tenant A';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'finance_invoice_not_found%' then
+        raise exception 'assertion failed: expected finance_invoice_not_found, got %', sqlerrm;
+      end if;
+  end;
+
+  begin
+    perform app.get_finance_invoice(gen_random_uuid(), '00000000-0000-0000-0000-000000027503');
+    raise exception 'assertion failed: a nonexistent invoice id must be refused';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'finance_invoice_not_found%' then
+        raise exception 'assertion failed: expected finance_invoice_not_found for a nonexistent id, got %', sqlerrm;
+      end if;
+  end;
+
+  raise notice 'PASS: app.get_finance_invoice -- FIN:View-gated (Plain User A denied), returns the real unmasked row for Finance Manager A, and folds both a cross-tenant stranger and a nonexistent id into the identical finance_invoice_not_found';
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new FIN-197 function (ERR-2026-004 regression guard)'
 do $$
 declare
@@ -426,7 +474,8 @@ begin
   for v_fn in select unnest(array[
     'touch_finance_invoice_row', 'check_finance_invoice_authority', 'prepare_finance_invoice_from_readiness',
     'submit_finance_invoice_for_approval', 'discard_finance_invoice_draft', 'approve_finance_invoice',
-    'issue_finance_invoice', 'list_finance_invoices', 'get_finance_invoice_lines'
+    'issue_finance_invoice', 'list_finance_invoices', 'get_finance_invoice_lines',
+    'get_finance_invoice'
   ]) loop
     select bool_or(has_function_privilege('anon', p.oid, 'EXECUTE'))
       into v_anon_has

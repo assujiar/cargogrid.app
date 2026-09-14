@@ -40,6 +40,28 @@ export async function listFinanceInvoices(
   return rows.slice(0, limit).map((row) => parseFinanceInvoice(row as Record<string, unknown>));
 }
 
+/**
+ * CG-AUDIT-2026-09-02 A7: single-invoice-by-id read (app.get_finance_invoice),
+ * the piece needed to build a printable invoice document -- only list reads
+ * existed before. FIN:View-gated; raises finance_invoice_not_found (folded
+ * with the tenant-membership check, ISS-2026-146-style) rather than
+ * returning null, matching getPurchaseOrder's own throw-never-null contract.
+ */
+export async function getFinanceInvoice(client: InvoiceQueryRpcClient, input: { invoiceId: string; actorAuthUserId: string }): Promise<FinanceInvoice> {
+  const { data, error } = await client.rpc("get_finance_invoice", {
+    p_invoice_id: input.invoiceId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+  });
+  if (error) {
+    throw new InvoiceQueryError(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new InvoiceQueryError(`finance_invoice_not_found: ${input.invoiceId}`);
+  }
+  return parseFinanceInvoice(row as Record<string, unknown>);
+}
+
 /** FIN:View-gated. Every charge/tax line for one invoice, ordered by line_number. */
 export async function getFinanceInvoiceLines(
   client: InvoiceQueryRpcClient,
