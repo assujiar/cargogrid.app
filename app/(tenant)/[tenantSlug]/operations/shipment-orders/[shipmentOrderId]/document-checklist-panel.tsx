@@ -7,9 +7,15 @@ import { Input } from "../../../../../../components/forms/input.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ChecklistItemView, ChecklistCompleteness } from "../../../../../../server/contracts/document-requirement/document-requirement.ts";
-import type { ShipmentOrderFormState } from "./actions.ts";
+import type { ShipmentOrderFormState, ChecklistItemDownloadState } from "./actions.ts";
 
 const INITIAL_STATE: ShipmentOrderFormState = { error: null };
+const INITIAL_DOWNLOAD_STATE: ChecklistItemDownloadState = { error: null, download: null };
+
+const ACCESS_RESULT_TONE: Record<"granted" | "denied", "success" | "danger"> = {
+  granted: "success",
+  denied: "danger",
+};
 
 const EFFECTIVE_STATUS_TONE: Record<ChecklistItemView["effectiveStatus"], "success" | "warning" | "danger" | "neutral"> = {
   approved: "success",
@@ -26,12 +32,14 @@ export function DocumentChecklistPanel({
   pinAction,
   uploadAction,
   reviewAction,
+  downloadAction,
 }: {
   readonly items: readonly ChecklistItemView[];
   readonly completeness: ChecklistCompleteness;
   readonly pinAction: (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
   readonly uploadAction: (checklistItemId: string, documentTypeCode: string) => (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
   readonly reviewAction: (checklistItemId: string) => (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
+  readonly downloadAction: (checklistItemId: string) => (prevState: ChecklistItemDownloadState, formData: FormData) => Promise<ChecklistItemDownloadState>;
 }) {
   const [pinState, pinFormAction, pinPending] = useActionState(pinAction, INITIAL_STATE);
 
@@ -60,7 +68,13 @@ export function DocumentChecklistPanel({
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((item) => (
-            <ChecklistItemRow key={item.id} item={item} uploadAction={uploadAction(item.id, item.documentTypeCode)} reviewAction={reviewAction(item.id)} />
+            <ChecklistItemRow
+              key={item.id}
+              item={item}
+              uploadAction={uploadAction(item.id, item.documentTypeCode)}
+              reviewAction={reviewAction(item.id)}
+              downloadAction={downloadAction(item.id)}
+            />
           ))}
         </ul>
       )}
@@ -72,13 +86,16 @@ function ChecklistItemRow({
   item,
   uploadAction,
   reviewAction,
+  downloadAction,
 }: {
   readonly item: ChecklistItemView;
   readonly uploadAction: (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
   readonly reviewAction: (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
+  readonly downloadAction: (prevState: ChecklistItemDownloadState, formData: FormData) => Promise<ChecklistItemDownloadState>;
 }) {
   const [uploadState, uploadFormAction, uploadPending] = useActionState(uploadAction, INITIAL_STATE);
   const [reviewState, reviewFormAction, reviewPending] = useActionState(reviewAction, INITIAL_STATE);
+  const [downloadState, downloadFormAction, downloadPending] = useActionState(downloadAction, INITIAL_DOWNLOAD_STATE);
   // This component renders once per checklist item, so every id must be row-unique.
   const rowId = useId();
   const fileInputId = `${rowId}-file`;
@@ -111,6 +128,30 @@ function ChecklistItemRow({
         <div className="mt-1">
           <ValidationMessage id={uploadErrorId}>{uploadState.error}</ValidationMessage>
         </div>
+      ) : null}
+
+      {item.fileId ? (
+        <form action={downloadFormAction} className="mt-2 flex flex-col gap-1">
+          <Button type="submit" variant="secondary" loading={downloadPending} loadingLabel="Creating link…" className="w-fit">
+            Get download link
+          </Button>
+          {downloadState.download ? (
+            downloadState.download.accessResult === "granted" && downloadState.download.signedUrl ? (
+              <p className="text-xs">
+                <a href={downloadState.download.signedUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+                  Open {downloadState.download.originalFilename ?? "file"}
+                </a>{" "}
+                <span className="text-neutral-500">— link expires in 5 minutes</span>
+              </p>
+            ) : (
+              <p role="status" className="flex items-center gap-2 text-xs">
+                <StatusBadge tone={ACCESS_RESULT_TONE[downloadState.download.accessResult]} label="access denied" />
+                {downloadState.download.accessReason ?? "no reason recorded"}
+              </p>
+            )
+          ) : null}
+          {downloadState.error ? <ValidationMessage id={`${item.id}-download-error`}>{downloadState.error}</ValidationMessage> : null}
+        </form>
       ) : null}
 
       {item.fileId ? (

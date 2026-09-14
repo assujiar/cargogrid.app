@@ -36,8 +36,11 @@ import {
   linkDocumentToChecklistItem,
   reviewDocumentChecklistItem,
   uploadShipmentDocumentFile,
+  getShipmentDocumentChecklistItemSignedDownloadUrl,
   DocumentRequirementMutationError,
+  type ShipmentDocumentChecklistEvidenceDownloadClient,
 } from "../../../../../../server/mutations/document-requirement.ts";
+import type { ShipmentDocumentChecklistItemSignedDownload } from "../../../../../../server/contracts/document-requirement/document-requirement.ts";
 import type { DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
 import type { BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
 import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
@@ -650,6 +653,41 @@ export async function uploadAndLinkDocumentAction(
 
   revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
   return { error: null };
+}
+
+export interface ChecklistItemDownloadState {
+  readonly error: string | null;
+  readonly download: ShipmentDocumentChecklistItemSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one checklist
+ * item's linked evidence file. Uses the service-role client -- the underlying
+ * RPC (app.access_shipment_document_checklist_item_evidence_for_download) is
+ * granted to service_role only, mirroring downloadVendorComplianceDocumentEvidenceAction's
+ * own identical reasoning.
+ */
+export async function downloadChecklistItemEvidenceAction(
+  tenantSlug: string,
+  checklistItemId: string,
+  _prevState: ChecklistItemDownloadState,
+  _formData: FormData,
+): Promise<ChecklistItemDownloadState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace.", download: null };
+  }
+
+  const serviceRole: ShipmentDocumentChecklistEvidenceDownloadClient = createSupabaseServiceRoleClient();
+  try {
+    const result = await getShipmentDocumentChecklistItemSignedDownloadUrl(serviceRole, checklistItemId, access.authUserId, access.authUserId);
+    return { error: null, download: result };
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not create a download link for this document: ${error.message}`, download: null };
+    }
+    throw error;
+  }
 }
 
 /** OPS-176: approve/reject the linked evidence for one checklist item. Approving an unscanned or unsafe file is rejected server-side (document_checklist_unsafe_file) regardless of what the UI disables. */

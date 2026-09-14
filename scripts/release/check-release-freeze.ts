@@ -5186,20 +5186,40 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "48041aced0d42d465f35d8fe9ee56fc16bf31171a6db822baae35bc6d095987e",
-  // HUNDRED-AND-FORTIETH PASS: CG-AUDIT-2026-09-02 A6, the third and LAST of the
-  // audit's own 3 named deadlocked flows -- ticket-reply attachments. Worse than
-  // the other two: app.reply_to_ticket raises evidence_file_not_scanned for any
-  // attachment that never reaches malware_scan_status='clean', and nothing ever
-  // wired real bytes/scanning for ticket attachments, so every real reply with an
-  // attachment hard-failed. New migration
-  // 20260914030000_a6_ticket_attachment_upload_scan.sql adds
-  // app.get_ticket_attachment_storage_path (service_role only) -- a plain
-  // uploaded_by_auth_user_id ownership lookup, not a re-derivation of
-  // app.initiate_ticket_attachment_upload's own per-ticket requester-or-staff
-  // authority (already satisfied by the time this is called) -- plus its
-  // required public.* PostgREST wrapper. 537 tracked migration files (536 ->
-  // 537). Re-verified with a full `pnpm run db:test`, ALL PASSED.
+  migrationSetSha256: "5a4fd4e59e8ec1a0e6e0e99256c87515331266aef7a529fc6f4b6681b84a680a",
+  // HUNDRED-AND-FORTY-FIRST PASS: CG-AUDIT-2026-09-02 A6, signed download for
+  // shipment document checklist evidence -- upload+scan for this record type was
+  // already wired (an earlier this-session pass), so evidence a reviewer
+  // approves/rejects is real, malware-scanned bytes; there was simply no way to
+  // ever fetch those bytes back out again. New migration
+  // 20260914040000_a6_shipment_document_checklist_signed_download.sql adds
+  // app.authorize_shipment_document_evidence_file_access (a narrowly-scoped
+  // sibling of app.authorize_vendor_evidence_file_access -- identical
+  // malware-scan/deleted/classification gates, record-scope deliberately
+  // omitted since the caller already independently verifies it) plus
+  // app.access_shipment_document_checklist_item_evidence_for_download
+  // (service_role only, gated on the brand-new-to-real-use OPS:Download
+  // permission action code -- seeded since 20260716103445, never once checked by
+  // any RPC until now -- and the same app.can_access_record scope
+  // app.link_document_to_checklist_item/app.review_document_checklist_item
+  // already use), plus both functions' required public.* PostgREST wrappers.
+  // One deliberate improvement over its own two pre-existing sibling functions
+  // (both UNCHANGED -- Part C, no applied migration edited): this new function
+  // folds the has_active_tenant_membership check into its own initial not-found
+  // branch instead of raising evaluate_permission's tenant_id-interpolating
+  // insufficient_authority first, so it does not reintroduce the ISS-2026-146
+  // tenant-id-disclosure defect class into brand-new code; disclosed in the
+  // migration's own header, not backported into the two older functions
+  // (out of scope). 538 tracked migration files (537 -> 538). Re-verified with a
+  // full `pnpm run db:test`, ALL PASSED (a first attempt caught its own bug --
+  // the new app.authorize_shipment_document_evidence_file_access function was
+  // granted EXECUTE to service_role but its matching public.* wrapper was
+  // initially omitted; scripts/db-tests/public-api-wrapper-regression.sql's own
+  // exhaustive, catalog-derived check caught it immediately -- fixed by adding
+  // the wrapper, matching app.authorize_vendor_evidence_file_access's own
+  // invoker-mode security shape exactly, then re-verified clean).
+  // History: 48041aced0d42d465f35d8fe9ee56fc16bf31171a6db822baae35bc6d095987e
+  // (537 files, HUNDRED-AND-FORTIETH PASS).
   // History: d625e847caecd16d1e81d87c5aaa017a3a5f5b6468129f45ee3c44e18fc57312
   // (536 files, HUNDRED-AND-THIRTY-NINTH PASS).
   // History: 0e46d035276715480a4bf95f1b40d3ffdc2038eea7b6bd383192416d903b07e2
@@ -6802,17 +6822,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "d8dac300bf8bbc595f646c067fa8f4b8941325acc8fe3577e32e982b0910b09f",
-  // HUNDRED-AND-FORTIETH PASS: same CG-AUDIT-2026-09-02 A6 ticket-attachment
-  // slice as migrationSetSha256's own note immediately above -- extends the
-  // existing scripts/db-tests/ticketing-internal.sql section 17 (no new file,
-  // 277 files unchanged) with coverage for app.get_ticket_attachment_storage_path:
-  // the uploader gets their own real storage_path, a non-uploading actor (even
-  // ticket staff) and a nonexistent file id both get the identical
-  // ticket_attachment_not_found, plus schema-privilege regression guards (both
-  // anon AND authenticated carry zero EXECUTE, unlike the authenticated-grantable
-  // sibling app.initiate_ticket_attachment_upload). Full `pnpm run db:test`, ALL
-  // PASSED.
+  dbTestSetSha256: "eaf809b9336aa8698e4e5fda56864fca197be5ff1ca202d6c4c269670c8251f9",
+  // HUNDRED-AND-FORTY-FIRST PASS: same CG-AUDIT-2026-09-02 A6 shipment-document-
+  // checklist signed-download slice as migrationSetSha256's own note immediately
+  // above -- extends the existing scripts/db-tests/operations-document-
+  // requirement.sql (no new file, 277 files unchanged) with a new top-level
+  // section covering app.access_shipment_document_checklist_item_evidence_for_
+  // download: insufficient_authority before OPS:Download is granted (via a real
+  // role-version publish, not a raw grant) and after it is denied to a
+  // view-only actor, the granted path's real storage_path/bucket_id/
+  // original_filename, an ISS-2026-146-shaped document_checklist_item_not_found
+  // for a zero-membership cross-tenant actor, denied-not-raised with
+  // storage_path/bucket_id nulled once the file is marked infected,
+  // document_checklist_no_linked_file for a freshly-pinned never-linked item,
+  // an app.file_access_logs audit-trail proof, and schema-privilege guards
+  // (anon/authenticated hold zero EXECUTE on either new function or its
+  // public.* wrapper). Full `pnpm run db:test`, ALL PASSED.
+  // History: d8dac300bf8bbc595f646c067fa8f4b8941325acc8fe3577e32e982b0910b09f
+  // (277 files, HUNDRED-AND-FORTIETH PASS).
   // History: 3829633f02208768f9f6952f76d4270f788dbe5a7f2b657394baca36a1786503
   // (277 files, HUNDRED-AND-THIRTY-NINTH PASS).
   // History: e625fc8c358aeba378a90281d55d52778f980663dc0b0d5925a18d3c507dc6fb

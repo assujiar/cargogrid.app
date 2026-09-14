@@ -65,6 +65,7 @@ import {
   pinDocumentChecklistAction,
   uploadAndLinkDocumentAction,
   reviewDocumentChecklistItemAction,
+  downloadChecklistItemEvidenceAction,
   startEpodCaptureAction,
   setEpodEvidenceAction,
   submitEpodCaptureAction,
@@ -321,6 +322,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundUploadAndLinkDocumentAction = (checklistItemId: string, documentTypeCode: string) =>
     uploadAndLinkDocumentAction.bind(null, tenantSlug, shipment.id, checklistItemId, documentTypeCode, randomUUID());
   const boundReviewDocumentChecklistItemAction = (checklistItemId: string) => reviewDocumentChecklistItemAction.bind(null, tenantSlug, shipment.id, checklistItemId);
+  const boundDownloadChecklistItemEvidenceAction = (checklistItemId: string) => downloadChecklistItemEvidenceAction.bind(null, tenantSlug, checklistItemId);
   const boundStartEpodCaptureAction = startEpodCaptureAction.bind(null, tenantSlug, shipment.id, randomUUID());
   const boundSetEpodEvidenceAction = (captureId: string) => setEpodEvidenceAction.bind(null, tenantSlug, shipment.id, captureId, randomUUID());
   const boundSubmitEpodCaptureAction = (captureId: string, expectedVersion: number) => submitEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion);
@@ -519,6 +521,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           pinAction={boundPinDocumentChecklistAction}
           uploadAction={boundUploadAndLinkDocumentAction}
           reviewAction={boundReviewDocumentChecklistItemAction}
+          downloadAction={boundDownloadChecklistItemEvidenceAction}
         />
       </section>
 
