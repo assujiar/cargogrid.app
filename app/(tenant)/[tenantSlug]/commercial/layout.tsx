@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { resolveCommercialAccessForRequest } from "../../../../lib/portal/resolve-commercial-access.server.ts";
 import { resolveSignedInUserLabelForRequest } from "../../../../lib/auth/resolve-signed-in-user-label.server.ts";
 import { AccountMenu } from "../../../../components/layout/account-menu.tsx";
+import { TenantPortalNav } from "../../../../components/domain/tenant-portal-nav.tsx";
 
 /**
  * Commercial portal shell (COM-143, CG-S7-COM-002) -- the first business-domain route
@@ -54,10 +55,15 @@ export default async function CommercialLayout({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-3">
+      <header className="border-b border-neutral-200 bg-neutral-50">
+        <div className="flex items-center justify-between px-6 py-3">
         <span className="text-sm font-semibold text-neutral-900">CargoGrid — {access.tenant.slug} — Commercial</span>
         <div className="flex items-center gap-4">
-        <nav aria-label="Commercial navigation" className="flex gap-4 text-sm">
+          <TenantPortalNav tenantSlug={access.tenant.slug} current="commercial" />
+          {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
+        </div>
+        </div>
+        <nav aria-label="Commercial navigation" className="flex flex-wrap gap-4 border-t border-neutral-200 px-6 py-2 text-sm">
           <a href={`/${access.tenant.slug}/commercial/dashboard`} className="text-neutral-700 hover:text-neutral-900">
             Dashboard
           </a>
@@ -104,8 +110,6 @@ export default async function CommercialLayout({
             Credit Approvals
           </a>
         </nav>
-        {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
-        </div>
       </header>
       <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-6">
         {children}

@@ -398,4 +398,154 @@ begin
 end;
 $$;
 
+\echo '>> audit remediation A2: app.list_role_versions / app.list_role_version_permissions / app.list_role_assignments_for_role -- the three read RPCs the admin/roles/ UI needs, added because the write-side RPCs above had no way to see their own results again after a page reload'
+do $$
+declare
+  v_tenant_id uuid;
+  v_role app.roles;
+  v_draft1 app.role_versions;
+  v_draft2 app.role_versions;
+  v_published1 app.role_versions;
+  v_published2 app.role_versions;
+  v_fin_view_id uuid;
+  v_fin_approve_id uuid;
+  v_count integer;
+  v_assignment app.role_assignments;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmerole');
+
+  insert into auth.users (id, email) values
+    ('00000000-0000-0000-0000-000000000303', 'a2customer@example.test'),
+    ('00000000-0000-0000-0000-000000000304', 'a2crosstenant@example.test');
+  perform app.link_auth_identity('00000000-0000-0000-0000-000000000303', v_tenant_id, 'tester', 'active');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000000303', 'customer_user', v_tenant_id, 'fake-account-ref-a2', 'tester');
+  perform app.invite_user((select id from app.tenants where slug = 'gizmorole'), '00000000-0000-0000-0000-000000000304', 'a2crosstenant@example.test', 'Cross Tenant', null, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'a2crosstenant@example.test'), 'active', 'onboarded', 'tester');
+
+  select * into v_role from app.create_role(v_tenant_id, 'A2 Read RPC Role', 'db-test fixture for the new read RPCs', 'tester');
+  select * into v_draft1 from app.create_role_version(v_role.id, 'tester');
+  select id into v_fin_view_id from app.permissions where resource_module_code = 'FIN' and action = 'View';
+  select id into v_fin_approve_id from app.permissions where resource_module_code = 'FIN' and action = 'Approve';
+  perform app.set_role_version_permissions(v_draft1.id, array[v_fin_view_id], 'tester');
+  select * into v_published1 from app.publish_role_version(v_draft1.id, now(), 'tester');
+
+  select * into v_draft2 from app.create_role_version(v_role.id, 'tester');
+  perform app.set_role_version_permissions(v_draft2.id, array[v_fin_view_id, v_fin_approve_id], 'tester');
+  select * into v_published2 from app.publish_role_version(v_draft2.id, now(), 'tester');
+
+  select * into v_assignment from app.assign_role(v_tenant_id, v_published2.id, '00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000301', 'tester');
+  perform app.revoke_role_assignment(v_assignment.id, 'db-test revoke proof', 'tester');
+
+  -- app.list_role_versions (SECURITY INVOKER, no actor param, relies on live RLS):
+  -- an active tenant member sees both versions (v1 now archived, v2 published), newest first.
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000302", "role": "authenticated"}';
+  select count(*) into v_count from app.list_role_versions(v_role.id);
+  if v_count <> 2 then
+    raise exception 'assertion failed: expected list_role_versions to return 2 versions for an active tenant member, got %', v_count;
+  end if;
+  if (select version_number from app.list_role_versions(v_role.id) limit 1) <> 2 then
+    raise exception 'assertion failed: expected list_role_versions ordered newest-version-first';
+  end if;
+  reset role; reset request.jwt.claims;
+
+  -- a customer_user-layer principal in the SAME tenant sees zero (role_versions_select_own_tenant excludes it).
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000303", "role": "authenticated"}';
+  select count(*) into v_count from app.list_role_versions(v_role.id);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_role_versions to deny a customer_user-layer principal, saw %', v_count;
+  end if;
+  reset role; reset request.jwt.claims;
+
+  -- a member of a DIFFERENT tenant sees zero.
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000304", "role": "authenticated"}';
+  select count(*) into v_count from app.list_role_versions(v_role.id);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_role_versions to deny a cross-tenant actor, saw %', v_count;
+  end if;
+  reset role; reset request.jwt.claims;
+
+  -- app.list_role_version_permissions (SECURITY DEFINER, explicit actor param, manually
+  -- reproduces role_versions_select_own_tenant's own current predicate).
+  select count(*) into v_count from app.list_role_version_permissions(v_published2.id, '00000000-0000-0000-0000-000000000302');
+  if v_count <> 2 then
+    raise exception 'assertion failed: expected list_role_version_permissions to return 2 permissions for the published version, got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_role_version_permissions(v_published1.id, '00000000-0000-0000-0000-000000000302');
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected list_role_version_permissions to return 1 permission for the archived version (bindings are immutable once published), got %', v_count;
+  end if;
+  select count(*) into v_count from app.list_role_version_permissions(v_published2.id, '00000000-0000-0000-0000-000000000303');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_role_version_permissions to deny a customer_user-layer actor, saw %', v_count;
+  end if;
+  select count(*) into v_count from app.list_role_version_permissions(v_published2.id, '00000000-0000-0000-0000-000000000304');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_role_version_permissions to deny a cross-tenant actor, saw %', v_count;
+  end if;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000302", "role": "authenticated"}';
+  begin
+    perform app.list_role_version_permissions(v_published2.id, '00000000-0000-0000-0000-000000000301');
+    raise exception 'assertion failed: expected list_role_version_permissions to reject an authenticated session claiming to act as a different actor (RULE A)';
+  exception
+    when insufficient_privilege then
+      null; -- expected: app.assert_actor_is_session_identity rejects the spoofed actor
+  end;
+  reset role; reset request.jwt.claims;
+
+  -- app.list_role_assignments_for_role (SECURITY INVOKER, no actor param): both the
+  -- (now-revoked) assignment above shows up -- unfiltered by status, matching
+  -- app.list_tenant_roles' own "every role, any status" precedent.
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000302", "role": "authenticated"}';
+  select count(*) into v_count from app.list_role_assignments_for_role(v_role.id);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected list_role_assignments_for_role to return the 1 (revoked) assignment, got %', v_count;
+  end if;
+  if (select status from app.list_role_assignments_for_role(v_role.id) limit 1) <> 'revoked' then
+    raise exception 'assertion failed: expected the assignment to show as revoked, not filtered out';
+  end if;
+  reset role; reset request.jwt.claims;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000304", "role": "authenticated"}';
+  select count(*) into v_count from app.list_role_assignments_for_role(v_role.id);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_role_assignments_for_role to deny a cross-tenant actor, saw %', v_count;
+  end if;
+  reset role; reset request.jwt.claims;
+
+  -- app.list_active_tenant_users_for_role_assignment (SECURITY DEFINER, explicit actor
+  -- param, real auth_user_id -- never app.users.id): returns exactly the tenant's 2
+  -- active users (301, 302); the customer_user-layer principal (303) is never in
+  -- app.users at all (granted a bare principal membership only), so it is absent from
+  -- the result set regardless of which actor asks; a customer_user-layer or
+  -- cross-tenant ACTOR sees zero rows (excluded by the authority predicate itself).
+  select count(*) into v_count from app.list_active_tenant_users_for_role_assignment(v_tenant_id, '00000000-0000-0000-0000-000000000301');
+  if v_count <> 2 then
+    raise exception 'assertion failed: expected list_active_tenant_users_for_role_assignment to return 2 active users, got %', v_count;
+  end if;
+  if not exists (
+    select 1 from app.list_active_tenant_users_for_role_assignment(v_tenant_id, '00000000-0000-0000-0000-000000000301')
+    where auth_user_id = '00000000-0000-0000-0000-000000000302'
+  ) then
+    raise exception 'assertion failed: expected 302 (an active user) to appear in list_active_tenant_users_for_role_assignment';
+  end if;
+
+  select count(*) into v_count from app.list_active_tenant_users_for_role_assignment(v_tenant_id, '00000000-0000-0000-0000-000000000303');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_active_tenant_users_for_role_assignment to deny a customer_user-layer actor, saw %', v_count;
+  end if;
+
+  select count(*) into v_count from app.list_active_tenant_users_for_role_assignment(v_tenant_id, '00000000-0000-0000-0000-000000000304');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected list_active_tenant_users_for_role_assignment to deny a cross-tenant actor, saw %', v_count;
+  end if;
+end;
+$$;
+
 \echo 'ALL PLT-111 db-test assertions passed.'

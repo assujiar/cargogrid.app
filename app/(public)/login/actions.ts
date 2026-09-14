@@ -6,9 +6,11 @@
  * §2.1) -- this checkpoint builds only the minimal real sign-in path the guarded
  * portals need an entry point for, not a full account-recovery/SSO surface.
  *
- * The organization field is now optional (`PLT-136`, CG-S6-PLT-033): a Tenant Admin
- * supplies their tenant's slug and lands on `/{slug}/admin`; CargoGrid staff (Supreme
- * Admin) leave it blank and land on `/supreme`. This is one shared entry point for both
+ * The organization field is now optional (`PLT-136`, CG-S6-PLT-033): any tenant member
+ * supplies their tenant's slug and lands on `/{slug}` (the Tenant Internal Portal Home,
+ * audit remediation A1 -- previously hardcoded to `/{slug}/admin`, which requires
+ * `tenant_admin` layer and 403s for any ordinary `org_user` signing in); CargoGrid staff
+ * (Supreme Admin) leave it blank and land on `/supreme`. This is one shared entry point for both
  * portals, not a second login surface -- the *portal itself* still gates on the
  * resolved principal's actual layer (`lib/portal/{tenant-admin,supreme-admin}-guard.ts`)
  * regardless of which path this action redirects to; picking the wrong path here only
@@ -62,7 +64,7 @@ export async function signInAction(_prevState: SignInFormState, formData: FormDa
     }
   }
 
-  const target = tenantSlug ? `/${tenantSlug}/admin` : "/supreme";
+  const target = tenantSlug ? `/${tenantSlug}` : "/supreme";
   const validation = validateRedirectTarget(target);
   if (!validation.safe) {
     return { error: "Unable to sign in to that organization." };

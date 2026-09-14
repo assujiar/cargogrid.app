@@ -7,19 +7,20 @@ import { Pagination } from "../../../../components/tables/pagination.tsx";
 import { StatusBadge } from "../../../../components/ui/status-badge.tsx";
 import { resolveTenantStatusTone } from "../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
+import { CreateTenantPanel } from "./create-tenant-panel.tsx";
+import { createTenantAction } from "./actions.ts";
 
 const PAGE_SIZE = 20;
 
 /**
- * Global tenant list (PLT-136, CG-S6-PLT-033) -- the one bounded workflow this
- * checkpoint ships (Prompt 136 §11/§12: "bounded workflows," never an unreviewed
- * destructive bulk action or domain feature admin). Read-only: tenant lifecycle
- * mutations (`app.transition_tenant_status()` and friends, `PLT-105`) already exist as
- * real backend capability, but their own high-risk UI (re-authentication, impact
- * preview, confirmation -- Prompt 136 §16/§20 task 2) is deliberately deferred to a
- * later, separately-scoped slice: building that machinery now, with no real mutating
- * action to gate yet, would be exactly the kind of unresolved placeholder this
- * checkpoint's own governance forbids.
+ * Global tenant list (PLT-136, CG-S6-PLT-033) plus tenant creation (audit
+ * remediation A2 -- `app.provision_tenant` already existed as real, tested
+ * backend capability with zero callers anywhere in the product; a tenant
+ * could not be created through the UI at all). Status *transition*
+ * mutations (`app.transition_tenant_status()` and friends) remain
+ * unwired here: their own high-risk UI (re-authentication, impact preview,
+ * confirmation -- Prompt 136 §16/§20 task 2) is a distinct, separately-scoped
+ * slice from bootstrapping a brand-new tenant, and stays deferred.
  *
  * States (`docs/standards/DESIGN_SYSTEM.md` §4): Empty and Error are both real,
  * distinct renders below; data is fetched into a plain result/error value first, with
@@ -64,9 +65,10 @@ export default async function SupremeTenantsPage({ searchParams }: { searchParam
 
   if (loadFailed || !result) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold text-neutral-900">Tenants</h1>
         <ErrorState description="Something went wrong loading tenants. Please try again." />
+        <CreateTenantPanel createAction={createTenantAction} />
       </div>
     );
   }
@@ -105,6 +107,7 @@ export default async function SupremeTenantsPage({ searchParams }: { searchParam
           buildHref={(targetPage) => `/supreme/tenants?page=${targetPage}`}
         />
       </div>
+      <CreateTenantPanel createAction={createTenantAction} />
     </div>
   );
 }

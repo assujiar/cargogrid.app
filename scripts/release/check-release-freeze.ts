@@ -5101,7 +5101,97 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // **The entire CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters,
   // 0 through 7, every `.from()`/direct-table read against an `app.*` table
   // across server/queries/*.ts AND page.tsx files) is now FULLY DONE.**
-  migrationSetSha256: "c5fd2bde0aad57ca615f1936c762f6265f56d00f8c8884379a146635cf19f376",
+  // HUNDRED-AND-THIRTY-SEVENTH PASS (2026-09-14, same ruling as migrationSetSha256
+  // above): 535 files (+1) -- new migration
+  // 20260914010000_add_role_permission_management_read_rpcs.sql. Audit
+  // remediation A2 (docs/audit/2026-09-02-independent-launch-readiness-audit.md
+  // finding A2, "createRole/assignRole/revokeRoleAssignment have no caller"):
+  // PLT-111's role/permission mutation RPCs already existed as real, tested,
+  // service_role-only backend capability with zero callers anywhere in the
+  // product -- this pass builds the first UI caller (app/(tenant)/[tenantSlug]/
+  // admin/roles/) and, discovering along the way that the read side had no
+  // way to see its own results again after a page reload, adds the 4 missing
+  // read RPCs that make it a real (not write-only) management screen.
+  // app.list_role_versions / app.list_role_assignments_for_role: SECURITY
+  // INVOKER, NO actor parameter -- app.role_versions and app.role_assignments
+  // both already carry a live RLS policy and an authenticated table grant
+  // (20260716105512_create_rls_tenant_policies.sql, most recently altered by
+  // 20260730560000_harden_customer_user_layer_default_deny.sql -- verified as
+  // the CURRENT, not original, predicate before writing this migration), so
+  // these functions rely entirely on the caller's own session via that live
+  // policy, the same choice this series already made for app.list_org_units/
+  // app.get_job_offer_for_application/app.get_approval_request_by_id
+  // (cluster 7, HUNDRED-AND-THIRTY-SIXTH PASS).
+  // app.list_role_version_permissions: SECURITY DEFINER, RULE A guard present.
+  // app.role_version_permissions had `alter table ... enable row level
+  // security` run (20260716103445) but repo-wide grep confirms ZERO policy and
+  // ZERO authenticated grant were ever added for it -- RLS-enabled-with-no-
+  // policy is default-deny for every role but the table owner, so SECURITY
+  // INVOKER would return zero rows for every real caller regardless of
+  // authority. Authority predicate manually reproduces role_versions_select_
+  // own_tenant's own current predicate (the same shape app.list_permissions_
+  // for_module already established for the sibling ungranted table app.
+  // permissions, cluster 2).
+  // app.list_active_tenant_users_for_role_assignment: SECURITY DEFINER, RULE A
+  // guard present. Added because app.role_assignments.auth_user_id references
+  // auth.users(id) directly -- a genuinely different value from app.users.id
+  // (a separate surrogate key, 20260716102620_create_users.sql:17-19) -- and
+  // server/queries/portal-users.ts's own PortalUser never projects
+  // auth_user_id (app.list_portal_users' own returns table has no such
+  // column). Extending that already-shipped, already-db-tested function's
+  // return shape would need a drop+create of a function this repository's own
+  // O1 remediation already verified, for a need only this one new form has; a
+  // small, single-purpose function is the narrower, lower-risk change,
+  // matching this schema's own dominant pattern of one RPC per real UI need.
+  // Same authority predicate as app.list_portal_users, independently
+  // re-derived from its own current body (20260910010000) rather than
+  // assumed. No email projected -- this list exists to pick a person to
+  // assign a role to, not to view PII.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the unit test suite (role-permission.ts extended
+  // with 4 new functions plus a toRolePermissionLookupClient/
+  // toRolePermissionRpcClient/toTenantRpcClient/toUserLifecycleRpcClient
+  // adapter each, role-permission.test.ts extended to match -- all passing),
+  // `git:check-paths` (clean), `security:check` (clean), a full `pnpm run
+  // db:test` (`ALL PASSED`, 535 migrations / 277 db-test files, extending the
+  // existing scripts/db-tests/role-permission.sql with a 4-actor sweep --
+  // active tenant member, a customer_user-layer principal, a cross-tenant
+  // actor, and a genuine RULE A actor-identity-spoofing rejection proof --
+  // across all 4 new functions, an archived-version-permissions-remain-
+  // readable proof, and a revoked-assignment-still-visible proof), and a real
+  // `next build`.
+  // This pass also builds app/(supreme)/supreme/tenants/ (provisionTenant
+  // caller, closing the other half of finding A2 -- a tenant could not be
+  // created through the UI at all) and app/(tenant)/[tenantSlug]/admin/users/
+  // (inviteUser caller plus the missing supabase.auth.admin.inviteUserByEmail
+  // wrapper, since inviteUser only links an ALREADY-EXISTING Supabase Auth
+  // identity and nothing anywhere created one), and closes audit finding A1
+  // (docs/audit/2026-09-02-independent-launch-readiness-audit.md: "no route
+  // exists from any one staff module into any other") with a new shared
+  // components/domain/tenant-portal-nav.tsx cross-module switcher wired into
+  // all 16 tenant-internal module layouts plus a new tenant Home landing page
+  // at app/(tenant)/[tenantSlug]/page.tsx -- no schema change for either, not
+  // reflected in these two digests.
+  // A real, independently-caught bug was found during this pass's own full
+  // `pnpm run db:test` run: scripts/db-tests/public-api-wrapper-regression.sql's
+  // own exhaustive "no public.* wrapper grants a role its app.* counterpart
+  // does not" check failed for BOTH app.list_role_versions and app.list_role_
+  // assignments_for_role -- their public.* wrappers correctly revoked the
+  // implicit default PUBLIC execute grant before re-granting only to
+  // authenticated/service_role, but the app.* originals never had that same
+  // `revoke execute ... from public` statement (present on the other two new
+  // functions in this same migration, and on every INVOKER precedent this
+  // pass's own header cites), so app.list_role_versions/app.list_role_
+  // assignments_for_role remained callable by anyone via the implicit PUBLIC
+  // grant every newly-created SQL function gets by default. Fixed by adding
+  // the missing revoke to both; re-verified with a second full `pnpm run
+  // db:test`, ALL PASSED.
+  migrationSetSha256: "0e46d035276715480a4bf95f1b40d3ffdc2038eea7b6bd383192416d903b07e2",
+  // History: 298c7f9bf1977c728e5a83d9f8b3522b2325b8f0ccf6c9e10355c44af32e58d3
+  // (535 files, HUNDRED-AND-THIRTY-SEVENTH PASS, pre-fix -- superseded before
+  // ever landing, see the note immediately above).
+  // History: c5fd2bde0aad57ca615f1936c762f6265f56d00f8c8884379a146635cf19f376
+  // (534 files, HUNDRED-AND-THIRTY-SIXTH PASS).
   // History: 2a5424306416032ff0adb5566a5d482d3e05400df4cb06263f15ca80698d7404
   // (533 files, HUNDRED-AND-THIRTY-FIFTH PASS).
   // History: 66e7aa429f477a4d667f002f6e11271a0fc63d371423cdcdd5f67d709b916470
@@ -6683,7 +6773,21 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // **Cluster 7 (page-level-direct-reads, 10/10 call sites) is now FULLY DONE.
   // The entire CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters)
   // is now FULLY DONE.**
-  dbTestSetSha256: "3e7fb02dcd68bf883434043e1243f908ccef6106efb53adb049ee54f621c2fa2",
+  // HUNDRED-AND-THIRTY-SEVENTH PASS (2026-09-14, same ruling as
+  // migrationSetSha256 above): 277 files (unchanged count) -- an EXISTING file,
+  // scripts/db-tests/role-permission.sql, widened with a new section covering
+  // the 4 new read RPCs 20260914010000 adds (see migrationSetSha256's own note
+  // above for the full derivation). Reuses this file's own established tenant
+  // (`acmerole`) and personas (301 roleadmin, 302 regular) rather than
+  // building a fresh fixture, adding two more (303 a customer_user-layer
+  // principal via app.grant_principal_membership, 304 a member of the
+  // existing cross-tenant `gizmorole`) and a fresh role ("A2 Read RPC Role")
+  // to keep the new assertions traceable against a clean, single-purpose
+  // state rather than the many prior mutations already run against "Finance
+  // Approver" earlier in this same file.
+  dbTestSetSha256: "e625fc8c358aeba378a90281d55d52778f980663dc0b0d5925a18d3c507dc6fb",
+  // History: 3e7fb02dcd68bf883434043e1243f908ccef6106efb53adb049ee54f621c2fa2
+  // (277 files, HUNDRED-AND-THIRTY-SIXTH PASS).
   // History: c4c2a6d0e31e51d2f09b104039347b53c6ddd114c5a1eccb4f6784727b05757d
   // (276 files, HUNDRED-AND-THIRTY-FIFTH PASS).
   // History: 9c3fffab23ebed2ff7089549dde1cdc811ca478a6372bc7ab76e6e654dd072fc

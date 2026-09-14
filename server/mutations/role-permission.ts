@@ -6,6 +6,7 @@
  * (supabase/migrations/20260716103445_create_roles_permissions.sql).
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ArchiveRoleVersionInputSchema,
   AssignRoleInputSchema,
@@ -44,6 +45,19 @@ export interface RolePermissionRpcClient {
       | "revoke_role_assignment",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/**
+ * Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict
+ * `Promise`) -- structurally incompatible with this file's own hand-written
+ * `RolePermissionRpcClient` interface. The same `async (fn, args) => await
+ * client.rpc(fn, args)` adapter every other cross-module RPC composition in this
+ * repository already uses for that exact mismatch. Every function on this interface
+ * is `service_role`-only (this file's own migration's grants) -- the caller passes a
+ * service-role client, never the RLS-scoped one.
+ */
+export function toRolePermissionRpcClient(client: Pick<SupabaseClient, "rpc">): RolePermissionRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export const ROLE_PERMISSION_KNOWN_ERROR_CODES = [

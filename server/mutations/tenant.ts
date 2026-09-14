@@ -10,8 +10,10 @@
  * singleton — no live Supabase project exists yet (Supabase Auth integration is
  * PLT-107, a later capability); this keeps the service real and fully testable today
  * without inventing a fake global client. `TenantRpcClient` is a minimal structural
- * subset of `SupabaseClient` — a real `@supabase/supabase-js` client satisfies it
- * without any adapter.
+ * subset of `SupabaseClient`, but a real client's `.rpc()` returns a thenable
+ * `PostgrestFilterBuilder`, not a strict `Promise` -- use `toTenantRpcClient` below to
+ * adapt one (this file's own header claimed "without any adapter" until audit
+ * remediation A2 became the first real caller and proved that claim wrong).
  *
  * Security posture (docs/standards/SECURITY_STANDARDS.md §2): a raw database error
  * is never returned to the caller — TenantServiceError carries a fixed, safe `code`
@@ -20,6 +22,7 @@
  * raw driver/connection-string/stack-trace value.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ProvisionTenantInputSchema,
   TransitionTenantInputSchema,
@@ -34,6 +37,19 @@ export interface TenantRpcClient {
     fn: "provision_tenant" | "transition_tenant_status",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+}
+
+/**
+ * Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict
+ * `Promise`) -- structurally incompatible with this file's own hand-written
+ * `TenantRpcClient` interface. The same `async (fn, args) => await client.rpc(fn, args)`
+ * adapter every other cross-module RPC composition in this repository already uses for
+ * that exact mismatch (mirrors `server/queries/procurement-approval.ts`'s
+ * `toApprovalQueryRpcClient`). Exported so the first real caller (audit remediation A2,
+ * the Supreme "Create tenant" action) can reuse it rather than redefining it.
+ */
+export function toTenantRpcClient(client: Pick<SupabaseClient, "rpc">): TenantRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export type TenantServiceErrorCode = "provision_failed" | "transition_failed" | "invalid_response";

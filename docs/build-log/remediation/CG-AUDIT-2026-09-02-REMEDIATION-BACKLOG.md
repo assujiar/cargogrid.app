@@ -101,8 +101,8 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | F5 | Shipment-order list and dispatch board each double-scan (`count:"exact"`) with an unindexed sort | `CODE` | **DONE** | (this commit) |
 | F2 (multi-select) | `multi-select.tsx` options are keyboard-inaccessible (`onMouseDown` only, no key handler) | `CODE` | **DONE** | (this commit) |
 | A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | **PARTIAL** | CODE half done (this commit); INFRA half (setting `CRON_SECRET` on the live Vercel project) is an operator step this repository cannot perform, see execution log |
-| A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | DEFERRED_LARGE | weeks, UI over existing capability |
-| A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | DEFERRED_LARGE | weeks |
+| A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | **DONE** | (this commit) — new shared `components/domain/tenant-portal-nav.tsx` cross-module switcher wired into all 16 tenant-internal module layouts (14 previously-bare stub layouts upgraded to real access-checked shells, admin/commercial's own existing submenus kept alongside it) plus a new tenant Home landing page (`app/(tenant)/[tenantSlug]/page.tsx`, previously a bare 404) and a login-redirect fix (every tenant member landed on `/{slug}/admin`, a `tenant_admin`-only route that 403s any ordinary `org_user`) |
+| A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
@@ -1823,3 +1823,90 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters, 0 through 7 — every broken
   `.from()`/direct-table read against an `app.*` table across both `server/queries/*.ts` and
   `page.tsx` files) is now FULLY DONE.**
+- 2026-09-14 — A1 + A2 closed together (this commit), per the audit's own §6 "Remediation, in
+  dependency order" step 3 ("Tenant shell + cross-module navigation + landing page; tenant
+  provisioning, user invitation, role creation/assignment, master-data entry") and the Product
+  Charter's own §41 MVP Must-Have list. Both findings shared one root cause: every mutation this
+  step needed (`provisionTenant`, `inviteUser`, `createRole`/`createRoleVersion`/
+  `setRoleVersionPermissions`/`publishRoleVersion`/`assignRole`/`revokeRoleAssignment`,
+  `createOrgUnit`/`moveOrgUnit`/`renameOrgUnit`/`setOrgUnitStatus`) already existed, fully
+  implemented and tested, with zero callers anywhere in the product — this was a UI-and-missing-
+  read-RPC gap, not new business logic.
+  **A1** (`components/domain/tenant-portal-nav.tsx`, a shared client nav mirroring the pre-existing
+  `customer-portal-nav.tsx` pattern): 14 of 16 tenant-internal module layouts
+  (`operations`/`finance`/`hris`/`procurement`/`tickets`/`helpdesk`/`knowledge-base`/`analytics`/
+  `automation-rules`/`integrations`/`reports`/`dashboards`/`saved-views`/`scheduled-reports`) were
+  bare `<TenantMain>` pass-throughs with NO access check and NO chrome at all — upgraded to the
+  same guard-then-chrome shape `admin`/`commercial` already established, each reusing the exact
+  access resolver its own pages already call (`resolveTicketAccessForRequest` for
+  tickets/helpdesk/knowledge-base, `resolveCommercialAccessForRequest` — genuinely domain-agnostic,
+  "any active tenant member" — for the other 8, each module's own dedicated resolver otherwise).
+  `admin`/`commercial` kept their own existing in-module submenus, with the new cross-module
+  switcher added as a second header row. New `app/(tenant)/[tenantSlug]/page.tsx` (no `page.tsx`
+  existed at the bare tenant root at all — a confirmed live 404) is a real Home landing page: a
+  quick-links grid into every module plus a genuine "pending approvals" summary via the pre-existing
+  `listPendingApprovalStepsForActor` (the one piece of the Product Charter's own TNT-HOM-001 "Internal
+  Home Dashboard" spec with an existing, tested, cross-domain read model behind it already — a full
+  role-based KPI/widget dashboard has no aggregation layer built yet and stays explicitly out of this
+  slice's scope, not faked here). `app/(public)/login/actions.ts`'s own redirect target was hardcoded
+  to `/{slug}/admin` for every tenant member regardless of layer — since `resolveTenantAdminAccess`
+  requires `tenant_admin` specifically, every ordinary `org_user` was landing straight into a 403 on
+  their very first post-login page load; changed to redirect to the new Home page instead.
+  **A2**: `app/(supreme)/supreme/tenants/` gained a create-tenant form (`provisionTenant`, its own
+  idempotency key derived deterministically from the slug — `provision-tenant:{slug}` — so an
+  accidental double-submit is a genuine no-op, never a duplicate). `app/(tenant)/[tenantSlug]/
+  admin/users/` gained an invite-user form — discovered along the way that `inviteUser` alone was
+  insufficient: it only links an tenant to an ALREADY-EXISTING Supabase Auth identity (`authUserId`
+  is a required parameter, never generated), and repo-wide grep confirmed zero callers anywhere of
+  `admin.createUser`/`inviteUserByEmail`/`generateLink`/`signUp()` — so the new `actions.ts` first
+  calls `supabase.auth.admin.inviteUserByEmail` (service-role client) to create the identity and send
+  the real invite email, then calls `inviteUser` against the id it returns; deliberately does not
+  attempt to reconcile "this email already has an Auth identity" (surfaced verbatim rather than
+  guessed at, since there is no `getUserByEmail` in the Admin API to safely resolve it).
+  `app/(tenant)/[tenantSlug]/admin/roles/` is the largest single piece: discovered that
+  `listTenantRoles`/`listPermissionsForModule` (already RPC-backed from the O1 cluster-2 pass) were
+  the ONLY read paths that existed — nothing exposed a role's own versions, a version's own bound
+  permissions, or who currently holds a role, so a UI built only on the existing write RPCs could
+  create data it could never show again after a reload. New migration
+  `20260914010000_add_role_permission_management_read_rpcs.sql` adds exactly the 4 missing reads:
+  `app.list_role_versions`/`app.list_role_assignments_for_role` (SECURITY INVOKER, no actor
+  parameter — `app.role_versions`/`app.role_assignments` both already carry a live RLS policy and an
+  `authenticated` grant, current predicate re-verified against its most recent `alter policy`
+  — `20260730560000` — before writing this migration, not assumed from the original `20260716105512`
+  wording); `app.list_role_version_permissions` (SECURITY DEFINER, RULE A guard — `app.
+  role_version_permissions` had `enable row level security` run but repo-wide grep confirmed ZERO
+  policy and ZERO `authenticated` grant were ever added for it, so SECURITY INVOKER would return zero
+  rows for every real caller; authority predicate manually reproduces `role_versions_select_own_
+  tenant`'s own current predicate, the same shape `app.list_permissions_for_module` already
+  established for the sibling ungranted table `app.permissions` in cluster 2); `app.
+  list_active_tenant_users_for_role_assignment` (SECURITY DEFINER, RULE A guard — added because `app.
+  role_assignments.auth_user_id` references `auth.users(id)` directly, a genuinely different value
+  from `app.users.id`, a separate surrogate key, and `app.list_portal_users`'s own `returns table`
+  projects no such column; a small, single-purpose function was the lower-risk choice over a
+  drop+create of an already-shipped, already-db-tested function, matching this schema's own dominant
+  one-RPC-per-real-need pattern). A real, independently-caught bug in this same migration: both
+  SECURITY INVOKER functions were missing their own `revoke execute ... from public` statement
+  (present on the other two, and on every INVOKER precedent this pass's own header cites) — caught by
+  `scripts/db-tests/public-api-wrapper-regression.sql`'s own exhaustive "no `public.*` wrapper grants
+  a role its `app.*` counterpart does not" check, fixed, and re-verified with a second full
+  `pnpm run db:test`, ALL PASSED. `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit
+  create/rename/move/activate-deactivate UI) needed no new migration at all — `list_org_units`
+  (already `authenticated`-callable from cluster 7) already returns every column; only a new
+  `listOrgUnitsFull` projection (full `OrgUnit` instead of the narrow 3-field picker summary
+  `OrgUnitSummary` already in use elsewhere) was needed on the TypeScript side.
+  Every new privileged Server Action uses the service-role client (all of `provisionTenant`/
+  `inviteUser`/the entire role-permission mutation family/the entire org-hierarchy mutation family
+  are `service_role`-only per their own migrations' grants) via a `toXxxRpcClient` adapter added to
+  each mutation/query module — the same `async (fn, args) => await client.rpc(fn, args)` idiom this
+  whole remediation series already established for the thenable-vs-`Promise` mismatch between a real
+  Supabase client and this codebase's own hand-written narrow RPC-client interfaces.
+  Full Tier A gate suite verified clean across all four pieces: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,053 tests passing — `role-permission.ts` and
+  `org-hierarchy.ts` each extended with new function coverage and matching test-file additions), a
+  full `pnpm run db:test` (`ALL PASSED`, 535 migrations / 277 db-test files, extending the existing
+  `scripts/db-tests/role-permission.sql` with a 4-actor sweep — active tenant member, a
+  customer_user-layer principal, a cross-tenant actor, and a genuine RULE A actor-identity-spoofing
+  rejection proof — across all 4 new read RPCs), `git:check-paths` (clean), `security:check` (clean),
+  and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-SEVENTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).

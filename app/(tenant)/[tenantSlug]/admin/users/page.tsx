@@ -2,21 +2,25 @@ import { notFound } from "next/navigation";
 import { resolveTenantAdminAccessForRequest } from "../../../../../lib/portal/resolve-tenant-admin-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listPortalUsers, PortalUsersQueryError, type ListPortalUsersResult, type PortalUser } from "../../../../../server/queries/portal-users.ts";
+import { listOrgUnits, toOrgHierarchyRpcClient, OrgHierarchyQueryError, type OrgUnitSummary } from "../../../../../server/queries/org-hierarchy.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
 import { Pagination } from "../../../../../components/tables/pagination.tsx";
 import { StatusBadge } from "../../../../../components/ui/status-badge.tsx";
 import { resolvePortalUserStatusTone } from "../../../../../components/domain/status-tone-map.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
+import { InviteUserPanel } from "./invite-user-panel.tsx";
+import { inviteUserAction } from "./actions.ts";
 
 const PAGE_SIZE = 20;
 
 /**
- * Users list (PLT-135, CG-S6-PLT-032) -- the one bounded "core management" child slice
- * this checkpoint ships (Prompt 135 §11/§12: "exact bounded workflow adapters," never
- * an "all-admin-pages mega task"). Read-only: invite/suspend/role-assignment mutations
- * already exist as real backend capability (PLT-110/111) but their own UI is deferred
- * to a later, separately-scoped slice -- this page proves the full route -> guard ->
- * RLS-scoped query -> render pattern end to end without expanding scope beyond it.
+ * Users list plus invitation (audit remediation A2;
+ * `docs/audit/2026-09-02-independent-launch-readiness-audit.md` finding A2:
+ * "no code path anywhere calls admin.createUser, inviteUserByEmail,
+ * generateLink or signUp()"). `inviteUser` (PLT-110/111) already existed as
+ * real, tested backend capability with zero callers; this page's own header
+ * previously stated that gap verbatim as a deliberate, separately-scoped
+ * deferral -- `actions.ts`'s own header explains what closes it.
  *
  * States (`docs/standards/DESIGN_SYSTEM.md` §4): Empty and Error are both real, distinct
  * renders below, not a bare table that silently shows nothing. A dedicated `loading.tsx`
@@ -54,11 +58,23 @@ export default async function TenantAdminUsersPage({
     loadFailed = true;
   }
 
+  let orgUnits: OrgUnitSummary[] = [];
+  try {
+    orgUnits = await listOrgUnits(toOrgHierarchyRpcClient(supabase), access.tenant.id);
+  } catch (error) {
+    if (!(error instanceof OrgHierarchyQueryError)) {
+      throw error;
+    }
+    // Org units are an optional refinement on the invite form -- failing to load them
+    // never blocks inviting a user without one.
+  }
+
   if (loadFailed || !result) {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold text-neutral-900">Users</h1>
         <ErrorState description="Something went wrong loading users. Please try again." />
+        <InviteUserPanel orgUnits={orgUnits} inviteAction={inviteUserAction.bind(null, tenantSlug)} />
       </div>
     );
   }
@@ -106,6 +122,7 @@ export default async function TenantAdminUsersPage({
           buildHref={(targetPage) => `/${tenantSlug}/admin/users?page=${targetPage}`}
         />
       </div>
+      <InviteUserPanel orgUnits={orgUnits} inviteAction={inviteUserAction.bind(null, tenantSlug)} />
     </div>
   );
 }

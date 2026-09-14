@@ -14,6 +14,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { parseOrgUnit, type OrgUnit } from "../contracts/org-hierarchy/org-hierarchy.ts";
 
 export interface OrgHierarchyRpcClient {
   rpc(
@@ -89,4 +90,32 @@ export async function listOrgUnits(
     throw new OrgHierarchyQueryError("list_org_units returned a non-array result");
   }
   return (data as Record<string, unknown>[]).map(parseOrgUnitSummary);
+}
+
+/**
+ * The same `list_org_units` RPC, parsed as the FULL `OrgUnit` shape rather than the
+ * narrow picker-list summary (audit remediation A2's own admin/organization/ UI needs
+ * status/parentId/recordVersion to render and to drive move/rename/set-status forms,
+ * none of which `OrgUnitSummary` carries) -- the RPC already returns every column
+ * (`select *`, its own header: "full-row, never narrowed"), so this is a pure
+ * projection choice, not a new database read.
+ */
+export async function listOrgUnitsFull(
+  client: OrgHierarchyRpcClient,
+  tenantId: string,
+  options?: { statusFilter?: string | null; unitTypeFilter?: string | null },
+): Promise<OrgUnit[]> {
+  const { data, error } = await client.rpc("list_org_units", {
+    p_tenant_id: tenantId,
+    p_status_filter: options?.statusFilter ?? null,
+    p_unit_type_filter: options?.unitTypeFilter ?? null,
+  });
+
+  if (error) {
+    throw new OrgHierarchyQueryError(error.message);
+  }
+  if (!Array.isArray(data)) {
+    throw new OrgHierarchyQueryError("list_org_units returned a non-array result");
+  }
+  return (data as Record<string, unknown>[]).map(parseOrgUnit);
 }

@@ -4,6 +4,7 @@ import { resolveTenantAdminAccessForRequest } from "../../../../lib/portal/resol
 import { resolveTenantPortalThemeForRequest } from "../../../../lib/portal/resolve-tenant-portal-theme.server.ts";
 import { resolveSignedInUserLabelForRequest } from "../../../../lib/auth/resolve-signed-in-user-label.server.ts";
 import { AccountMenu } from "../../../../components/layout/account-menu.tsx";
+import { TenantPortalNav } from "../../../../components/domain/tenant-portal-nav.tsx";
 
 /**
  * Tenant Admin portal shell (PLT-135, CG-S6-PLT-032). Every request through this route
@@ -68,7 +69,8 @@ export default async function TenantAdminLayout({
 
   return (
     <div className="flex min-h-screen flex-col" style={theme?.cssVars as CSSProperties | undefined}>
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-6 py-3">
+      <header className="border-b border-neutral-200 bg-neutral-50">
+        <div className="flex items-center justify-between px-6 py-3">
         <span className="flex items-center gap-2 text-sm font-semibold text-neutral-900">
           {theme?.logoAssetUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- SUPPRESS(owner=design-system, reason=tenant-supplied remote logo asset cannot be optimized by next/image at build time, expires=NONE, adr=ADR-0017)
@@ -77,12 +79,22 @@ export default async function TenantAdminLayout({
           CargoGrid — {access.tenant.slug}
         </span>
         <div className="flex items-center gap-4">
-        <nav aria-label="Admin navigation" className="flex gap-4 text-sm">
+          <TenantPortalNav tenantSlug={access.tenant.slug} current="admin" />
+          {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
+        </div>
+        </div>
+        <nav aria-label="Admin navigation" className="flex flex-wrap gap-4 border-t border-neutral-200 px-6 py-2 text-sm">
           <a href={`/${access.tenant.slug}/admin`} className="text-neutral-700 hover:text-neutral-900">
             Home
           </a>
           <a href={`/${access.tenant.slug}/admin/users`} className="text-neutral-700 hover:text-neutral-900">
             Users
+          </a>
+          <a href={`/${access.tenant.slug}/admin/roles`} className="text-neutral-700 hover:text-neutral-900">
+            Roles
+          </a>
+          <a href={`/${access.tenant.slug}/admin/organization`} className="text-neutral-700 hover:text-neutral-900">
+            Organization
           </a>
           <a href={`/${access.tenant.slug}/admin/tracking`} className="text-neutral-700 hover:text-neutral-900">
             Tracking
@@ -121,8 +133,6 @@ export default async function TenantAdminLayout({
             Liability &amp; reconciliation
           </a>
         </nav>
-        {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
-        </div>
       </header>
       <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-6">
         {children}
