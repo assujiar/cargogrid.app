@@ -135,6 +135,8 @@ import {
   type UnlinkTicketPortalRecordInput,
   InitiateTicketAttachmentUploadInputSchema,
   type InitiateTicketAttachmentUploadInput,
+  parseTicketAttachmentEvidenceDownloadSource,
+  type TicketAttachmentSignedDownload,
 } from "../contracts/ticketing/ticketing.ts";
 import { parseFileSummary, type FileSummary } from "../contracts/document/document.ts";
 
@@ -257,6 +259,13 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   // (20260914030000) for a missing file, a wrong record_type/document_type_code, or a
   // caller who did not upload it -- indistinguishable, existence-oracle-safe.
   "ticket_attachment_not_found",
+  // CG-AUDIT-2026-09-02 A6: raised by the new app.access_ticket_attachment_evidence_
+  // for_download (20260914050000) for a file that exists but is not (yet, or no
+  // longer) referenced by any ticket_messages.attachment_file_ids row -- distinct
+  // from ticket_attachment_not_found (which also covers this same RPC's own
+  // can_access_ticket/helpdesk-channel/message-visibility denials, existence-oracle-
+  // safe, indistinguishable from a genuinely missing file).
+  "ticket_attachment_not_linked",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -423,6 +432,55 @@ export async function getTicketAttachmentStoragePath(client: TicketMutationRpcCl
   if (error) throw new TicketMutationError(classifyError(error.message), error.message);
   if (typeof data !== "string" || data.length === 0) throw new TicketMutationError("mutation_failed", "get_ticket_attachment_storage_path returned no storage_path");
   return data;
+}
+
+export type TicketAttachmentEvidenceDownloadClient = TicketMutationRpcClient & {
+  storage: {
+    from(bucket: string): {
+      createSignedUrl(path: string, expiresInSeconds: number): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }>;
+    };
+  };
+};
+
+const TICKET_ATTACHMENT_SIGNED_DOWNLOAD_URL_TTL_SECONDS = 300;
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ticket-reply
+ * attachment. Calls the service_role-only app.access_ticket_attachment_
+ * evidence_for_download RPC first (app.can_access_ticket + the linked
+ * message's own visibility scope, then the malware-scan/classification
+ * gate); only once that RPC reports accessResult='granted' does this
+ * function call Storage at all. storage_path/bucketId never leave this
+ * function -- the caller only ever sees the already-signed URL. Mirrors
+ * getShipmentDocumentChecklistItemSignedDownloadUrl exactly.
+ */
+export async function getTicketAttachmentSignedDownloadUrl(
+  client: TicketAttachmentEvidenceDownloadClient,
+  fileId: string,
+  actorAuthUserId: string,
+  actorLabel: string,
+): Promise<TicketAttachmentSignedDownload> {
+  const { data, error } = await client.rpc("access_ticket_attachment_evidence_for_download", {
+    p_file_id: fileId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_actor_label: actorLabel,
+    p_correlation_id: null,
+  });
+  if (error) throw new TicketMutationError(classifyError(error.message), error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") throw new TicketMutationError("mutation_failed", "access_ticket_attachment_evidence_for_download returned no row");
+  const source = parseTicketAttachmentEvidenceDownloadSource(row as Record<string, unknown>);
+
+  if (source.accessResult !== "granted" || !source.bucketId || !source.storagePath) {
+    return { accessResult: source.accessResult, accessReason: source.accessReason, signedUrl: null, originalFilename: null };
+  }
+
+  const { data: signed, error: signError } = await client.storage.from(source.bucketId).createSignedUrl(source.storagePath, TICKET_ATTACHMENT_SIGNED_DOWNLOAD_URL_TTL_SECONDS);
+  if (signError || !signed) {
+    throw new TicketMutationError("mutation_failed", `could not mint a signed download URL: ${signError?.message ?? "no data returned"}`);
+  }
+
+  return { accessResult: "granted", accessReason: null, signedUrl: signed.signedUrl, originalFilename: source.originalFilename };
 }
 
 export async function redactTicketMessage(client: TicketMutationRpcClient, input: RedactTicketMessageInput) {

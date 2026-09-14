@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 3 of the audit's own named deadlocked flows now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal (plus its signed download), shipment document checklist uploads (previously a fully fake filename/MIME/size text-entry form with zero real File object anywhere in the flow), and ticket-reply attachments (previously worse than the other two -- an outright, reproducible hard failure, not a silent gap: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning for ticket attachments, so every real reply with an attachment failed). All three now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is now wired for two of the three: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`) and shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code plus the same `app.can_access_record` scope its sibling link/review functions already use). Still bounded, not DONE: ePOD evidence and ticket attachments still lack signed download (the same vendor-compliance signed-download RPC pattern is directly reusable for both); ePOD evidence capture's own UI is a separate, larger gap -- it never even collects a real File today; every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 3 of the audit's own named deadlocked flows now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal (plus its signed download), shipment document checklist uploads (previously a fully fake filename/MIME/size text-entry form with zero real File object anywhere in the flow), and ticket-reply attachments (previously worse than the other two -- an outright, reproducible hard failure, not a silent gap: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning for ticket attachments, so every real reply with an attachment failed). All three now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is now wired for all 3 of the audit's own named flows: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code plus the same `app.can_access_record` scope its sibling link/review functions already use), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed, since ticket read access was already governed by those two primitives). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable, but ePOD evidence capture's own UI is a separate, larger gap -- it never even collects a real File today); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and three printable documents, surat jalan (delivery note), POD (proof of delivery), and purchase order, now exist end to end (`server/documents/`, three new Route Handlers, wired into their respective detail pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); invoice and faktur pajak both need new backend RPC work (no single-invoice-by-id read exists) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -2328,3 +2328,89 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   it needs a genuine signature-pad/photo-capture UI, not just a file input;
   D4's own GUC gap still fails every scan closed until an operator configures
   both the encryption key and a real VirusTotal API key.
+- 2026-09-14 — A6: signed download for ticket-reply attachments -- the third
+  and final flow of the vendor-compliance/shipment-checklist/ticket-attachment
+  trio to gain signed download. Upload+scan for this record type was already
+  wired (`20260914030000_a6_ticket_attachment_upload_scan.sql`), so an
+  attachment posted to a reply is real, malware-scanned bytes; there was
+  simply no way to ever fetch it back out again --
+  `ticket-detail-panel.tsx` did not even render an attachment's filename,
+  confirmed live before writing this migration.
+  Unlike the vendor-compliance/shipment-checklist pair, this record type had
+  no unused permission-action seam to reach for (`OPS:Download` was exactly
+  that seam for shipment checklists). New migration
+  `20260914050000_a6_ticket_attachment_signed_download.sql` instead reuses
+  two primitives ticket reads already depend on:
+  `app.can_access_ticket` (staff OR the ticket's own requester OR an active
+  watcher -- the SAME baseline `app.list_ticket_messages`/`app.list_customer_
+  ticket_messages` already apply) and the linked `ticket_messages` row's own
+  `visibility` column (`public` vs. `internal`-staff-only -- the SAME
+  predicate those two functions already filter message rows by). A
+  helpdesk-channel Supreme-Admin-only hard block mirrors
+  `app.list_ticket_messages`'s own identical restriction. No new authority
+  concept was introduced for this slice.
+  `app.authorize_ticket_attachment_evidence_file_access` is a narrowly-scoped
+  sibling of the vendor-compliance/shipment-checklist pair (identical
+  malware-scan/deleted-file/classification gates, record-scope omitted since
+  the caller already verifies `can_access_ticket` + message visibility).
+  `app.access_ticket_attachment_evidence_for_download` (service_role only)
+  resolves the file, its parent ticket, and the ONE `ticket_messages` row
+  that actually references the file id in its `attachment_file_ids` array --
+  a file staged but never attached to any message (e.g. a reply that failed
+  after staging) is refused with a new, distinct `ticket_attachment_not_linked`
+  rather than being silently granted or folded into `ticket_attachment_not_found`.
+  Deliberately NOT the `app.actor_holds_customer_user_layer` exclusion
+  `app.list_ticket_messages` also applies: that exclusion exists so a
+  customer-layer caller cannot consume the STAFF-facing listing wholesale --
+  this function is not a listing, it authorizes exactly one already-known
+  file id against exactly one already-resolved message's own visibility, so
+  the same protection falls out of the visibility gate naturally. This also
+  means the one RPC is usable, unmodified, by a future customer-portal-side
+  download action too (`customer-ticket-detail-panel.tsx` has no attachment
+  UI at all today, confirmed live -- out of scope for this migration, which
+  wires the staff-facing panel only).
+  App layer: `server/contracts/ticketing/ticketing.ts` gained the parsed
+  RPC-row schema plus a public-facing `TicketAttachmentSignedDownload` type
+  (only `signedUrl`/`originalFilename`/result/reason, storage_path/bucketId
+  never leave the mutation function). `server/mutations/ticketing.ts` gained
+  `getTicketAttachmentSignedDownloadUrl`, mirroring
+  `getShipmentDocumentChecklistItemSignedDownloadUrl` exactly, plus the new
+  `ticket_attachment_not_linked` error code.
+  `downloadTicketAttachmentAction` (`app/(tenant)/[tenantSlug]/tickets/
+  actions.ts`) and a new "Get download link" control per attachment in
+  `ticket-detail-panel.tsx`'s `MessageBubble` wire it into the UI. No read
+  RPC in this app projects an attachment's original filename today, and
+  widening either hardened, privacy-critical `list_ticket_messages`/
+  `list_customer_ticket_messages` function was judged out of scope for this
+  slice (larger blast radius on already-carefully-hardened code, CPL-325's
+  own file-privacy fix among it) -- so each attachment renders as a generic
+  "Attachment N" button; the REAL original filename appears in the link text
+  only once a download is actually granted, mirroring
+  `document-checklist-panel.tsx`'s own established pattern.
+  `scripts/db-tests/ticketing-internal.sql` gained a new top-level section 18:
+  a requester and staff both granted a real storage_path/bucket_id/
+  original_filename for a public-visibility message's attachment; the
+  requester denied (folded into `ticket_attachment_not_found`) for an
+  internal-only staff note's attachment, staff still granted; a bystander
+  denied, then granted once a real watcher (but still denied for the
+  internal-only attachment); a cross-tenant identity denied; an orphan file
+  refused with the distinct `ticket_attachment_not_linked`; the malware-scan
+  gate underneath still denies-not-raises an infected file with
+  storage_path/bucket_id nulled; a real `app.file_access_logs` audit-trail
+  count proof; and schema-privilege guards (`anon`/`authenticated` hold zero
+  EXECUTE on either new function or its `public.*` wrapper).
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,061 tests passing, unchanged
+  count), a full `pnpm run db:test` (`ALL PASSED`, 539 migrations / 277
+  db-test files), `git:check-paths` (clean, 8 files checked), `security:check`
+  (clean), and a real `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-FORTY-SECOND
+  PASS, `migrationSetSha256`/`dbTestSetSha256` both).
+  **This closes A6's own "signed download" gap for all 3 of the audit's own
+  named deadlocked flows.** Still open under A6: signed download for ePOD
+  evidence (same reusable pattern, but ePOD evidence capture's own UI is a
+  separate, larger gap needing a genuine signature-pad/photo-capture UI, not
+  just wiring); customer-portal-side ticket-attachment download UI (the new
+  RPC is ready, `customer-ticket-detail-panel.tsx` still has no attachment UI
+  at all); D4's own GUC gap still fails every scan closed until an operator
+  configures both the encryption key and a real VirusTotal API key.

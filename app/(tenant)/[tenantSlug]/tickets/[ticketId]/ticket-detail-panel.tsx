@@ -10,7 +10,7 @@ import { Checkbox } from "../../../../../components/forms/checkbox.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
-import type { TicketActionState, TicketLinkSearchActionState } from "../actions.ts";
+import type { TicketActionState, TicketLinkSearchActionState, TicketAttachmentDownloadState } from "../actions.ts";
 import type { KbActionState } from "../../knowledge-base/actions.ts";
 import type { KbTicketArticleLinkRow, KbTicketArticleLinkForRequesterRow } from "../../../../../server/contracts/knowledge-base/knowledge-base.ts";
 import type {
@@ -40,6 +40,12 @@ import type {
 import { TICKET_PRIORITIES, SLA_PAUSE_REASON_CODES, TICKET_LINK_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: TicketActionState = { error: null };
+const INITIAL_DOWNLOAD_STATE: TicketAttachmentDownloadState = { error: null, download: null };
+
+const ATTACHMENT_ACCESS_RESULT_TONE: Record<"granted" | "denied", "success" | "danger"> = {
+  granted: "success",
+  denied: "danger",
+};
 
 const TICKET_LINK_ENTITY_TYPE_LABELS: Record<TicketLinkEntityType, string> = {
   shipment: "Shipment",
@@ -121,10 +127,12 @@ function MessageBubble({
   message,
   isStaffViewer,
   redactAction,
+  downloadAction,
 }: {
   message: TicketMessageRow;
   isStaffViewer: boolean;
   redactAction: (messageId: string, expectedVersion: number) => BoundAction;
+  downloadAction: (fileId: string) => (prevState: TicketAttachmentDownloadState, formData: FormData) => Promise<TicketAttachmentDownloadState>;
 }) {
   const [state, formAction, pending] = useActionState(redactAction(message.id, message.recordVersion), INITIAL_STATE);
   const isInternal = message.visibility === "internal";
@@ -137,6 +145,13 @@ function MessageBubble({
         <span>{new Date(message.createdAt).toLocaleString()}</span>
       </div>
       <p className="whitespace-pre-wrap text-sm text-neutral-900">{message.body}</p>
+      {message.attachmentFileIds.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {message.attachmentFileIds.map((fileId, index) => (
+            <AttachmentRow key={fileId} fileId={fileId} index={index} downloadAction={downloadAction(fileId)} />
+          ))}
+        </ul>
+      ) : null}
       {isStaffViewer && !message.isRedacted ? (
         <form action={formAction} className="flex items-center gap-2">
           {/* One bubble per message, so the id is message-scoped; the placeholder is the
@@ -159,6 +174,54 @@ function MessageBubble({
         </form>
       ) : null}
       {state.error ? <ValidationMessage id={`redact-${message.id}-error`}>{state.error}</ValidationMessage> : null}
+    </li>
+  );
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: no read RPC in this app projects an attachment's
+ * original filename today (list_ticket_messages/list_customer_ticket_messages
+ * return attachment_file_ids only -- see this feature's own migration header
+ * for why widening either hardened, privacy-critical function was out of
+ * scope for this slice). "Attachment N" is a placeholder for the button
+ * only; once a download link is minted, app.access_ticket_attachment_
+ * evidence_for_download's own real original_filename appears in the link
+ * text, exactly like document-checklist-panel.tsx's established pattern.
+ */
+function AttachmentRow({
+  fileId,
+  index,
+  downloadAction,
+}: {
+  fileId: string;
+  index: number;
+  downloadAction: (prevState: TicketAttachmentDownloadState, formData: FormData) => Promise<TicketAttachmentDownloadState>;
+}) {
+  const [state, formAction, pending] = useActionState(downloadAction, INITIAL_DOWNLOAD_STATE);
+  return (
+    <li className="flex flex-col gap-1">
+      <form action={formAction} className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-neutral-500">Attachment {index + 1}</span>
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating link…">
+          Get download link
+        </Button>
+      </form>
+      {state.download ? (
+        state.download.accessResult === "granted" && state.download.signedUrl ? (
+          <p className="text-xs">
+            <a href={state.download.signedUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+              Open {state.download.originalFilename ?? "file"}
+            </a>{" "}
+            <span className="text-neutral-500">— link expires in 5 minutes</span>
+          </p>
+        ) : (
+          <p role="status" className="flex items-center gap-2 text-xs">
+            <StatusBadge tone={ATTACHMENT_ACCESS_RESULT_TONE[state.download.accessResult]} label="access denied" />
+            {state.download.accessReason ?? "no reason recorded"}
+          </p>
+        )
+      ) : null}
+      {state.error ? <ValidationMessage id={`attachment-${fileId}-download-error`}>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -1278,6 +1341,7 @@ export function TicketDetailPanel({
   kbLinksForRequester,
   replyAction,
   redactAction,
+  downloadAttachmentAction,
   addWatcherAction,
   removeWatcherAction,
   assignAction,
@@ -1325,6 +1389,7 @@ export function TicketDetailPanel({
   kbLinksForRequester: readonly KbTicketArticleLinkForRequesterRow[];
   replyAction: BoundAction;
   redactAction: (messageId: string, expectedVersion: number) => BoundAction;
+  downloadAttachmentAction: (fileId: string) => (prevState: TicketAttachmentDownloadState, formData: FormData) => Promise<TicketAttachmentDownloadState>;
   addWatcherAction: BoundAction;
   removeWatcherAction: (watcherId: string, expectedVersion: number) => BoundAction;
   assignAction: BoundAction;
@@ -1400,7 +1465,7 @@ export function TicketDetailPanel({
         <h2 className="text-sm font-semibold text-neutral-900">Conversation</h2>
         <ul className="flex flex-col gap-2">
           {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} isStaffViewer={detail.isStaffViewer} redactAction={redactAction} />
+            <MessageBubble key={m.id} message={m} isStaffViewer={detail.isStaffViewer} redactAction={redactAction} downloadAction={downloadAttachmentAction} />
           ))}
         </ul>
         <ReplyForm isStaffViewer={detail.isStaffViewer} replyAction={replyAction} />

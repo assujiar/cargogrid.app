@@ -1219,4 +1219,195 @@ begin
 end;
 $$;
 
+\echo '>> 18. CG-AUDIT-2026-09-02 A6: app.access_ticket_attachment_evidence_for_download -- signed-download authorization for ticket-reply attachments, reusing app.can_access_ticket plus the linked message''s own visibility (public vs. internal-staff-only), then the malware-scan/classification gate'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'tkt1');
+  v_category uuid := (select id from app.ticket_categories where tenant_id = v_tenant1 and code = 'HARDWARE');
+  v_bystander_emp uuid := (select master_record_id from app.employees where tenant_id = v_tenant1 and work_email = 'bystanderwork@tkt1.test');
+  v_ticket app.tickets;
+  v_file_public uuid;
+  v_file_internal uuid;
+  v_file_orphan uuid;
+  v_watcher app.ticket_watchers;
+  v_row record;
+  v_msg_text text;
+  v_log_count integer;
+begin
+  v_ticket := app.create_ticket(v_tenant1, v_category, null, 'normal', 'A6 download-authorization test', 'See attached.', 'idem-a6-download-1', '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  -- A public-visibility reply with a clean attachment.
+  v_file_public := (app.initiate_ticket_attachment_upload(v_ticket.id, 'public-evidence.png', 'image/png', 2048, null, 'idem-a6-dl-public-file', '00000000-0000-0000-0000-000000286002', 'requester1')).id;
+  perform app.record_file_scan_result(v_file_public, 'clean', 'test-scanner', '00000000-0000-0000-0000-000000286002', 'requester1');
+  perform app.reply_to_ticket(v_ticket.id, 'here is my public evidence', 'public', array[v_file_public], null, '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  -- An internal-only staff note with a clean attachment.
+  v_file_internal := (app.initiate_ticket_attachment_upload(v_ticket.id, 'internal-note.png', 'image/png', 2048, null, 'idem-a6-dl-internal-file', '00000000-0000-0000-0000-000000286004', 'staff1')).id;
+  perform app.record_file_scan_result(v_file_internal, 'clean', 'test-scanner', '00000000-0000-0000-0000-000000286004', 'staff1');
+  perform app.reply_to_ticket(v_ticket.id, 'internal note with attachment', 'internal', array[v_file_internal], null, '00000000-0000-0000-0000-000000286004', 'staff1');
+
+  -- An orphan file: staged and scanned clean, but never actually attached to
+  -- any ticket_messages row (e.g. a reply that failed after staging).
+  v_file_orphan := (app.initiate_ticket_attachment_upload(v_ticket.id, 'orphan.png', 'image/png', 1024, null, 'idem-a6-dl-orphan-file', '00000000-0000-0000-0000-000000286002', 'requester1')).id;
+  perform app.record_file_scan_result(v_file_orphan, 'clean', 'test-scanner', '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  -- 18a. The requester (the public message's own author) is granted a real
+  -- signed-download-ready storage_path/bucket_id/original_filename.
+  select * into v_row from app.access_ticket_attachment_evidence_for_download(v_file_public, '00000000-0000-0000-0000-000000286002', 'requester1');
+  if v_row.access_result <> 'granted' or v_row.bucket_id <> 'tenant-documents' or v_row.storage_path is null or v_row.original_filename <> 'public-evidence.png' then
+    raise exception 'FAIL: the requester should be granted download access to their own public-message attachment, got result=% bucket=% path=% filename=%', v_row.access_result, v_row.bucket_id, v_row.storage_path, v_row.original_filename;
+  end if;
+
+  -- 18b. Staff can ALSO download the same public attachment.
+  select * into v_row from app.access_ticket_attachment_evidence_for_download(v_file_public, '00000000-0000-0000-0000-000000286004', 'staff1');
+  if v_row.access_result <> 'granted' then
+    raise exception 'FAIL: ticket staff should be granted download access to a public-message attachment on their own ticket, got %', v_row.access_result;
+  end if;
+
+  raise notice 'PASS: app.access_ticket_attachment_evidence_for_download grants both the requester and ticket staff a real signed-download-ready storage_path/bucket_id/original_filename for a public-visibility message attachment';
+
+  -- 18c. The SAME requester (not staff) cannot download an INTERNAL-only
+  -- staff note's attachment -- folded into the SAME ticket_attachment_not_found
+  -- a genuinely missing file would produce, never a distinguishable
+  -- insufficient_authority (mirrors app.list_ticket_messages' own visibility
+  -- filter, HRT-286 decision 3).
+  begin
+    perform app.access_ticket_attachment_evidence_for_download(v_file_internal, '00000000-0000-0000-0000-000000286002', 'requester1');
+    raise exception 'FAIL: the requester must not be able to download an internal-only staff note''s attachment';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_attachment_not_found%' then
+        raise exception 'FAIL: expected ticket_attachment_not_found for a requester probing an internal-note attachment, got: %', v_msg_text;
+      end if;
+  end;
+
+  -- 18d. Staff CAN download that same internal-only attachment.
+  select * into v_row from app.access_ticket_attachment_evidence_for_download(v_file_internal, '00000000-0000-0000-0000-000000286004', 'staff1');
+  if v_row.access_result <> 'granted' then
+    raise exception 'FAIL: ticket staff should be granted download access to an internal-note attachment, got %', v_row.access_result;
+  end if;
+
+  raise notice 'PASS: an internal-note attachment is downloadable by ticket staff but denied (folded into ticket_attachment_not_found) for the requester -- mirrors app.list_ticket_messages'' own visibility filter';
+
+  -- 18e. A genuinely unrelated bystander (zero participation on this ticket)
+  -- gets the same ticket_attachment_not_found -- existence-oracle-safe,
+  -- mirroring app.can_access_ticket's own established discipline (section 17c).
+  begin
+    perform app.access_ticket_attachment_evidence_for_download(v_file_public, '00000000-0000-0000-0000-000000286006', 'bystander');
+    raise exception 'FAIL: a non-participant bystander must not be able to download this ticket''s attachment';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_attachment_not_found%' then
+        raise exception 'FAIL: expected ticket_attachment_not_found for a non-participant bystander, got: %', v_msg_text;
+      end if;
+  end;
+
+  -- 18f. Once the SAME bystander is a real, explicit watcher (can_access_ticket
+  -- now true), they may download the PUBLIC attachment -- but still not the
+  -- internal-only one (a watcher is never staff).
+  v_watcher := app.add_ticket_watcher(v_ticket.id, v_bystander_emp, '00000000-0000-0000-0000-000000286002', 'requester1');
+  select * into v_row from app.access_ticket_attachment_evidence_for_download(v_file_public, '00000000-0000-0000-0000-000000286006', 'bystander');
+  if v_row.access_result <> 'granted' then
+    raise exception 'FAIL: an active watcher should be granted download access to a public-message attachment, got %', v_row.access_result;
+  end if;
+  begin
+    perform app.access_ticket_attachment_evidence_for_download(v_file_internal, '00000000-0000-0000-0000-000000286006', 'bystander');
+    raise exception 'FAIL: a plain watcher (not staff) must not be able to download an internal-only staff note''s attachment';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_attachment_not_found%' then
+        raise exception 'FAIL: expected ticket_attachment_not_found for a watcher probing an internal-note attachment, got: %', v_msg_text;
+      end if;
+  end;
+  perform app.remove_ticket_watcher(v_watcher.id, v_watcher.record_version, '00000000-0000-0000-0000-000000286002', 'requester1');
+
+  raise notice 'PASS: an active watcher (can_access_ticket true, not staff) is granted download for a public attachment but denied for an internal-only one, exactly like a requester';
+
+  -- 18g. A cross-tenant identity gets the same ticket_attachment_not_found.
+  begin
+    perform app.access_ticket_attachment_evidence_for_download(v_file_public, '00000000-0000-0000-0000-000000286022', 'tkt2-requester1');
+    raise exception 'FAIL: a tenant2 identity must not be able to download a tenant1 ticket''s attachment';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_attachment_not_found%' then
+        raise exception 'FAIL: expected ticket_attachment_not_found for a cross-tenant identity, got: %', v_msg_text;
+      end if;
+  end;
+
+  raise notice 'PASS: a cross-tenant identity gets ticket_attachment_not_found -- existence-oracle-safe';
+
+  -- 18h. An orphan file (staged, scanned clean, but never actually attached
+  -- to any ticket_messages row) is refused with the distinct
+  -- ticket_attachment_not_linked -- never silently treated as "not found"
+  -- (which would misleadingly suggest the upload itself never happened) nor
+  -- silently granted (there is no message to scope visibility against),
+  -- even for its own uploader.
+  begin
+    perform app.access_ticket_attachment_evidence_for_download(v_file_orphan, '00000000-0000-0000-0000-000000286002', 'requester1');
+    raise exception 'FAIL: an orphan file never attached to any message must be refused';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'ticket_attachment_not_linked%' then
+        raise exception 'FAIL: expected ticket_attachment_not_linked for an orphan file, got: %', v_msg_text;
+      end if;
+  end;
+
+  raise notice 'PASS: app.access_ticket_attachment_evidence_for_download refuses a file that was staged but never attached to any message with the distinct ticket_attachment_not_linked, even for its own uploader';
+
+  -- 18i. The malware-scan gate underneath still applies: an infected file is
+  -- denied-not-raised, with storage_path/bucket_id nulled -- mirrors the
+  -- vendor-compliance/shipment-checklist siblings' own identical proof
+  -- technique (forcing malware_scan_status directly, RPD-022 correction GUC).
+  perform set_config('app.scan_correction_reason', 'A6 test: force infected for denial-shape proof', true);
+  update app.files set malware_scan_status = 'infected' where id = v_file_public;
+  select * into v_row from app.access_ticket_attachment_evidence_for_download(v_file_public, '00000000-0000-0000-0000-000000286002', 'requester1');
+  if v_row.access_result <> 'denied' or v_row.access_reason <> 'document_infected_quarantined' or v_row.storage_path is not null or v_row.bucket_id is not null then
+    raise exception 'FAIL: an infected attachment should be denied (not raised) with storage_path/bucket_id nulled, got result=% reason=% path=% bucket=%', v_row.access_result, v_row.access_reason, v_row.storage_path, v_row.bucket_id;
+  end if;
+  update app.files set malware_scan_status = 'clean' where id = v_file_public;
+
+  raise notice 'PASS: the malware-scan gate underneath (app.authorize_ticket_attachment_evidence_file_access) still applies -- an infected file is denied-not-raised with storage_path/bucket_id nulled';
+
+  -- 18j. Every access decision above was captured as a real app.file_access_logs row.
+  select count(*) into v_log_count from app.file_access_logs where file_id in (v_file_public, v_file_internal) and access_type = 'signed_url_issued';
+  if v_log_count < 5 then
+    raise exception 'FAIL: expected at least 5 app.file_access_logs rows (one per non-orphan-file decision above) for file_id in (public, internal), got %', v_log_count;
+  end if;
+
+  raise notice 'PASS: app.file_access_logs records a real audit-trail row for every access_ticket_attachment_evidence_for_download decision';
+
+  -- 18k. Schema-privilege defense in depth, mirroring section 17h/17j's own
+  -- static-catalog-check technique: neither anon nor authenticated holds
+  -- EXECUTE on either new function or its public.* wrapper (service_role
+  -- only, unlike app.initiate_ticket_attachment_upload's own
+  -- authenticated-grantable shape).
+  declare
+    v_has_priv boolean;
+  begin
+    if has_function_privilege('anon', 'app.authorize_ticket_attachment_evidence_file_access(uuid, text, uuid, uuid)', 'execute')
+      or has_function_privilege('authenticated', 'app.authorize_ticket_attachment_evidence_file_access(uuid, text, uuid, uuid)', 'execute')
+      or has_function_privilege('anon', 'public.authorize_ticket_attachment_evidence_file_access(uuid, text, uuid, uuid)', 'execute')
+      or has_function_privilege('authenticated', 'public.authorize_ticket_attachment_evidence_file_access(uuid, text, uuid, uuid)', 'execute')
+    then
+      raise exception 'FAIL: neither anon nor authenticated should hold EXECUTE on app.authorize_ticket_attachment_evidence_file_access or its public.* wrapper';
+    end if;
+
+    if has_function_privilege('anon', 'app.access_ticket_attachment_evidence_for_download(uuid, uuid, text, uuid)', 'execute')
+      or has_function_privilege('authenticated', 'app.access_ticket_attachment_evidence_for_download(uuid, uuid, text, uuid)', 'execute')
+      or has_function_privilege('anon', 'public.access_ticket_attachment_evidence_for_download(uuid, uuid, text, uuid)', 'execute')
+      or has_function_privilege('authenticated', 'public.access_ticket_attachment_evidence_for_download(uuid, uuid, text, uuid)', 'execute')
+    then
+      raise exception 'FAIL: neither anon nor authenticated should hold EXECUTE on app.access_ticket_attachment_evidence_for_download or its public.* wrapper';
+    end if;
+  end;
+
+  raise notice 'PASS: app.authorize_ticket_attachment_evidence_file_access, app.access_ticket_attachment_evidence_for_download, and both public.* wrappers -- neither anon nor authenticated holds EXECUTE (service_role only)';
+end;
+$$;
+
 \echo '>> all ticketing-internal (HRT-286) assertions passed'

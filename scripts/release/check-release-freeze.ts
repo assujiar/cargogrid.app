@@ -5186,7 +5186,27 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "5a4fd4e59e8ec1a0e6e0e99256c87515331266aef7a529fc6f4b6681b84a680a",
+  migrationSetSha256: "ebfd10ca535e62f410d58a76d036e56676eee0f3e5ee97a9cd00833b4dc03622",
+  // HUNDRED-AND-FORTY-SECOND PASS: CG-AUDIT-2026-09-02 A6, signed download for
+  // ticket-reply attachments -- upload+scan for this record type was already
+  // wired (20260914030000), so an attachment posted to a reply is real,
+  // malware-scanned bytes; there was simply no way to ever fetch it back out
+  // (ticket-detail-panel.tsx did not even render an attachment's filename).
+  // New migration 20260914050000_a6_ticket_attachment_signed_download.sql
+  // adds app.authorize_ticket_attachment_evidence_file_access (a narrowly-
+  // scoped sibling of the vendor-compliance/shipment-checklist pair) and
+  // app.access_ticket_attachment_evidence_for_download (service_role only).
+  // Unlike those two siblings, this record type had no unused permission-
+  // action seam to reach for -- reuses app.can_access_ticket (the SAME
+  // staff-or-requester-or-watcher baseline every ticket read RPC already
+  // applies) plus the linked ticket_messages row's own visibility (public vs.
+  // internal-staff-only, the SAME predicate app.list_ticket_messages/app.
+  // list_customer_ticket_messages already filter by) and a helpdesk-channel
+  // Supreme-Admin-only hard block mirroring app.list_ticket_messages -- no new
+  // authority concept introduced. 539 tracked migration files (538 -> 539).
+  // Re-verified with a full `pnpm run db:test`, ALL PASSED.
+  // History: 5a4fd4e59e8ec1a0e6e0e99256c87515331266aef7a529fc6f4b6681b84a680a
+  // (538 files, HUNDRED-AND-FORTY-FIRST PASS).
   // HUNDRED-AND-FORTY-FIRST PASS: CG-AUDIT-2026-09-02 A6, signed download for
   // shipment document checklist evidence -- upload+scan for this record type was
   // already wired (an earlier this-session pass), so evidence a reviewer
@@ -6822,7 +6842,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "eaf809b9336aa8698e4e5fda56864fca197be5ff1ca202d6c4c269670c8251f9",
+  dbTestSetSha256: "00caebe52c3ffe1ead32a7162ff4d4a965c34fc0c353bffe02723d863f55e8e1",
+  // HUNDRED-AND-FORTY-SECOND PASS: same CG-AUDIT-2026-09-02 A6 ticket-attachment
+  // signed-download slice as migrationSetSha256's own note immediately above --
+  // extends the existing scripts/db-tests/ticketing-internal.sql with a new
+  // top-level section 18 (no new file, 277 files unchanged): a requester and
+  // staff both granted a real storage_path/bucket_id/original_filename for a
+  // public-visibility message's attachment; the requester denied (folded into
+  // ticket_attachment_not_found) for an internal-only staff note's attachment,
+  // staff still granted; a bystander denied, then granted once a real watcher
+  // (but still denied for the internal-only attachment); a cross-tenant
+  // identity denied; an orphan file (staged, scanned clean, never attached to
+  // any message) refused with the distinct ticket_attachment_not_linked; the
+  // malware-scan gate underneath still denies-not-raises an infected file with
+  // storage_path/bucket_id nulled; a real app.file_access_logs audit-trail
+  // count proof; and schema-privilege guards (anon/authenticated hold zero
+  // EXECUTE on either new function or its public.* wrapper). Full `pnpm run
+  // db:test`, ALL PASSED.
+  // History: eaf809b9336aa8698e4e5fda56864fca197be5ff1ca202d6c4c269670c8251f9
+  // (277 files, HUNDRED-AND-FORTY-FIRST PASS).
   // HUNDRED-AND-FORTY-FIRST PASS: same CG-AUDIT-2026-09-02 A6 shipment-document-
   // checklist signed-download slice as migrationSetSha256's own note immediately
   // above -- extends the existing scripts/db-tests/operations-document-

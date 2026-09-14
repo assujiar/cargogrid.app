@@ -27,6 +27,8 @@ import {
   replyToTicket,
   initiateTicketAttachmentUpload,
   getTicketAttachmentStoragePath,
+  getTicketAttachmentSignedDownloadUrl,
+  type TicketAttachmentEvidenceDownloadClient,
   redactTicketMessage,
   addTicketWatcher,
   removeTicketWatcher,
@@ -85,6 +87,7 @@ import type {
   TicketEscalationTargetType,
   TicketLinkEntityType,
   TicketLinkRelationship,
+  TicketAttachmentSignedDownload,
 } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface TicketActionState {
@@ -122,9 +125,56 @@ function toTicketAttachmentBackgroundJobClient(client: Awaited<ReturnType<typeof
   return client as unknown as BackgroundJobMutationRpcClient;
 }
 
+/**
+ * CG-AUDIT-2026-09-02 A6: app.access_ticket_attachment_evidence_for_download
+ * is service_role only (like app.get_ticket_attachment_storage_path above) --
+ * same adapter-cast reasoning. The real service-role client's own `.storage`
+ * member already satisfies TicketAttachmentEvidenceDownloadClient's shape
+ * structurally; this cast exists only to widen the `.rpc` return type the
+ * same way toTicketAttachmentStoreClient does.
+ */
+function toTicketAttachmentDownloadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): TicketAttachmentEvidenceDownloadClient {
+  return client as unknown as TicketAttachmentEvidenceDownloadClient;
+}
+
 function errorMessage(prefix: string, error: unknown): TicketActionState {
   if (error instanceof TicketMutationError) return { error: `${prefix}: ${error.message}` };
   throw error;
+}
+
+export interface TicketAttachmentDownloadState {
+  readonly error: string | null;
+  readonly download: TicketAttachmentSignedDownload | null;
+}
+
+const INITIAL_DOWNLOAD_STATE: TicketAttachmentDownloadState = { error: null, download: null };
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ticket
+ * attachment. access.status === "allowed" only proves tenant-level portal
+ * entry (same caveat replyToTicketAction's own header already documents) --
+ * the real per-file authority (app.can_access_ticket, message visibility,
+ * malware-scan status) is re-checked fresh inside
+ * app.access_ticket_attachment_evidence_for_download itself, never assumed
+ * here.
+ */
+export async function downloadTicketAttachmentAction(
+  tenantSlug: string,
+  fileId: string,
+  _prevState: TicketAttachmentDownloadState,
+  _formData: FormData,
+): Promise<TicketAttachmentDownloadState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, download: null };
+
+  const serviceRole = createSupabaseServiceRoleClient();
+  try {
+    const download = await getTicketAttachmentSignedDownloadUrl(toTicketAttachmentDownloadClient(serviceRole), fileId, access.authUserId, access.authUserId);
+    return { error: null, download };
+  } catch (error) {
+    if (error instanceof TicketMutationError) return { error: `Could not create a download link: ${error.message}`, download: null };
+    throw error;
+  }
 }
 
 // --- Queue/category catalog (TKT:Edit) ---
