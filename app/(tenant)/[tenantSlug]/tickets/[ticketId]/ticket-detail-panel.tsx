@@ -204,8 +204,8 @@ function ReplyForm({ isStaffViewer, replyAction }: { isStaffViewer: boolean; rep
       </div>
       {state.error ? <ValidationMessage id="ticket-reply-error">{state.error}</ValidationMessage> : null}
       <p className="text-xs text-neutral-500">
-        Each attachment is staged through app.initiate_ticket_attachment_upload (PLT-128, requester-or-staff-gated) and clears malware scanning before it can be attached to a reply -- an infected or not-yet-scanned file is rejected. This repository has no Supabase Storage integration anywhere, so the
-        file&apos;s bytes themselves are not persisted to an object store yet (disclosed NOT_RUN, see ISS-2026-064 / ISS-2026-087).
+        Each attachment is staged through app.initiate_ticket_attachment_upload (PLT-128, requester-or-staff-gated), its real bytes are stored, and a malware scan is queued -- an infected or not-yet-scanned file is rejected when the reply is posted (CG-AUDIT-2026-09-02 A6). Until an operator configures a
+        real VirusTotal API key and the platform integration encryption key (D4&apos;s own still-open gap), every scan fails closed and stays &quot;pending&quot; -- so posting an attachment will keep failing in an unconfigured environment, not because the attachment itself is broken.
       </p>
     </form>
   );

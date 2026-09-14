@@ -253,6 +253,10 @@ export const TICKET_KNOWN_MUTATION_ERROR_CODES = [
   "document_invalid_classification",
   "document_classification_too_weak",
   "file_actor_unauthorized",
+  // CG-AUDIT-2026-09-02 A6: raised by the new app.get_ticket_attachment_storage_path
+  // (20260914030000) for a missing file, a wrong record_type/document_type_code, or a
+  // caller who did not upload it -- indistinguishable, existence-oracle-safe.
+  "ticket_attachment_not_found",
 ] as const;
 
 export type KnownTicketMutationErrorCode = (typeof TICKET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -399,6 +403,26 @@ export async function initiateTicketAttachmentUpload(client: TicketMutationRpcCl
   const row = Array.isArray(data) ? data[0] : data;
   if (!row || typeof row !== "object") throw new TicketMutationError("mutation_failed", "initiate_ticket_attachment_upload returned no row");
   return parseFileSummary(row as Record<string, unknown>);
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: the one piece app.initiate_ticket_attachment_upload
+ * itself can never provide (it deliberately returns a storage_path-less
+ * FileSummary, since it is `authenticated`-callable -- see that function's own
+ * comment immediately above). A plain ownership lookup (app.files.
+ * uploaded_by_auth_user_id = actorAuthUserId) for a file the SAME actor just
+ * uploaded as a ticket attachment in this same request -- never a re-derivation of
+ * initiateTicketAttachmentUpload's own per-ticket requester-or-staff authority
+ * check, already satisfied by the time this is called. service_role-only.
+ */
+export async function getTicketAttachmentStoragePath(client: TicketMutationRpcClient, fileId: string, actorAuthUserId: string): Promise<string> {
+  const { data, error } = await client.rpc("get_ticket_attachment_storage_path", {
+    p_file_id: fileId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
+  if (error) throw new TicketMutationError(classifyError(error.message), error.message);
+  if (typeof data !== "string" || data.length === 0) throw new TicketMutationError("mutation_failed", "get_ticket_attachment_storage_path returned no storage_path");
+  return data;
 }
 
 export async function redactTicketMessage(client: TicketMutationRpcClient, input: RedactTicketMessageInput) {

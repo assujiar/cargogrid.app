@@ -1148,6 +1148,74 @@ begin
   end;
 
   raise notice 'PASS: app.initiate_ticket_attachment_upload and its public.* wrapper -- anon has zero schema privilege, defense in depth mirroring section 14';
+
+  -- 17i. CG-AUDIT-2026-09-02 A6: app.get_ticket_attachment_storage_path -- a
+  -- plain ownership lookup, never a re-derivation of this section's own
+  -- requester-or-staff ticket-participation bar. The uploader gets back their
+  -- own file's real storage_path; anyone else (even ticket staff, who could
+  -- legitimately call initiate_ticket_attachment_upload themselves but did not
+  -- upload THIS file) gets the same ticket_attachment_not_found a bogus file id
+  -- would produce -- existence-oracle-safe, mirroring this whole section's own
+  -- discipline.
+  declare
+    v_storage_path text;
+  begin
+    v_storage_path := app.get_ticket_attachment_storage_path(v_file_req.id, '00000000-0000-0000-0000-000000286002');
+    if v_storage_path is null or length(v_storage_path) = 0 then
+      raise exception 'FAIL: app.get_ticket_attachment_storage_path should return the uploader''s own real storage_path, got %', v_storage_path;
+    end if;
+
+    begin
+      perform app.get_ticket_attachment_storage_path(v_file_req.id, '00000000-0000-0000-0000-000000286004');
+      raise exception 'FAIL: ticket staff who did not upload this specific file must not be able to fetch its storage_path';
+    exception
+      when others then
+        get stacked diagnostics v_msg_text = message_text;
+        if v_msg_text not like 'ticket_attachment_not_found%' then
+          raise exception 'FAIL: expected ticket_attachment_not_found for a non-uploading staff actor, got: %', v_msg_text;
+        end if;
+    end;
+
+    begin
+      perform app.get_ticket_attachment_storage_path(gen_random_uuid(), '00000000-0000-0000-0000-000000286002');
+      raise exception 'FAIL: a nonexistent file id must be refused';
+    exception
+      when others then
+        get stacked diagnostics v_msg_text = message_text;
+        if v_msg_text not like 'ticket_attachment_not_found%' then
+          raise exception 'FAIL: expected ticket_attachment_not_found for a nonexistent file id, got: %', v_msg_text;
+        end if;
+    end;
+  end;
+
+  raise notice 'PASS: app.get_ticket_attachment_storage_path -- the uploader gets their own real storage_path; a non-uploading actor (even ticket staff) and a nonexistent file id both get the identical ticket_attachment_not_found';
+
+  -- 17j. Schema-privilege: unlike app.initiate_ticket_attachment_upload itself
+  -- (granted to authenticated, self-checking), the storage_path lookup is
+  -- service_role-only -- storage_path can never safely reach a role the
+  -- RLS-scoped client executes as.
+  declare
+    v_has_priv boolean;
+  begin
+    select has_function_privilege('anon', 'app.get_ticket_attachment_storage_path(uuid, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'FAIL: anon should have zero execute privilege on app.get_ticket_attachment_storage_path';
+    end if;
+    select has_function_privilege('authenticated', 'app.get_ticket_attachment_storage_path(uuid, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'FAIL: authenticated should have zero execute privilege on app.get_ticket_attachment_storage_path (service_role only)';
+    end if;
+    select has_function_privilege('anon', 'public.get_ticket_attachment_storage_path(uuid, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'FAIL: anon should have zero execute privilege on public.get_ticket_attachment_storage_path';
+    end if;
+    select has_function_privilege('authenticated', 'public.get_ticket_attachment_storage_path(uuid, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'FAIL: authenticated should have zero execute privilege on public.get_ticket_attachment_storage_path (the PostgREST-reachable wrapper, service_role only)';
+    end if;
+  end;
+
+  raise notice 'PASS: app.get_ticket_attachment_storage_path and its public.* wrapper -- both anon and authenticated carry zero EXECUTE (service_role only), unlike its authenticated-grantable sibling app.initiate_ticket_attachment_upload';
 end;
 $$;
 

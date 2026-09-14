@@ -5186,19 +5186,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "d625e847caecd16d1e81d87c5aaa017a3a5f5b6468129f45ee3c44e18fc57312",
-  // HUNDRED-AND-THIRTY-NINTH PASS: CG-AUDIT-2026-09-02 A6, the third and final
-  // piece of "wire upload + signed download + scanning" -- upload and scanning
-  // were already wired by an earlier pass; this adds signed download for vendor
-  // compliance evidence. New migration
-  // 20260914020000_a6_vendor_compliance_signed_download.sql adds
-  // app.access_vendor_compliance_document_evidence_for_download (service_role
-  // only -- the one piece its authenticated-grantable sibling,
-  // app.access_vendor_compliance_document_evidence, can never provide, since
-  // app.files.storage_path carries no column grant to authenticated at all) plus
-  // its required public.* PostgREST wrapper (app is not exposed to PostgREST).
-  // 536 tracked migration files (535 -> 536). Re-verified with a full
-  // `pnpm run db:test`, ALL PASSED.
+  migrationSetSha256: "48041aced0d42d465f35d8fe9ee56fc16bf31171a6db822baae35bc6d095987e",
+  // HUNDRED-AND-FORTIETH PASS: CG-AUDIT-2026-09-02 A6, the third and LAST of the
+  // audit's own 3 named deadlocked flows -- ticket-reply attachments. Worse than
+  // the other two: app.reply_to_ticket raises evidence_file_not_scanned for any
+  // attachment that never reaches malware_scan_status='clean', and nothing ever
+  // wired real bytes/scanning for ticket attachments, so every real reply with an
+  // attachment hard-failed. New migration
+  // 20260914030000_a6_ticket_attachment_upload_scan.sql adds
+  // app.get_ticket_attachment_storage_path (service_role only) -- a plain
+  // uploaded_by_auth_user_id ownership lookup, not a re-derivation of
+  // app.initiate_ticket_attachment_upload's own per-ticket requester-or-staff
+  // authority (already satisfied by the time this is called) -- plus its
+  // required public.* PostgREST wrapper. 537 tracked migration files (536 ->
+  // 537). Re-verified with a full `pnpm run db:test`, ALL PASSED.
+  // History: d625e847caecd16d1e81d87c5aaa017a3a5f5b6468129f45ee3c44e18fc57312
+  // (536 files, HUNDRED-AND-THIRTY-NINTH PASS).
   // History: 0e46d035276715480a4bf95f1b40d3ffdc2038eea7b6bd383192416d903b07e2
   // (535 files, HUNDRED-AND-THIRTY-SEVENTH PASS).
   // History: 298c7f9bf1977c728e5a83d9f8b3522b2325b8f0ccf6c9e10355c44af32e58d3
@@ -6799,15 +6802,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "3829633f02208768f9f6952f76d4270f788dbe5a7f2b657394baca36a1786503",
-  // HUNDRED-AND-THIRTY-NINTH PASS: same CG-AUDIT-2026-09-02 A6 signed-download
+  dbTestSetSha256: "d8dac300bf8bbc595f646c067fa8f4b8941325acc8fe3577e32e982b0910b09f",
+  // HUNDRED-AND-FORTIETH PASS: same CG-AUDIT-2026-09-02 A6 ticket-attachment
   // slice as migrationSetSha256's own note immediately above -- extends the
-  // existing scripts/db-tests/procurement-vendor-compliance.sql (no new file,
-  // 277 files unchanged) with granted/denied/insufficient-authority/cross-tenant
-  // coverage for app.access_vendor_compliance_document_evidence_for_download,
-  // plus schema-privilege regression guards (service_role only, zero
-  // anon/authenticated grant on both the app.* function and its public.*
-  // wrapper). Full `pnpm run db:test`, ALL PASSED.
+  // existing scripts/db-tests/ticketing-internal.sql section 17 (no new file,
+  // 277 files unchanged) with coverage for app.get_ticket_attachment_storage_path:
+  // the uploader gets their own real storage_path, a non-uploading actor (even
+  // ticket staff) and a nonexistent file id both get the identical
+  // ticket_attachment_not_found, plus schema-privilege regression guards (both
+  // anon AND authenticated carry zero EXECUTE, unlike the authenticated-grantable
+  // sibling app.initiate_ticket_attachment_upload). Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 3829633f02208768f9f6952f76d4270f788dbe5a7f2b657394baca36a1786503
+  // (277 files, HUNDRED-AND-THIRTY-NINTH PASS).
   // History: e625fc8c358aeba378a90281d55d52778f980663dc0b0d5925a18d3c507dc6fb
   // (277 files, HUNDRED-AND-THIRTY-SEVENTH PASS).
   // History: 3e7fb02dcd68bf883434043e1243f908ccef6106efb53adb049ee54f621c2fa2

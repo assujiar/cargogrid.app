@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | 2 of the audit's own 3 named deadlocked flows are now fully wired end to end (upload + real bytes stored + malware scan enqueued): vendor compliance document submission/renewal (plus its signed download) and shipment document checklist uploads (previously a fully fake filename/MIME/size text-entry form with zero real File object anywhere in the flow -- fixed with a real `<input type="file">` and a shared `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper, extracted once a second caller needed the identical upload+enqueue+compensate sequence). Still bounded, not DONE: ticket-reply attachments have neither upload nor download wired (the pattern now exists to reuse); shipment document checklist and ePOD evidence capture still lack signed download (ePOD's own evidence-capture UI is a separate, larger gap -- it never even collects a real File today, disclosed in A7's POD document work); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 3 of the audit's own named deadlocked flows now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal (plus its signed download), shipment document checklist uploads (previously a fully fake filename/MIME/size text-entry form with zero real File object anywhere in the flow), and ticket-reply attachments (previously worse than the other two -- an outright, reproducible hard failure, not a silent gap: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning for ticket attachments, so every real reply with an attachment failed). All three now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Still bounded, not DONE: shipment document checklist, ePOD evidence, and ticket attachments all still lack signed download (vendor compliance's own signed-download RPC is a directly reusable pattern for each); ePOD evidence capture's own UI is a separate, larger gap -- it never even collects a real File today; every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and two printable documents, surat jalan (delivery note) and POD (proof of delivery), now exist end to end (`server/documents/`, two new Route Handlers, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, packing list, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -2116,3 +2116,96 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   input, disclosed here rather than folded into this bounded fix; D4's own GUC gap
   still fails every scan closed until an operator configures both the encryption key
   and a real VirusTotal API key.
+- 2026-09-14 — A6, third and LAST of the audit's own 3 named deadlocked flows:
+  ticket-reply attachments. Investigated with a parallel research pass before
+  fixing (survey findings preserved in this entry, not just the fix). Live-confirmed
+  this flow was actually WORSE than the other two: the UI already had a real
+  `<input type="file" multiple>` and the Server Action already extracted real
+  `File` objects, and `app.initiate_ticket_attachment_upload` was already
+  correctly requester-or-staff-gated -- but `app.reply_to_ticket` itself
+  (`20260731270000_harden_ticketing_internal_replayable_review_fixes_hrt295.sql:422`)
+  raises `evidence_file_not_scanned` for any attached file whose
+  `malware_scan_status` isn't `'clean'`, and since nothing ever stored real bytes
+  or enqueued a scan for a ticket attachment, no file could ever reach `'clean'`.
+  This meant every real attempt to post a ticket reply with an attachment
+  hard-failed today, not merely sat in a silent unscanned limbo like the other two
+  flows did before their own fixes.
+  Why this needed a new RPC rather than a straight copy of the checklist/vendor-
+  compliance fix: `app.initiate_ticket_attachment_upload` is deliberately
+  `authenticated`-callable (it carries its own per-ticket requester-or-staff
+  authority check inline) and, exactly like the metadata-view vendor-compliance
+  RPC, deliberately returns a `storage_path`-less `FileSummary` for that reason --
+  `storage_path` still carries no column grant to `authenticated` at all. New
+  migration `20260914030000_a6_ticket_attachment_upload_scan.sql` adds
+  `app.get_ticket_attachment_storage_path(file_id, actor)` (service_role only) --
+  deliberately NOT a re-derivation of the per-ticket authority check (the actor
+  already passed it the moment `initiate_ticket_attachment_upload` itself
+  succeeded, in the same request); just a plain `uploaded_by_auth_user_id =
+  actor` ownership lookup for a file the same actor just staged -- plus its
+  required `public.*` wrapper.
+  App layer: `server/mutations/ticketing.ts` gained `getTicketAttachmentStoragePath`
+  and a new `ticket_attachment_not_found` error code.
+  `replyToTicketAction` (`app/(tenant)/[tenantSlug]/tickets/actions.ts`) now
+  calls the shared `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts`
+  helper (this session's own third caller, after vendor compliance and shipment
+  checklist) right after each `initiateTicketAttachmentUpload` call, storing
+  real bytes and enqueuing a `malware_scan` job before moving to the next file --
+  a failed upload OR a failed store still aborts the whole reply before
+  `reply_to_ticket` is ever called, preserving the existing "never post with only
+  some attachments" invariant. `eslint.config.js`'s `serviceRoleImportGuard`
+  gained this file's entry. `ticket-detail-panel.tsx`'s own disclosure text
+  updated to no longer claim "no Storage integration exists" (false as of this
+  fix) while still honestly disclosing that D4's own GUC gap means every scan
+  fails closed until an operator configures real credentials.
+  `scripts/db-tests/ticketing-internal.sql` section 17 extended (no new file):
+  the uploader gets their own real `storage_path`; a non-uploading actor (even
+  ticket staff, who could legitimately stage their OWN attachment but not read
+  this one) and a nonexistent file id both get the identical
+  `ticket_attachment_not_found`; schema-privilege guards confirm both `anon`
+  AND `authenticated` carry zero EXECUTE on the new RPC and its wrapper, unlike
+  its `authenticated`-grantable sibling `app.initiate_ticket_attachment_upload`.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,061 tests passing, unchanged
+  count), a full `pnpm run db:test` (`ALL PASSED`, 537 migrations / 277 db-test
+  files), `git:check-paths` (clean), `security:check` (clean), and a real
+  `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-FORTIETH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  This closes all 3 of A6's own named deadlocked flows for real upload+scan.
+  Still open under A6: signed download for shipment document checklist, ePOD
+  evidence, and ticket attachments (vendor compliance's own signed-download RPC,
+  `20260914020000_a6_vendor_compliance_signed_download.sql`, is a directly
+  reusable pattern for each -- research this session already scoped the exact
+  new-RPC shape for the checklist case: a new `app.authorize_shipment_document_
+  evidence_file_access` sibling of `app.authorize_vendor_evidence_file_access`,
+  gated by the currently-unused `'OPS', 'Download'` permission action code);
+  ePOD evidence capture's own UI (`setEpodEvidenceAction`) still fabricates a
+  filename/fixed-size File-free metadata row, a separate and larger gap since it
+  needs a genuine signature-pad/photo-capture UI, not just a file input; D4's own
+  GUC gap still fails every scan closed until an operator configures both the
+  encryption key and a real VirusTotal API key.
+- 2026-09-14 — F4 (`has_active_tenant_membership` performance) investigated in
+  depth via a parallel research pass; disposition unchanged (`DEFERRED_LARGE`),
+  but now backed by concrete findings rather than the audit's own summary alone.
+  The function's own three internal lookups (`app.tenant_user_identities`,
+  `app.users`, `app.principal_memberships`, `app.support_access_grants`/
+  `app.support_access_sessions`) are ALL already covered by existing unique
+  constraints/indexes -- there is no missing index to add anywhere in the
+  function's own dependency chain. The real cost driver is that Postgres never
+  inlines a `SECURITY DEFINER` function, so every RLS policy clause calling it
+  is an opaque, single-argument boolean the planner can never decompose into an
+  index condition against the protected table's own `tenant_id` column -- when a
+  query supplies no tenant filter and relies on RLS alone, the result is a full
+  `Seq Scan` with the function evaluated as a row-by-row `Filter`, exactly the
+  audit's own reproduced `explain analyze` output shows. Confirmed this is
+  directionally honest, not overstated: 1,944+ call sites and 267+ RLS policy
+  clauses reference it across the migration history. Two things would actually
+  fix the root cause -- rewriting ~267+ RLS policy clauses to a sargable form
+  (large by blast radius, needs per-table isolation-test re-verification) or
+  adding trigger-maintained caching underneath the single function gating
+  tenant isolation for the entire schema (small in file count but carries
+  stale-access-window risk this session cannot adequately verify at this
+  scale) -- both genuinely architecture-level, matching the backlog's own
+  "needs a load-bearing-function redesign" framing. No code changed for this
+  finding; recommendation is to leave it deferred rather than attempt a partial
+  fix that does not address the measured pathological case.
