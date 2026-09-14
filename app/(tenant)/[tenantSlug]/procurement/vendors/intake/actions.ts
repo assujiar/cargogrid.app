@@ -7,10 +7,23 @@
  * precedent. Gated by the Configuration Engine's own authority
  * (app.check_config_object_authority, tenant_admin/Supreme for a tenant-scoped
  * object), matching Prompt 251 §26's "tenant admins configure intake."
+ *
+ * Uses the service-role client: app.create_config_draft/app.set_config_items/
+ * app.publish_config_version (and their public.* wrappers) are granted to
+ * service_role only, never authenticated (supabase/migrations/
+ * 20260717130000_create_configuration_engine.sql -- verified live against a
+ * disposable test database, has_function_privilege('authenticated', ...) is
+ * false for all three). This action previously called them through the
+ * RLS-scoped client, so every real tenant admin's toggle attempt failed with
+ * a caught-and-swallowed permission-denied error -- found and fixed while
+ * scoping the same generic engine for the A3b approval-authoring UI.
+ * app.check_config_object_authority still enforces the real actor's authority
+ * in-body against the explicitly passed actorAuthUserId, so the service-role
+ * client does not widen who this action lets toggle the flag.
  */
 
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../../lib/supabase/service-role.ts";
 import { resolveProcurementAccessForRequest } from "../../../../../../lib/portal/resolve-procurement-access.server.ts";
 import { createConfigDraft, setConfigItems, publishConfigVersion, ConfigMutationError, type ConfigMutationRpcClient } from "../../../../../../server/mutations/config.ts";
 
@@ -26,11 +39,7 @@ export async function setVendorSelfRegistrationEnabledAction(tenantSlug: string,
 
   const enabled = formData.get("enabled") === "on";
 
-  const supabaseClient = await createSupabaseServerClient();
-  // supabase.rpc() returns a thenable PostgrestFilterBuilder, not a structural
-  // Promise (missing catch/finally) -- this async wrapper normalizes it to the plain
-  // Promise shape ConfigMutationRpcClient declares, the same adapter pattern
-  // app/(tenant)/[tenantSlug]/operations/fleet/page.tsx already established.
+  const supabaseClient = createSupabaseServiceRoleClient();
   const supabase: ConfigMutationRpcClient = { rpc: async (fn, args) => await supabaseClient.rpc(fn, args) };
   try {
     const draft = await createConfigDraft(supabase, {

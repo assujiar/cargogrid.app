@@ -104,7 +104,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | **DONE** | (this commit) — new shared `components/domain/tenant-portal-nav.tsx` cross-module switcher wired into all 16 tenant-internal module layouts (14 previously-bare stub layouts upgraded to real access-checked shells, admin/commercial's own existing submenus kept alongside it) plus a new tenant Home landing page (`app/(tenant)/[tenantSlug]/page.tsx`, previously a bare 404) and a login-redirect fix (every tenant member landed on `/{slug}/admin`, a `tenant_admin`-only route that 403s any ordinary `org_user`) |
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
-| A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
+| A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
@@ -2648,3 +2648,73 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   Still open under A7: faktur pajak and packing list printables (packing
   list still blocked on the same zero-UI gap noted in the third-document
   entry above).
+- 2026-09-14 — A3b closed: a generic approval-definition authoring page
+  (`admin/approvals/`), following a research pass that confirmed A3b was
+  over-classified DEFERRED_LARGE the same way A1/A2/E5 were. An approval
+  *definition* is not its own row type -- it is a PLT-121 ConfigVersion/
+  config_items object with `config_type_code='approval'` (the approval
+  engine migration's own header), so authoring it needed zero new backend:
+  `app.publish_approval_definition` (PLT-123) and the generic
+  `app.create_config_draft`/`app.set_config_items` (PLT-121) already existed,
+  fully implemented and tested (`scripts/db-tests/approval.sql:95-263`
+  exercises the exact same create-draft -> set-items -> publish sequence,
+  every structural failure mode included). The one open question worth
+  research was whether A3b's own 8 named dependent functions
+  (`_request_procurement_entity_approval`, `request_approval`,
+  `request_customer_credit_profile`, `submit_job_offer_for_approval`,
+  `submit_leave_request`, `submit_onboarding_case_for_finalize_approval`,
+  `submit_payroll_run_for_finalization`, `submit_quotation`) each needed
+  their own definition -- confirmed no: `app._resolve_approval_config_type_code`
+  (`20260831250000_scope_approval_routing_per_domain.sql:104-122`) falls back
+  to the plain `'approval'` config type whenever a tenant has not published a
+  narrower per-domain override, so one tenant-scoped generic definition
+  unblocks all 8 at once.
+  The definition's structural shape (`pattern`, `steps`,
+  `threshold_required_steps`, `allow_self_approval`) is authored as one JSON
+  object rather than a bespoke step-builder UI, mirroring
+  `finance/config/finance-config-forms.tsx`'s own `FinanceConfigItemsForm`
+  precedent exactly -- `app.validate_approval_definition` already performs
+  full structural validation server-side regardless of input source, so this
+  is genuinely real authoring, not a fake stand-in for one. The page also
+  lists every existing version (draft/published/archived) and every tenant
+  role (id + name, since a step's `role_id` must be typed into the JSON) as
+  a reference table, plus a rollback-to-published-version form mirroring
+  `finance/config`'s own `RollbackFinanceConfigVersionForm`.
+  **Two real, previously-undiscovered bugs found while getting the new
+  page's client choice right, both fixed in this same slice**: verified live
+  against a disposable test database (`has_function_privilege`, not just
+  reading migration text) that `app.list_config_versions`,
+  `app.create_config_draft`, `app.set_config_items`, and
+  `app.publish_config_version` (and their `public.*` wrappers) are granted to
+  `service_role` only, never `authenticated`. (1) `finance/config/page.tsx`
+  called `listFinanceConfigVersions` (wrapping `list_config_versions`) with
+  the RLS-scoped client -- every real Finance Manager visit threw
+  permission-denied, caught as `loadFailed`, so the page always rendered
+  ErrorState regardless of class or actual version history. Fixed by reading
+  that one call through the service-role client (authority is still enforced
+  in-body via `app.check_config_object_authority` against the explicitly
+  passed actor, so this does not widen who can read the list).
+  (2) `procurement/vendors/intake/actions.ts`'s
+  `setVendorSelfRegistrationEnabledAction` called the generic
+  `createConfigDraft`/`setConfigItems`/`publishConfigVersion` with the same
+  RLS-scoped client -- every real tenant admin's self-registration toggle
+  failed the same way, silently swallowed into a returned form error. Fixed
+  the same way (service-role client for those three calls only). Both bugs
+  predate this session's own work on either file.
+  Also added a generic `listConfigVersions` to `server/queries/config.ts`
+  (mirroring `finance-config.ts`'s own `configTypeCode`-narrowed
+  `listFinanceConfigVersions`, but for any config type) since no
+  type-agnostic version-listing read existed before this slice -- reused by
+  the new page, and available to any future non-Finance Configuration Engine
+  UI.
+  `eslint.config.js`'s `serviceRoleImportGuard` ignore-list gained the 4 new
+  service-role-importing files this slice touches
+  (`admin/approvals/actions.ts`, `admin/approvals/page.tsx`,
+  `finance/config/page.tsx`, `procurement/vendors/intake/actions.ts`).
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,070 tests passing, +3 for
+  the new `listConfigVersions`), `db:test` (`ALL PASSED`), `git:check-paths`
+  (clean, 9 files checked), `security:check` (clean), and a real `next build`
+  (confirms the new `/admin/approvals` route). No migration/db-test change --
+  `check-release-freeze` unaffected (digests unchanged from the
+  HUNDRED-AND-FORTY-FOURTH PASS).

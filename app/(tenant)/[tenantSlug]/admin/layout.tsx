@@ -93,6 +93,9 @@ export default async function TenantAdminLayout({
           <a href={`/${access.tenant.slug}/admin/roles`} className="text-neutral-700 hover:text-neutral-900">
             Roles
           </a>
+          <a href={`/${access.tenant.slug}/admin/approvals`} className="text-neutral-700 hover:text-neutral-900">
+            Approval routing
+          </a>
           <a href={`/${access.tenant.slug}/admin/organization`} className="text-neutral-700 hover:text-neutral-900">
             Organization
           </a>
