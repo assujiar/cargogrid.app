@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | `IN_PROGRESS` (clusters 0-5 **DONE** — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE** — an earlier note after batch 3 alone claimed this prematurely, see that entry's own correction; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, all 4 batches, 30/30 call sites, **FULLY DONE**; cluster 7/`page-level-direct-reads` (16 call sites) not yet started — see below) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | **DONE** (all 8 clusters, 0 through 7, FULLY closed — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE**; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, all 4 batches, 30/30 call sites, **FULLY DONE**; cluster 7/`page-level-direct-reads`, the full cluster in one commit, 10/10 call sites, **FULLY DONE** — see below. The entire Ø1-query-layer defect (every broken `.from()`/direct-table read against an `app.*` table, across `server/queries/*.ts` AND `page.tsx` files) is now closed) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -1755,3 +1755,71 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   **Cluster 6 (`platform-intelligence-reports`) is now FULLY DONE: all 30 call sites closed.**
   Remaining: cluster 7 (`page-level-direct-reads`, 16 call sites), not yet started — next up under
   the same "lanjut sampe siap launching" mandate.
+
+- 2026-09-14 — Ø1-query-layer cluster 7 (`page-level-direct-reads`), the FULL cluster, closed in
+  one commit, continuing the same "lanjut sampe siap launching" mandate. **This is the LAST
+  cluster of the entire Ø1-query-layer defect.** Unlike every prior cluster (all `server/queries/
+  *.ts`), every one of this cluster's 10 broken `.from()` reads is embedded DIRECTLY in a Server
+  Component `page.tsx` file across 6 files: `hris/employees/[masterRecordId]/page.tsx` (2:
+  `files`, `org_units`), `hris/positions/[positionId]/page.tsx` (2: `org_units`,
+  `employee_position_assignments`), `hris/positions/bulk-reassign/page.tsx` (1: `org_units`),
+  `hris/positions/page.tsx` (1: `org_units`), `hris/recruitment/applications/[applicationId]/
+  page.tsx` (1: `job_offers`), `operations/warehouses/[warehouseId]/locations/page.tsx` (1:
+  `warehouse_locations`), `procurement/approvals/[stepId]/page.tsx` (2: `approval_request_steps`,
+  `approval_requests`). New migration
+  `20260913050000_close_o1_query_layer_cluster7_page_level_direct_reads.sql` adds 7 new
+  `app.*`/`public.*` Option-2 wrapper pairs (14 functions) — the 5 `org_units` call sites
+  (functionally identical flat picker lists) share ONE new function
+  (`app.list_org_units`), a disclosed implementation choice matching the recon's own suggestion.
+  Grant/RLS shapes, each independently re-derived: `app.list_files_for_record` (SECURITY DEFINER,
+  mirrors `app.list_files_for_tenant`'s per-row `app.authorize_file_access` audit-log composition
+  exactly, scoped by `(tenant_id, record_type, record_id)`); `app.list_org_units` (SECURITY
+  INVOKER, RLS excludes `customer_user`-layer, domain-agnostic — "any active tenant member",
+  matching all 5 call sites' own access guards regardless of domain); `app.list_position_
+  incumbents` (SECURITY DEFINER, HRS:View + `app.has_view_personal_data` masking, mirrors the
+  CURRENT post-lineage-column-fix bodies of `app.get_employee_current_assignment`/`app.get_
+  employee_position_assignment_history` exactly, including projecting the table's own full
+  CURRENT 24-column shape rather than assuming any column is grantable); `app.get_job_offer_for_
+  application` (SECURITY INVOKER — a DELIBERATE DEPARTURE from the recon's own suggested
+  SECURITY-DEFINER-plus-`can_view_job_offer` design, since `app.job_offers`' own RLS is STRICTLY
+  BROADER than `can_view_job_offer`'s HRS:View-first branch — every HRS:View holder is already an
+  active tenant member); `app.get_warehouse_location` (SECURITY DEFINER, mirrors `app.get_
+  warehouse_location_deactivation_impact`'s own OPS:View + `can_access_record` scope chain
+  exactly); `app.get_approval_request_step` (SECURITY INVOKER, full-row grant, the same
+  already-proven-safe EXISTS-join RLS shape `app.list_approval_request_steps` established in
+  cluster 6 batch 1); `app.get_approval_request_by_id` (SECURITY INVOKER — a second DELIBERATE
+  DEPARTURE from the recon's own suggested design, since the suggested `app.check_approval_
+  request_authority` helper was ALREADY independently found stale by cluster 0 batch 3 relative
+  to this table's own CURRENT RLS predicate; column-restricted grant, `ended_reason` cast to null
+  in its correct 13th-of-16 physical position).
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only pre-existing
+  warnings), the 6,046-test unit suite (6 query modules extended with new function coverage:
+  `document.ts`, `org-hierarchy.ts`, `position.ts`, `recruitment.ts`, `bin-racking.ts`,
+  `approval.ts`, each with matching test-file additions), `git:check-paths` (clean),
+  `security:check` (clean), a full `pnpm run db:test` (`ALL PASSED`, 534 migrations / 277
+  db-test files, including the new cluster-7 db-test file: a 5-persona sweep — an HRS:View +
+  OPS:View staff member via a real role assignment, a plain member with no special role, a
+  customer_user-layer principal, a zero-membership Supreme Admin, and a cross-tenant actor in a
+  second tenant — across all 7 new functions; a genuine masking proof for both `app.list_
+  position_incumbents` (`reason_note`/`decided_reason` nulled for the HRS:View-only persona
+  despite real non-null values written to the fixture row, unmasked for the Supreme Admin via
+  `app.has_view_personal_data`'s own `is_supreme_admin` bypass) and `app.get_approval_request_
+  by_id` (`ended_reason` nulled despite a real non-null value written)), and a real `next build`.
+  A real, independently-caught bug was found and fixed during this pass's own fixture authoring:
+  an early draft used `location_type='zone'` for a `warehouse_locations` fixture row, which is
+  not one of the 6 values `warehouse_locations_location_type_check` actually permits
+  (`rack`/`shelf`/`floor`/`staging`/`dock`/`bin`) — caught immediately by the insert's own CHECK
+  violation, fixed by using `'floor'`. A second, unrelated finding during this pass's own
+  full-suite verification: a transient failure in the PRE-EXISTING, unrelated
+  `commercial-dashboard.sql` (its own `"due_today"` activity-bucket assertion, sensitive to
+  `current_date` at the exact moment `db:test` happened to run across a real midnight boundary,
+  2026-09-13 into 2026-09-14) was independently reproduced by stashing every one of this pass's
+  own changes and re-running the full suite against the unmodified prior commit — confirming the
+  failure was never caused by this batch, before restoring the stash and re-running to a clean
+  ALL PASSED.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-SIXTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both).
+  **Cluster 7 (`page-level-direct-reads`) is now FULLY DONE: all 10 call sites closed. The entire
+  CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters, 0 through 7 — every broken
+  `.from()`/direct-table read against an `app.*` table across both `server/queries/*.ts` and
+  `page.tsx` files) is now FULLY DONE.**

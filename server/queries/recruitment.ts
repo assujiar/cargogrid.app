@@ -19,8 +19,10 @@ import {
   parseInterviewWithPanel,
   parseMyAssignedInterview,
   parseOfferTimeline,
+  parseJobOffer,
   parsePublicVacancySummary,
   parsePublicVacancyDetail,
+  type JobOffer,
   type JobVacancy,
   type JobVacancyDetail,
   type CandidateProfile,
@@ -187,6 +189,15 @@ export async function getApplicationDetail(client: RecruitmentQueryClient, id: s
   const row = firstRow(data);
   if (!row) throw new RecruitmentQueryError("get_application_detail returned no row");
   return parseApplicationDetail(row);
+}
+
+/** The (0 or 1) offer for one application -- O1 remediation, cluster 7, replacing a broken direct .from("job_offers") read embedded in hris/recruitment/applications/[applicationId]/page.tsx. Returns null (never an error) when the application has no offer yet -- the normal case. */
+export async function getJobOfferForApplication(client: RecruitmentQueryClient, applicationId: string): Promise<JobOffer | null> {
+  const { data, error } = await client.rpc("get_job_offer_for_application", { p_application_id: applicationId });
+  if (error) throw new RecruitmentQueryError(error.message);
+  const row = firstRow(data);
+  if (!row) return null;
+  return parseJobOffer(row);
 }
 
 export async function listApplicationStageHistory(client: RecruitmentQueryClient, applicationId: string, actorAuthUserId: string): Promise<ApplicationStageHistoryRow[]> {

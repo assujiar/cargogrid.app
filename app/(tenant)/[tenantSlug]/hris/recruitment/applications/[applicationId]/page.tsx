@@ -7,6 +7,7 @@ import {
   listApplicationStageHistory,
   listCandidateAssessments,
   listApplicationInterviews,
+  getJobOfferForApplication,
   RecruitmentQueryError,
 } from "../../../../../../../server/queries/recruitment.ts";
 import { ErrorState } from "../../../../../../../components/ui/error-state.tsx";
@@ -55,22 +56,17 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
   let stageHistory: Awaited<ReturnType<typeof listApplicationStageHistory>> = [];
   let assessments: Awaited<ReturnType<typeof listCandidateAssessments>> = [];
   let interviews: Awaited<ReturnType<typeof listApplicationInterviews>> = [];
-  let offerRows: { id: string; application_id: string; status: string; approval_status: string; approval_request_id: string | null; current_version_id: string | null; record_version: number }[] = [];
+  let offer: Awaited<ReturnType<typeof getJobOfferForApplication>> = null;
 
   try {
     detail = await getApplicationDetail(supabase, applicationId, access.authUserId);
-    [candidate, stageHistory, assessments, interviews] = await Promise.all([
+    [candidate, stageHistory, assessments, interviews, offer] = await Promise.all([
       getCandidateProfile(supabase, detail.candidateId, access.authUserId),
       listApplicationStageHistory(supabase, applicationId, access.authUserId),
       listCandidateAssessments(supabase, applicationId, access.authUserId),
       listApplicationInterviews(supabase, applicationId, access.authUserId),
+      getJobOfferForApplication(supabase, applicationId),
     ]);
-    // app.job_offers itself carries a plain RLS-scoped authenticated SELECT grant
-    // (no PII, no masking concern) -- a direct read via the authenticated server
-    // client (never service-role, which would bypass RLS unnecessarily here) avoids
-    // an extra RPC solely to look up "does an offer exist for this application yet."
-    const { data } = await supabase.from("job_offers").select("id, application_id, status, approval_status, approval_request_id, current_version_id, record_version").eq("application_id", applicationId).maybeSingle();
-    if (data) offerRows = [data as (typeof offerRows)[number]];
   } catch (error) {
     if (!(error instanceof RecruitmentQueryError)) throw error;
     if (error.message.startsWith("insufficient_authority")) denied = true;
@@ -88,8 +84,6 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
     return <ErrorState description="Something went wrong loading this application. Please try again." />;
   }
 
-  const offer = offerRows[0] ?? null;
-
   return (
     <ApplicationDetailPanel
       tenantSlug={tenantSlug}
@@ -103,10 +97,10 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           ? {
               id: offer.id,
               status: offer.status as never,
-              approvalStatus: offer.approval_status as never,
-              approvalRequestId: offer.approval_request_id,
-              currentVersionId: offer.current_version_id,
-              recordVersion: offer.record_version,
+              approvalStatus: offer.approvalStatus as never,
+              approvalRequestId: offer.approvalRequestId,
+              currentVersionId: offer.currentVersionId,
+              recordVersion: offer.recordVersion,
             }
           : null
       }

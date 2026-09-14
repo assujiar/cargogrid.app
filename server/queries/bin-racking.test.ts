@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { listWarehouseLocations, getWarehouseLocationDeactivationImpact, resolveWarehouseLocationByBarcode, BinRackingQueryError, type BinRackingQueryClient } from "./bin-racking.ts";
+import { listWarehouseLocations, getWarehouseLocation, getWarehouseLocationDeactivationImpact, resolveWarehouseLocationByBarcode, BinRackingQueryError, type BinRackingQueryClient } from "./bin-racking.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const WAREHOUSE_ID = "323e4567-e89b-12d3-a456-426614174000";
@@ -68,6 +68,27 @@ describe("listWarehouseLocations", () => {
   test("throws BinRackingQueryError on an rpc error", async () => {
     const { client } = fakeRpcClient({ data: null, error: { message: "insufficient_authority: identity lacks OPS:View" } });
     await assert.rejects(() => listWarehouseLocations(client, WAREHOUSE_ID, ACTOR_ID), BinRackingQueryError);
+  });
+});
+
+describe("getWarehouseLocation", () => {
+  test("resolves a matched row and passes the exact snake_case params", async () => {
+    const { client, calls } = fakeRpcClient({ data: [RACK_ROW], error: null });
+    const location = await getWarehouseLocation(client, RACK_ID, ACTOR_ID);
+    assert.equal(location?.code, "RACK-A");
+    assert.equal(calls[0]?.fn, "get_warehouse_location");
+    assert.deepEqual(calls[0]?.args, { p_location_id: RACK_ID, p_actor_auth_user_id: ACTOR_ID });
+  });
+
+  test("returns null (never an error) when not found", async () => {
+    const { client } = fakeRpcClient({ data: [], error: null });
+    const location = await getWarehouseLocation(client, RACK_ID, ACTOR_ID);
+    assert.equal(location, null);
+  });
+
+  test("throws BinRackingQueryError on an rpc error", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "insufficient_authority: identity lacks OPS:View" } });
+    await assert.rejects(() => getWarehouseLocation(client, RACK_ID, ACTOR_ID), BinRackingQueryError);
   });
 });
 

@@ -48,6 +48,19 @@ export async function listWarehouseLocations(
   return ((data as Record<string, unknown>[] | null) ?? []).map(parseWarehouseLocation);
 }
 
+/** One location by id (the `?parent=` breadcrumb lookup) -- O1 remediation, cluster 7, replacing a broken direct .from("warehouse_locations") read embedded in operations/warehouses/[warehouseId]/locations/page.tsx. Returns null (never an error) when the location does not exist. */
+export async function getWarehouseLocation(client: BinRackingQueryClient, locationId: string, actorAuthUserId: string): Promise<WarehouseLocation | null> {
+  const { data, error } = await client.rpc("get_warehouse_location", { p_location_id: locationId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) {
+    throw new BinRackingQueryError(error.message);
+  }
+  const row = firstRow(data);
+  if (!row) {
+    return null;
+  }
+  return parseWarehouseLocation(row);
+}
+
 /** Read-only dependency-impact preview mirroring exactly what app.set_warehouse_location_status itself blocks a deactivation on. */
 export async function getWarehouseLocationDeactivationImpact(client: BinRackingQueryClient, locationId: string, actorAuthUserId: string): Promise<WarehouseLocationDeactivationImpact> {
   const { data, error } = await client.rpc("get_warehouse_location_deactivation_impact", { p_location_id: locationId, p_actor_auth_user_id: actorAuthUserId });

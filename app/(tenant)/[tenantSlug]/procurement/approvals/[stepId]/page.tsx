@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { resolveProcurementAccessForRequest } from "../../../../../../lib/portal/resolve-procurement-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
-import { getApprovalRequestHistory, listPendingApprovalStepsForActor } from "../../../../../../server/queries/approval.ts";
+import { getApprovalRequestHistory, listPendingApprovalStepsForActor, getApprovalRequestStep, getApprovalRequestById, ApprovalQueryError } from "../../../../../../server/queries/approval.ts";
 import { getProcurementApprovalContextSnapshot, ProcurementApprovalQueryError, toApprovalQueryRpcClient } from "../../../../../../server/queries/procurement-approval.ts";
 import { PROCUREMENT_APPROVAL_ENTITY_TYPES, type ProcurementApprovalEntityType } from "../../../../../../server/contracts/procurement-approval/procurement-approval.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
@@ -22,32 +22,37 @@ export default async function ProcurementApprovalStepDetailPage({ params }: { pa
   }
 
   const supabase = await createSupabaseServerClient();
+  const approvalClient = toApprovalQueryRpcClient(supabase);
 
-  const { data: stepRow, error: stepError } = await supabase.from("approval_request_steps").select("*").eq("id", stepId).maybeSingle();
-  if (stepError) {
+  let stepRow: Awaited<ReturnType<typeof getApprovalRequestStep>> = null;
+  let requestRow: Awaited<ReturnType<typeof getApprovalRequestById>> = null;
+  try {
+    stepRow = await getApprovalRequestStep(approvalClient, stepId);
+    if (stepRow) {
+      requestRow = await getApprovalRequestById(approvalClient, stepRow.requestId);
+    }
+  } catch (error) {
+    if (!(error instanceof ApprovalQueryError)) throw error;
     return <ErrorState description="Something went wrong loading this approval step. Please try again." />;
   }
   if (!stepRow) {
     notFound();
   }
-
-  const { data: requestRow, error: requestError } = await supabase.from("approval_requests").select("*").eq("id", stepRow.request_id).maybeSingle();
-  if (requestError || !requestRow) {
+  if (!requestRow) {
     return <ErrorState description="Something went wrong loading the bound approval request. Please try again." />;
   }
-  if (!(PROCUREMENT_APPROVAL_ENTITY_TYPES as readonly string[]).includes(requestRow.entity_type)) {
+  if (!(PROCUREMENT_APPROVAL_ENTITY_TYPES as readonly string[]).includes(requestRow.entityType)) {
     // Not a Procurement-governed request (e.g. a Commercial quotation approval) --
     // this detail page is not the right surface for it.
     notFound();
   }
-  const entityType = requestRow.entity_type as ProcurementApprovalEntityType;
+  const entityType = requestRow.entityType as ProcurementApprovalEntityType;
 
   let loadFailed = false;
   let snapshot: Awaited<ReturnType<typeof getProcurementApprovalContextSnapshot>> | null = null;
   let history: Awaited<ReturnType<typeof getApprovalRequestHistory>> = [];
   let pendingStepIds: string[] = [];
   try {
-    const approvalClient = toApprovalQueryRpcClient(supabase);
     [snapshot, history] = await Promise.all([
       getProcurementApprovalContextSnapshot(supabase, { approvalRequestId: requestRow.id, actorAuthUserId: access.authUserId }),
       getApprovalRequestHistory(approvalClient, { requestId: requestRow.id, actorAuthUserId: access.authUserId }),
@@ -68,7 +73,7 @@ export default async function ProcurementApprovalStepDetailPage({ params }: { pa
   return (
     <ProcurementApprovalDecisionPanel
       tenantSlug={tenantSlug}
-      stepOrder={stepRow.step_order}
+      stepOrder={stepRow.stepOrder}
       stepStatus={stepRow.status}
       requestId={requestRow.id}
       requestStatus={requestRow.status}

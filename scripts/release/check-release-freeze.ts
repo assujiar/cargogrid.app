@@ -5039,7 +5039,71 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // Cluster 6 (platform-intelligence-reports, 30/30 call sites) is now FULLY
   // DONE. Remaining: cluster 7 (16 call sites), not yet started -- next up under
   // the same "lanjut sampe siap launching" mandate.
-  migrationSetSha256: "2a5424306416032ff0adb5566a5d482d3e05400df4cb06263f15ca80698d7404",
+  // HUNDRED-AND-THIRTY-SIXTH PASS (2026-09-14, same ruling as migrationSetSha256
+  // above): 534 files (+1) -- new migration 20260913050000_close_o1_query_layer_
+  // cluster7_page_level_direct_reads.sql. Closes cluster 7 (page-level-direct-
+  // reads), the LAST cluster of the entire Ø1-query-layer defect: all 10 broken
+  // `.from()` reads embedded DIRECTLY in Server Component page.tsx files (not
+  // server/queries/*.ts, unlike every prior cluster) across 6 files --
+  // hris/employees/[masterRecordId]/page.tsx (2: files, org_units),
+  // hris/positions/[positionId]/page.tsx (2: org_units, employee_position_
+  // assignments), hris/positions/bulk-reassign/page.tsx (1: org_units),
+  // hris/positions/page.tsx (1: org_units), hris/recruitment/applications/
+  // [applicationId]/page.tsx (1: job_offers), operations/warehouses/
+  // [warehouseId]/locations/page.tsx (1: warehouse_locations), procurement/
+  // approvals/[stepId]/page.tsx (2: approval_request_steps, approval_requests).
+  // 7 new app.*/public.* Option-2 wrapper pairs (14 functions) -- the 5
+  // org_units call sites (functionally identical flat picker lists) share ONE
+  // new function per the recon's own explicit suggestion.
+  // Grant/RLS shapes, independently re-derived per function: app.list_files_for_
+  // record (SECURITY DEFINER, mirrors app.list_files_for_tenant's per-row
+  // app.authorize_file_access composition exactly); app.list_org_units
+  // (SECURITY INVOKER, RLS excludes customer_user-layer, domain-agnostic);
+  // app.list_position_incumbents (SECURITY DEFINER, HRS:View + app.has_view_
+  // personal_data masking, mirrors the CURRENT post-lineage-column-fix bodies of
+  // app.get_employee_current_assignment/app.get_employee_position_assignment_
+  // history exactly, including projecting the table's own full CURRENT
+  // 24-column shape); app.get_job_offer_for_application (SECURITY INVOKER --
+  // DELIBERATE DEPARTURE from the recon's own suggested DEFINER-plus-
+  // can_view_job_offer design, since app.job_offers' own RLS is STRICTLY
+  // BROADER than can_view_job_offer's HRS:View-first branch); app.get_warehouse_
+  // location (SECURITY DEFINER, mirrors app.get_warehouse_location_
+  // deactivation_impact's own OPS:View + can_access_record chain exactly);
+  // app.get_approval_request_step (SECURITY INVOKER, full-row grant, the same
+  // already-proven-safe EXISTS-join RLS shape app.list_approval_request_steps
+  // established in cluster 6 batch 1); app.get_approval_request_by_id
+  // (SECURITY INVOKER -- DELIBERATE DEPARTURE from the recon's own suggested
+  // DEFINER-plus-check_approval_request_authority design, since that helper was
+  // ALREADY independently found stale by cluster 0 batch 3 relative to the
+  // table's own CURRENT RLS predicate; column-restricted grant, ended_reason
+  // cast to null in its correct 13th-of-16 position).
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the unit test suite (6 query modules extended with
+  // new function coverage: document.ts/document.test.ts, org-hierarchy.ts/
+  // org-hierarchy.test.ts, position.ts/position.test.ts, recruitment.ts/
+  // recruitment.test.ts, bin-racking.ts/bin-racking.test.ts, approval.ts/
+  // approval.test.ts -- 6,046 tests passing), `git:check-paths` (clean),
+  // `security:check` (clean), a full `pnpm run db:test` (`ALL PASSED`, 534
+  // migrations / 277 db-test files, including the new cluster-7 db-test file: a
+  // 5-persona sweep -- HRS:View+OPS:View staff, a plain member with no special
+  // role, a customer_user-layer principal, a zero-membership Supreme Admin, and
+  // a cross-tenant actor -- across all 7 new functions, a genuine masking proof
+  // for both app.list_position_incumbents (reason_note/decided_reason nulled
+  // for an HRS:View-only holder, unmasked for Supreme Admin) and app.get_
+  // approval_request_by_id (ended_reason nulled despite a real non-null value
+  // written to the fixture row)), and a real `next build`. A transient,
+  // date-rollover-triggered failure in the PRE-EXISTING, unrelated
+  // commercial-dashboard.sql (its own "due_today" activity bucket, sensitive to
+  // current_date at the exact moment db:test ran across a midnight boundary)
+  // was independently reproduced on the pre-cluster-7 commit too, confirming it
+  // was never caused by this batch's own changes, before re-running the full
+  // suite to a clean ALL PASSED.
+  // **The entire CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters,
+  // 0 through 7, every `.from()`/direct-table read against an `app.*` table
+  // across server/queries/*.ts AND page.tsx files) is now FULLY DONE.**
+  migrationSetSha256: "c5fd2bde0aad57ca615f1936c762f6265f56d00f8c8884379a146635cf19f376",
+  // History: 2a5424306416032ff0adb5566a5d482d3e05400df4cb06263f15ca80698d7404
+  // (533 files, HUNDRED-AND-THIRTY-FIFTH PASS).
   // History: 66e7aa429f477a4d667f002f6e11271a0fc63d371423cdcdd5f67d709b916470
   // (532 files, HUNDRED-AND-THIRTY-FOURTH PASS).
   // History: c7dc83b91381284f9fd45b6839d67bcc5acf11f58ee141a981269a6f5374f54b
@@ -6579,7 +6643,49 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ALL PASSED.
   // Cluster 6 (platform-intelligence-reports, 30/30 call sites) is now FULLY
   // DONE. Remaining: cluster 7 (16 call sites), not yet started.
-  dbTestSetSha256: "c4c2a6d0e31e51d2f09b104039347b53c6ddd114c5a1eccb4f6784727b05757d",
+  // HUNDRED-AND-THIRTY-SIXTH PASS (2026-09-14, same ruling as migrationSetSha256
+  // above): 277 files (+1) -- new file scripts/db-tests/o1-query-layer-
+  // cluster7.sql, the LAST cluster of the entire Ø1-query-layer remediation.
+  // Proves, against a real disposable database, all 7 new function pairs (14
+  // functions) across page-level-direct-reads. Fixture setup deliberately
+  // bypasses every domain's own heavier creation RPCs (app.create_employee_
+  // draft, app.create_job_vacancy_draft, app.request_approval, etc.) via direct
+  // INSERT wherever a table has no trivial creation helper -- the same
+  // established technique this series already used for app.approval_requests/
+  // app.config_versions (cluster 0 batch 3) -- since these functions are being
+  // tested for their own read-side authority/masking behavior, not the
+  // mutation business rules that would normally produce these rows. A
+  // 5-persona sweep (HRS:View+OPS:View staff via a real role assignment, a
+  // plain member with no special role, a customer_user-layer principal, a
+  // zero-membership Supreme Admin, and a cross-tenant actor in a second
+  // tenant) across all 7 functions; a genuine masking proof for app.list_
+  // position_incumbents (reason_note/decided_reason nulled for the HRS:View-
+  // only persona despite real non-null values written to the fixture row,
+  // unmasked for Supreme Admin via app.has_view_personal_data's own
+  // is_supreme_admin bypass) and for app.get_approval_request_by_id
+  // (ended_reason nulled despite a real non-null value written); ordering/
+  // not-found/nonexistent-id genuinely-empty proofs throughout; the standard
+  // anon-denial/service_role-smoke/schema-privilege-grant-count sections. A
+  // real, independently-caught bug was found and fixed during this pass's own
+  // fixture authoring: an early draft used location_type='zone' for a
+  // warehouse_locations fixture row, which is not one of the 6 values
+  // warehouse_locations_location_type_check actually permits (rack/shelf/
+  // floor/staging/dock/bin) -- caught immediately by the insert's own CHECK
+  // violation, fixed by using 'floor'. A second, unrelated finding during this
+  // pass's own full-suite verification: a transient failure in the
+  // PRE-EXISTING, unrelated commercial-dashboard.sql (its own "due_today"
+  // activity-bucket assertion, sensitive to current_date at the exact moment
+  // db:test happened to run across a real midnight boundary, 2026-09-13 into
+  // 2026-09-14) was independently reproduced by stashing every one of this
+  // pass's own changes and re-running the full suite against the unmodified
+  // prior commit -- confirming the failure was never caused by this batch,
+  // before restoring the stash and re-running to a clean ALL PASSED.
+  // **Cluster 7 (page-level-direct-reads, 10/10 call sites) is now FULLY DONE.
+  // The entire CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters)
+  // is now FULLY DONE.**
+  dbTestSetSha256: "3e7fb02dcd68bf883434043e1243f908ccef6106efb53adb049ee54f621c2fa2",
+  // History: c4c2a6d0e31e51d2f09b104039347b53c6ddd114c5a1eccb4f6784727b05757d
+  // (276 files, HUNDRED-AND-THIRTY-FIFTH PASS).
   // History: 9c3fffab23ebed2ff7089549dde1cdc811ca478a6372bc7ab76e6e654dd072fc
   // (275 files, HUNDRED-AND-THIRTY-FOURTH PASS).
   // History: 9c3f143bab47f9bda68819b09514d2891e653b99f83e589493b1fde46cb6737f

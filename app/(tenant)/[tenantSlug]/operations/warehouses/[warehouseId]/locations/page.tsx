@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolveOperationsAccessForRequest } from "../../../../../../../lib/portal/resolve-operations-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../../lib/supabase/server.ts";
-import { listWarehouseLocations, BinRackingQueryError } from "../../../../../../../server/queries/bin-racking.ts";
-import { parseWarehouseLocation, type WarehouseLocation } from "../../../../../../../server/contracts/bin-racking/bin-racking.ts";
+import { listWarehouseLocations, getWarehouseLocation, BinRackingQueryError } from "../../../../../../../server/queries/bin-racking.ts";
+import type { WarehouseLocation } from "../../../../../../../server/contracts/bin-racking/bin-racking.ts";
 import { ErrorState } from "../../../../../../../components/ui/error-state.tsx";
 import { StatusBadge } from "../../../../../../../components/ui/status-badge.tsx";
 
@@ -43,8 +43,7 @@ export default async function WarehouseLocationsPage({
   try {
     locations = await listWarehouseLocations(supabase, warehouseId, access.authUserId, parent ?? null);
     if (parent) {
-      const { data } = await supabase.from("warehouse_locations").select("*").eq("id", parent).maybeSingle();
-      parentLocation = data ? parseWarehouseLocation(data as Record<string, unknown>) : null;
+      parentLocation = await getWarehouseLocation(supabase, parent, access.authUserId);
     }
   } catch (error) {
     if (!(error instanceof BinRackingQueryError)) {
