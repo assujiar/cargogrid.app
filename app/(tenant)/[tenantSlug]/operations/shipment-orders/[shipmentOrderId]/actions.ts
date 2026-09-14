@@ -756,6 +756,25 @@ export async function startEpodCaptureAction(tenantSlug: string, shipmentOrderId
  * ePOD capture version. No live storage backend exists in this sandbox -- MIME type
  * and size are fixed placeholders, matching PLT-128's own disclosed constraint.
  */
+/**
+ * CG-AUDIT-2026-09-02 A6 (the 4th and last of the audit's own named
+ * deadlocked flows -- vendor compliance, shipment document checklist, and
+ * ticket-reply attachments were all fixed earlier this session): previously
+ * this action read plain TEXT filename fields (signatureFilename/
+ * photoFilename), never a real File object, and called uploadShipmentDocumentFile
+ * with a HARDCODED mimeType/sizeBytes -- no bytes were ever stored, no scan
+ * was ever enqueued, so a signature/photo "evidence" file could never leave
+ * malware_scan_status='pending'. Fixed by taking real `signatureFile`/
+ * `photoFile` File inputs and running the same upload+store+scan sequence
+ * uploadAndLinkDocumentAction already established for checklist evidence --
+ * both are optional (app.set_epod_evidence itself treats signature_file_id/
+ * photo_file_ids as nullable), but a present file must round-trip as real,
+ * clean-scannable bytes, never fabricated metadata. Geolocation/capturedAt
+ * remain plain scalar inputs -- app.set_epod_evidence never required a
+ * signature-pad canvas or live camera capture, only a real evidence file
+ * when one is provided; that richer capture UX can layer on top later with
+ * zero RPC/schema changes.
+ */
 export async function setEpodEvidenceAction(
   tenantSlug: string,
   shipmentOrderId: string,
@@ -771,49 +790,73 @@ export async function setEpodEvidenceAction(
 
   const receiverName = String(formData.get("receiverName") ?? "");
   const receiverPosition = String(formData.get("receiverPosition") ?? "").trim();
-  const signatureFilename = String(formData.get("signatureFilename") ?? "").trim();
-  const photoFilename = String(formData.get("photoFilename") ?? "").trim();
+  const signatureFile = formData.get("signatureFile");
+  const photoFile = formData.get("photoFile");
   const latitude = String(formData.get("latitude") ?? "").trim();
   const longitude = String(formData.get("longitude") ?? "").trim();
   const capturedAtLocal = String(formData.get("capturedAt") ?? "").trim();
 
+  const supabase = await createSupabaseServerClient();
   try {
     const serviceRole = createSupabaseServiceRoleClient();
     let signatureFileId: string | null = null;
-    if (signatureFilename.length > 0) {
-      const file = await uploadShipmentDocumentFile(serviceRole, {
+    if (signatureFile instanceof File && signatureFile.size > 0) {
+      const uploaded = await uploadShipmentDocumentFile(serviceRole, {
         tenantId: access.tenant.id,
         shipmentOrderId,
         documentTypeCode: "epod",
-        originalFilename: signatureFilename,
-        mimeType: "image/png",
-        sizeBytes: 20480,
+        originalFilename: signatureFile.name,
+        mimeType: signatureFile.type || "image/png",
+        sizeBytes: signatureFile.size,
         idempotencyKey: `${idempotencyKeyPrefix}-sig`,
         actorAuthUserId: access.authUserId,
         actorLabel: access.authUserId,
       });
-      signatureFileId = file.id;
+      const storeError = await storeFileBytesAndEnqueueScan(
+        toShipmentDocumentStoreClient(serviceRole),
+        toShipmentDocumentBackgroundJobClient(supabase),
+        uploaded,
+        signatureFile,
+        access.tenant.id,
+        access.authUserId,
+        "signature",
+      );
+      if (storeError) {
+        return storeError;
+      }
+      signatureFileId = uploaded.id;
     }
     let photoFileIds: string[] = [];
-    if (photoFilename.length > 0) {
-      const file = await uploadShipmentDocumentFile(serviceRole, {
+    if (photoFile instanceof File && photoFile.size > 0) {
+      const uploaded = await uploadShipmentDocumentFile(serviceRole, {
         tenantId: access.tenant.id,
         shipmentOrderId,
         documentTypeCode: "epod",
-        originalFilename: photoFilename,
-        mimeType: "image/jpeg",
-        sizeBytes: 102400,
+        originalFilename: photoFile.name,
+        mimeType: photoFile.type || "image/jpeg",
+        sizeBytes: photoFile.size,
         idempotencyKey: `${idempotencyKeyPrefix}-photo`,
         actorAuthUserId: access.authUserId,
         actorLabel: access.authUserId,
       });
-      photoFileIds = [file.id];
+      const storeError = await storeFileBytesAndEnqueueScan(
+        toShipmentDocumentStoreClient(serviceRole),
+        toShipmentDocumentBackgroundJobClient(supabase),
+        uploaded,
+        photoFile,
+        access.tenant.id,
+        access.authUserId,
+        "delivery photo",
+      );
+      if (storeError) {
+        return storeError;
+      }
+      photoFileIds = [uploaded.id];
     }
 
     const deliveryGeojson: GeoJsonPoint | null =
       latitude.length > 0 && longitude.length > 0 ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] } : null;
 
-    const supabase = await createSupabaseServerClient();
     await setEpodEvidence(supabase, {
       captureId,
       receiverName: receiverName.trim().length === 0 ? null : receiverName,

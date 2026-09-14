@@ -158,23 +158,27 @@ function EpodCaptureActions({
             </FormField>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <FormField id={`${captureId}-signature-filename`} label="Signature filename">
-              <Input
-                id={`${captureId}-signature-filename`}
-                type="text"
-                name="signatureFilename"
-                placeholder="signature.png"
-                invalid={Boolean(evidenceState.error)}
+            {/* CG-AUDIT-2026-09-02 A6: a real file input, not a typed filename -- the
+                Server Action stores the actual bytes and enqueues a malware scan; a
+                signature-pad canvas / live camera capture is later UI polish on top
+                of this same file, never a schema/RPC prerequisite. */}
+            <FormField id={`${captureId}-signature-file`} label="Signature">
+              <input
+                id={`${captureId}-signature-file`}
+                type="file"
+                name="signatureFile"
+                accept="image/*"
+                className="text-sm"
                 aria-describedby={evidenceDescribedBy}
               />
             </FormField>
-            <FormField id={`${captureId}-photo-filename`} label="Photo filename">
-              <Input
-                id={`${captureId}-photo-filename`}
-                type="text"
-                name="photoFilename"
-                placeholder="delivery-photo.jpg"
-                invalid={Boolean(evidenceState.error)}
+            <FormField id={`${captureId}-photo-file`} label="Delivery photo">
+              <input
+                id={`${captureId}-photo-file`}
+                type="file"
+                name="photoFile"
+                accept="image/*"
+                className="text-sm"
                 aria-describedby={evidenceDescribedBy}
               />
             </FormField>
@@ -217,6 +221,12 @@ function EpodCaptureActions({
           <Button type="submit" loading={evidencePending} loadingLabel="Saving…" variant="secondary" className="w-fit">
             Save evidence
           </Button>
+          <p className="text-xs text-neutral-500">
+            Any signature/photo file is stored for real and a malware scan is queued (CG-AUDIT-2026-09-02 A6). Until an
+            operator configures a real VirusTotal API key and the platform integration encryption key (D4&apos;s own
+            still-open gap), every scan fails closed and stays &quot;pending&quot; -- so an evidence file will keep failing
+            approval in an unconfigured environment, not because the file itself is broken.
+          </p>
         </form>
         {evidenceState.error ? (
           <div className="mt-1">
