@@ -6,9 +6,10 @@ import { Breadcrumb } from "../../../../../../../../../components/ui/breadcrumb.
 import { StatusBadge } from "../../../../../../../../../components/ui/status-badge.tsx";
 import { ValidationMessage } from "../../../../../../../../../components/forms/validation-message.tsx";
 import type { VendorComplianceDocument, VendorComplianceAccessResult } from "../../../../../../../../../server/contracts/vendor-compliance/vendor-compliance.ts";
-import type { VendorComplianceEvidenceAccessState } from "../../../actions.ts";
+import type { VendorComplianceEvidenceAccessState, VendorComplianceEvidenceDownloadState } from "../../../actions.ts";
 
 const INITIAL_STATE: VendorComplianceEvidenceAccessState = { error: null, access: null };
+const INITIAL_DOWNLOAD_STATE: VendorComplianceEvidenceDownloadState = { error: null, download: null };
 
 const ACCESS_RESULT_TONE: Record<VendorComplianceAccessResult, "success" | "danger"> = {
   granted: "success",
@@ -16,9 +17,11 @@ const ACCESS_RESULT_TONE: Record<VendorComplianceAccessResult, "success" | "dang
 };
 
 type EvidenceAccessAction = (prevState: VendorComplianceEvidenceAccessState, formData: FormData) => Promise<VendorComplianceEvidenceAccessState>;
+type EvidenceDownloadAction = (prevState: VendorComplianceEvidenceDownloadState, formData: FormData) => Promise<VendorComplianceEvidenceDownloadState>;
 
-function VersionRow({ version, accessAction }: { version: VendorComplianceDocument; accessAction: EvidenceAccessAction }) {
+function VersionRow({ version, accessAction, downloadAction }: { version: VendorComplianceDocument; accessAction: EvidenceAccessAction; downloadAction: EvidenceDownloadAction }) {
   const [state, formAction, pending] = useActionState(accessAction, INITIAL_STATE);
+  const [downloadState, downloadFormAction, downloadPending] = useActionState(downloadAction, INITIAL_DOWNLOAD_STATE);
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-neutral-100 p-3">
@@ -62,6 +65,28 @@ function VersionRow({ version, accessAction }: { version: VendorComplianceDocume
           )
         ) : null}
       </form>
+
+      <form action={downloadFormAction} className="flex flex-col gap-2">
+        {downloadState.error ? <ValidationMessage>{downloadState.error}</ValidationMessage> : null}
+        <Button type="submit" variant="secondary" loading={downloadPending} loadingLabel="Creating link…" className="w-fit">
+          Get download link
+        </Button>
+        {downloadState.download ? (
+          downloadState.download.accessResult === "granted" && downloadState.download.signedUrl ? (
+            <p className="text-xs">
+              <a href={downloadState.download.signedUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+                Open {downloadState.download.originalFilename ?? "file"}
+              </a>{" "}
+              <span className="text-neutral-500">— link expires in 5 minutes</span>
+            </p>
+          ) : (
+            <p role="status" className="flex items-center gap-2 text-xs">
+              <StatusBadge tone={ACCESS_RESULT_TONE[downloadState.download.accessResult]} label="access denied" />
+              {downloadState.download.accessReason ?? "no reason recorded"}
+            </p>
+          )
+        ) : null}
+      </form>
     </li>
   );
 }
@@ -73,6 +98,7 @@ export function DocumentVersionPanel({
   requirementName,
   versions,
   accessActionFor,
+  downloadActionFor,
 }: {
   tenantSlug: string;
   vendorMasterRecordId: string;
@@ -80,6 +106,7 @@ export function DocumentVersionPanel({
   requirementName: string | null;
   versions: readonly VendorComplianceDocument[];
   accessActionFor: (documentId: string) => EvidenceAccessAction;
+  downloadActionFor: (documentId: string) => EvidenceDownloadAction;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -104,7 +131,7 @@ export function DocumentVersionPanel({
 
       <ul className="flex flex-col gap-3">
         {versions.map((version) => (
-          <VersionRow key={version.id} version={version} accessAction={accessActionFor(version.id)} />
+          <VersionRow key={version.id} version={version} accessAction={accessActionFor(version.id)} downloadAction={downloadActionFor(version.id)} />
         ))}
       </ul>
     </div>

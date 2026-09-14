@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | user-directed, part 2 of 2: a real private Storage bucket, a real `malware_scan` job type/worker, and a real VirusTotal scan adapter now exist, and one of the 3 named deadlocked flows (vendor compliance document submission/renewal) is wired end to end. Still bounded, not DONE: ticket-reply attachments and shipment document checklists are not wired (the pattern now exists for them to reuse); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | part 3 of 3: the audit's own step-4 wording, "wire upload + signed download + scanning," is now fully wired for vendor compliance evidence specifically -- a real private Storage bucket, a real `malware_scan` job type/worker, a real VirusTotal scan adapter, AND a real signed-download RPC + Server Action + UI link (previously the one leg no record type had, repo-wide). Still bounded, not DONE: ticket-reply attachments and shipment document checklists have neither upload nor download wired yet (the pattern now exists for both to reuse); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and two printable documents, surat jalan (delivery note) and POD (proof of delivery), now exist end to end (`server/documents/`, two new Route Handlers, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, packing list, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -1990,3 +1990,81 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   alongside `/surat-jalan`). No migration/db-test/lockfile change — `db:test` and
   `check-release-freeze` both unaffected.
   Still open under A7: invoice, faktur pajak, packing list, and purchase order printables.
+- 2026-09-14 — A6 third piece: signed download for vendor compliance evidence, closing
+  the audit's own step-4 wording ("wire upload + signed download + scanning") for that
+  one record type. Upload and scanning were already wired by an earlier pass; signed
+  download never was, for ANY record type in this codebase -- confirmed by a repo-wide
+  grep for `createSignedUrl`/`storage.from(...).download` finding only the malware-scan
+  job's own internal download, never anything user-facing (the same gap this session's
+  A7 POD document disclosed and deliberately worked around rather than faked).
+  Why not simply reuse the existing `app.access_vendor_compliance_document_evidence`:
+  that RPC already accepts `p_access_type='signed_url_issued'` and already runs the
+  right authorization (PRC:Download + `app.authorize_vendor_evidence_file_access`'s
+  malware-scan/classification gate), but by deliberate prior design (Finding A,
+  `20260814000000_harden_storage_signed_url_audit_findings.sql`) it can never return
+  `storage_path` -- `app.files.storage_path` carries no column grant to `authenticated`
+  at all, and that RPC is granted to `authenticated`. Minting a signed URL genuinely
+  needs the raw storage key, so the fix is a new, narrowly-scoped, `service_role`-only
+  sibling RPC that performs the identical authorization dance and only returns
+  `storage_path`/`bucket_id` once granted.
+  New migration `20260914020000_a6_vendor_compliance_signed_download.sql`:
+  `app.access_vendor_compliance_document_evidence_for_download` (service_role only,
+  never authenticated/anon) plus its required `public.*` PostgREST pass-through wrapper
+  (`app` is not exposed to PostgREST at all — confirmed via `supabase/config.toml`'s own
+  `schemas = ["public", "graphql_public"]` — so every RPC callable from application code
+  needs a matching `public.*` wrapper, the standing convention
+  `20260826000000_create_public_api_data_wrappers.sql` established and
+  `scripts/db-tests/public-api-wrapper-regression.sql` enforces exhaustively, catalog-
+  derived, every externally-callable `app.*` function, every run). Deliberately NOT a
+  refactor sharing a body with the existing RPC across the authenticated/service_role
+  grant boundary: a reviewer reading the new function alone sees its complete grant
+  surface without tracing an EXECUTE grant through a second function with a wider grant.
+  App layer: `server/contracts/vendor-compliance/vendor-compliance.ts` gained the raw-row
+  parse type (`VendorComplianceDocumentEvidenceDownloadSource`, never re-exported past
+  the mutation function that parses it) and the public-facing result type
+  (`VendorComplianceDocumentSignedDownload`, carries only the already-signed URL, never
+  `storage_path`/`bucket_id`). `server/mutations/vendor-compliance.ts` gained
+  `getVendorComplianceDocumentSignedDownloadUrl`, which calls the new RPC first and only
+  calls `.storage.from(bucketId).createSignedUrl(storagePath, 300)` (5-minute TTL) once
+  `accessResult === 'granted'` -- storage_path/bucketId never leave this one function.
+  `app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts` gained
+  `downloadVendorComplianceDocumentEvidenceAction`, using the service-role client (the
+  same `toDocumentClient`-style cast-adapter pattern this file's own
+  `initiate_file_upload` caller already established, since this RPC is service_role-only
+  for the identical reason). `document-version-panel.tsx` gained a second, independent
+  "Get download link" form/button per version row (a second `useActionState`, since two
+  independent server actions in one row need two `<form>` elements -- HTML forbids
+  nesting) rendering `<a href={signedUrl} target="_blank">` once granted, or the denial
+  reason inline once denied, mirroring the existing "View evidence" row's own pattern.
+  A genuine, live-reproduced defect found and fixed while writing db-test coverage (not
+  merely typechecked): `information_schema.parameters.specific_name` is synthesized as
+  `<function_name>_<oid>` and silently clipped to NAMEDATALEN-1 (63) bytes TOTAL --
+  for this function's own OID that clips the 55-character function name itself
+  mid-word, to `..._for_downloa_<oid>` (missing the final "d"). A first draft of the
+  "no storage_path on the metadata_view sibling" exclusion assertion pattern-matched
+  `specific_name not like '%_for_download%'`, which can never match the clipped value
+  and left the original assertion still failing (live-reproduced: `pnpm run db:test`
+  failed with the pre-existing "expected no storage_path" assertion, not a new one).
+  Fixed by joining through `information_schema.routines.routine_name` instead, which is
+  the real, unclipped name -- applied to both the original exclusion check and the new
+  inclusion check for the new function's own return shape.
+  `scripts/db-tests/procurement-vendor-compliance.sql` extended (no new file): granted
+  (real `storage_path`/`bucket_id='tenant-documents'`)/insufficient_authority (viewer
+  lacking PRC:Download)/ISS-2026-146-shaped cross-tenant not-found/denied-not-raised-
+  with-storage_path-nulled-once-infected/`app.file_access_logs` recording under
+  `access_type='signed_url_issued'`/storage_path-present-in-return-shape coverage for
+  the new RPC, plus schema-privilege regression guards (zero anon/authenticated EXECUTE
+  on both the `app.*` function and its `public.*` wrapper, unlike its sibling which IS
+  granted to authenticated).
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only pre-existing
+  warnings, confirmed none from this slice), the unit test suite (6,057 tests passing,
+  unchanged file count), a full `pnpm run db:test` (`ALL PASSED`, 536 migrations / 277
+  db-test files), `git:check-paths` (clean), `security:check` (clean), and a real
+  `next build`.
+  `scripts/release/check-release-freeze.ts` amended (HUNDRED-AND-THIRTY-NINTH PASS,
+  `migrationSetSha256`/`dbTestSetSha256` both — the new migration file and the extended
+  db-test file).
+  Still open under A6: ticket-reply attachments and shipment document checklists have
+  neither upload nor download wired (the pattern now exists for both); D4's own GUC gap
+  (encryption key + a real VirusTotal API key) still fails every scan closed until an
+  operator configures both.

@@ -23,7 +23,9 @@ import {
   revokeVendorComplianceWaiver,
   recalculateVendorComplianceStatus,
   accessVendorComplianceDocumentEvidence,
+  getVendorComplianceDocumentSignedDownloadUrl,
   VendorComplianceMutationError,
+  type VendorComplianceEvidenceDownloadClient,
 } from "../../../../../../server/mutations/vendor-compliance.ts";
 import { getVendorComplianceRequirement, VendorComplianceQueryError } from "../../../../../../server/queries/vendor-compliance.ts";
 import { initiateFileUpload, requestFileDeletion, DocumentMutationError, type DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
@@ -34,6 +36,7 @@ import type {
   VendorComplianceWaiverDecision,
   VendorComplianceAccessType,
   VendorComplianceDocumentEvidenceAccess,
+  VendorComplianceDocumentSignedDownload,
 } from "../../../../../../server/contracts/vendor-compliance/vendor-compliance.ts";
 
 export interface VendorComplianceActionState {
@@ -341,6 +344,48 @@ export async function accessVendorComplianceDocumentEvidenceAction(
     return { error: null, access: result };
   } catch (error) {
     if (error instanceof VendorComplianceMutationError) return { error: `Could not access this evidence file: ${error.message}`, access: null };
+    throw error;
+  }
+}
+
+/** Same adapter-cast reasoning as toDocumentClient above. app.access_vendor_compliance_document_evidence_for_download (CG-AUDIT-2026-09-02 A6) is granted to service_role only, never authenticated -- storage_path cannot safely be handed to any RPC the RLS-scoped client could reach, per that function's own header comment -- so this one genuinely needs the service-role client, unlike its metadata_view/download-decision sibling immediately above. */
+function toVendorComplianceEvidenceDownloadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): VendorComplianceEvidenceDownloadClient {
+  return client as unknown as VendorComplianceEvidenceDownloadClient;
+}
+
+export interface VendorComplianceEvidenceDownloadState {
+  readonly error: string | null;
+  readonly download: VendorComplianceDocumentSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6, third and final piece of "wire upload + signed download +
+ * scanning" for vendor compliance evidence (upload and scanning were already wired by
+ * an earlier pass). Mints a short-lived (5 minute) signed URL server-side; the
+ * browser never sees storage_path, only the already-signed URL, which it opens
+ * directly (Supabase Storage itself authorizes GETs against a valid signed token,
+ * independent of any further RLS check).
+ */
+export async function downloadVendorComplianceDocumentEvidenceAction(
+  tenantSlug: string,
+  documentId: string,
+  _prevState: VendorComplianceEvidenceDownloadState,
+  _formData: FormData,
+): Promise<VendorComplianceEvidenceDownloadState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, download: null };
+
+  const serviceRoleClient = createSupabaseServiceRoleClient();
+  try {
+    const result = await getVendorComplianceDocumentSignedDownloadUrl(toVendorComplianceEvidenceDownloadClient(serviceRoleClient), {
+      documentId,
+      correlationId: null,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+    return { error: null, download: result };
+  } catch (error) {
+    if (error instanceof VendorComplianceMutationError) return { error: `Could not create a download link for this evidence file: ${error.message}`, download: null };
     throw error;
   }
 }

@@ -5,7 +5,7 @@ import { listVendorComplianceDocumentVersions, getVendorComplianceRequirement, V
 import { getVendorProfile, VendorProfileQueryError } from "../../../../../../../../../server/queries/vendor-profile.ts";
 import { ErrorState } from "../../../../../../../../../components/ui/error-state.tsx";
 import { DocumentVersionPanel } from "./document-version-panel.tsx";
-import { accessVendorComplianceDocumentEvidenceAction } from "../../../actions.ts";
+import { accessVendorComplianceDocumentEvidenceAction, downloadVendorComplianceDocumentEvidenceAction } from "../../../actions.ts";
 
 /**
  * Compliance document/version viewer (PRC-253 fix-pass addition, HIGH-severity
@@ -76,6 +76,7 @@ export default async function VendorComplianceDocumentVersionsPage({
       requirementName={requirementName}
       versions={versions}
       accessActionFor={(documentId) => accessVendorComplianceDocumentEvidenceAction.bind(null, tenantSlug, documentId, "metadata_view")}
+      downloadActionFor={(documentId) => downloadVendorComplianceDocumentEvidenceAction.bind(null, tenantSlug, documentId)}
     />
   );
 }

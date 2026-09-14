@@ -5186,7 +5186,21 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "0e46d035276715480a4bf95f1b40d3ffdc2038eea7b6bd383192416d903b07e2",
+  migrationSetSha256: "d625e847caecd16d1e81d87c5aaa017a3a5f5b6468129f45ee3c44e18fc57312",
+  // HUNDRED-AND-THIRTY-NINTH PASS: CG-AUDIT-2026-09-02 A6, the third and final
+  // piece of "wire upload + signed download + scanning" -- upload and scanning
+  // were already wired by an earlier pass; this adds signed download for vendor
+  // compliance evidence. New migration
+  // 20260914020000_a6_vendor_compliance_signed_download.sql adds
+  // app.access_vendor_compliance_document_evidence_for_download (service_role
+  // only -- the one piece its authenticated-grantable sibling,
+  // app.access_vendor_compliance_document_evidence, can never provide, since
+  // app.files.storage_path carries no column grant to authenticated at all) plus
+  // its required public.* PostgREST wrapper (app is not exposed to PostgREST).
+  // 536 tracked migration files (535 -> 536). Re-verified with a full
+  // `pnpm run db:test`, ALL PASSED.
+  // History: 0e46d035276715480a4bf95f1b40d3ffdc2038eea7b6bd383192416d903b07e2
+  // (535 files, HUNDRED-AND-THIRTY-SEVENTH PASS).
   // History: 298c7f9bf1977c728e5a83d9f8b3522b2325b8f0ccf6c9e10355c44af32e58d3
   // (535 files, HUNDRED-AND-THIRTY-SEVENTH PASS, pre-fix -- superseded before
   // ever landing, see the note immediately above).
@@ -6785,7 +6799,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "e625fc8c358aeba378a90281d55d52778f980663dc0b0d5925a18d3c507dc6fb",
+  dbTestSetSha256: "3829633f02208768f9f6952f76d4270f788dbe5a7f2b657394baca36a1786503",
+  // HUNDRED-AND-THIRTY-NINTH PASS: same CG-AUDIT-2026-09-02 A6 signed-download
+  // slice as migrationSetSha256's own note immediately above -- extends the
+  // existing scripts/db-tests/procurement-vendor-compliance.sql (no new file,
+  // 277 files unchanged) with granted/denied/insufficient-authority/cross-tenant
+  // coverage for app.access_vendor_compliance_document_evidence_for_download,
+  // plus schema-privilege regression guards (service_role only, zero
+  // anon/authenticated grant on both the app.* function and its public.*
+  // wrapper). Full `pnpm run db:test`, ALL PASSED.
+  // History: e625fc8c358aeba378a90281d55d52778f980663dc0b0d5925a18d3c507dc6fb
+  // (277 files, HUNDRED-AND-THIRTY-SEVENTH PASS).
   // History: 3e7fb02dcd68bf883434043e1243f908ccef6106efb53adb049ee54f621c2fa2
   // (277 files, HUNDRED-AND-THIRTY-SIXTH PASS).
   // History: c4c2a6d0e31e51d2f09b104039347b53c6ddd114c5a1eccb4f6784727b05757d

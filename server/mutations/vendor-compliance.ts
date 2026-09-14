@@ -21,11 +21,13 @@ import {
   RecalculateVendorComplianceStatusInputSchema,
   RecalculateTenantVendorComplianceStatusInputSchema,
   AccessVendorComplianceDocumentEvidenceInputSchema,
+  AccessVendorComplianceDocumentEvidenceForDownloadInputSchema,
   parseVendorComplianceRequirement,
   parseVendorComplianceDocument,
   parseVendorComplianceWaiver,
   parseVendorComplianceStatusRow,
   parseVendorComplianceDocumentEvidenceAccess,
+  parseVendorComplianceDocumentEvidenceDownloadSource,
   type CreateVendorComplianceRequirementDraftInput,
   type UpdateVendorComplianceRequirementDraftInput,
   type PublishVendorComplianceRequirementInput,
@@ -40,6 +42,8 @@ import {
   type RecalculateVendorComplianceStatusInput,
   type RecalculateTenantVendorComplianceStatusInput,
   type AccessVendorComplianceDocumentEvidenceInput,
+  type AccessVendorComplianceDocumentEvidenceForDownloadInput,
+  type VendorComplianceDocumentSignedDownload,
   type VendorComplianceRequirement,
   type VendorComplianceDocument,
   type VendorComplianceWaiver,
@@ -283,6 +287,62 @@ export async function accessVendorComplianceDocumentEvidence(
   const row = firstRow(data);
   if (!row) throw new VendorComplianceMutationError("invalid_response", "access_vendor_compliance_document_evidence returned no row");
   return parseVendorComplianceDocumentEvidenceAccess(row);
+}
+
+/**
+ * Widens VendorComplianceMutationRpcClient with the one extra capability this single
+ * function needs: minting a signed URL against the real Storage bucket. Only ever
+ * satisfied by a service-role client (lib/supabase/service-role.ts) -- the underlying
+ * RPC this calls is granted to service_role only, so an RLS-scoped client's own
+ * `.rpc()` call would simply be refused before `.storage` is ever reached.
+ */
+export type VendorComplianceEvidenceDownloadClient = VendorComplianceMutationRpcClient & {
+  storage: {
+    from(bucket: string): {
+      createSignedUrl(path: string, expiresInSeconds: number): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }>;
+    };
+  };
+};
+
+const SIGNED_DOWNLOAD_URL_TTL_SECONDS = 300;
+
+/**
+ * CG-AUDIT-2026-09-02 A6, third and final piece of "wire upload + signed download +
+ * scanning": mints a short-lived signed URL for one vendor compliance document's
+ * evidence file. Calls the service_role-only app.access_vendor_compliance_document_evidence_for_download
+ * RPC first (the identical PRC:Download + malware-scan/classification gate its sibling
+ * app.access_vendor_compliance_document_evidence already uses, just able to return
+ * storage_path); only once that RPC reports accessResult='granted' does this function
+ * call Storage at all. storage_path/bucketId never leave this function -- the caller
+ * only ever sees the already-signed URL, matching accessVendorComplianceDocumentEvidence's
+ * own "denied, not raised, with sensitive fields withheld" contract.
+ */
+export async function getVendorComplianceDocumentSignedDownloadUrl(
+  client: VendorComplianceEvidenceDownloadClient,
+  input: AccessVendorComplianceDocumentEvidenceForDownloadInput,
+): Promise<VendorComplianceDocumentSignedDownload> {
+  const parsed = AccessVendorComplianceDocumentEvidenceForDownloadInputSchema.parse(input);
+  const { data, error } = await client.rpc("access_vendor_compliance_document_evidence_for_download", {
+    p_document_id: parsed.documentId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_correlation_id: parsed.correlationId ?? null,
+  });
+  if (error) throw new VendorComplianceMutationError(classifyError(error.message), error.message);
+  const row = firstRow(data);
+  if (!row) throw new VendorComplianceMutationError("invalid_response", "access_vendor_compliance_document_evidence_for_download returned no row");
+  const source = parseVendorComplianceDocumentEvidenceDownloadSource(row);
+
+  if (source.accessResult !== "granted" || !source.bucketId || !source.storagePath) {
+    return { accessResult: source.accessResult, accessReason: source.accessReason, signedUrl: null, originalFilename: null };
+  }
+
+  const { data: signed, error: signError } = await client.storage.from(source.bucketId).createSignedUrl(source.storagePath, SIGNED_DOWNLOAD_URL_TTL_SECONDS);
+  if (signError || !signed) {
+    throw new VendorComplianceMutationError("mutation_failed", `could not mint a signed download URL: ${signError?.message ?? "no data returned"}`);
+  }
+
+  return { accessResult: "granted", accessReason: null, signedUrl: signed.signedUrl, originalFilename: source.originalFilename };
 }
 
 // --- Waivers ---
