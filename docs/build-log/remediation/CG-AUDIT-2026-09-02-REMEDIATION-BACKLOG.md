@@ -2542,3 +2542,41 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `git:check-paths` (clean, 2 files checked), `security:check` (clean), and a
   real `next build`. No migration/db-test/lockfile change --
   `check-release-freeze` unaffected.
+- 2026-09-14 — A6: wired the customer-portal side of ticket-attachment
+  signed download, closing the gap explicitly disclosed as out of scope in
+  this session's own earlier ticket-attachment slice
+  (`customer-ticket-detail-panel.tsx` had zero attachment UI at all).
+  Research confirmed `app.access_ticket_attachment_evidence_for_download`
+  (this session's own RPC) needed NO changes to serve this caller: it
+  already gates on `app.can_access_ticket` (which a genuine customer
+  requester/watcher already satisfies) plus the linked message's own
+  `public`/`internal` visibility, and deliberately carries no
+  `app.actor_holds_customer_user_layer` exclusion (that exclusion exists
+  only on the STAFF listing RPC, to keep a customer-layer caller off
+  internal-note visibility wholesale -- this RPC authorizes one
+  already-known file id against one already-resolved message's own
+  visibility instead, so the same protection already falls out of the
+  visibility gate). `attachmentFileIds` was already flowing end-to-end
+  through `CustomerTicketMessageRowSchema` -- only the panel's own rendering
+  was missing.
+  `app/(tenant)/[tenantSlug]/customer-tickets/actions.ts` gained
+  `getCustomerTicketAttachmentDownloadLinkAction`, calling the SAME
+  `getTicketAttachmentSignedDownloadUrl` mutation wrapper the staff side
+  already uses, gated by `resolveCustomerTicketAccessForRequest`.
+  `customer-ticket-detail-panel.tsx`'s `MessageBubble` gained a per-attachment
+  "Get download link" control mirroring the staff panel's own established
+  `AttachmentRow` pattern exactly (a generic "Attachment N" placeholder
+  button; the real filename appears in the link text only once granted,
+  since no read RPC here projects a filename either).
+  Disclosed, not fixed (separate, larger gap, out of scope for this slice):
+  `replyToCustomerTicketAction` hardcodes `attachmentFileIds: null` --
+  customers cannot attach a file to their OWN reply at all today. This is a
+  genuine upload-side gap analogous to the ones already fixed for
+  vendor-compliance/shipment-checklist/staff-ticket-attachments, but a
+  distinct piece of work (a real file-input reply form on the customer
+  portal side) from the download-side gap this slice closed.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,063 tests passing, unchanged
+  count), `git:check-paths` (clean, 4 files checked), `security:check`
+  (clean), and a real `next build`. No migration/db-test/lockfile change --
+  `check-release-freeze` unaffected.
