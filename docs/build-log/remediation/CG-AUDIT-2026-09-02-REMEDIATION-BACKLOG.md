@@ -107,7 +107,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | user-directed, part 2 of 2: a real private Storage bucket, a real `malware_scan` job type/worker, and a real VirusTotal scan adapter now exist, and one of the 3 named deadlocked flows (vendor compliance document submission/renewal) is wired end to end. Still bounded, not DONE: ticket-reply attachments and shipment document checklists are not wired (the pattern now exists for them to reuse); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
-| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and the first printable document, surat jalan (delivery note), now exist end to end (`server/documents/`, a new Route Handler, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). Still open: invoice, faktur pajak, packing list, POD, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
+| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and two printable documents, surat jalan (delivery note) and POD (proof of delivery), now exist end to end (`server/documents/`, two new Route Handlers, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, packing list, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
@@ -1954,3 +1954,39 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   Still open under A7: invoice, faktur pajak, packing list, POD, and purchase order printables —
   each is now a bounded "one new document template + generator + route" slice over the same
   infrastructure, not a from-scratch build.
+- 2026-09-14 — A7 second printable document: Proof of Delivery (POD), built on
+  `getEpodCaptureHistory` (OPS-177) — no new schema, no new RPC. Chosen instead of invoice: invoice
+  was investigated first, but `server/queries/invoice.ts` has only `listFinanceInvoices` (a bounded
+  list) and `getFinanceInvoiceLines`, no single-invoice-by-id read RPC, and no `[invoiceId]` detail
+  route exists anywhere — building it would mean a new RPC/migration, out of scope for this slice.
+  POD needed none, so it was built first; invoice/faktur pajak remain open with that scoping now
+  written down for whoever picks them up next.
+  Architecture, mirroring the surat jalan precedent exactly: `server/documents/pod-document.tsx`
+  (the `@react-pdf/renderer` JSX layout — POD's data is already flat and strongly typed via
+  `EpodCaptureSchema`, so no `toLabeledValues`-style generic label/value transform is needed here)
+  + `server/documents/generate-pod.server.ts` (assembles `PodData` from `getShipmentOrder` and
+  `getEpodCaptureHistory`, selecting `history.find((c) => c.isLatestVersion)` — the exact same
+  "current version" definition `epod-panel.tsx` already uses — returning `null`, the caller's 404,
+  when a shipment has no ePOD capture at all yet) + a new Route Handler
+  (`app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/pod/route.ts`, identical
+  shape to the surat-jalan route) + a "Print POD" link on the shipment order detail page, shown only
+  when `epodHistory.length > 0` (no point linking to a route that would 404).
+  Deliberately scoped text-only, disclosed in the file's own header comment: `EpodCapture` carries
+  `signatureFileId`/`photoFileIds` referencing real captured evidence in `app.files`, but a
+  repo-wide grep for `createSignedUrl`/`storage.from(...).download` confirms no signed-download
+  capability exists anywhere in this codebase yet — the only hit is the malware-scan job's own
+  internal download, never anything user-facing (this is A6's own still-open "wire upload + signed
+  download + scanning" scope; only upload and scanning are done). Embedding actual signature/photo
+  images is real future work once that exists, not something to fake with an unauthenticated or
+  public URL; the document is still genuinely useful as a receiver-identity/timestamp/review-status
+  summary without the images, and says so explicitly in its own closing line.
+  Genuinely verified, not merely typechecked: the same pre-transpile-then-run technique used for
+  surat jalan produced two real PDF buffers (one with full capture data, one with every nullable
+  field null and `status: "draft"`), both starting with the literal `%PDF-` magic bytes.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only pre-existing warnings,
+  confirmed none of the new files/lines introduced any), the unit test suite (6,057 tests passing,
+  unchanged — no pure-logic helper needed extracting this time, so no new test file), `git:check-paths`
+  (clean), `security:check` (clean), and a real `next build` (confirms the new `/pod` route
+  alongside `/surat-jalan`). No migration/db-test/lockfile change — `db:test` and
+  `check-release-freeze` both unaffected.
+  Still open under A7: invoice, faktur pajak, packing list, and purchase order printables.

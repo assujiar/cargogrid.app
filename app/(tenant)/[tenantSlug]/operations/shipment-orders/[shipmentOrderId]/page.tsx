@@ -368,6 +368,16 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
         >
           Print surat jalan
         </a>
+        {epodHistory.length > 0 ? (
+          <a
+            href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/pod`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-primary underline"
+          >
+            Print POD
+          </a>
+        ) : null}
         <a href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/route-planning`} className="text-sm font-medium text-primary underline">
           Route and load planning
         </a>

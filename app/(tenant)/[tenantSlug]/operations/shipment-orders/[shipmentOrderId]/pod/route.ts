@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { resolveOperationsAccessForRequest } from "../../../../../../../lib/portal/resolve-operations-access.server.ts";
+import { createSupabaseServerClient } from "../../../../../../../lib/supabase/server.ts";
+import { generatePodPdf, PodGenerationError } from "../../../../../../../server/documents/generate-pod.server.ts";
+
+/**
+ * Proof of Delivery (POD) PDF download (audit remediation A7). A Route
+ * Handler, not a Server Action, because a Server Action cannot return a raw
+ * binary HTTP response with a `Content-Type`/`Content-Disposition` header --
+ * the same access-gate-then-query shape every sibling `page.tsx` already
+ * uses (`resolveOperationsAccessForRequest`), just returning a PDF instead
+ * of HTML, mirroring the surat-jalan route exactly.
+ */
+export async function GET(_request: Request, { params }: { params: Promise<{ tenantSlug: string; shipmentOrderId: string }> }) {
+  const { tenantSlug, shipmentOrderId } = await params;
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  let result: Awaited<ReturnType<typeof generatePodPdf>>;
+  try {
+    result = await generatePodPdf(supabase, access.tenant.slug, shipmentOrderId, access.authUserId);
+  } catch (error) {
+    if (error instanceof PodGenerationError) {
+      return NextResponse.json({ error: "generation_failed", message: error.message }, { status: 500 });
+    }
+    throw error;
+  }
+
+  if (!result) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  return new NextResponse(new Uint8Array(result.pdfBuffer), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="pod-${result.shipmentOrder.shipmentNumber}.pdf"`,
+      "Cache-Control": "private, no-store",
+    },
+  });
+}
