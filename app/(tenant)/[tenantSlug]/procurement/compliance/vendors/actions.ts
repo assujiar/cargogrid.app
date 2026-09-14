@@ -28,9 +28,9 @@ import {
   type VendorComplianceEvidenceDownloadClient,
 } from "../../../../../../server/mutations/vendor-compliance.ts";
 import { getVendorComplianceRequirement, VendorComplianceQueryError } from "../../../../../../server/queries/vendor-compliance.ts";
-import { initiateFileUpload, requestFileDeletion, DocumentMutationError, type DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
-import { enqueueJob, type BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
-import { TENANT_DOCUMENTS_BUCKET_ID } from "../../../../../../lib/storage/tenant-documents-bucket.ts";
+import { initiateFileUpload, DocumentMutationError, type DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
+import type { BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
+import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
 import type {
   VendorComplianceDocumentDecision,
   VendorComplianceWaiverDecision,
@@ -97,12 +97,16 @@ function toBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseS
  * malware_scan job that resolves malware_scan_status away from 'pending' -- the
  * first real production caller anywhere in this repository of
  * app.record_file_scan_result (see lib/malware-scan/process-malware-scan-job.server.ts's
- * own header). On a storage upload failure, compensates with a soft
- * app.request_file_deletion rather than leaving a bytes-less 'pending' file row
- * behind; a best-effort compensation only -- if the deletion call ALSO fails, the
- * row remains 'pending' with no stored bytes, the same disclosed residual state
- * A6 started in, not a regression this checkpoint introduces.
+ * own header). Delegates to the shared lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts
+ * helper, extracted from this exact function once shipment document checklist uploads
+ * (app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/actions.ts)
+ * needed the identical sequence -- kept as a thin same-name wrapper here so neither of
+ * this file's own two call sites needed to change.
  */
+function toEvidenceUploadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient & StorageUploadClient {
+  return client as unknown as DocumentMutationRpcClient & StorageUploadClient;
+}
+
 async function storeEvidenceBytesAndEnqueueScan(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   serviceRoleClient: ReturnType<typeof createSupabaseServiceRoleClient>,
@@ -111,37 +115,7 @@ async function storeEvidenceBytesAndEnqueueScan(
   tenantId: string,
   actorAuthUserId: string,
 ): Promise<{ error: string } | null> {
-  const bytes = new Uint8Array(await evidenceFile.arrayBuffer());
-  const { error: uploadError } = await serviceRoleClient.storage.from(TENANT_DOCUMENTS_BUCKET_ID).upload(uploaded.storagePath, bytes, { contentType: uploaded.mimeType, upsert: false });
-  if (uploadError) {
-    try {
-      await requestFileDeletion(toDocumentClient(serviceRoleClient), { fileId: uploaded.id, reason: "storage upload failed", actorAuthUserId, actorLabel: actorAuthUserId });
-    } catch {
-      // Best-effort compensation only -- see this function's own header.
-    }
-    return { error: `Could not store this evidence file: ${uploadError.message}` };
-  }
-
-  try {
-    await enqueueJob(toBackgroundJobClient(supabase), {
-      tenantId,
-      jobType: "malware_scan",
-      payload: {
-        file_id: uploaded.id,
-        storage_path: uploaded.storagePath,
-        uploaded_by_auth_user_id: actorAuthUserId,
-        original_filename: uploaded.originalFilename,
-        mime_type: uploaded.mimeType,
-      },
-      idempotencyKey: "malware_scan:" + uploaded.id,
-      actorAuthUserId,
-      actorLabel: actorAuthUserId,
-    });
-  } catch (error) {
-    return { error: `Evidence stored, but could not queue it for a malware scan: ${error instanceof Error ? error.message : "unknown error"}` };
-  }
-
-  return null;
+  return storeFileBytesAndEnqueueScan(toEvidenceUploadClient(serviceRoleClient), toBackgroundJobClient(supabase), uploaded, evidenceFile, tenantId, actorAuthUserId, "evidence file");
 }
 
 function detailPath(tenantSlug: string, vendorMasterRecordId: string): string {

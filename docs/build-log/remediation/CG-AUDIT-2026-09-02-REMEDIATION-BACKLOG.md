@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs approval-authoring UI, or a deliberate seeded-default policy decision |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | part 3 of 3: the audit's own step-4 wording, "wire upload + signed download + scanning," is now fully wired for vendor compliance evidence specifically -- a real private Storage bucket, a real `malware_scan` job type/worker, a real VirusTotal scan adapter, AND a real signed-download RPC + Server Action + UI link (previously the one leg no record type had, repo-wide). Still bounded, not DONE: ticket-reply attachments and shipment document checklists have neither upload nor download wired yet (the pattern now exists for both to reuse); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | 2 of the audit's own 3 named deadlocked flows are now fully wired end to end (upload + real bytes stored + malware scan enqueued): vendor compliance document submission/renewal (plus its signed download) and shipment document checklist uploads (previously a fully fake filename/MIME/size text-entry form with zero real File object anywhere in the flow -- fixed with a real `<input type="file">` and a shared `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper, extracted once a second caller needed the identical upload+enqueue+compensate sequence). Still bounded, not DONE: ticket-reply attachments have neither upload nor download wired (the pattern now exists to reuse); shipment document checklist and ePOD evidence capture still lack signed download (ePOD's own evidence-capture UI is a separate, larger gap -- it never even collects a real File today, disclosed in A7's POD document work); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | (this commit) — the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and two printable documents, surat jalan (delivery note) and POD (proof of delivery), now exist end to end (`server/documents/`, two new Route Handlers, wired into the shipment order detail page), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Still open: invoice, faktur pajak, packing list, and purchase order printables -- each is now a bounded, precedented "one new document template + generator + route" slice rather than a from-scratch infrastructure build |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -2068,3 +2068,51 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   neither upload nor download wired (the pattern now exists for both); D4's own GUC gap
   (encryption key + a real VirusTotal API key) still fails every scan closed until an
   operator configures both.
+- 2026-09-14 — A6, second of the audit's own 3 named deadlocked flows: shipment
+  document checklist uploads. Live-confirmed, not assumed, before fixing: the checklist
+  upload form (`document-checklist-panel.tsx`) never had a real `<input type="file">`
+  at all -- three plain text/number fields (`originalFilename`, `mimeType`, `sizeBytes`)
+  fed straight into `app.initiate_file_upload`'s metadata row, with a hardcoded
+  `defaultValue={102400}` size. No File object ever existed anywhere in this flow, so
+  no bytes could ever be stored and no scan could ever be queued -- the exact
+  `malware_scan_status='pending'` forever gap A6 names, now confirmed for this second
+  flow specifically (the same header comment on the old action even said so: "No live
+  storage backend exists in this sandbox").
+  Extracted `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` from
+  `procurement/compliance/vendors/actions.ts`'s own `storeEvidenceBytesAndEnqueueScan`
+  (that file's first real caller of the upload-bytes-then-enqueue-scan sequence) once a
+  second, genuinely identical caller needed it -- a third from-scratch copy of
+  security-relevant upload+compensate logic risked drift between copies. The vendor-
+  compliance file's own function is now a thin same-name wrapper delegating to the
+  shared helper (kept so neither of that file's own two call sites needed to change);
+  its behavior is unchanged, re-verified by the full test/lint/typecheck/build pass
+  below.
+  `uploadAndLinkDocumentAction` (shipment-orders `actions.ts`) now reads a real
+  `formData.get("file")` (rejecting a missing/empty file up front), derives
+  `originalFilename`/`mimeType`/`sizeBytes` from the real `File` object instead of
+  operator-typed text, calls the shared helper to store real bytes and enqueue a
+  `malware_scan` job, and only links the checklist item to the file once storage
+  genuinely succeeded (a storage failure now returns an inline error instead of
+  silently linking a checklist item to bytes that were never stored). UI: the three
+  fake fields replaced with one real `<input type="file" name="file" required>`,
+  mirroring vendor compliance's own identical evidence-upload markup exactly.
+  New unit tests: `lib/malware-scan/store-file-bytes-and-enqueue-scan.test.ts` (4
+  cases: real upload + enqueue succeeds; upload failure compensates with a soft
+  `app.request_file_deletion` and returns an inline error; upload failure where the
+  compensating deletion ALSO fails still returns the original error rather than
+  throwing; bytes stored successfully but the scan enqueue itself fails still returns
+  an inline error, never silently drops the file into an unscanned state).
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,061 tests passing, +4 new),
+  `git:check-paths` (clean), `security:check` (clean), and a real `next build`. No
+  migration/db-test/lockfile change — `db:test` and `check-release-freeze` both
+  unaffected.
+  Still open under A6: ticket-reply attachments (neither upload nor download wired);
+  shipment document checklist and ePOD evidence still lack signed download (the
+  pattern from vendor compliance's own signed-download slice is directly reusable);
+  ePOD evidence capture's own UI still fabricates a filename/fixed-size File-free
+  metadata row (`setEpodEvidenceAction`) -- a separate, larger gap than this slice's
+  own scope, since it needs a genuine signature-pad/photo-capture UI, not just a file
+  input, disclosed here rather than folded into this bounded fix; D4's own GUC gap
+  still fails every scan closed until an operator configures both the encryption key
+  and a real VirusTotal API key.

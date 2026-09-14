@@ -4,8 +4,6 @@ import { useActionState, useId } from "react";
 import { Button } from "../../../../../../components/ui/button.tsx";
 import { FormField } from "../../../../../../components/forms/form-field.tsx";
 import { Input } from "../../../../../../components/forms/input.tsx";
-import { NumberInput } from "../../../../../../components/forms/number-input.tsx";
-import { Select } from "../../../../../../components/forms/select.tsx";
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { ChecklistItemView, ChecklistCompleteness } from "../../../../../../server/contracts/document-requirement/document-requirement.ts";
@@ -21,7 +19,7 @@ const EFFECTIVE_STATUS_TONE: Record<ChecklistItemView["effectiveStatus"], "succe
   expired: "danger",
 };
 
-/** OPS-176: the pinned checklist plus a per-item upload/link form (filename/mime/size metadata only -- no live storage integration exists in this sandbox, PLT-128's own disclosed constraint) and a reviewer approve/reject form. effective_status is always the live app.get_shipment_document_checklist value, never cached client state. */
+/** OPS-176 (CG-AUDIT-2026-09-02 A6): the pinned checklist plus a per-item real-file upload/link form (a genuine `<input type="file">`, mirroring vendor-compliance's own evidence upload -- the filename/MIME/size fields this form used to expose are gone, since a real File object already carries all three) and a reviewer approve/reject form. effective_status is always the live app.get_shipment_document_checklist value, never cached client state. */
 export function DocumentChecklistPanel({
   items,
   completeness,
@@ -83,9 +81,7 @@ function ChecklistItemRow({
   const [reviewState, reviewFormAction, reviewPending] = useActionState(reviewAction, INITIAL_STATE);
   // This component renders once per checklist item, so every id must be row-unique.
   const rowId = useId();
-  const filenameId = `${rowId}-original-filename`;
-  const mimeTypeId = `${rowId}-mime-type`;
-  const sizeBytesId = `${rowId}-size-bytes`;
+  const fileInputId = `${rowId}-file`;
   const notesId = `${rowId}-notes`;
   const expiresAtId = `${rowId}-expires-at`;
   const uploadErrorId = `${rowId}-upload-error`;
@@ -104,18 +100,8 @@ function ChecklistItemRow({
       {item.reviewNotes ? <p className="mt-1 text-sm text-neutral-600">Notes: {item.reviewNotes}</p> : null}
 
       <form action={uploadFormAction} className="mt-2 flex flex-wrap items-end gap-2" noValidate>
-        <FormField id={filenameId} label="Filename">
-          <Input id={filenameId} type="text" name="originalFilename" required placeholder="pod.pdf" invalid={Boolean(uploadState.error)} aria-describedby={uploadDescribedBy} />
-        </FormField>
-        <FormField id={mimeTypeId} label="MIME type">
-          <Select id={mimeTypeId} name="mimeType" required defaultValue="application/pdf" invalid={Boolean(uploadState.error)} aria-describedby={uploadDescribedBy}>
-            <option value="application/pdf">application/pdf</option>
-            <option value="image/jpeg">image/jpeg</option>
-            <option value="image/png">image/png</option>
-          </Select>
-        </FormField>
-        <FormField id={sizeBytesId} label="Size (bytes)">
-          <NumberInput id={sizeBytesId} name="sizeBytes" required min={1} defaultValue={102400} className="w-28" invalid={Boolean(uploadState.error)} aria-describedby={uploadDescribedBy} />
+        <FormField id={fileInputId} label="File">
+          <input id={fileInputId} type="file" name="file" required className="text-sm" aria-describedby={uploadDescribedBy} />
         </FormField>
         <Button type="submit" loading={uploadPending} loadingLabel="Uploading…" variant="secondary">
           Upload &amp; link

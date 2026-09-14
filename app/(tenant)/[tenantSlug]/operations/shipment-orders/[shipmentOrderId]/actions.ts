@@ -38,6 +38,9 @@ import {
   uploadShipmentDocumentFile,
   DocumentRequirementMutationError,
 } from "../../../../../../server/mutations/document-requirement.ts";
+import type { DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
+import type { BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
+import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
 import {
   startEpodCapture,
   setEpodEvidence,
@@ -569,14 +572,26 @@ export async function pinDocumentChecklistAction(tenantSlug: string, shipmentOrd
   return { error: null };
 }
 
+function toShipmentDocumentStoreClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient & StorageUploadClient {
+  return client as unknown as DocumentMutationRpcClient & StorageUploadClient;
+}
+
+function toShipmentDocumentBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): BackgroundJobMutationRpcClient {
+  return client as unknown as BackgroundJobMutationRpcClient;
+}
+
 /**
- * OPS-176: uploads file metadata through the Platform Document/File Engine
- * (app.initiate_file_upload, PLT-128, service_role-only -- lib/supabase/service-role.ts's
- * createSupabaseServiceRoleClient is the same "explicit actor, service-role execution"
- * pattern lib/portal/tenant-admin-guard-deps.server.ts already established), then links
- * the resulting file to this checklist item through the RLS-scoped authenticated client.
- * No live storage backend exists in this sandbox -- only filename/MIME/size metadata is
- * ever captured, the same disclosed constraint PLT-128's own migration recorded.
+ * OPS-176 (CG-AUDIT-2026-09-02 A6, third of the audit's own 3 named deadlocked
+ * flows -- vendor compliance document submission and its signed download are both
+ * already wired): uploads file metadata through the Platform Document/File Engine
+ * (app.initiate_file_upload, PLT-128, service_role-only), stores the REAL uploaded
+ * bytes and enqueues a malware_scan job (lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts,
+ * the same sequence vendor compliance evidence already uses), then links the
+ * resulting file to this checklist item through the RLS-scoped authenticated client.
+ * Previously this action only ever captured filename/MIME/size metadata typed into
+ * plain text fields -- no real File reached this action at all, so no file could
+ * ever leave malware_scan_status='pending' -- the exact still-open gap this
+ * backlog's own A6 status note named.
  */
 export async function uploadAndLinkDocumentAction(
   tenantSlug: string,
@@ -592,26 +607,40 @@ export async function uploadAndLinkDocumentAction(
     return { error: "You don't have access to this organization's Operations workspace." };
   }
 
-  const originalFilename = String(formData.get("originalFilename") ?? "");
-  const mimeType = String(formData.get("mimeType") ?? "");
-  const sizeBytes = Number(formData.get("sizeBytes") ?? 0);
+  const uploadedFile = formData.get("file");
+  if (!(uploadedFile instanceof File) || uploadedFile.size === 0) {
+    return { error: "Choose a file to upload." };
+  }
 
   try {
     const serviceRole = createSupabaseServiceRoleClient();
-    const file = await uploadShipmentDocumentFile(serviceRole, {
+    const uploaded = await uploadShipmentDocumentFile(serviceRole, {
       tenantId: access.tenant.id,
       shipmentOrderId,
       documentTypeCode,
-      originalFilename,
-      mimeType,
-      sizeBytes,
+      originalFilename: uploadedFile.name,
+      mimeType: uploadedFile.type || "application/octet-stream",
+      sizeBytes: uploadedFile.size,
       idempotencyKey,
       actorAuthUserId: access.authUserId,
       actorLabel: access.authUserId,
     });
 
     const supabase = await createSupabaseServerClient();
-    await linkDocumentToChecklistItem(supabase, { checklistItemId, fileId: file.id, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    const storeError = await storeFileBytesAndEnqueueScan(
+      toShipmentDocumentStoreClient(serviceRole),
+      toShipmentDocumentBackgroundJobClient(supabase),
+      uploaded,
+      uploadedFile,
+      access.tenant.id,
+      access.authUserId,
+      "document",
+    );
+    if (storeError) {
+      return storeError;
+    }
+
+    await linkDocumentToChecklistItem(supabase, { checklistItemId, fileId: uploaded.id, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof DocumentRequirementMutationError) {
       return { error: `Could not upload/link this document: ${error.message}` };
