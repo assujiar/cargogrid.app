@@ -105,7 +105,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
-| A4 | No import UI over 12 working import schemas | `CODE-BIG` | DEFERRED_LARGE | weeks |
+| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **PARTIAL** | one schema (`finance_opening_balance_import`) now has a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`. The other 11 schemas' own adapters exist and are tested but have no UI yet -- each costs roughly one wrapper + one document-type registration + one route, no new pattern, per this schema's own slice |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
@@ -2718,3 +2718,85 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   (confirms the new `/admin/approvals` route). No migration/db-test change --
   `check-release-freeze` unaffected (digests unchanged from the
   HUNDRED-AND-FORTY-FOURTH PASS).
+- 2026-09-15 — A4 narrowed and partially closed: a real, complete UI for one
+  of the audit's own "12 working import schemas" -- `finance_opening_balance_
+  import` -- chosen because a prior research pass confirmed its own domain
+  adapter (`app.validate_finance_opening_balance_import_row`/
+  `app.commit_finance_opening_balance_import_job`, ISS-2026-273) was already
+  fully built and tested, needing zero new business-logic RPC work, matching
+  the same "UI over an already-working backend" shape as A1/A2/A3b/E5.
+  Two real, previously-undiscovered gaps found and fixed in the same slice
+  (this session's now-established pattern of verifying every assumption
+  against a live disposable database rather than trusting migration-text
+  alone):
+  (1) `finance_opening_balance_source` (the DOCUMENT TYPE for the raw CSV
+  file itself, a different catalogue from the import_export SCHEMA
+  registration -- that one was already real, `20260830130000`'s own lines
+  495-501) was registered only by `scripts/db-tests/finance-subledger.sql:903`,
+  never a real migration -- the exact E5 pattern. Every real tenant's first
+  source-file upload would have failed `document_type_not_configured`.
+  Fixed by `20260914080000_register_finance_opening_balance_source_
+  document_type.sql`, mirroring E5's own two-insert shape exactly.
+  (2) No read RPC existed to show a reviewer which staged row failed
+  validation and why (`app.preview_import_job` returns only 4 aggregate
+  counts), and `app.jobs`' own documented "direct-table RLS for
+  authenticated" is genuinely real but was unreachable through this
+  application's actual PostgREST surface ("app is not exposed to
+  PostgREST," confirmed by grep -- no `public.jobs` view exists, and
+  `createSupabaseServerClient()`'s `.from()` only ever resolves against
+  `public`). A real import UI could not recover "which job is in progress,
+  what state is it in" across a page reload without a new read. Fixed by
+  `20260914090000_create_import_export_job_detail_read_rpcs.sql`'s
+  `app.list_import_staging_rows` and `app.get_import_export_job`, both
+  mirroring `app.preview_import_job`'s own SECURITY DEFINER/authority shape
+  (job requester or tenant support/Supreme authority) exactly.
+  A genuine anon-EXECUTE-widening bug was introduced and caught by this
+  slice's own `db:test` run: both new `public.*` wrappers' revoke statements
+  said `from public` only, not `from anon, authenticated, service_role,
+  public` -- the exact ISS-2026-309 defect class (Supabase's own `ALTER
+  DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO anon, authenticated,
+  service_role` grants `anon` a real, direct privilege at function-creation
+  time that `revoke ... from public` -- the PUBLIC pseudo-role, not the
+  `anon` role -- never touches), except this time in a migration written
+  AFTER `20260830200000_correct_public_wrapper_grant_parity.sql`'s own
+  historical bulk-fix swept every wrapper that existed at that time, so the
+  new one was not automatically covered. Fixed by adding `anon` to both
+  revoke statements explicitly, matching every OTHER migration this session
+  wrote correctly the first time (confirmed via grep across all of this
+  session's own `20260914*` migrations -- an isolated slip in one file,
+  never a misunderstanding of the convention, exactly as the ISS-2026-309
+  postmortem itself observed about its own two-file slip).
+  New `server/policies/csv-import-parse.ts` (RFC 4180 parser, no dependency
+  added -- `stage_import_rows` takes pre-parsed JSON rows, never a raw CSV
+  file itself) and `server/mutations/finance-opening-balance-import.ts`
+  (the two domain-adapter wrappers, reusing the generic PLT-131 parsers
+  since both RPCs return the same composite types as their generic
+  siblings). The page (`finance/imports/opening-balances/`) is a real,
+  multi-step state machine reflecting the actual job lifecycle -- bootstrap
+  (one-time per-tenant publish of both the document-type file-upload rules
+  and the schema's column definition) -> upload+scan (reusing this
+  session's own A6 `storeFileBytesAndEnqueueScan` helper) -> stage+validate
+  (downloads the SAME already-scanned bytes back from Storage rather than
+  re-accepting a fresh file, so staged rows can never diverge from what was
+  actually scanned; resumable -- never re-stages an already-staged job,
+  which would duplicate every row) -> review (every row's own status/error)
+  -> commit (`allowPartial` explicit, never silently skips invalid rows).
+  Disclosed prerequisite, not a new gap: `app.stage_import_rows` hard-blocks
+  on an unscanned file, and this schema's own malware scanning is genuinely
+  asynchronous in this environment (no live worker process) -- the page
+  surfaces this as a plain retry-after-a-moment message, the same
+  established "Scan status: ... blocked until clean" pattern
+  `document-checklist-panel.tsx` already uses, rather than inventing new UX.
+  No nav entry, mirroring `finance/config`'s own precedent (neither page is
+  linked from elsewhere in this codebase either).
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,091 tests passing, +21 for
+  the CSV parser/new mutation wrapper/two new query functions), `db:test`
+  (`ALL PASSED`, re-verified after the anon-widening fix, migrations 541 ->
+  543, db-test files unchanged at 277), `git:check-paths` (clean, 15 files
+  checked), `security:check` (clean), and a real `next build` (confirms the
+  new `/finance/imports/opening-balances` route). `check-release-freeze`'s
+  self-test digests updated (HUNDRED-AND-FORTY-FIFTH PASS).
+  Still open under A4: the other 11 import schemas' own UIs (each costs
+  roughly one wrapper + one document-type registration + one route per this
+  slice's own template, no new pattern needed).

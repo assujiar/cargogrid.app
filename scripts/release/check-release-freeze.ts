@@ -5186,7 +5186,34 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "c2185515d281ab0fc8735e7c9dd8ed02a2399e1bf19cdf4538a0aa013adefbef",
+  migrationSetSha256: "9a289b45078fa8853d5a8796555fe20b3cc2ac46b4d168efca0f30f91d56f2e7",
+  // HUNDRED-AND-FORTY-FIFTH PASS: CG-AUDIT-2026-09-02 A4 ("No import UI over
+  // 12 working import schemas"), narrowed to one schema
+  // (finance_opening_balance_import) after a research pass confirmed A4 was
+  // over-classified DEFERRED_LARGE the same way A1/A2/A3b/E5 were. Two new
+  // migrations: 20260914080000_register_finance_opening_balance_source_
+  // document_type.sql (the exact E5 pattern -- app.register_document_type(
+  // 'finance_opening_balance_source', ...) was called only by scripts/
+  // db-tests/finance-subledger.sql:903, never a real migration, so every real
+  // tenant's first source-file upload would fail document_type_not_configured;
+  // the import_export SCHEMA registration itself, a different catalogue,
+  // was already real via 20260830130000's own lines 495-501) and
+  // 20260914090000_create_import_export_job_detail_read_rpcs.sql
+  // (app.list_import_staging_rows -- app.preview_import_job only returns 4
+  // aggregate counts, never which row failed or why -- and
+  // app.get_import_export_job -- app.jobs' own documented direct-table RLS
+  // for authenticated is real but unreachable through PostgREST, "app is not
+  // exposed to it" and no public.jobs view exists). Both new functions
+  // mirror app.preview_import_job's own authority/SECURITY DEFINER shape
+  // exactly. 543 tracked migration files (541 -> 543). Re-verified with a
+  // full `pnpm run db:test`, ALL PASSED (after fixing a genuine anon-EXECUTE-
+  // widening bug this pass introduced and caught via that same run: both new
+  // public.* wrappers' revoke statements only said `from public`, not `from
+  // anon, authenticated, service_role, public` -- the exact ISS-2026-309
+  // defect class, this time in a migration written after that historical
+  // bulk-fix migration and therefore not covered by it).
+  // History: c2185515d281ab0fc8735e7c9dd8ed02a2399e1bf19cdf4538a0aa013adefbef
+  // (541 files, HUNDRED-AND-FORTY-FOURTH PASS).
   // HUNDRED-AND-FORTY-FOURTH PASS: CG-AUDIT-2026-09-02 A7, invoice PDF, the
   // fourth printable document after surat jalan/POD/purchase order. Only
   // list_finance_invoices/get_finance_invoice_lines existed before -- no
@@ -6880,7 +6907,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "667c43fe1e5d370dcc3b2b8d6b65addb248494679fc8650be9f29070e18708df",
+  dbTestSetSha256: "79d691b78ecd5e12dcd81e0d16f29322b1e528058d15507219238c2fd595542e",
+  // HUNDRED-AND-FORTY-FIFTH PASS: same CG-AUDIT-2026-09-02 A4 slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/import-export.sql (no new file, 277 files unchanged)
+  // with a new section covering app.get_import_export_job/app.
+  // list_import_staging_rows: authority-gated identically to the existing
+  // app.preview_import_job test right above it (a mere teammate and another
+  // tenant's admin both denied, a nonexistent job id raises
+  // import_export_job_not_found, the requester and the tenant_admin/support-
+  // authority both succeed), returns the real job row (tenant_id/
+  // total_rows/valid_row_count/invalid_row_count/payload all verified) and
+  // the real 4 staged rows ordered by row_number with the correct 3-valid/
+  // 1-invalid breakdown and the still-invalid row's own error message.
+  // scripts/db-tests/finance-subledger.sql's own pre-existing end-to-end
+  // opening-balance import test (its own throwaway register_document_type
+  // call, now redundant with but not conflicting with the new real
+  // migration) re-verified unaffected. Full `pnpm run db:test`, ALL PASSED.
+  // History: 667c43fe1e5d370dcc3b2b8d6b65addb248494679fc8650be9f29070e18708df
+  // (277 files, HUNDRED-AND-FORTY-FOURTH PASS).
   // HUNDRED-AND-FORTY-FOURTH PASS: same CG-AUDIT-2026-09-02 A7 invoice-PDF
   // slice as migrationSetSha256's own note immediately above -- extends the
   // existing scripts/db-tests/finance-invoice.sql (no new file, 277 files

@@ -470,6 +470,95 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 A4: app.get_import_export_job / app.list_import_staging_rows -- same authority gate as app.preview_import_job (job requester or tenant support/Supreme authority), the two new row-level reads a real import UI needs'
+do $$
+declare
+  v_tenant_id uuid;
+  v_other_tenant_id uuid;
+  v_job_id uuid;
+  v_job app.jobs;
+  v_rows app.import_staging_rows[];
+  v_row_count integer;
+  v_valid_count integer;
+  v_invalid_count integer;
+begin
+  v_tenant_id := (select id from app.tenants where slug = 'acmeie');
+  v_other_tenant_id := (select id from app.tenants where slug = 'gizmoie');
+  v_job_id := (select job_id from app.jobs where tenant_id = v_tenant_id and idempotency_key = 'idem-job-1');
+
+  -- app.get_import_export_job
+  begin
+    perform app.get_import_export_job(v_job_id, '00000000-0000-0000-0000-000000003002');
+    raise exception 'assertion failed: expected job_actor_unauthorized for a mere teammate (not the requester, not support authority)';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  begin
+    perform app.get_import_export_job(v_job_id, '00000000-0000-0000-0000-000000003006');
+    raise exception 'assertion failed: expected job_actor_unauthorized for another tenant''s admin';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  begin
+    perform app.get_import_export_job(gen_random_uuid(), '00000000-0000-0000-0000-000000003001');
+    raise exception 'assertion failed: expected import_export_job_not_found for a job id from nowhere';
+  exception
+    when no_data_found then
+      if sqlerrm !~ 'import_export_job_not_found' then raise; end if;
+  end;
+
+  v_job := app.get_import_export_job(v_job_id, '00000000-0000-0000-0000-000000003001');
+  if v_job.tenant_id <> v_tenant_id or v_job.total_rows <> 4 or v_job.valid_row_count <> 3 or v_job.invalid_row_count <> 1 or v_job.payload <> '{}'::jsonb then
+    raise exception 'assertion failed: unexpected job row for the requester %', v_job;
+  end if;
+
+  v_job := app.get_import_export_job(v_job_id, '00000000-0000-0000-0000-000000003004');
+  if v_job.job_id <> v_job_id then
+    raise exception 'assertion failed: expected the tenant_admin (support authority) to also read the job';
+  end if;
+
+  -- app.list_import_staging_rows
+  begin
+    perform app.list_import_staging_rows(v_job_id, '00000000-0000-0000-0000-000000003002');
+    raise exception 'assertion failed: expected job_actor_unauthorized for a mere teammate';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  begin
+    perform app.list_import_staging_rows(gen_random_uuid(), '00000000-0000-0000-0000-000000003001');
+    raise exception 'assertion failed: expected import_export_job_not_found for a job id from nowhere';
+  exception
+    when no_data_found then
+      if sqlerrm !~ 'import_export_job_not_found' then raise; end if;
+  end;
+
+  select array_agg(r order by r.row_number) into v_rows from app.list_import_staging_rows(v_job_id, '00000000-0000-0000-0000-000000003001') r;
+  select count(*), count(*) filter (where validation_status = 'valid'), count(*) filter (where validation_status = 'invalid')
+    into v_row_count, v_valid_count, v_invalid_count
+    from unnest(v_rows) r;
+  if v_row_count <> 4 or v_valid_count <> 3 or v_invalid_count <> 1 then
+    raise exception 'assertion failed: expected 4 rows (3 valid, 1 invalid) for the requester, got count=% valid=% invalid=%', v_row_count, v_valid_count, v_invalid_count;
+  end if;
+  if v_rows[1].row_number <> 1 or v_rows[2].row_number <> 2 or v_rows[3].row_number <> 3 or v_rows[4].row_number <> 4 then
+    raise exception 'assertion failed: expected rows ordered by row_number, got %', v_rows;
+  end if;
+  if v_rows[3].validation_status <> 'invalid' or v_rows[3].error !~ 'required value is missing' then
+    raise exception 'assertion failed: expected row 3 to still be the invalid one (missing required value), got status=% error=%', v_rows[3].validation_status, v_rows[3].error;
+  end if;
+
+  select count(*) into v_row_count from app.list_import_staging_rows(v_job_id, '00000000-0000-0000-0000-000000003004');
+  if v_row_count <> 4 then
+    raise exception 'assertion failed: expected the tenant_admin (support authority) to also list the job''s rows';
+  end if;
+end;
+$$;
+
 \echo '>> app.commit_import_job: refuses while rows are pending, refuses invalid rows without p_allow_partial, a partial commit succeeds; a fully-clean job commits outright'
 do $$
 declare
