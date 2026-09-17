@@ -45,6 +45,12 @@ const FINANCE_OPENING_BALANCE_IMPORT_KNOWN_MUTATION_ERROR_CODES = [
   "insufficient_authority",
   "ip_not_allowed",
   "mfa_step_up_required",
+  // CG-AUDIT-2026-09-02 A4 (found while scoping the vendor_import slice,
+  // fixed here too): app.commit_finance_opening_balance_import_job's own
+  // same-schema guard (20260830130000:698) raises this exact prefix, but it
+  // was never in this file's own allowlist -- it fell through to the
+  // generic mutation_failed instead.
+  "import_export_wrong_schema",
 ] as const;
 type KnownFinanceOpeningBalanceImportMutationErrorCode = (typeof FINANCE_OPENING_BALANCE_IMPORT_KNOWN_MUTATION_ERROR_CODES)[number];
 export type FinanceOpeningBalanceImportMutationErrorCode = KnownFinanceOpeningBalanceImportMutationErrorCode | "mutation_failed" | "invalid_response";

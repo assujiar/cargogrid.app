@@ -5186,7 +5186,35 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "86774c9bdd692c3d63b7edc8d738d0de9efc52b90833e208005646800478f034",
+  migrationSetSha256: "f5c0eed07102830e5f7e61b5e4fb721d9942d98b4f5ce071297d9b2213c36424",
+  // HUNDRED-AND-FORTY-EIGHTH PASS: CG-AUDIT-2026-09-02 A4, vendor_import (the
+  // third of 12 import schemas, after finance_opening_balance_import and
+  // employee_import). New migration
+  // 20260917020000_register_vendor_import_source_document_type.sql registers
+  // the vendor_import_source DOCUMENT TYPE (only ever registered by
+  // scripts/db-tests/procurement-vendor-registration.sql's own fixture,
+  // never a real migration -- the exact finance_opening_balance_source gap,
+  // confirmed via repo-wide grep before writing this migration) -- the
+  // import_export:vendor_import SCHEMA registration itself was already real
+  // (20260830100000_create_vendor_import_adapter.sql). No db-test file
+  // changed this pass (dbTestSetSha256 unchanged) -- the underlying
+  // app.validate_vendor_import_row/app.commit_vendor_import_job RPCs were
+  // already fully covered by procurement-vendor-registration.sql's own
+  // fixture; this pass only adds the TS-side wrapper
+  // (validateVendorImportRow/commitVendorImportJob in
+  // server/mutations/vendor-profile.ts, unit-tested in
+  // vendor-profile.test.ts) and the UI trio
+  // (procurement/imports/vendors/{actions.ts,page.tsx,
+  // vendor-import-forms.tsx}), both new surface area with no independent
+  // database behavior to regress. Also fixes an incidentally-discovered gap
+  // in server/mutations/finance-opening-balance-import.ts (found while
+  // reading its own file as this slice's template): its error-code
+  // allowlist was missing import_export_wrong_schema, a real prefix
+  // app.commit_finance_opening_balance_import_job's own same-schema guard
+  // (20260830130000:698) raises -- added there too, with a matching new
+  // unit test.
+  // History: 86774c9bdd692c3d63b7edc8d738d0de9efc52b90833e208005646800478f034
+  // (545 files, HUNDRED-AND-FORTY-SEVENTH PASS).
   // HUNDRED-AND-FORTY-SEVENTH PASS: CG-AUDIT-2026-09-02 B6a (scoped off B6,
   // "Cost and cash never reach the ledger on their own" -- a dedicated recon
   // pass found the audit's own literal claims true but overstated: 3 of 4

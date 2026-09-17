@@ -11,6 +11,8 @@ import {
   redeemVendorIntakeToken,
   submitVendorProfileSelfRegistration,
   resolveVendorSelfRegistrationTarget,
+  validateVendorImportRow,
+  commitVendorImportJob,
   VendorProfileMutationError,
   type VendorProfileMutationRpcClient,
 } from "./vendor-profile.ts";
@@ -18,6 +20,8 @@ import {
 const MASTER_RECORD_ID = "223e4567-e89b-12d3-a456-426614174000";
 const TENANT_ID = "323e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "423e4567-e89b-12d3-a456-426614174000";
+const JOB_ID = "523e4567-e89b-12d3-a456-426614174000";
+const ROW_ID = "623e4567-e89b-12d3-a456-426614174000";
 
 function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
   client: VendorProfileMutationRpcClient;
@@ -289,5 +293,108 @@ describe("resolveVendorSelfRegistrationTarget (anonymous)", () => {
     const result = await resolveVendorSelfRegistrationTarget(client, "does-not-exist");
     assert.equal(result.tenantId, null);
     assert.equal(result.selfRegistrationEnabled, false);
+  });
+});
+
+describe("validateVendorImportRow (CG-AUDIT-2026-09-02 A4)", () => {
+  test("calls validate_vendor_import_row with the exact snake_case params", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: {
+        id: ROW_ID,
+        tenant_id: TENANT_ID,
+        job_id: JOB_ID,
+        row_number: 1,
+        raw_payload: { legal_name: "PT Contoso Logistik" },
+        validation_status: "valid",
+        error: null,
+        created_at: "2026-09-17T00:00:00.000Z",
+      },
+      error: null,
+    });
+    const row = await validateVendorImportRow(client, { stagingRowId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "procurementmanagera" });
+
+    assert.deepEqual(calls[0]?.args, { p_staging_row_id: ROW_ID, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "procurementmanagera" });
+    assert.equal(row.validationStatus, "valid");
+  });
+
+  test("wraps a database error into a typed VendorProfileMutationError", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "import_export_staging_row_not_found: no staging row" } });
+    await assert.rejects(
+      () => validateVendorImportRow(client, { stagingRowId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "procurementmanagera" }),
+      VendorProfileMutationError,
+    );
+  });
+});
+
+describe("commitVendorImportJob (CG-AUDIT-2026-09-02 A4)", () => {
+  test("calls commit_vendor_import_job with the exact snake_case params, including client IP, defaulting allowPartial to false", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: {
+        job_id: JOB_ID,
+        tenant_id: TENANT_ID,
+        job_type: "import",
+        status: "completed",
+        priority: 0,
+        payload: {},
+        attempts: 0,
+        max_attempts: 3,
+        locked_by: null,
+        locked_until: null,
+        error: null,
+        result_url: null,
+        created_by: "procurementmanagera",
+        created_at: "2026-09-17T00:00:00.000Z",
+        completed_at: "2026-09-17T00:05:00.000Z",
+        requested_by_auth_user_id: ACTOR_ID,
+        idempotency_key: "idem-vendor-import-job",
+        import_export_schema_code: "vendor_import",
+        source_file_id: "723e4567-e89b-12d3-a456-426614174000",
+        result_file_id: null,
+        total_rows: 1,
+        processed_rows: 1,
+        valid_row_count: 1,
+        invalid_row_count: 0,
+        cancel_reason: null,
+        updated_at: "2026-09-17T00:05:00.000Z",
+      },
+      error: null,
+    });
+    const job = await commitVendorImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "procurementmanagera", clientIp: "203.0.113.5" });
+
+    assert.deepEqual(calls[0]?.args, { p_job_id: JOB_ID, p_allow_partial: false, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "procurementmanagera", p_client_ip: "203.0.113.5" });
+    assert.equal(job.status, "completed");
+  });
+
+  test("classifies import_export_wrong_schema", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "import_export_wrong_schema: job x is not a vendor_import job" } });
+    await assert.rejects(
+      () => commitVendorImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "procurementmanagera" }),
+      (err: unknown) => {
+        assert.ok(err instanceof VendorProfileMutationError);
+        assert.equal(err.code, "import_export_wrong_schema");
+        return true;
+      },
+    );
+  });
+
+  test("classifies mfa_step_up_required and ip_not_allowed", async () => {
+    const mfaClient = fakeRpcClient({ data: null, error: { message: "mfa_step_up_required: PRC:Import requires a current MFA step-up verification" } }).client;
+    await assert.rejects(
+      () => commitVendorImportJob(mfaClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "procurementmanagera" }),
+      (err: unknown) => {
+        assert.ok(err instanceof VendorProfileMutationError);
+        assert.equal(err.code, "mfa_step_up_required");
+        return true;
+      },
+    );
+    const ipClient = fakeRpcClient({ data: null, error: { message: "ip_not_allowed: malformed IP address denied for scope" } }).client;
+    await assert.rejects(
+      () => commitVendorImportJob(ipClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "procurementmanagera", clientIp: "bad-ip" }),
+      (err: unknown) => {
+        assert.ok(err instanceof VendorProfileMutationError);
+        assert.equal(err.code, "ip_not_allowed");
+        return true;
+      },
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveProcurementAccessForRequest } from "../../../../../lib/portal/resolve-procurement-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listVendorProfiles, VendorProfileQueryError } from "../../../../../server/queries/vendor-profile.ts";
@@ -50,9 +51,14 @@ export default async function VendorDirectoryPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">Vendors</h1>
-        <p className="text-xs text-neutral-500">Canonical vendor registration and onboarding. One vendor identity, reused across Commercial, Operations, and Finance.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-900">Vendors</h1>
+          <p className="text-xs text-neutral-500">Canonical vendor registration and onboarding. One vendor identity, reused across Commercial, Operations, and Finance.</p>
+        </div>
+        <Link href={`/${tenantSlug}/procurement/imports/vendors`} className="text-sm text-primary underline">
+          Bulk import from CSV
+        </Link>
       </div>
 
       <VendorDirectoryPanel tenantSlug={tenantSlug} vendors={vendors} statusFilter={statusFilter} search={q ?? ""} createAction={createVendorProfileDraftAction.bind(null, tenantSlug)} />

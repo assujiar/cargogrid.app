@@ -130,4 +130,16 @@ describe("commitFinanceOpeningBalanceImportJob", () => {
       },
     );
   });
+
+  test("classifies import_export_wrong_schema (CG-AUDIT-2026-09-02 A4, found while scoping vendor_import)", async () => {
+    const client = fakeClient({ data: null, error: { message: "import_export_wrong_schema: job x is not a finance_opening_balance_import job" } });
+    await assert.rejects(
+      () => commitFinanceOpeningBalanceImportJob(client, { jobId: JOB_ID, allowPartial: false, actorAuthUserId: ACTOR_ID, actorLabel: "financemanagera", clientIp: null }),
+      (err: unknown) => {
+        assert.ok(err instanceof FinanceOpeningBalanceImportMutationError);
+        assert.equal(err.code, "import_export_wrong_schema");
+        return true;
+      },
+    );
+  });
 });
