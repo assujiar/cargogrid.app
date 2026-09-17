@@ -5186,7 +5186,33 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "f5c0eed07102830e5f7e61b5e4fb721d9942d98b4f5ce071297d9b2213c36424",
+  migrationSetSha256: "d318b8f40decdc22344f35555f6bb7d0d722123236bd7be1cc00c66970454021",
+  // HUNDRED-AND-FORTY-NINTH PASS: CG-AUDIT-2026-09-02 A4, vendor_rate_import
+  // (the fourth of 12 import schemas). New migration
+  // 20260917030000_register_vendor_rate_import_source_document_type.sql
+  // registers the vendor_rate_import_source DOCUMENT TYPE (only ever
+  // registered by scripts/db-tests/procurement-vendor-rate-tiers.sql's own
+  // fixture, never a real migration -- the same gap repeated a third time,
+  // mirroring 20260917020000's own vendor_import fix verbatim) -- the
+  // import_export:vendor_rate_import SCHEMA registration itself was already
+  // real (20260730620000_extend_commercial_vendor_rate_for_procurement.sql).
+  // Unlike vendor_import, server/mutations/procurement-rate.ts already had
+  // a complete validateVendorRateImportRow/commitVendorRateImportJob
+  // wrapper -- this pass only closed two small parity gaps in it (commit
+  // never passed the RPC's own p_client_ip param, added at
+  // 20260902200000_harden_tenant_id_disclosure_commercial.sql; the
+  // error-code allowlist was missing ip_not_allowed/mfa_step_up_required),
+  // the exact class of fix employee_import's own scoping found in
+  // server/mutations/employee.ts. No db-test file changed this pass
+  // (dbTestSetSha256 unchanged) -- the underlying RPCs were already fully
+  // covered by procurement-vendor-rate-tiers.sql's own fixture; this pass
+  // only adds the TS-side wrapper patch (unit-tested in
+  // procurement-rate.test.ts) and the UI trio
+  // (procurement/imports/vendor-rates/{actions.ts,page.tsx,
+  // vendor-rate-import-forms.tsx}), both new surface area with no
+  // independent database behavior to regress.
+  // History: f5c0eed07102830e5f7e61b5e4fb721d9942d98b4f5ce071297d9b2213c36424
+  // (546 files, HUNDRED-AND-FORTY-EIGHTH PASS).
   // HUNDRED-AND-FORTY-EIGHTH PASS: CG-AUDIT-2026-09-02 A4, vendor_import (the
   // third of 12 import schemas, after finance_opening_balance_import and
   // employee_import). New migration

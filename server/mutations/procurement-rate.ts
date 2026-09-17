@@ -70,6 +70,12 @@ export const PROCUREMENT_RATE_KNOWN_MUTATION_ERROR_CODES = [
   "import_export_job_has_invalid_rows",
   "import_vendor_master_not_found",
   "job_actor_unauthorized",
+  // CG-AUDIT-2026-09-02 A4: app.commit_vendor_rate_import_job's latest
+  // redefinition (20260902200000_harden_tenant_id_disclosure_commercial.sql:721)
+  // composes app.assert_current_step_up_authorization('PRC','Import') and
+  // app.assert_ip_allowed -- both real, reachable error codes never added here.
+  "ip_not_allowed",
+  "mfa_step_up_required",
 ] as const;
 type KnownProcurementRateMutationErrorCode = (typeof PROCUREMENT_RATE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type ProcurementRateMutationErrorCode = KnownProcurementRateMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -240,6 +246,7 @@ export async function commitVendorRateImportJob(client: ProcurementRateMutationR
     p_allow_partial: parsedInput.allowPartial,
     p_actor_auth_user_id: parsedInput.actorAuthUserId,
     p_actor_label: parsedInput.actorLabel,
+    p_client_ip: parsedInput.clientIp,
   });
   if (!data || typeof data !== "object") {
     throw new ProcurementRateMutationError("invalid_response", "commit_vendor_rate_import_job returned no row");

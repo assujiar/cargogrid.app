@@ -105,7 +105,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
-| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **PARTIAL** | three schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, and `procurement/imports/vendors/`. The other 9 schemas' own adapters exist and are tested but have no UI yet -- each costs roughly one wrapper + one document-type registration + one route, no new pattern, per this schema's own slice |
+| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **PARTIAL** | four schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, and `procurement/imports/vendor-rates/`. The other 8 schemas' own adapters exist and are tested but have no UI yet -- each costs roughly one wrapper + one document-type registration + one route, no new pattern, per this schema's own slice |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
@@ -3088,9 +3088,66 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `/[tenantSlug]/procurement/imports/vendors` route). `check-release-freeze`'s
   self-test digests updated (HUNDRED-AND-FORTY-EIGHTH PASS, migrations
   545 -> 546, db-test files unchanged at 277).
-  Still open under A4: the other 9 import schemas' own UIs
+  Still open under A4 as of this slice: the other 8 import schemas' own UIs
   (attendance_device_import, timesheet_import, leave_opening_balance_import,
   payroll_loan_cutover_import, position_crosswalk_import under HRS;
-  vendor_rate_import under PRC; customer_import under COM; item_import,
-  inventory_opening_balance_import under OPS), each estimated at the same
-  one-wrapper-plus-one-route cost as this slice and the two before it.
+  customer_import under COM; item_import, inventory_opening_balance_import
+  under OPS), each estimated at the same one-wrapper-plus-one-route cost as
+  this slice and the three before it. (vendor_rate_import itself closed
+  next, see below.)
+- 2026-09-17 — A4 (`vendor_rate_import`, fourth import schema) closed: a
+  near-mechanical port of `procurement/imports/vendors/`'s own trio to
+  `procurement/imports/vendor-rates/`, reusing `server/policies/csv-import-parse.ts`,
+  `storeFileBytesAndEnqueueScan`, and the generic `stageImportRows`/
+  `listImportStagingRows`/`getImportExportJob` verbatim. Unlike
+  `vendor_import`, the `import_export:vendor_rate_import` SCHEMA was already
+  a real global catalog row
+  (`20260730620000_extend_commercial_vendor_rate_for_procurement.sql`) --
+  only the `vendor_rate_import_source` DOCUMENT TYPE was never registered
+  by any real migration, only by
+  `scripts/db-tests/procurement-vendor-rate-tiers.sql`'s own fixture
+  (confirmed by repo-wide grep before writing anything), the exact
+  `vendor_import_source` gap repeated a third time. Fixed by new migration
+  `20260917030000_register_vendor_rate_import_source_document_type.sql`,
+  mirroring `20260917020000`'s own shape verbatim.
+  Unlike `vendor_import` (whose TS wrapper had to be built from scratch),
+  `server/mutations/procurement-rate.ts` already exported a complete
+  `validateVendorRateImportRow`/`commitVendorRateImportJob` wrapper before
+  this slice -- this slice only closed two small parity gaps in it, the
+  exact class `employee_import`'s own scoping found in
+  `server/mutations/employee.ts`: `commitVendorRateImportJob` never passed
+  the RPC's own `p_client_ip` param (added to
+  `app.commit_vendor_rate_import_job` at
+  `20260902200000_harden_tenant_id_disclosure_commercial.sql`, composing
+  `app.assert_ip_allowed` and a PRC:Import MFA step-up gate), and
+  `PROCUREMENT_RATE_KNOWN_MUTATION_ERROR_CODES` was missing
+  `ip_not_allowed`/`mfa_step_up_required`. The bootstrap action publishes
+  the FULL 31-column contract already exported as
+  `VENDOR_RATE_IMPORT_COLUMNS` in
+  `server/contracts/procurement-rate/procurement-rate.ts` (13 flat fields
+  plus 3 tier blocks of 6 fields each) rather than hand-rolling a column
+  list inline the way the three prior slices had to -- the contract already
+  existed, reused directly.
+  `app.commit_vendor_rate_import_job`'s own authority composition matches
+  `vendor_import`'s (`is_support_grant_authority` AND `PRC:Import`,
+  additive, never either alone); imported rates land as `pending_approval`
+  exactly like manually-created ones, never auto-approved by import, both
+  documented in the wizard's own copy.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings; two new server-only files added to
+  `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit test
+  suite (6,105 tests passing, +4 for the `clientIp`/new-error-code coverage
+  in `procurement-rate.test.ts`), `db:test` (`ALL PASSED` -- no new db-test
+  file needed, since `procurement-vendor-rate-tiers.sql`'s own existing
+  fixture already fully covers both RPCs' real behavior), `git:check-paths`
+  (clean, 10 files checked), `security:check` (clean), and a real
+  `next build` (confirms the new
+  `/[tenantSlug]/procurement/imports/vendor-rates` route).
+  `check-release-freeze`'s self-test digests updated (HUNDRED-AND-FORTY-NINTH
+  PASS, migrations 546 -> 547, db-test files unchanged at 277).
+  Still open under A4: the other 8 import schemas' own UIs
+  (attendance_device_import, timesheet_import, leave_opening_balance_import,
+  payroll_loan_cutover_import, position_crosswalk_import under HRS;
+  customer_import under COM; item_import, inventory_opening_balance_import
+  under OPS), each estimated at the same one-wrapper-plus-one-route cost as
+  this slice and the three before it.

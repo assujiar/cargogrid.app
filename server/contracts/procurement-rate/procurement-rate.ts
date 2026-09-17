@@ -176,6 +176,8 @@ export const CommitVendorRateImportJobInputSchema = z.object({
   allowPartial: z.boolean().default(false),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  /** CG-AUDIT-2026-09-02 A4: app.commit_vendor_rate_import_job gained an optional p_client_ip param (20260902200000_harden_tenant_id_disclosure_commercial.sql, composing app.assert_ip_allowed + app.assert_current_step_up_authorization('PRC','Import')) -- the TS wrapper never passed it. */
+  clientIp: z.string().nullable().default(null),
 });
 export type CommitVendorRateImportJobInput = z.input<typeof CommitVendorRateImportJobInputSchema>;
 
