@@ -805,6 +805,8 @@ export const CommitEmployeeImportJobInputSchema = z.object({
   allowPartial: z.boolean().default(false),
   actorAuthUserId: z.string().uuid(),
   actorLabel: z.string().min(1),
+  /** CG-AUDIT-2026-09-02 A4: app.commit_employee_import_job gained an optional p_client_ip param (20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql) enforcing the tenant's own IP allowlist when supplied -- the TS wrapper never passed it. */
+  clientIp: z.string().nullable().default(null),
 });
 export type CommitEmployeeImportJobInput = z.input<typeof CommitEmployeeImportJobInputSchema>;
 

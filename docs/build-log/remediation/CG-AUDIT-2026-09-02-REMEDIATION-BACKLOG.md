@@ -2797,7 +2797,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   checked), `security:check` (clean), and a real `next build` (confirms the
   new `/finance/imports/opening-balances` route). `check-release-freeze`'s
   self-test digests updated (HUNDRED-AND-FORTY-FIFTH PASS).
-  Still open under A4: the other 11 import schemas' own UIs (each costs
+  Still open under A4: the other 10 import schemas' own UIs (each costs
   roughly one wrapper + one document-type registration + one route per this
   slice's own template, no new pattern needed).
 - 2026-09-17 — B7 (worklist half) closed: `finance/invoices/page.tsx` gained
@@ -2859,3 +2859,64 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   (confirms `/finance/invoices` still builds with the new worklist).
   `check-release-freeze`'s self-test digests updated (HUNDRED-AND-FORTY-SIXTH
   PASS, migrations 543 -> 544, db-test files unchanged at 277).
+- 2026-09-17 — A4 (`employee_import`, second import schema) closed: a
+  near-mechanical port of `finance/imports/opening-balances/`'s own trio to
+  `hris/imports/employees/`, reusing `server/policies/csv-import-parse.ts`,
+  `storeFileBytesAndEnqueueScan`, and the generic
+  `stageImportRows`/`listImportStagingRows`/`getImportExportJob` verbatim.
+  No new migration needed -- unlike `finance_opening_balance_source`, both
+  the `employee_document` document type and the `employee_import` schema
+  are already registered as real GLOBAL catalog rows directly by
+  `20260730830000_create_hris_employee_master.sql`; each tenant still
+  separately publishes its own `document:employee_document` and
+  `import_export:employee_import` config VERSIONS (the same one-time
+  per-tenant bootstrap step every PLT-131 adopter requires), confirmed by
+  reading `scripts/db-tests/hris-employee-master.sql`'s own fixture setup
+  for the exact 10-column shape and `default_classification: 'confidential'`
+  convention (reused verbatim here rather than finance's `'internal'`,
+  matching the more sensitive nature of employee PII).
+  Two real, previously-undiscovered "minor parity gaps" this slice closes in
+  `server/mutations/employee.ts`, both flagged by this session's own prior
+  scoping pass rather than found fresh here: (1)
+  `app.commit_employee_import_job` gained an optional `p_client_ip` param at
+  `20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql`
+  (enforcing the tenant's own IP allowlist when supplied, composed with a
+  real MFA step-up requirement for HRS:Import) but the TS wrapper never
+  passed it -- fixed by adding `clientIp` to
+  `CommitEmployeeImportJobInputSchema` (nullable, defaulting to `null`) and
+  threading it through, mirroring `commitOpeningBalanceImportAction`'s own
+  `resolveRequestClientIp()` call; (2)
+  `EMPLOYEE_KNOWN_MUTATION_ERROR_CODES` was missing
+  `employee_import_duplicate_employee_number` (HDN-385's own named,
+  loud-abort error for a genuine explicit `employee_number` collision),
+  `ip_not_allowed`, and `mfa_step_up_required` -- all three now reachable,
+  real error codes rather than falling through to a generic
+  `unclassified_error`. Both RPC-level behaviors (the IP allowlist
+  enforcement and the MFA step-up requirement) were already fully covered
+  by `scripts/db-tests/hris-employee-master.sql`'s own ISS-2026-278
+  regression section -- this slice only closes the TS-side wrapper/
+  classification gap, so no new db-test coverage or migration was needed.
+  The employee directory page (`hris/employees/page.tsx`) gained a "Bulk
+  import from CSV" nav link next to its header -- unlike finance's
+  standalone unlinked opening-balances page, HR's own directory has a
+  natural integration point (a bulk-onboarding entry point next to the
+  one-at-a-time create form), so this slice links it rather than leaving it
+  orphaned.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings; two new server-only files added to
+  `eslint.config.js`'s `serviceRoleImportGuard` ignores list, mirroring the
+  opening-balances precedent exactly), the unit test suite (6,097 tests
+  passing, +6 for the `clientIp`/new-error-code coverage in
+  `employee.test.ts`), `db:test` (`ALL PASSED`, unchanged -- no SQL touched
+  this slice), `git:check-paths` (clean, 8 files checked), `security:check`
+  (clean), and a real `next build` (confirms the new
+  `/[tenantSlug]/hris/imports/employees` route). `check-release-freeze`'s
+  self-test digests are unchanged from the HUNDRED-AND-FORTY-SIXTH PASS --
+  no migration or db-test file was added or modified this slice.
+  Still open under A4: the other 10 import schemas' own UIs (attendance_
+  device_import, timesheet_import, leave_opening_balance_import,
+  payroll_loan_cutover_import, position_crosswalk_import under HRS; vendor_
+  import, vendor_rate_import under PRC; customer_import under COM; item_
+  import, inventory_opening_balance_import under OPS), each estimated at
+  the same one-wrapper-plus-one-route cost as this slice and the finance one
+  before it.
