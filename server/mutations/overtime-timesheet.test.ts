@@ -12,6 +12,8 @@ import {
   reopenTimesheetPeriod,
   generatePayrollTimeInput,
   generatePayrollTimeInputsForPeriod,
+  validateTimesheetImportRow,
+  commitTimesheetImportJob,
   OvertimeTimesheetMutationError,
   type OvertimeTimesheetMutationRpcClient,
 } from "./overtime-timesheet.ts";
@@ -19,6 +21,8 @@ import {
 const TENANT_ID = "123e4567-e89b-12d3-a456-426614174000";
 const ID_1 = "223e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "323e4567-e89b-12d3-a456-426614174000";
+const JOB_ID = "423e4567-e89b-12d3-a456-426614174000";
+const ROW_ID = "523e4567-e89b-12d3-a456-426614174000";
 
 function fakeClient(response: { data: unknown; error: { message: string } | null }): { client: OvertimeTimesheetMutationRpcClient; calls: { fn: string; args: Record<string, unknown> }[] } {
   const calls: { fn: string; args: Record<string, unknown> }[] = [];
@@ -127,5 +131,102 @@ describe("generatePayrollTimeInput / generatePayrollTimeInputsForPeriod", () => 
     const rows = await generatePayrollTimeInputsForPeriod(client, { periodId: ID_1, actorAuthUserId: ACTOR_ID, actorLabel: "approver" });
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.generated, true);
+  });
+});
+
+describe("validateTimesheetImportRow (CG-AUDIT-2026-09-02 A4)", () => {
+  test("calls validate_timesheet_import_row with the exact snake_case params", async () => {
+    const { client, calls } = fakeClient({
+      data: {
+        id: ROW_ID,
+        tenant_id: TENANT_ID,
+        job_id: JOB_ID,
+        row_number: 1,
+        raw_payload: { employee_number: "EMP-1", work_date: "2026-08-10", entry_minutes: "480" },
+        validation_status: "valid",
+        error: null,
+        created_at: "2026-09-17T00:00:00.000Z",
+      },
+      error: null,
+    });
+    const row = await validateTimesheetImportRow(client, { stagingRowId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" });
+
+    assert.deepEqual(calls[0]?.args, { p_staging_row_id: ROW_ID, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "tester" });
+    assert.equal(row.validationStatus, "valid");
+  });
+
+  test("wraps a database error into a typed OvertimeTimesheetMutationError", async () => {
+    const { client } = fakeClient({ data: null, error: { message: "import_export_staging_row_not_found: no staging row" } });
+    await assert.rejects(() => validateTimesheetImportRow(client, { stagingRowId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }), OvertimeTimesheetMutationError);
+  });
+});
+
+describe("commitTimesheetImportJob (CG-AUDIT-2026-09-02 A4)", () => {
+  test("calls commit_timesheet_import_job with the exact snake_case params, including client IP, defaulting allowPartial to false", async () => {
+    const { client, calls } = fakeClient({
+      data: {
+        job_id: JOB_ID,
+        tenant_id: TENANT_ID,
+        job_type: "import",
+        status: "completed",
+        priority: 0,
+        payload: {},
+        attempts: 0,
+        max_attempts: 3,
+        locked_by: null,
+        locked_until: null,
+        error: null,
+        result_url: null,
+        created_by: "tester",
+        created_at: "2026-09-17T00:00:00.000Z",
+        completed_at: "2026-09-17T00:05:00.000Z",
+        requested_by_auth_user_id: ACTOR_ID,
+        idempotency_key: "idem-timesheet-import-job",
+        import_export_schema_code: "timesheet_import",
+        source_file_id: "623e4567-e89b-12d3-a456-426614174000",
+        result_file_id: null,
+        total_rows: 1,
+        processed_rows: 1,
+        valid_row_count: 1,
+        invalid_row_count: 0,
+        cancel_reason: null,
+        updated_at: "2026-09-17T00:05:00.000Z",
+      },
+      error: null,
+    });
+    const job = await commitTimesheetImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "203.0.113.5" });
+
+    assert.deepEqual(calls[0]?.args, { p_job_id: JOB_ID, p_allow_partial: false, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "tester", p_client_ip: "203.0.113.5" });
+    assert.equal(job.status, "completed");
+  });
+
+  test("classifies job_actor_unauthorized, mfa_step_up_required, and ip_not_allowed", async () => {
+    const membershipClient = fakeClient({ data: null, error: { message: "job_actor_unauthorized: identity x lacks active membership in tenant y" } }).client;
+    await assert.rejects(
+      () => commitTimesheetImportJob(membershipClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof OvertimeTimesheetMutationError);
+        assert.equal(err.code, "job_actor_unauthorized");
+        return true;
+      },
+    );
+    const mfaClient = fakeClient({ data: null, error: { message: "mfa_step_up_required: HRS:Import requires a current MFA step-up verification" } }).client;
+    await assert.rejects(
+      () => commitTimesheetImportJob(mfaClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof OvertimeTimesheetMutationError);
+        assert.equal(err.code, "mfa_step_up_required");
+        return true;
+      },
+    );
+    const ipClient = fakeClient({ data: null, error: { message: "ip_not_allowed: malformed IP address denied for scope" } }).client;
+    await assert.rejects(
+      () => commitTimesheetImportJob(ipClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "bad-ip" }),
+      (err: unknown) => {
+        assert.ok(err instanceof OvertimeTimesheetMutationError);
+        assert.equal(err.code, "ip_not_allowed");
+        return true;
+      },
+    );
   });
 });

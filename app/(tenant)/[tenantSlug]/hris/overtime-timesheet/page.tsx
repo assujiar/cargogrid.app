@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import {
@@ -82,6 +83,12 @@ export default async function OvertimeTimesheetAdminPage({ params }: { params: P
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-xl font-semibold text-neutral-900">Overtime &amp; timesheets</h1>
+        <Link href={`/${tenantSlug}/hris/imports/timesheet`} className="text-sm text-primary underline">
+          Bulk import timesheet entries from CSV
+        </Link>
+      </div>
       <OvertimeTimesheetAdminPanel
         overtimeRequests={overtimeRequests}
         timesheetEntries={timesheetEntries}

@@ -271,6 +271,16 @@ export const CommitAttendanceDeviceImportJobInputSchema = z.object({
 });
 export type CommitAttendanceDeviceImportJobInput = z.input<typeof CommitAttendanceDeviceImportJobInputSchema>;
 
+/** app.commit_timesheet_import_job's own input shape (CG-AUDIT-2026-09-02 A4, eighth import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_attendance_device_import_job's own identical gate structure. */
+export const CommitTimesheetImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitTimesheetImportJobInput = z.input<typeof CommitTimesheetImportJobInputSchema>;
+
 export const CancelImportExportJobInputSchema = z.object({
   jobId: z.string().uuid(),
   reason: z.string().nullable().default(null),
