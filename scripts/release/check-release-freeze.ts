@@ -5186,7 +5186,51 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "6be207c7a54967232c008f739ed7d32a56e77bf05e361a7112429d67cbc2fc9a",
+  migrationSetSha256: "86774c9bdd692c3d63b7edc8d738d0de9efc52b90833e208005646800478f034",
+  // HUNDRED-AND-FORTY-SEVENTH PASS: CG-AUDIT-2026-09-02 B6a (scoped off B6,
+  // "Cost and cash never reach the ledger on their own" -- a dedicated recon
+  // pass found the audit's own literal claims true but overstated: 3 of 4
+  // AR/AP allocation-reversal paths already post to the GL correctly (forward
+  // AR, forward AP, and reversed AP since 20260826030000/RGL-BLK-009, pre-
+  // audit); only reversed AR (app.request_finance_receipt_deallocation) was
+  // a genuine open gap, with an exact, already-shipped precedent to mirror).
+  // New migration 20260917010000_fix_finance_receipt_deallocation_gl_
+  // reversal.sql re-creates app.request_finance_receipt_deallocation to post
+  // a real reversing GL journal (app.finance_journal_corrections, correction_
+  // type='reversal', posted via app.create_and_post_finance_system_journal
+  // with lock_scope='ar') before calling the existing app.reverse_finance_ar_
+  // allocation, closing the exact mirror-image of RGL-BLK-009 on the AR side.
+  // One real wrinkle the AP precedent did not have to solve: app.allocate_
+  // finance_receipt posts ONE subledger batch/GL journal per ALLOCATE CALL
+  // (which can cover several AR open items at once), while this function
+  // reverses exactly ONE allocation row at a time -- reversing the shared
+  // journal in full (the AP function's own technique, correct there because
+  // one settlement always owns exactly one journal) would misstate every
+  // OTHER still-applied allocation from the same batch. Fixed by flipping the
+  // original journal's own 2 lines (landing on the exact same accounts, never
+  // re-resolving a posting-map key) but substituting this one allocation's
+  // own amount for each line's amount, and deliberately leaving the original
+  // subledger batch's own status at 'posted' (never 'reversed') since other
+  // allocations from it may still stand -- the correction journal itself is
+  // the GL's actual source of truth. Every other line of the function's own
+  // body (authority gate, IP allowlist, reason validation, the existing
+  // reverse_finance_ar_allocation call, the allocation/receipt updates, the
+  // closing audit event) is byte-for-byte unchanged from the live definition.
+  // New db-test section in scripts/db-tests/finance-receipt-allocation.sql
+  // reuses the file's own existing "governed deallocation" fixture, which
+  // already (coincidentally) exercises the exact "one batch, two allocations,
+  // reverse only one" scenario needed to prove the fix: after reversing the
+  // 300,000-of-1,300,000 allocation, asserts the original batch stays
+  // 'posted' (the still-applied 1,000,000 allocation is unaffected), a posted
+  // finance_journal_corrections row links to the original batch's own
+  // journal, the new reversal journal is balanced at exactly 300,000 (never
+  // 1,300,000), and its 2 lines land on the exact same 2 accounts as the
+  // original with direction flipped. Full `pnpm run db:test`, ALL PASSED
+  // (including finance-settlement.sql/finance-reversal-adjustment.sql/
+  // finance-subledger.sql/finance-journal.sql re-run for the shared function
+  // chain, unaffected).
+  // History: 6be207c7a54967232c008f739ed7d32a56e77bf05e361a7112429d67cbc2fc9a
+  // (544 files, HUNDRED-AND-FORTY-SIXTH PASS).
   // HUNDRED-AND-FORTY-SIXTH PASS: CG-AUDIT-2026-09-02 B7 (worklist half only
   // -- "Invoicing is driven by a hand-copied UUID... Finance has no
   // billable-jobs worklist"; the second half, app.check_customer_credit/
@@ -6936,7 +6980,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "1c467db02e81e9c424823e55b971988e0b964f1c14f51d6ae36a47bca6fbdfaf",
+  dbTestSetSha256: "4a915df77274d94f292469409eb205d0585e9897246a12721fa2ddbedc57a5dd",
+  // HUNDRED-AND-FORTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 B6a slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/finance-receipt-allocation.sql (no new file, 277 files
+  // unchanged) with new assertions inside its own existing "governed
+  // deallocation" section: the original receipt-allocation batch stays
+  // 'posted' after a partial reversal, a posted finance_journal_corrections
+  // row links to it, the new reversal journal is balanced at exactly the
+  // reversed allocation's own amount (never the whole batch total), and its
+  // lines land on the same 2 accounts as the original with direction
+  // flipped. Full `pnpm run db:test`, ALL PASSED.
+  // History: 1c467db02e81e9c424823e55b971988e0b964f1c14f51d6ae36a47bca6fbdfaf
+  // (277 files, HUNDRED-AND-FORTY-SIXTH PASS).
   // HUNDRED-AND-FORTY-SIXTH PASS: same CG-AUDIT-2026-09-02 B7 slice as
   // migrationSetSha256's own note immediately above -- extends the existing
   // scripts/db-tests/finance-invoice.sql (no new file, 277 files unchanged)

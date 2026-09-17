@@ -365,6 +365,12 @@ declare
   v_item_300 uuid;
   v_receipt app.finance_receipts;
   v_open_amount numeric;
+  v_batch_id uuid;
+  v_original_batch app.finance_subledger_batches;
+  v_correction app.finance_journal_corrections;
+  v_reversal_debit numeric;
+  v_reversal_credit numeric;
+  v_matched_accounts integer;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmerecva');
   select id into v_receipt_id from app.finance_receipts where tenant_id = v_tenant_a and receipt_reference = 'BANKREF-001';
@@ -397,6 +403,39 @@ begin
   select open_amount into v_open_amount from app.finance_ar_open_items where id = v_item_300;
   if v_open_amount <> 300000 then
     raise exception 'assertion failed: expected the 300,000 AR open item to be fully open again after reversal, got open_amount=%', v_open_amount;
+  end if;
+
+  -- CG-AUDIT-2026-09-02 B6a regression: the reversal above must have posted a REAL,
+  -- balanced GL correction journal, scoped to only this 300,000 allocation's own
+  -- amount -- never the whole 1,300,000 batch, which also covers the STILL-applied
+  -- 1,000,000 allocation from the very same app.allocate_finance_receipt call
+  -- ('alloc-real-1' above). This is the exact "one batch, several allocations,
+  -- partial reversal" scenario app.request_finance_settlement_reversal's own
+  -- whole-journal-reversal technique could not have handled correctly.
+  select batch_id into v_batch_id from app.finance_receipt_allocations where id = v_allocation_id;
+  select * into v_original_batch from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'receipt_allocation' and source_id = v_batch_id;
+  if v_original_batch.status <> 'posted' then
+    raise exception 'assertion failed: expected the ORIGINAL receipt-allocation batch to remain posted (the still-applied 1,000,000 allocation from the same batch is unaffected by reversing the other one), got status=%', v_original_batch.status;
+  end if;
+
+  select * into v_correction from app.finance_journal_corrections where tenant_id = v_tenant_a and idempotency_key = 'receipt_dealloc:' || v_allocation_id::text;
+  if not found or v_correction.status <> 'posted' or v_correction.correction_type <> 'reversal' or v_correction.original_journal_id <> v_original_batch.gl_journal_id or v_correction.correction_journal_id is null then
+    raise exception 'assertion failed: expected a posted reversal correction linked to the original batch''s own journal, got %', row_to_json(v_correction);
+  end if;
+
+  select sum(amount) filter (where direction = 'debit'), sum(amount) filter (where direction = 'credit')
+    into v_reversal_debit, v_reversal_credit
+    from app.finance_journal_lines where journal_id = v_correction.correction_journal_id;
+  if v_reversal_debit <> 300000 or v_reversal_credit <> 300000 then
+    raise exception 'assertion failed: expected the reversal journal to be balanced at exactly this allocation''s own 300,000 (never the whole 1,300,000 batch), got debit=% credit=%', v_reversal_debit, v_reversal_credit;
+  end if;
+
+  select count(*) into v_matched_accounts
+    from app.finance_journal_lines orig
+    join app.finance_journal_lines rev on rev.account_id = orig.account_id and rev.direction <> orig.direction
+    where orig.journal_id = v_original_batch.gl_journal_id and rev.journal_id = v_correction.correction_journal_id;
+  if v_matched_accounts <> 2 then
+    raise exception 'assertion failed: expected the reversal journal to flip direction on the exact same 2 accounts (cash/AR-control) the original batch posted to, never a re-resolved account, matched %', v_matched_accounts;
   end if;
 
   begin

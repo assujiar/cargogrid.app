@@ -79,7 +79,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | DEFERRED_LARGE | real report-building effort, weeks per the audit's own estimate |
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs a billing-model decision (partial/milestone billing) before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | DEFERRED_LARGE | schema redesign across `finance_journals`/`finance_journal_lines` |
-| B6 | Cost/cash never auto-post to GL | `CODE-BIG` | DEFERRED_LARGE | |
+| B6 | Cost/cash never auto-post to GL | `CODE` (re-scoped, see below) | **PARTIAL** | a dedicated recon pass found this MEDIUM, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL, automatic or dedicated-manual -- real but narrower than the audit's own framing, see execution log |
 | B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **PARTIAL** | the worklist-UI half is fixed: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half (`app.check_customer_credit` never reads AR open items; no order-acceptance path calls it) is untouched -- separate, larger, deliberately deferred work |
 
 ## C — Indonesia
@@ -2920,3 +2920,94 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   import, inventory_opening_balance_import under OPS), each estimated at
   the same one-wrapper-plus-one-route cost as this slice and the finance one
   before it.
+- 2026-09-17 — B6 re-scoped, B6a closed: a dedicated recon pass (before any
+  code was written) found the audit's own literal claims true but its
+  `CODE-BIG`/`DEFERRED_LARGE` classification overstated -- the only backlog
+  row in this whole document with a completely empty Notes column, unlike
+  every sibling `DEFERRED_LARGE` item, which was itself the tell. Verified
+  against the LIVE current bodies of every function the audit named (not the
+  2026-09-02 audit text alone, since ~2 weeks of remediation had already
+  moved this code):
+  (1) 12 of the audit's "13 actual_cost functions" were never candidates to
+  post to the GL at all (reads/permission checks/arithmetic/a trigger),
+  explicitly disclosed as out of scope in their own creating migration's
+  header. The 13th, `app.prepare_finance_vendor_bill_from_actual_cost`,
+  already has a complete, working, GL-wired path for vendor-sourced cost via
+  the ordinary vendor-bill lifecycle (`post_finance_vendor_bill` posts to
+  the GL). Internal-source (no-vendor) actual cost genuinely has no path to
+  the GL at all, automatic or dedicated-manual -- a real, narrower gap left
+  open (see below), distinct from "no cost ever posts."
+  (2) `allocate_finance_receipt` and `apply_finance_ap_settlement` both
+  already post correctly (confirmed via their real call sites, not the
+  isolated low-level mutators the audit named). `reverse_finance_ap_settlement`
+  was ALSO already fixed, pre-audit, by
+  `20260826030000_harden_finance_settlement_reversal_gl_journal_and_reachability.sql`
+  (RGL-BLK-009) -- its only caller, `app.request_finance_settlement_reversal`,
+  posts a real reversing GL journal. Only `reverse_finance_ar_allocation`'s
+  own caller, `app.request_finance_receipt_deallocation`, was never given
+  the mirror-image fix -- confirmed by reading all 3 of its redefinitions
+  since creation (SECURITY DEFINER hardening, IP-allowlist wiring), none of
+  which touched the GL side.
+  (3) `app.purchase_order_lines` still has no unit price/amount/currency
+  column, confirmed unchanged -- a real, narrow, but separate procurement
+  data-model gap, unconnected to GL posting (POs do not post to GL in this
+  codebase at all) and left open, not blocking.
+  (4) A fully working MANUAL GL posting path already exists
+  (`create_finance_journal_draft` -> submit -> approve -> `post_finance_journal`)
+  -- B6 was a "no automation yet" gap, never a "money unaccounted for with
+  no recovery path" emergency.
+  B6a (the one real, narrow, closeable gap) fixed: new migration
+  `20260917010000_fix_finance_receipt_deallocation_gl_reversal.sql`
+  re-creates `app.request_finance_receipt_deallocation` to post a real
+  reversing GL journal (a `finance_journal_corrections` row, `correction_type
+  ='reversal'`, posted via the existing `create_and_post_finance_system_journal`
+  with `lock_scope='ar'`) before calling the existing
+  `app.reverse_finance_ar_allocation` -- closing the exact mirror-image of
+  RGL-BLK-009 on the AR side. One real wrinkle the AP precedent did not have
+  to solve, found and resolved during implementation: `allocate_finance_receipt`
+  posts ONE subledger batch/GL journal per ALLOCATE CALL (which can cover
+  several AR open items across several `finance_receipt_allocations` rows),
+  while deallocation reverses exactly ONE allocation row at a time --
+  reversing the shared journal in full (the AP function's own technique,
+  correct there only because one settlement always owns exactly one journal)
+  would misstate every OTHER still-applied allocation from the same batch.
+  Fixed by flipping the original journal's own 2 lines (landing on the exact
+  same accounts, never re-resolving a posting-map key -- the same principle
+  the AP precedent's own comment states) but substituting this one
+  allocation's own amount for each line's amount, and deliberately leaving
+  the original subledger batch's own status at `'posted'` (never
+  `'reversed'`) since other allocations from it may still stand -- the new
+  correction journal is the GL's actual source of truth;
+  `app.finance_subledger_batches` is a lineage/traceability record, never
+  itself read by any balance computation in this codebase. No wrapper change
+  needed (`public.request_finance_receipt_deallocation`'s signature is
+  unchanged). New db-test assertions extend the EXISTING "governed
+  deallocation" fixture in `scripts/db-tests/finance-receipt-allocation.sql`
+  (no new file) which already, by coincidence, exercises the exact "one
+  batch, two allocations, reverse only one" scenario the fix targets:
+  confirm the original batch stays `posted`, a posted correction links to
+  its journal, the new reversal journal is balanced at exactly the reversed
+  allocation's own amount (never the whole batch total), and its 2 lines
+  land on the same 2 accounts as the original with direction flipped.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings; no TS/frontend files touched), the unit test suite
+  (6,097 tests, unchanged -- SQL-only slice), `db:test` (`ALL PASSED` twice
+  in a row -- the finance-domain files plus a full-suite run; one unrelated,
+  pre-existing flake reproduced once in
+  `customer-loyalty-liability-reconciliation.sql`'s own real three-process
+  timing-sensitive atomicity race test, gone on immediate re-run, confirmed
+  unrelated to this slice), `git:check-paths` (clean, 3 files checked),
+  `security:check` (clean). `next build` not run -- no TypeScript/frontend
+  file changed. `check-release-freeze`'s self-test digests updated
+  (HUNDRED-AND-FORTY-SEVENTH PASS, migrations 544 -> 545, db-test files
+  unchanged at 277).
+  Still open under B6: internal-source actual cost has no path to the GL
+  (would need 1-2 new `finance_posting_map` keys plus a new
+  `app.post_actual_cost_to_gl`-shaped function, modeled directly on
+  `prepare_finance_vendor_bill_from_actual_cost`/`post_finance_vendor_bill`'s
+  combined shape -- no chart-of-accounts product decision needed, since
+  `finance_posting_map` is already a free-form, tenant-self-service
+  `jsonb` config); `app.purchase_order_lines` still has no unit price/
+  amount/currency column. Both are real, narrow, and estimated MEDIUM by the
+  same recon pass, not `DEFERRED_LARGE` -- left open for a follow-up slice,
+  not because either needs a product decision.
