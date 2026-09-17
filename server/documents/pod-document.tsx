@@ -5,23 +5,21 @@
  * purchase order"). Built on `getEpodCaptureHistory` (OPS-177), already real,
  * tested backend capability -- no new schema, no new RPC.
  *
- * Deliberately TEXT-ONLY: `EpodCapture.signatureFileId`/`.photoFileIds`
- * reference real captured evidence in `app.files`, but no signed-download
- * capability exists anywhere in this codebase yet to fetch their bytes for
- * embedding (repo-wide grep for `createSignedUrl`/`storage.from(...).download`
- * confirms the only existing Storage read is the malware-scan job's own
- * internal download, never anything user-facing) -- audit finding A6's own
- * remaining scope, "wire upload + signed download + scanning," of which only
- * upload and scanning are done. Embedding the actual signature/photo images
- * is real future work once that exists, not something to fake here with an
- * unauthenticated or public URL. This summary is still genuinely useful on
- * its own (receiver identity, capture timestamp, review status/notes) --
- * exactly what a POD confirms even before its visual evidence is attached.
+ * Evidence images (audit remediation NEW-2, follow-on to A6's own closure):
+ * `signatureImageUrl`/`photoImageUrls` are already-minted, short-lived
+ * Storage signed URLs (`generate-pod.server.ts`'s own
+ * `getEpodEvidenceSignedDownloadUrl` call) -- this component only ever
+ * receives a URL it can hand straight to `@react-pdf/renderer`'s `Image`,
+ * never a raw file id/storage path. A null `signatureImageUrl` or an empty
+ * `photoImageUrls` array (access denied, a since-deleted file, or capture
+ * simply never attached one) falls back to the same text note this
+ * document originally shipped with -- never a broken image or a thrown
+ * render error.
  */
 
 import ReactPDF from "@react-pdf/renderer";
 
-const { Document, Page, View, Text, StyleSheet } = ReactPDF;
+const { Document, Page, View, Text, Image, StyleSheet } = ReactPDF;
 
 export interface PodData {
   readonly tenantLabel: string;
@@ -36,6 +34,8 @@ export interface PodData {
   readonly reviewNotes: string | null;
   readonly photoCount: number;
   readonly hasSignature: boolean;
+  readonly signatureImageUrl: string | null;
+  readonly photoImageUrls: readonly string[];
 }
 
 const styles = StyleSheet.create({
@@ -51,6 +51,9 @@ const styles = StyleSheet.create({
   value: { flex: 1 },
   note: { marginTop: 8, padding: 8, backgroundColor: "#f3f4f6", borderRadius: 2 },
   evidenceNote: { marginTop: 16, fontSize: 9, color: "#4b5563", fontStyle: "italic" },
+  signatureImage: { width: 180, height: 90, objectFit: "contain", border: "1pt solid #d1d5db" },
+  photoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  photoImage: { width: 140, height: 140, objectFit: "cover", border: "1pt solid #d1d5db" },
 });
 
 export function PodDocument({ data }: { data: PodData }) {
@@ -107,9 +110,29 @@ export function PodDocument({ data }: { data: PodData }) {
           ) : null}
         </View>
 
-        <Text style={styles.evidenceNote}>
-          {data.photoCount} photo(s) and {data.hasSignature ? "a signature" : "no signature"} captured for this delivery. Visual evidence is retained in this tenant&apos;s document storage and is not embedded in this summary.
-        </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Signature</Text>
+          {data.signatureImageUrl ? (
+            // eslint-disable-next-line jsx-a11y/alt-text -- SUPPRESS(owner=ops-a7-printables, reason=react-pdf's Image renders into a PDF not the DOM and its ImageProps type has no alt prop at all, expires=NONE, adr=NONE)
+            <Image style={styles.signatureImage} src={data.signatureImageUrl} />
+          ) : (
+            <Text style={styles.evidenceNote}>{data.hasSignature ? "Signature evidence is on file but could not be embedded." : "No signature captured for this delivery."}</Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Delivery photos</Text>
+          {data.photoImageUrls.length > 0 ? (
+            <View style={styles.photoRow}>
+              {data.photoImageUrls.map((url) => (
+                // eslint-disable-next-line jsx-a11y/alt-text -- SUPPRESS(owner=ops-a7-printables, reason=react-pdf's Image renders into a PDF not the DOM and its ImageProps type has no alt prop at all, expires=NONE, adr=NONE)
+                <Image key={url} style={styles.photoImage} src={url} />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.evidenceNote}>{data.photoCount > 0 ? `${data.photoCount} photo(s) on file but could not be embedded.` : "No delivery photos captured for this delivery."}</Text>
+          )}
+        </View>
       </Page>
     </Document>
   );
