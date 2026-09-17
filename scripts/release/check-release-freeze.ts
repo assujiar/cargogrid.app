@@ -5186,7 +5186,76 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "612bd8a59232f940ab9fa607520e8b98c056358fa5687a5fba87adc43fb6b5a1",
+  migrationSetSha256: "f96a78c8f5f1d91773a6077337c99ef7ce7453375201de6f63f8b8ac1f5da579",
+  // HUNDRED-AND-FIFTY-FIFTH PASS: CG-AUDIT-2026-09-02 B7 (second half),
+  // "Invoicing keyed off a hand-copied UUID; no credit control" -- the
+  // worklist-UI half was fixed earlier this session
+  // (20260915010000_create_list_billable_readiness_handoffs.sql), whose own
+  // header explicitly named app.check_customer_credit/credit control as "a
+  // separate, larger, deliberately excluded piece of work, untouched here."
+  // This pass closes it. New migration
+  // 20260917090000_b7_credit_control_ar_exposure_and_job_order_handoff_gate.sql
+  // confirmed live (never assumed) that app.check_customer_credit (COM-157)
+  // was NOT a stub -- it already read a real app.credit_profiles/app.credit_
+  // profile_overrides row and persisted every outcome to app.credit_check_
+  // snapshots -- but had two real gaps: (1) it never consulted actual AR
+  // exposure, only the static approved limit, so a customer already at their
+  // limit from prior unpaid invoices could still be approved for a
+  // brand-new request that alone sat under the limit; (2) it was dead-gated
+  // code -- reachable only through its own manual "Check eligibility"
+  // widget, never from any order-acceptance path, confirmed by checking
+  // every real candidate (app.prepare_job_order_handoff/app.confirm_job_
+  // order/app.create_shipment_order_from_job/app.confirm_shipment_order --
+  // none called any credit check).
+  // Fix 1: check_customer_credit now sums app.finance_ar_open_items.
+  // open_amount (FIN-196, status <> paid, same currency) and adds it to the
+  // requested amount before comparing against the effective limit -- reading
+  // the base table directly rather than app.get_finance_ar_exposure_summary
+  // (which hard-gates on FIN:View and would force a permission regression
+  // onto every credit check).
+  // Fix 2: app.prepare_job_order_handoff -- the correct singular acceptance-
+  // moment gate point, per check_customer_credit's own "the one
+  // deterministic, reproducible pre-conversion check" framing -- now
+  // evaluates credit for the converted account and the quotation's own real
+  // total, raising credit_blocked for an affirmative credit-control decision
+  // already in force (blocked_limit/blocked_hold/blocked_not_active/blocked_
+  // currency_mismatch), deliberately NOT for blocked_no_profile (credit
+  // profiles are opt-in in this product, never mandatory -- confirmed live
+  // that scripts/db-tests/commercial-job-order-lineage.sql's own existing
+  // happy-path tests never set one up at all, so hard-blocking on
+  // blocked_no_profile would have retroactively made a credit profile
+  // mandatory before ANY job order could ever be accepted for ANY account,
+  // a far larger undisclosed product-shape change than the audit asked for).
+  // A real, load-bearing design correction happened mid-pass: a first draft
+  // had prepare_job_order_handoff call the PUBLIC check_customer_credit
+  // directly (itself COM:View-gated), reasoning "every COM:Edit role already
+  // holds COM:View." That untested assumption broke live: a full `pnpm run
+  // db:test` pass (this repository's own 60+ existing prepare_job_order_
+  // handoff callers, not just this slice's own two files) failed on
+  // scripts/db-tests/customer-booking-requests.sql, whose staff role holds
+  // COM:Edit but not COM:View. Fixed by extracting the decision core into a
+  // new internal app._evaluate_customer_credit (no authority check of its
+  // own, always unmasked -- masking is the caller's concern), which the
+  // public app.check_customer_credit now delegates to (adding COM:View +
+  // masking) and app.prepare_job_order_handoff calls directly (already
+  // gated on COM:Edit, no second transitive check) -- re-verified clean via
+  // a second full db:test pass afterward.
+  // scripts/db-tests/commercial-job-order-lineage.sql's own existing
+  // happy-path assertion needed a real update (not a weakened test): the
+  // payload's own "credit" field, previously always null for an account
+  // that had never been checked, is now genuinely populated with a real
+  // blocked_no_profile snapshot, since prepare_job_order_handoff performs a
+  // real check on every call -- the assertion now expects that real value.
+  // server/mutations/job-order-lineage.ts gained the "credit_blocked" error
+  // code plus a new unit test. Full Tier A gates verified clean: typecheck,
+  // lint (0 errors), the full unit test suite (6149/6149; the one
+  // check-release-freeze self-test failure this same pass produces is
+  // resolved by this very comment/digest update), db:test (`ALL PASSED`
+  // across all 280+ files, including the two extended fixtures and the one
+  // that initially broke), git:check-paths, security:check, and a real
+  // `next build`.
+  // History: 612bd8a59232f940ab9fa607520e8b98c056358fa5687a5fba87adc43fb6b5a1
+  // (552 files, HUNDRED-AND-FIFTY-FOURTH PASS).
   // HUNDRED-AND-FIFTY-FOURTH PASS: CG-AUDIT-2026-09-02 A6, ePOD evidence signed
   // download -- the 4th and final of the audit's own named deadlocked
   // upload/download flows (vendor compliance, shipment document checklist,
@@ -7287,7 +7356,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "4a915df77274d94f292469409eb205d0585e9897246a12721fa2ddbedc57a5dd",
+  dbTestSetSha256: "20b567dec4705f5d4fc9e4efc8e1f1321825c856c4a985910d8c49266e11d227",
+  // HUNDRED-AND-FIFTY-FIFTH PASS: same CG-AUDIT-2026-09-02 B7 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (277 files unchanged), but two existing fixtures gained real new
+  // coverage: scripts/db-tests/commercial-credit-commercial-control.sql now
+  // proves check_customer_credit's own real AR-exposure logic (a real,
+  // open app.finance_ar_open_items row moves an otherwise-allow decision to
+  // blocked_limit, additively, not "any AR at all blocks everything") and
+  // app.prepare_job_order_handoff's own new credit_blocked gate (a real,
+  // first-ever handoff attempt for an over-limit account raises, creating
+  // no app.job_order_handoffs row); scripts/db-tests/commercial-job-order-
+  // lineage.sql had one existing assertion genuinely updated (not weakened)
+  // to expect the payload's own "credit" field to carry a real
+  // blocked_no_profile snapshot instead of null, since prepare_job_order_
+  // handoff now performs a real check on every call.
+  // History: 4a915df77274d94f292469409eb205d0585e9897246a12721fa2ddbedc57a5dd
+  // (277 files, HUNDRED-AND-FORTY-SEVENTH PASS).
   // HUNDRED-AND-FORTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 B6a slice as
   // migrationSetSha256's own note immediately above -- extends the existing
   // scripts/db-tests/finance-receipt-allocation.sql (no new file, 277 files

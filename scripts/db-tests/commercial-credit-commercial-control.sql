@@ -1,8 +1,77 @@
 -- Real, executable test evidence for COM-157 (Credit and Commercial Control,
 -- CG-S7-COM-016) -- run via `pnpm run db:test` against a real, disposable Postgres
 -- database.
+--
+-- CG-AUDIT-2026-09-02 B7 (second half) extends this file with real AR-exposure and
+-- job-order-handoff-gate coverage further down (see the block right after the
+-- app.create_credit_override test).
 
 \set ON_ERROR_STOP on
+
+-- CG-AUDIT-2026-09-02 B7 fixture helper: mints one real, minimal AR-postable
+-- app.finance_invoices row (plus the disposable job-order/billing-readiness chain
+-- app.validate_finance_open_item_source, ISS-2026-319, requires it to genuinely
+-- resolve against) for a given account -- direct fixture insert, out of scope for
+-- this capability's own test, mirroring scripts/db-tests/finance-accounts-
+-- receivable.sql's own identical iss319_build_job_order/iss319_mint_invoice
+-- precedent verbatim (merged into one function here since this file needs it for
+-- exactly one purpose: proving app.check_customer_credit now reads real AR
+-- exposure, never reusing or re-deriving any of this file's own real Commercial
+-- lead->quote->accept->convert chains for it).
+create function pg_temp.b7_mint_ar_invoice(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_lead_id uuid;
+  v_prospect_id uuid;
+  v_opportunity_id uuid;
+  v_opp_version integer;
+  v_quotation_id uuid := gen_random_uuid();
+  v_joh_id uuid;
+  v_job_order_id uuid;
+  v_eval_id uuid;
+  v_handoff_id uuid;
+  v_invoice_id uuid;
+begin
+  insert into app.leads (tenant_id, source, contact_name, email, created_by)
+  values (p_tenant_id, 'manual', p_seed, p_seed || '@b7-ar-fixture.test', p_actor_label)
+  returning id into v_lead_id;
+
+  insert into app.prospects (tenant_id, lead_id, legal_name, contact_name, created_by)
+  values (p_tenant_id, v_lead_id, p_seed || ' Co', p_seed, p_actor_label)
+  returning id into v_prospect_id;
+
+  insert into app.opportunities (tenant_id, prospect_id, name, created_by)
+  values (p_tenant_id, v_prospect_id, p_seed || ' opportunity', p_actor_label)
+  returning id, record_version into v_opportunity_id, v_opp_version;
+
+  insert into app.quotations (id, tenant_id, quote_number, opportunity_id, source_opportunity_version, prospect_id, currency, validity_to, root_quotation_id, created_by)
+  values (v_quotation_id, p_tenant_id, p_seed || '-QUOTE', v_opportunity_id, v_opp_version, v_prospect_id, 'IDR', now() + interval '30 days', v_quotation_id, p_actor_label);
+
+  insert into app.job_order_handoffs (tenant_id, quotation_id, account_id, payload, payload_hash, prepared_by_auth_user_id, created_by)
+  values (p_tenant_id, v_quotation_id, p_account_id, '{}'::jsonb, 'b7-ar-fixture-hash-' || p_seed, p_actor_auth_user_id, p_actor_label)
+  returning id into v_joh_id;
+
+  insert into app.job_orders (tenant_id, job_number, source_handoff_id, quotation_id, account_id, customer_snapshot, cargo_service_snapshot, revenue_snapshot, acceptance_snapshot, created_by)
+  values (p_tenant_id, p_seed || '-JOB', v_joh_id, v_quotation_id, p_account_id, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, p_actor_label)
+  returning id into v_job_order_id;
+
+  insert into app.billing_readiness_evaluations (tenant_id, job_order_id, evaluated_status, is_overridden, override_reason, overridden_by_auth_user_id, overridden_by, evaluated_by_auth_user_id, evaluated_by, created_by)
+  values (p_tenant_id, v_job_order_id, 'not_ready', true, 'CG-AUDIT-2026-09-02 B7 fixture: minted so the AR open-item source-lineage guard has a real invoice to resolve', p_actor_auth_user_id, p_actor_label, p_actor_auth_user_id, p_actor_label, p_actor_label)
+  returning id into v_eval_id;
+
+  insert into app.billing_readiness_handoffs (tenant_id, job_order_id, evaluation_id, idempotency_key, handed_off_by_auth_user_id, handed_off_by)
+  values (p_tenant_id, v_job_order_id, v_eval_id, p_seed || '-handoff', p_actor_auth_user_id, p_actor_label)
+  returning id into v_handoff_id;
+
+  insert into app.finance_invoices (tenant_id, customer_account_id, job_order_id, billing_readiness_handoff_id, currency, created_by)
+  values (p_tenant_id, p_account_id, v_job_order_id, v_handoff_id, 'IDR', p_actor_label)
+  returning id into v_invoice_id;
+
+  return v_invoice_id;
+end;
+$fn$;
 
 \echo '>> setup: one tenant, a company/branch/two-team org hierarchy, a rep (COM:Create/Edit/View/View selling price -- no Approve), an approver (COM:Approve/View/View selling price, assigned the routed Credit Approver role), a viewer (COM:View only -- masking test), a sibling-team outsider (same as rep but not assigned the approver role), and two full lead->prospect->opportunity->costing->rate->margin->quotation chains, both accepted and converted to accounts (A and B)'
 do $$
@@ -77,7 +146,10 @@ begin
   v_rep_draft := app.create_role_version(v_rep_role, 'tester');
   perform app.set_role_version_permissions(
     v_rep_draft.id,
-    array(select id from app.permissions where resource_module_code = 'COM' and action in ('Create', 'Edit', 'View', 'View selling price', 'View cost')),
+    -- FIN:Edit is additive here solely for the CG-AUDIT-2026-09-02 B7 fixture
+    -- further down (posting a real AR open item + generating this tenant's own
+    -- fiscal calendar) -- rep never otherwise touches Finance in this file.
+    array(select id from app.permissions where (resource_module_code = 'COM' and action in ('Create', 'Edit', 'View', 'View selling price', 'View cost')) or (resource_module_code = 'FIN' and action = 'Edit')),
     'tester'
   );
   perform app.publish_role_version(v_rep_draft.id, now(), 'tester');
@@ -125,6 +197,13 @@ begin
     jsonb_build_object('key', 'allow_self_approval', 'value', false)
   ), '00000000-0000-0000-0000-000000010101', 'tenant admin');
   perform app.publish_approval_definition(v_config_draft.id, '00000000-0000-0000-0000-000000010101', null, 'tenant admin');
+
+  -- CG-AUDIT-2026-09-02 B7: a full year of open fiscal periods starting this
+  -- calendar year, covering whatever "now" genuinely is when db:test runs (never a
+  -- hardcoded date) -- the AR-exposure fixture further down posts against
+  -- current_date, which app.post_finance_ar_open_item requires a real, open
+  -- fiscal period for (FIN-193's own app.resolve_finance_period_for_date).
+  perform app.generate_finance_fiscal_calendar(v_tenant, null, 'FY-B7', 'B7 fixture calendar', date_trunc('year', now())::date, 12, '00000000-0000-0000-0000-000000010102', 'rep');
 
   -- Chain A ("Credit Test Co A")
   perform app.capture_lead(v_tenant, 'manual', null, 'Credit Test Co A', 'Jane Cred A', 'jane.a@acmecred.test', '0811',
@@ -438,6 +517,74 @@ begin
   select outcome into v_outcome from app.check_customer_credit(v_tenant, v_account_a_id, 'IDR', 90000000, 'quotation', null, '00000000-0000-0000-0000-000000010103', 'approver');
   if v_outcome <> 'blocked_limit' then
     raise exception 'assertion failed: expected blocked_limit above even the overridden 80000000 limit, got %', v_outcome;
+  end if;
+end;
+$$;
+
+\echo '>> CG-AUDIT-2026-09-02 B7: app.check_customer_credit now factors in real AR exposure (app.finance_ar_open_items), not just the static/overridden limit; app.prepare_job_order_handoff (COM-160) gates on the outcome -- credit_blocked once existing exposure plus the quotation total exceeds the limit'
+do $$
+declare
+  v_tenant uuid;
+  v_account_a_id uuid;
+  v_quotation_a_id uuid;
+  v_outcome text;
+  v_effective_limit numeric;
+  v_invoice_id uuid;
+  v_open_item app.finance_ar_open_items;
+begin
+  v_tenant := (select id from app.tenants where slug = 'acmecred');
+  v_account_a_id := (select account_id from app.account_conversions where quotation_id = (select id from app.quotations where customer_snapshot ->> 'legal_name' = 'Credit Test Co A'));
+  v_quotation_a_id := (select id from app.quotations where customer_snapshot ->> 'legal_name' = 'Credit Test Co A');
+
+  -- Account A's override (from the test immediately above) still holds:
+  -- effective_limit_amount=80,000,000. Post one real, open AR item for
+  -- 75,000,000 -- alone well under that 80M limit.
+  v_invoice_id := pg_temp.b7_mint_ar_invoice(v_tenant, v_account_a_id, '00000000-0000-0000-0000-000000010102', 'rep', 'b7-ar-exposure-a');
+  select * into v_open_item from app.post_finance_ar_open_item(
+    v_tenant, null, v_account_a_id, 'invoice', v_invoice_id, 'IDR', 75000000,
+    current_date, current_date + 30, '00000000-0000-0000-0000-000000010102', 'rep'
+  );
+  if v_open_item.status <> 'open' or v_open_item.open_amount <> 75000000 then
+    raise exception 'assertion failed: expected a real open AR item for 75000000, got status=% open_amount=%', v_open_item.status, v_open_item.open_amount;
+  end if;
+
+  -- 75,000,000 already open + a fresh 10,000,000 request = 85,000,000, over the
+  -- 80,000,000 override limit -- blocked, even though 10,000,000 alone would fit
+  -- comfortably under it. This is the exact behavior the pre-B7 function never had:
+  -- confirmed by this same test file's own earlier "allow within limit" case using
+  -- amounts that would have passed before this migration.
+  select outcome, effective_limit_amount into v_outcome, v_effective_limit
+  from app.check_customer_credit(v_tenant, v_account_a_id, 'IDR', 10000000, 'quotation', null, '00000000-0000-0000-0000-000000010103', 'approver');
+  if v_outcome <> 'blocked_limit' or v_effective_limit <> 80000000 then
+    raise exception 'assertion failed: expected blocked_limit (75M existing exposure + 10M request > 80M limit), got outcome=% limit=%', v_outcome, v_effective_limit;
+  end if;
+
+  -- A request that, added to the existing exposure, still fits (75M + 4M = 79M <=
+  -- 80M) is allowed -- proving the new logic is additive, not "any existing AR at
+  -- all blocks everything."
+  select outcome into v_outcome
+  from app.check_customer_credit(v_tenant, v_account_a_id, 'IDR', 4000000, 'quotation', null, '00000000-0000-0000-0000-000000010103', 'approver');
+  if v_outcome <> 'allow' then
+    raise exception 'assertion failed: expected allow (75M existing exposure + 4M request = 79M <= 80M limit), got %', v_outcome;
+  end if;
+
+  -- app.prepare_job_order_handoff: the real order-acceptance gate this repository
+  -- previously had zero of. Account A's own accepted/converted quotation (v_quote_a,
+  -- IDR 15,000,000 total) has never had a handoff prepared anywhere in this file --
+  -- the idempotency short-circuit cannot mask this call, so the gate genuinely runs:
+  -- 75M existing exposure + 15M quotation total = 90M > 80M limit.
+  begin
+    perform app.prepare_job_order_handoff(v_quotation_a_id, '00000000-0000-0000-0000-000000010102', 'rep');
+    raise exception 'assertion failed: expected credit_blocked -- 75M existing exposure + 15M quotation total = 90M > 80M limit';
+  exception
+    when check_violation then
+      if sqlerrm not like 'credit_blocked:%' then
+        raise exception 'assertion failed: expected credit_blocked, got %', sqlerrm;
+      end if;
+  end;
+
+  if exists (select 1 from app.job_order_handoffs where quotation_id = v_quotation_a_id) then
+    raise exception 'assertion failed: a credit_blocked handoff attempt must create no app.job_order_handoffs row at all';
   end if;
 end;
 $$;

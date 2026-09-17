@@ -80,7 +80,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs a billing-model decision (partial/milestone billing) before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | DEFERRED_LARGE | schema redesign across `finance_journals`/`finance_journal_lines` |
 | B6 | Cost/cash never auto-post to GL | `CODE` (AR/AP half) / `NEEDS_PRODUCT_DECISION` (internal-cost half) | **PARTIAL** | a dedicated recon pass found this MEDIUM overall, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL at all -- but the vendor-sourced path's own real precedent (`prepare_finance_vendor_bill_from_actual_cost`) never posts directly either: it stages a Finance-owned vendor-bill DRAFT that goes through Finance's own full review/approve/post lifecycle before it ever reaches the GL, honoring `app.shipment_actual_costs`' own explicit disclosed design boundary ("non-authoritative-for-payment operational figures," its creating migration's own words). A same-shape fix for internal cost needs an equivalent Finance-owned, Finance-reviewed document type to stage into -- none exists today, and inventing one (what document, what lifecycle, does it need its own approval step, which account absorbs it) is a real product decision, not a database migration a session can make unilaterally; a thin function posting internal-cost components straight to the GL would bypass that same governance model and treat internal cost as LESS governed than vendor cost, a new inconsistency worse than the gap it would close. See execution log |
-| B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **PARTIAL** | the worklist-UI half is fixed: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half (`app.check_customer_credit` never reads AR open items; no order-acceptance path calls it) is untouched -- separate, larger, deliberately deferred work |
+| B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **DONE** | the worklist-UI half: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half: `app.check_customer_credit` was never a stub -- it already read a real `app.credit_profiles`/`app.credit_profile_overrides` row and persisted every outcome -- but never consulted actual AR exposure (only the static approved limit) and was dead-gated code (reachable only via its own manual "Check eligibility" widget, never from any order-acceptance path). Now fixed: it sums real `app.finance_ar_open_items.open_amount` (status <> paid, same currency) into the comparison, and `app.prepare_job_order_handoff` (the correct singular acceptance-moment gate point) evaluates credit for the converted account and the quotation's own real total, raising `credit_blocked` for an affirmative credit-control decision already in force -- deliberately not for `blocked_no_profile` (credit profiles are opt-in, not mandatory). The decision core was factored into a new internal `app._evaluate_customer_credit` (no authority check of its own) after a full `db:test` run caught a real regression: a first draft called the public, COM:View-gated `check_customer_credit` directly, which broke a db-test fixture whose staff role holds COM:Edit but not COM:View -- fixed by having the internal function carry the logic and only the public wrapper add the authority check |
 
 ## C — Indonesia
 
@@ -3829,3 +3829,88 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `db:test` (`ALL PASSED` -- no schema change), `git:check-paths`,
   `security:check`, `release:check-freeze` (unchanged), and a real
   `next build`.
+
+- 2026-09-17 — B7 (credit-control half, "Invoicing keyed off a hand-copied
+  UUID; no credit control") closed -- the worklist-UI half was fixed
+  earlier this session; this half was explicitly named at the time as
+  "a separate, larger, deliberately excluded piece of work, untouched
+  here." `app.check_customer_credit` (COM-157) was confirmed, by reading
+  its own live function body rather than assuming, to NOT be a stub: it
+  already read a real `app.credit_profiles`/`app.credit_profile_overrides`
+  row and persisted every outcome to `app.credit_check_snapshots`. Two
+  real gaps remained: (1) it never consulted actual AR exposure, only the
+  static approved limit, so a customer already at their limit from prior
+  unpaid invoices could still be approved for a brand-new request that
+  alone sat under the limit; (2) it was dead-gated code -- reachable only
+  through its own manual "Check eligibility" widget on the Account detail
+  page, never from any order-acceptance path (every real candidate --
+  `app.prepare_job_order_handoff`/`app.confirm_job_order`/`app.create_
+  shipment_order_from_job`/`app.confirm_shipment_order` -- confirmed to
+  call no credit check at all).
+  Fix: new migration `20260917090000_b7_credit_control_ar_exposure_and_
+  job_order_handoff_gate.sql`. `check_customer_credit` now sums real
+  `app.finance_ar_open_items.open_amount` (FIN-196, `status <> paid`,
+  same currency) and adds it to the requested amount before comparing
+  against the effective limit -- reading the base table directly, not
+  `app.get_finance_ar_exposure_summary` (which hard-gates on `FIN:View`
+  and would force a permission regression onto every credit check).
+  `app.prepare_job_order_handoff` -- the correct singular acceptance-moment
+  gate point, matching `check_customer_credit`'s own "the one
+  deterministic, reproducible pre-conversion check" framing, and NOT
+  `confirm_job_order`/`confirm_shipment_order` (pure status transitions
+  with no new financial-exposure decision) -- now evaluates credit for the
+  converted account and the quotation's own real total, raising
+  `credit_blocked` for an affirmative credit-control decision already in
+  force (`blocked_limit`/`blocked_hold`/`blocked_not_active`/`blocked_
+  currency_mismatch`). Deliberately does NOT block on `blocked_no_profile`:
+  credit profiles are opt-in in this product (`app.request_customer_
+  credit_profile` is user-initiated, never automatic), confirmed live that
+  `scripts/db-tests/commercial-job-order-lineage.sql`'s own existing
+  happy-path tests never set one up at all -- hard-blocking every account
+  that has simply never engaged credit control would have retroactively
+  made a credit profile mandatory before ANY job order could ever be
+  accepted for ANY account, a far larger, undisclosed product-shape change
+  than "the limit a tenant already approved should actually be enforced."
+  A real, load-bearing design correction happened mid-slice: a first draft
+  had `prepare_job_order_handoff` call the PUBLIC `check_customer_credit`
+  directly, reasoning "every COM:Edit role already holds COM:View." That
+  untested assumption broke live -- a full `pnpm run db:test` pass (this
+  repository's own 60+ existing `prepare_job_order_handoff` callers, not
+  just this slice's own two files) failed on `scripts/db-tests/customer-
+  booking-requests.sql`, whose staff role holds COM:Edit but not COM:View.
+  Fixed by extracting the decision core into a new internal
+  `app._evaluate_customer_credit` (no authority check of its own, always
+  unmasked -- masking is the caller's concern), which the public
+  `app.check_customer_credit` now delegates to (adding the COM:View gate
+  plus per-caller masking) and `app.prepare_job_order_handoff` calls
+  directly (already gated on COM:Edit, no second transitive check) --
+  re-verified clean via a second full `db:test` pass afterward. This is
+  exactly the kind of regression this session's own "run the real gates,
+  never assume" discipline exists to catch.
+  `scripts/db-tests/commercial-credit-commercial-control.sql` gained a new
+  test block (a real AR open item posted for an account already under an
+  active override, proving the exposure-aware `blocked_limit` outcome is
+  additive, not "any AR at all blocks everything," plus a real
+  `prepare_job_order_handoff` call proving the new gate raises
+  `credit_blocked` and creates no `app.job_order_handoffs` row) --
+  including a new `pg_temp` fixture helper mirroring `finance-accounts-
+  receivable.sql`'s own precedent for minting a real, AR-postable invoice.
+  `scripts/db-tests/commercial-job-order-lineage.sql` had one existing
+  assertion genuinely UPDATED, not weakened: the payload's own "credit"
+  field, previously always null for an account that had never been
+  checked, is now genuinely populated with a real `blocked_no_profile`
+  snapshot, since `prepare_job_order_handoff` performs a real check on
+  every call -- the assertion now expects that real, disclosed value.
+  `server/mutations/job-order-lineage.ts` gained the `credit_blocked`
+  error code plus a new unit test.
+  Full Tier A gates verified clean: `typecheck`, targeted + full `lint`
+  (0 errors, only pre-existing warnings), the full unit test suite
+  (6150/6150, including the release-freeze self-test after its digest
+  update), `db:test` (`ALL PASSED` across all 280+ files, including both
+  extended fixtures and the one that initially broke),
+  `git:check-paths` (6 files), `security:check`,
+  `release:check-freeze` (HUNDRED-AND-FIFTY-FIFTH PASS, both digests
+  updated -- a new migration file and two extended db-test fixtures), and
+  a real `next build`.
+  **B7 ("Invoicing keyed off a hand-copied UUID; no credit control") is
+  now DONE** -- both the worklist-UI half and the credit-control half.

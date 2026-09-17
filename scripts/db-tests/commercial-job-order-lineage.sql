@@ -188,10 +188,18 @@ begin
   if v_first.payload -> 'acceptance' ->> 'decidedByName' <> 'Lineage Contact' then
     raise exception 'assertion failed: expected payload.acceptance.decidedByName=Lineage Contact, got %', v_first.payload -> 'acceptance' ->> 'decidedByName';
   end if;
-  -- No contract or credit check was ever created against this account -- both sections
-  -- must be explicit jsonb null, never a fabricated placeholder.
-  if v_first.payload -> 'contract' is distinct from 'null'::jsonb or v_first.payload -> 'credit' is distinct from 'null'::jsonb then
-    raise exception 'assertion failed: expected contract and credit sections to both be null (none created), got contract=% credit=%', v_first.payload -> 'contract', v_first.payload -> 'credit';
+  -- No contract was ever created against this account -- that section must be
+  -- explicit jsonb null, never a fabricated placeholder. The credit section is no
+  -- longer null (CG-AUDIT-2026-09-02 B7): app.prepare_job_order_handoff itself now
+  -- calls app.check_customer_credit for real before assembling this payload -- this
+  -- account never engaged credit control at all, so the outcome is blocked_no_profile
+  -- (which, per that migration's own deliberate scope boundary, does NOT block the
+  -- handoff itself -- credit profiles are opt-in, not mandatory).
+  if v_first.payload -> 'contract' is distinct from 'null'::jsonb then
+    raise exception 'assertion failed: expected the contract section to be null (none created), got contract=%', v_first.payload -> 'contract';
+  end if;
+  if v_first.payload -> 'credit' ->> 'outcome' <> 'blocked_no_profile' or v_first.payload -> 'credit' ->> 'checkedAt' is null then
+    raise exception 'assertion failed: expected a real credit section with outcome=blocked_no_profile and a non-null checkedAt (CG-AUDIT-2026-09-02 B7''s own real check now runs), got credit=%', v_first.payload -> 'credit';
   end if;
 
   -- Idempotent retry: same row, same hash, never a second insert.

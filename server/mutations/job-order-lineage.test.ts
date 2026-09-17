@@ -108,6 +108,18 @@ describe("prepareJobOrderHandoff", () => {
     );
   });
 
+  test("classifies credit_blocked (CG-AUDIT-2026-09-02 B7)", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "credit_blocked: quotation account outcome blocked_limit (effective limit 80000000)" } });
+    await assert.rejects(
+      () => prepareJobOrderHandoff(client, { quotationId: QUOTATION_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof JobOrderLineageMutationError);
+        assert.equal(err.code, "credit_blocked");
+        return true;
+      },
+    );
+  });
+
   test("falls back to mutation_failed for an unrecognized error message", async () => {
     const { client } = fakeRpcClient({ data: null, error: { message: "boom, something unrelated broke" } });
     await assert.rejects(

@@ -17,6 +17,7 @@ export const JOB_ORDER_LINEAGE_KNOWN_MUTATION_ERROR_CODES = [
   "quote_not_approved",
   "quote_not_accepted",
   "account_not_converted",
+  "credit_blocked",
 ] as const;
 type KnownJobOrderLineageMutationErrorCode = (typeof JOB_ORDER_LINEAGE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type JobOrderLineageMutationErrorCode = KnownJobOrderLineageMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -45,6 +46,12 @@ function classifyError(message: string): JobOrderLineageMutationErrorCode {
  * app.check_customer_credit (COM-157) already established -- app.job_order_handoffs
  * (the base table row type) carries no explicit `payload_masked` column, unlike the
  * directory view, so this wrapper synthesizes it from `payload === null` before parsing.
+ *
+ * CG-AUDIT-2026-09-02 B7: the RPC now also calls app.check_customer_credit for the
+ * converted account and the quotation's own real total, throwing `credit_blocked`
+ * when an affirmative credit-control decision (over limit, on hold, expired, wrong
+ * currency) is already in force for that account -- never for an account that has
+ * simply never engaged credit control at all (see the migration's own header for why).
  */
 export async function prepareJobOrderHandoff(client: JobOrderLineageMutationRpcClient, input: PrepareJobOrderHandoffInput): Promise<JobOrderHandoff> {
   const parsedInput = PrepareJobOrderHandoffInputSchema.parse(input);
