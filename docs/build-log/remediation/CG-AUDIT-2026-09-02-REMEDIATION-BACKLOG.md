@@ -79,7 +79,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | DEFERRED_LARGE | real report-building effort, weeks per the audit's own estimate |
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs a billing-model decision (partial/milestone billing) before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | DEFERRED_LARGE | schema redesign across `finance_journals`/`finance_journal_lines` |
-| B6 | Cost/cash never auto-post to GL | `CODE` (re-scoped, see below) | **PARTIAL** | a dedicated recon pass found this MEDIUM, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL, automatic or dedicated-manual -- real but narrower than the audit's own framing, see execution log |
+| B6 | Cost/cash never auto-post to GL | `CODE` (AR/AP half) / `NEEDS_PRODUCT_DECISION` (internal-cost half) | **PARTIAL** | a dedicated recon pass found this MEDIUM overall, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL at all -- but the vendor-sourced path's own real precedent (`prepare_finance_vendor_bill_from_actual_cost`) never posts directly either: it stages a Finance-owned vendor-bill DRAFT that goes through Finance's own full review/approve/post lifecycle before it ever reaches the GL, honoring `app.shipment_actual_costs`' own explicit disclosed design boundary ("non-authoritative-for-payment operational figures," its creating migration's own words). A same-shape fix for internal cost needs an equivalent Finance-owned, Finance-reviewed document type to stage into -- none exists today, and inventing one (what document, what lifecycle, does it need its own approval step, which account absorbs it) is a real product decision, not a database migration a session can make unilaterally; a thin function posting internal-cost components straight to the GL would bypass that same governance model and treat internal cost as LESS governed than vendor cost, a new inconsistency worse than the gap it would close. See execution log |
 | B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **PARTIAL** | the worklist-UI half is fixed: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half (`app.check_customer_credit` never reads AR open items; no order-acceptance path calls it) is untouched -- separate, larger, deliberately deferred work |
 
 ## C — Indonesia
@@ -3001,13 +3001,36 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   file changed. `check-release-freeze`'s self-test digests updated
   (HUNDRED-AND-FORTY-SEVENTH PASS, migrations 544 -> 545, db-test files
   unchanged at 277).
-  Still open under B6: internal-source actual cost has no path to the GL
-  (would need 1-2 new `finance_posting_map` keys plus a new
-  `app.post_actual_cost_to_gl`-shaped function, modeled directly on
-  `prepare_finance_vendor_bill_from_actual_cost`/`post_finance_vendor_bill`'s
-  combined shape -- no chart-of-accounts product decision needed, since
-  `finance_posting_map` is already a free-form, tenant-self-service
-  `jsonb` config); `app.purchase_order_lines` still has no unit price/
-  amount/currency column. Both are real, narrow, and estimated MEDIUM by the
-  same recon pass, not `DEFERRED_LARGE` -- left open for a follow-up slice,
-  not because either needs a product decision.
+  Still open under B6, and NOT attempted this slice after closer reading
+  disclosed a real reason not to: this session's own initial B6b plan (a
+  thin `app.post_actual_cost_to_gl` posting internal-source cost components
+  straight to the GL via 1-2 new `finance_posting_map` keys, mechanically
+  modeled on `post_finance_vendor_bill`'s own posting shape) was abandoned
+  after re-reading `20260728110000_create_operations_actual_cost.sql`'s own
+  header, which explicitly discloses `app.shipment_actual_costs`/
+  `_components` as "non-authoritative-for-payment operational figures" --
+  and confirming that the vendor-sourced path's own real precedent,
+  `app.prepare_finance_vendor_bill_from_actual_cost`, honors exactly that
+  boundary: it never posts anything itself, it stages a Finance-owned
+  vendor-bill DRAFT that must independently pass through Finance's own full
+  review/approve/post lifecycle before the actual-cost figures become
+  authoritative. A same-shape fix for internal cost needs an equivalent
+  Finance-owned, Finance-reviewed staging document -- none exists today, and
+  what it should be (a new document type? does it need its own approval
+  step? which account absorbs an internal cost with no vendor bill to
+  anchor it?) is a real product decision this session should not make
+  unilaterally inside a database migration. Implementing the originally-
+  planned thin direct-post function would have posted internal cost with
+  LESS governance than vendor cost gets today -- a new inconsistency, not a
+  fix, and exactly the kind of shortcut Part C's own "financial correctness
+  never traded for velocity" rule exists to prevent. Correctly re-
+  dispositioned as `NEEDS_PRODUCT_DECISION`, not implemented, per Part A's
+  own "if there's a real ambiguity requiring a decision this session cannot
+  make, disposition it honestly rather than plowing ahead" doctrine.
+  `app.purchase_order_lines` still has no unit price/amount/currency
+  column, confirmed narrow and non-blocking (nothing in this codebase reads
+  it for GL purposes, since POs never post to GL at all) but also NOT added
+  speculatively this slice -- no real consumer exists yet to justify the
+  columns, and adding unused schema ahead of a genuine need is exactly the
+  kind of premature design this session's own standing instructions warn
+  against. Left open for whichever future slice actually needs it.
