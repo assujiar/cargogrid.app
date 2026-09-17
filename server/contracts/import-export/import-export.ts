@@ -241,6 +241,16 @@ export const CommitVendorImportJobInputSchema = z.object({
 });
 export type CommitVendorImportJobInput = z.input<typeof CommitVendorImportJobInputSchema>;
 
+/** app.commit_customer_import_job's own input shape (CG-AUDIT-2026-09-02 A4, fifth import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not. */
+export const CommitCustomerImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitCustomerImportJobInput = z.input<typeof CommitCustomerImportJobInputSchema>;
+
 export const CancelImportExportJobInputSchema = z.object({
   jobId: z.string().uuid(),
   reason: z.string().nullable().default(null),

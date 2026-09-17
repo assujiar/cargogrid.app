@@ -5186,7 +5186,32 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "d318b8f40decdc22344f35555f6bb7d0d722123236bd7be1cc00c66970454021",
+  migrationSetSha256: "e1b912c83b0af0bebaf24e8266396d292501b40a9a46fad9b1b368656b19aa60",
+  // HUNDRED-AND-FIFTIETH PASS: CG-AUDIT-2026-09-02 A4, customer_import (the
+  // fifth of 12 import schemas). New migration
+  // 20260917040000_register_master_data_import_source_document_type.sql
+  // registers the master_data_import_source DOCUMENT TYPE (only ever
+  // registered by scripts/db-tests/master-data-import.sql's own fixture,
+  // never a real migration -- the same gap repeated a fourth time,
+  // mirroring 20260917020000/20260917030000's own fix verbatim). This
+  // document type is SHARED between customer_import and item_import
+  // (both registered together by
+  // 20260830120000_create_customer_and_item_import_adapters.sql), so this
+  // migration incidentally clears the way for a future item_import UI
+  // slice too -- additive/idempotent, so that slice will find it already
+  // registered and need no migration of its own for it.
+  // server/mutations/account.ts had ZERO wrapper for
+  // validate_customer_import_row/commit_customer_import_job at all (a
+  // from-scratch build, the same shape as vendor_import's own slice, not a
+  // small parity patch like vendor_rate_import's) -- both new functions
+  // reuse the generic PLT-131 parsers directly. app.commit_customer_import_job
+  // is create-or-link (a duplicate-fingerprint match resolves to the
+  // existing account and is counted as linked, never blocked, unless that
+  // account is under legal hold -- import_blocked_legal_hold, ISS-2026-277),
+  // a genuinely different shape from vendor_import's own flag-for-review
+  // duplicate sweep, both documented in the wizard's own copy.
+  // History: d318b8f40decdc22344f35555f6bb7d0d722123236bd7be1cc00c66970454021
+  // (547 files, HUNDRED-AND-FORTY-NINTH PASS).
   // HUNDRED-AND-FORTY-NINTH PASS: CG-AUDIT-2026-09-02 A4, vendor_rate_import
   // (the fourth of 12 import schemas). New migration
   // 20260917030000_register_vendor_rate_import_source_document_type.sql
