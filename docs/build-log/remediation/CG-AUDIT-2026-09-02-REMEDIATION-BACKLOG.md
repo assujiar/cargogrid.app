@@ -105,7 +105,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
-| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **PARTIAL** | nine schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, and `hris/imports/leave-opening-balance/`. The other 3 schemas' own adapters exist and are tested but have no UI yet -- each costs roughly one wrapper + one document-type registration + one route, no new pattern, per this schema's own slice |
+| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **PARTIAL** | ten schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`, `payroll_loan_cutover_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, `hris/imports/leave-opening-balance/`, and `hris/imports/payroll-loans/`. The other 2 schemas' own adapters exist and are tested but have no UI yet -- each costs roughly one wrapper + one document-type registration + one route, no new pattern, per this schema's own slice |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
@@ -3442,3 +3442,82 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   own document-type-registration state has not yet been directly confirmed
   and should not be assumed to match this slice's own "already fully
   catalogued" precedent without checking.
+- 2026-09-17 — A4 (`payroll_loan_cutover_import`, eleventh import schema)
+  closed: a near-mechanical port of `hris/imports/leave-opening-balance/`'s
+  own trio to `hris/imports/payroll-loans/`, reusing
+  `server/policies/csv-import-parse.ts`, `storeFileBytesAndEnqueueScan`, and
+  the generic `stageImportRows`/`listImportStagingRows`/`getImportExportJob`
+  verbatim. Directly confirmed (per the prior slice's own note not to
+  assume) rather than extrapolated: the `import_export_schemas` row was
+  already real
+  (`20260901010000_create_payroll_loan_cutover_import_adapter.sql`), but no
+  document type for the raw source file existed anywhere -- the one
+  existing db-test, `scripts/db-tests/hris-payroll.sql`, reuses the same
+  generic `master_data_import_source` type the prior slice's own db-test
+  reused. New migration
+  `20260917060000_register_payroll_loan_cutover_import_source_document_type.sql`
+  registers a dedicated `payroll_loan_cutover_import_source` document type
+  instead, applying the exact same reasoning the immediately preceding
+  `leave_opening_balance_import` slice established: payroll loan balances
+  are personal debt/financial obligation data tied to an individual
+  employee, at least as sensitive as leave balances, and do not belong
+  under a generic commercial-master-data type.
+  `server/mutations/payroll.ts` (20+ existing payroll mutation wrappers,
+  but ZERO for `validate_payroll_loan_cutover_import_row`/
+  `commit_payroll_loan_cutover_import_job`) gained both as a from-scratch
+  addition, reusing the generic PLT-131 parsers directly -- this file's own
+  pre-existing convention (plain TS object inputs, no Zod, an
+  internally-derived error `code`, no explicit `code` param on its
+  `PayrollMutationError`) was kept for its other 20+ functions, but the two
+  new import wrappers instead follow the cross-slice A4 convention (a
+  Zod-validated `CommitPayrollLoanCutoverImportJobInputSchema` in the
+  shared `import-export.ts` contracts file) for consistency with every
+  other A4 slice's own commit-input shape, matching this session's own
+  established precedent of privileging cross-slice A4 consistency over a
+  host file's own local style.
+  `app.commit_payroll_loan_cutover_import_job` composes the richest
+  authority stack of any A4 import schema so far:
+  `app.is_support_grant_authority` (Supreme Admin or tenant_admin) AND
+  `HRS:Import` AND `HRS:Approve` (additive, never either-or) --
+  `HRS:Approve` is required because `app.issue_payroll_loan` itself demands
+  it of every caller issuing a loan, and bulk import is not exempt from
+  that rule, plus the same conditional MFA step-up and IP-allowlist gates
+  `leave_opening_balance_import`/`attendance_device_import`/
+  `timesheet_import` carry. Duplicate handling mirrors
+  `finance_opening_balance_import`'s/`leave_opening_balance_import`'s own
+  idempotency-key-derived-from-staging-row-id convention (backed by a
+  partial unique index on `app.payroll_loans` this time, not an
+  append-only ledger check) -- a corrected re-upload creates a brand-new
+  loan rather than correcting a wrong one. No bespoke write path: every
+  valid row calls `app.issue_payroll_loan`, the SAME primitive the manual
+  "Issue Loan" form uses, with `p_is_opening_balance=true`, writing one
+  `app.payroll_loans` row plus a tail of `app.payroll_loan_installments`
+  rows (numbered `(term_count - remaining + 1)..term_count`, never
+  renumbered from 1).
+  The host page (`hris/payroll/payroll-admin-panel.tsx`) already had its
+  own internal `<header>` (unlike attendance/overtime-timesheet/leave's
+  prior "no header at all" state) -- this slice threaded a new `tenantSlug`
+  prop through `page.tsx` and added the import link inside that existing
+  header, rather than adding a redundant second one.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  only pre-existing warnings; two new server-only files added to
+  `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  test suite (6,133 tests passing, +5 for
+  `validatePayrollLoanCutoverImportRow`/
+  `commitPayrollLoanCutoverImportJob`), `db:test` (`ALL PASSED` -- no new
+  db-test file needed, since `hris-payroll.sql`'s own existing fixture
+  already fully covers both RPCs' real behavior, including the
+  ISS-2026-278 MFA step-up regression), `git:check-paths` (clean, 10 files
+  checked), `security:check` (clean), and a real `next build` (confirms
+  the new `/[tenantSlug]/hris/imports/payroll-loans` route).
+  `check-release-freeze`'s self-test digests were updated this slice (the
+  new document-type migration changed `migrationSetSha256`, HUNDRED-AND-
+  FIFTY-SECOND PASS, 550 files; `dbTestSetSha256` unchanged at 277 files,
+  no db-test file added), independently re-verified via `pnpm run
+  release:check-freeze` passing clean.
+  Still open under A4: the other 2 import schemas' own UIs
+  (position_crosswalk_import under HRS; inventory_opening_balance_import
+  under OPS), each estimated at the same one-wrapper-plus-one-route cost as
+  this slice and the nine before it -- their own document-type-registration
+  state has not yet been directly confirmed and should not be assumed
+  either way without checking.

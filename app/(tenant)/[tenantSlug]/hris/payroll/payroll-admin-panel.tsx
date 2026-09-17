@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useId, useState } from "react";
+import Link from "next/link";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { StatusBadge, type StatusTone } from "../../../../../components/ui/status-badge.tsx";
 import { EmptyState } from "../../../../../components/ui/empty-state.tsx";
@@ -477,12 +478,14 @@ function HandoffRowItem({ row, acknowledgeFinancePayrollHandoffAction }: { row: 
 }
 
 export function PayrollAdminPanel({
+  tenantSlug,
   periods, components, runs, openExceptions, pendingReimbursements, pendingHandoffs, finalizedRunTotals, myStepIdByApprovalRequestId,
   createPayrollPeriodAction, freezePayrollPeriodInputsAction, reopenPayrollPeriodInputsAction, createPayrollComponentAction, assignPayrollComponentAction,
   decidePayrollReimbursementAction, issuePayrollLoanAction, createPayrollRunAction, calculatePayrollRunAction,
   resolvePayrollExceptionAction, waivePayrollExceptionAction, submitPayrollRunForFinalizationAction, finalizePayrollRunAction,
   cancelPayrollRunAction, requestPayrollRunCalculationCancellationAction, generateFinancePayrollHandoffAction, acknowledgeFinancePayrollHandoffAction,
 }: {
+  tenantSlug: string;
   periods: PayrollPeriodRow[];
   components: PayrollComponentRow[];
   runs: PayrollRunRow[];
@@ -511,12 +514,17 @@ export function PayrollAdminPanel({
 }) {
   return (
     <div className="flex flex-col gap-8 p-6">
-      <header>
-        <h1 className="text-lg font-semibold text-neutral-900">Payroll</h1>
-        <p className="text-sm text-neutral-500">
-          Configure components, freeze inputs, calculate and finalize runs, and hand off approved figures to Finance. Compensation
-          visibility here requires the HRS:View payroll permission specifically — never inherited from org-hierarchy manager scope.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-neutral-900">Payroll</h1>
+          <p className="text-sm text-neutral-500">
+            Configure components, freeze inputs, calculate and finalize runs, and hand off approved figures to Finance. Compensation
+            visibility here requires the HRS:View payroll permission specifically — never inherited from org-hierarchy manager scope.
+          </p>
+        </div>
+        <Link href={`/${tenantSlug}/hris/imports/payroll-loans`} className="text-sm text-primary underline">
+          Load loan cutover balances from CSV
+        </Link>
       </header>
 
       <section className="flex flex-col gap-3">

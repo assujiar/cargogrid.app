@@ -5186,7 +5186,65 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "ca3087ff6026e373163feadc9827c84baae16c29735d1b6d431443e67692acaa",
+  migrationSetSha256: "8a8497f2551367ca69bf64a36cf672c04e5d822483283a08001d2ef952e59a31",
+  // HUNDRED-AND-FIFTY-SECOND PASS: CG-AUDIT-2026-09-02 A4, payroll_loan_cutover_import
+  // (the eleventh of 12 import schemas). New migration
+  // 20260917060000_register_payroll_loan_cutover_import_source_document_type.sql
+  // registers a dedicated, HRS-owned payroll_loan_cutover_import_source
+  // DOCUMENT TYPE -- the SAME situation the immediately preceding
+  // HUNDRED-AND-FIFTY-FIRST PASS (leave_opening_balance_import) hit: the
+  // import_export SCHEMA registration was already real
+  // (20260901010000_create_payroll_loan_cutover_import_adapter.sql), but no
+  // document type for the raw source file had ever been registered
+  // anywhere; scripts/db-tests/hris-payroll.sql's own bootstrap instead
+  // reuses the generic, COM-owned master_data_import_source document type.
+  // Following the same reasoning as the 151st pass, this migration
+  // registers a dedicated type rather than reusing the generic one --
+  // payroll loan balances are personal debt/financial obligation data tied
+  // to an individual employee, at least as sensitive as leave balances.
+  // server/mutations/payroll.ts (20+ existing payroll mutation wrappers,
+  // but ZERO for validate_payroll_loan_cutover_import_row/
+  // commit_payroll_loan_cutover_import_job) gained both as a from-scratch
+  // addition, reusing the generic PLT-131 parsers directly -- this file's
+  // own pre-existing convention (plain TS object inputs, no Zod, an
+  // internally-derived error `code`) was kept for the OTHER 20+ functions,
+  // but the two new import wrappers instead follow the cross-slice A4
+  // convention (Zod-validated CommitPayrollLoanCutoverImportJobInputSchema
+  // in the shared import-export.ts contracts file) for consistency with
+  // every other A4 slice's own commit-input shape.
+  // app.commit_payroll_loan_cutover_import_job composes the richest
+  // authority stack of any A4 import schema so far: app.is_support_grant_
+  // authority (Supreme Admin or tenant_admin) AND HRS:Import AND
+  // HRS:Approve (additive, never either-or) -- HRS:Approve is required
+  // because app.issue_payroll_loan itself demands it of every caller
+  // issuing a loan, and bulk import is not exempt. Plus the same
+  // conditional MFA step-up and IP-allowlist gates leave_opening_balance_
+  // import/attendance_device_import/timesheet_import carry. Duplicate
+  // handling mirrors finance_opening_balance_import's/leave_opening_
+  // balance_import's own idempotency-key-derived-from-staging-row-id
+  // convention (backed by a partial unique index on app.payroll_loans this
+  // time, not an append-only ledger check) -- a corrected re-upload creates
+  // a brand-new loan rather than correcting a wrong one. No bespoke write
+  // path: every valid row calls app.issue_payroll_loan, the SAME primitive
+  // the manual "Issue Loan" form uses, with p_is_opening_balance=true.
+  // The host page (hris/payroll/payroll-admin-panel.tsx) already had its
+  // own internal header (unlike attendance/overtime-timesheet/leave's prior
+  // "no header at all" state) -- this pass threaded a new tenantSlug prop
+  // through and added the import link inside that existing header, rather
+  // than adding a redundant second header.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  // only pre-existing warnings; two new server-only files added to
+  // `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  // test suite (+6 for `validatePayrollLoanCutoverImportRow`/
+  // `commitPayrollLoanCutoverImportJob`), `db:test` (`ALL PASSED` -- no new
+  // db-test file needed, since `scripts/db-tests/hris-payroll.sql`'s own
+  // existing fixture already fully covers both RPCs' real behavior,
+  // including the ISS-2026-278 MFA step-up regression), `git:check-paths`
+  // (clean, 10 files checked), `security:check` (clean), and a real `next
+  // build` (confirms the new `/[tenantSlug]/hris/imports/payroll-loans`
+  // route).
+  // History: ca3087ff6026e373163feadc9827c84baae16c29735d1b6d431443e67692acaa
+  // (549 files, HUNDRED-AND-FIFTY-FIRST PASS).
   // HUNDRED-AND-FIFTY-FIRST PASS: CG-AUDIT-2026-09-02 A4, leave_opening_balance_import
   // (the tenth of 12 import schemas). New migration
   // 20260917050000_register_leave_opening_balance_import_source_document_type.sql

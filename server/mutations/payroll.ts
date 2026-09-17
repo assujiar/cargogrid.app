@@ -28,6 +28,16 @@ import {
   type PayrollFinanceHandoffBatchRow,
   type PayrollCalculationCancellationRequestRow,
 } from "../contracts/payroll/payroll.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitPayrollLoanCutoverImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitPayrollLoanCutoverImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 
 export type PayrollMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -55,6 +65,15 @@ export const PAYROLL_KNOWN_MUTATION_ERROR_CODES = [
   // undiscriminated Postgres error (23505/23503) to the caller.
   "payroll_period_code_conflict", "payroll_component_code_conflict", "payroll_component_version_conflict",
   "payroll_run_adjust_period_mismatch", "payroll_run_not_calculating", "payroll_calculation_job_not_in_progress",
+  // CG-AUDIT-2026-09-02 A4 (payroll_loan_cutover_import UI slice): app.commit_payroll_loan_cutover_import_job's
+  // latest redefinition (20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql)
+  // composes app.check_import_export_job_authority (job_actor_unauthorized),
+  // app.assert_current_step_up_authorization, and app.assert_ip_allowed -- the same
+  // authority stack commit_leave_opening_balance_import_job composes, plus the generic
+  // import_export_* prefixes app.commit_import_job/app.validate_staging_row raise.
+  "import_export_job_not_found", "import_export_wrong_schema", "import_export_job_not_committable",
+  "import_export_job_not_fully_validated", "import_export_job_has_invalid_rows",
+  "job_actor_unauthorized", "mfa_step_up_required", "ip_not_allowed",
 ] as const;
 export type PayrollKnownMutationErrorCode = (typeof PAYROLL_KNOWN_MUTATION_ERROR_CODES)[number];
 
@@ -430,4 +449,35 @@ export async function acknowledgePayrollFinanceHandoffBatch(
     p_batch_id: input.batchId, p_expected_version: input.expectedVersion, p_actor_auth_user_id: input.actorAuthUserId, p_actor_label: input.actorLabel,
   });
   return parsePayrollFinanceHandoffBatchRow(unwrap(data, error) as Record<string, unknown>);
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, eleventh import schema) ---
+// app.validate_payroll_loan_cutover_import_row returns app.import_staging_rows
+// and app.commit_payroll_loan_cutover_import_job returns app.jobs -- the SAME
+// composite types the generic PLT-131 app.validate_staging_row/
+// app.commit_import_job return, so both reuse the generic parsers directly,
+// mirroring server/mutations/leave.ts's own precedent.
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (employee_number, currency, notes), employee_number must resolve to an active employee in this tenant, principal_amount/installment_amount must be positive, term_count must be in [1,360], and remaining_installments must be in [0, term_count]. */
+export async function validatePayrollLoanCutoverImportRow(client: PayrollMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_payroll_loan_cutover_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  return parseImportStagingRow(unwrap(data, error) as Record<string, unknown>);
+}
+
+/** Requires BOTH app.is_support_grant_authority (Supreme Admin or tenant_admin) AND HRS:Import AND HRS:Approve (additive, never either-or) -- the richest authority composition of any A4 import schema so far, since app.issue_payroll_loan itself demands Approve of its own caller for every single loan issuance and bulk import is not exempt. Also gated by a conditional MFA step-up and a conditional IP allowlist check, identical in shape to commit_leave_opening_balance_import_job. Calls app.issue_payroll_loan per valid row with p_is_opening_balance=true, writing app.payroll_loans plus a tail of app.payroll_loan_installments (numbered (term_count - remaining + 1)..term_count, never renumbered from 1) -- an already-committed staging row (source_import_staging_row_id already bound, backed by a partial unique index) is skipped as a plain idempotent replay, never a second loan; correcting a wrong cutover row requires cancelling/adjusting the loan outside this import entirely. */
+export async function commitPayrollLoanCutoverImportJob(client: PayrollMutationRpcClient, input: CommitPayrollLoanCutoverImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitPayrollLoanCutoverImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_payroll_loan_cutover_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  return parseImportExportJob(unwrap(data, error) as Record<string, unknown>);
 }
