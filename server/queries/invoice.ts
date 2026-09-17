@@ -5,7 +5,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseFinanceInvoice, parseFinanceInvoiceLine, type FinanceInvoice, type FinanceInvoiceLine } from "../contracts/invoice/invoice.ts";
+import { parseFinanceInvoice, parseFinanceInvoiceLine, parseBillableReadinessHandoff, type FinanceInvoice, type FinanceInvoiceLine, type BillableReadinessHandoff } from "../contracts/invoice/invoice.ts";
 import { BOUNDED_LIST_LIMIT } from "./bounded-list.ts";
 
 export type InvoiceQueryRpcClient = Pick<SupabaseClient, "rpc">;
@@ -60,6 +60,26 @@ export async function getFinanceInvoice(client: InvoiceQueryRpcClient, input: { 
     throw new InvoiceQueryError(`finance_invoice_not_found: ${input.invoiceId}`);
   }
   return parseFinanceInvoice(row as Record<string, unknown>);
+}
+
+/**
+ * CG-AUDIT-2026-09-02 B7 (worklist half): every BillingReadinessHandoff not
+ * yet consumed by a live invoice (app.list_billable_readiness_handoffs) --
+ * lets Finance pick one from a list instead of typing its UUID by hand
+ * (`finance/invoices/invoice-forms.tsx`'s own free-text field this closes).
+ * FIN:View-gated; amount/currency come back null with amountMasked=true for
+ * a viewer without COM's "View selling price".
+ */
+export async function listBillableReadinessHandoffs(client: InvoiceQueryRpcClient, input: { tenantId: string; actorAuthUserId: string }): Promise<BillableReadinessHandoff[]> {
+  const { data, error } = await client.rpc("list_billable_readiness_handoffs", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+  });
+  if (error) {
+    throw new InvoiceQueryError(error.message);
+  }
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => parseBillableReadinessHandoff(row as Record<string, unknown>));
 }
 
 /** FIN:View-gated. Every charge/tax line for one invoice, ordered by line_number. */

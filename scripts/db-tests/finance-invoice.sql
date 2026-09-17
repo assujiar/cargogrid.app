@@ -465,6 +465,71 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 B7 (worklist half): app.list_billable_readiness_handoffs -- every BillingReadinessHandoff not yet consumed by a live invoice. FIN:View-gated like get_finance_invoice; Plain User A denied, Finance Manager B (zero relationship to tenant A) denied; Finance Manager A (no COM:View selling price) sees both still-billable handoffs (the discarded-invoice one and a genuinely fresh one) but never the already-issued one, with amount masked; Rep A (holds COM:View selling price too) sees the same two handoffs with the real unmasked amount'
+do $$
+declare
+  v_tenant_a uuid;
+  v_job app.job_orders;
+  v_evaluation app.billing_readiness_evaluations;
+  v_handoff3 app.billing_readiness_handoffs;
+  v_rows record;
+  v_count integer;
+  v_handoff1_id uuid;
+  v_handoff2_id uuid;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeinva');
+  select * into v_job from app.job_orders where tenant_id = v_tenant_a;
+  v_handoff1_id := (select id from app.billing_readiness_handoffs where job_order_id = v_job.id and idempotency_key = 'invoice-fixture-handoff-1');
+  v_handoff2_id := (select id from app.billing_readiness_handoffs where job_order_id = v_job.id and idempotency_key = 'invoice-fixture-handoff-2');
+
+  -- A third, genuinely fresh handoff that has never been invoiced at all.
+  select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, 'fixture: third handoff for the B7 worklist test', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_evaluation from app.override_billing_readiness(v_job.id, v_evaluation.record_version, 'fixture: third override', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_handoff3 from app.handoff_billing_readiness(v_job.id, 'invoice-fixture-handoff-3', '00000000-0000-0000-0000-000000027502', 'rep');
+
+  begin
+    perform app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027505');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User A (no FIN grant)';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  begin
+    perform app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027506');
+    raise exception 'assertion failed: expected insufficient_authority for Finance Manager B (zero relationship to tenant A)';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  -- Finance Manager A: FIN:View but no COM:View selling price -- both still-billable
+  -- handoffs appear, masked, never the already-issued one.
+  select count(*) into v_count from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027503') r where r.id = v_handoff1_id;
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected the already-issued handoff to be excluded from the worklist';
+  end if;
+
+  select * into v_rows from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027503') r where r.id = v_handoff2_id;
+  if v_rows.amount is not null or not v_rows.amount_masked then
+    raise exception 'assertion failed: expected the discarded-invoice handoff to reappear as billable, masked for Finance Manager A, got amount=% masked=%', v_rows.amount, v_rows.amount_masked;
+  end if;
+
+  select count(*) into v_count from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027503') r where r.id = v_handoff3.id;
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected the genuinely fresh handoff to appear exactly once in Finance Manager A''s worklist';
+  end if;
+
+  -- Rep A: FIN:View AND COM:View selling price -- same two handoffs, real unmasked amount.
+  select * into v_rows from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027502') r where r.id = v_handoff2_id;
+  if v_rows.amount_masked or v_rows.amount <> 15000000 or v_rows.currency <> 'IDR' or v_rows.job_number <> v_job.job_number or v_rows.customer_legal_name is null then
+    raise exception 'assertion failed: expected Rep A to see the real unmasked amount (15,000,000 IDR) and a real customer name for the discarded-invoice handoff, got %', v_rows;
+  end if;
+
+  raise notice 'PASS: app.list_billable_readiness_handoffs -- FIN:View-gated (Plain User A and Finance Manager B both denied), excludes the already-issued handoff, includes the discarded-invoice handoff and a genuinely fresh one, and masks amount behind COM:View selling price exactly like app.list_job_orders';
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new FIN-197 function (ERR-2026-004 regression guard)'
 do $$
 declare
@@ -475,7 +540,7 @@ begin
     'touch_finance_invoice_row', 'check_finance_invoice_authority', 'prepare_finance_invoice_from_readiness',
     'submit_finance_invoice_for_approval', 'discard_finance_invoice_draft', 'approve_finance_invoice',
     'issue_finance_invoice', 'list_finance_invoices', 'get_finance_invoice_lines',
-    'get_finance_invoice'
+    'get_finance_invoice', 'list_billable_readiness_handoffs'
   ]) loop
     select bool_or(has_function_privilege('anon', p.oid, 'EXECUTE'))
       into v_anon_has

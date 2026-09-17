@@ -5186,7 +5186,36 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "9a289b45078fa8853d5a8796555fe20b3cc2ac46b4d168efca0f30f91d56f2e7",
+  migrationSetSha256: "6be207c7a54967232c008f739ed7d32a56e77bf05e361a7112429d67cbc2fc9a",
+  // HUNDRED-AND-FORTY-SIXTH PASS: CG-AUDIT-2026-09-02 B7 (worklist half only
+  // -- "Invoicing is driven by a hand-copied UUID... Finance has no
+  // billable-jobs worklist"; the second half, app.check_customer_credit/
+  // credit control, is separate, larger, deliberately excluded work,
+  // untouched here). app.billing_readiness_handoffs is append-only with no
+  // status column, and the only existing read, app.list_billing_readiness_
+  // handoffs, is scoped to one job order -- exactly the id Finance does not
+  // have without already knowing which job order to look up, so it cannot
+  // serve as a tenant-wide worklist. New migration 20260915010000_create_
+  // list_billable_readiness_handoffs.sql adds app.list_billable_readiness_
+  // handoffs: every handoff with no live (non-void) app.finance_invoices row
+  // yet, joined to app.job_orders/app.accounts for job_number/customer name,
+  // amount/currency reusing app.prepare_finance_invoice_from_readiness's own
+  // exact revenue-snapshot arithmetic (subtotalAmount - discountAmount) so
+  // the worklist never shows a number preparing the invoice would not
+  // actually charge, masked behind app.has_view_selling_price mirroring
+  // app.list_job_orders' own precedent, FIN:View-gated like app.
+  // list_finance_invoices/app.get_finance_invoice. `billingReadinessHandoffId`
+  // on `prepareFinanceInvoiceFromReadinessAction` is now a bound positional
+  // arg (the worklist's own per-row form), not a hand-typed FormData field --
+  // the free-text input is gone from invoice-forms.tsx. 544 tracked
+  // migration files (543 -> 544). Verified this new wrapper's own revoke
+  // statement explicitly names anon/authenticated/service_role (not just
+  // "from public") BEFORE running db:test this time, learning directly from
+  // the HUNDRED-AND-FORTY-FIFTH PASS's own anon-widening slip -- confirmed
+  // clean via has_function_privilege against a live disposable database.
+  // Re-verified with a full `pnpm run db:test`, ALL PASSED.
+  // History: 9a289b45078fa8853d5a8796555fe20b3cc2ac46b4d168efca0f30f91d56f2e7
+  // (543 files, HUNDRED-AND-FORTY-FIFTH PASS).
   // HUNDRED-AND-FORTY-FIFTH PASS: CG-AUDIT-2026-09-02 A4 ("No import UI over
   // 12 working import schemas"), narrowed to one schema
   // (finance_opening_balance_import) after a research pass confirmed A4 was
@@ -6907,7 +6936,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "79d691b78ecd5e12dcd81e0d16f29322b1e528058d15507219238c2fd595542e",
+  dbTestSetSha256: "1c467db02e81e9c424823e55b971988e0b964f1c14f51d6ae36a47bca6fbdfaf",
+  // HUNDRED-AND-FORTY-SIXTH PASS: same CG-AUDIT-2026-09-02 B7 slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/finance-invoice.sql (no new file, 277 files unchanged)
+  // with a new section covering app.list_billable_readiness_handoffs:
+  // FIN:View-gated (Plain User A and cross-tenant Finance Manager B both
+  // denied insufficient_authority), excludes a handoff with a live issued
+  // invoice, includes a handoff whose only invoice was discarded (voided)
+  // and a genuinely fresh never-invoiced handoff, and masks amount behind
+  // COM:View selling price for Finance Manager A (who lacks it) while Rep A
+  // (who holds it) sees the real 15,000,000 IDR amount, real job_number, and
+  // real customer_legal_name. Also added to the file's own existing
+  // schema-privilege anon-EXECUTE-zero sweep. Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 79d691b78ecd5e12dcd81e0d16f29322b1e528058d15507219238c2fd595542e
+  // (277 files, HUNDRED-AND-FORTY-FIFTH PASS).
   // HUNDRED-AND-FORTY-FIFTH PASS: same CG-AUDIT-2026-09-02 A4 slice as
   // migrationSetSha256's own note immediately above -- extends the existing
   // scripts/db-tests/import-export.sql (no new file, 277 files unchanged)

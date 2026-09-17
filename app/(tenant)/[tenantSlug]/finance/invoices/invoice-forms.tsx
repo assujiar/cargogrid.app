@@ -2,7 +2,7 @@
 
 /** Customer Invoice client forms (FIN-197, CG-S9-FIN-008). Same `useActionState`/bound-action split every prior capability's own forms already use. */
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 import { Button } from "../../../../../components/ui/button.tsx";
 import { FormField } from "../../../../../components/forms/form-field.tsx";
 import { Input } from "../../../../../components/forms/input.tsx";
@@ -28,46 +28,48 @@ const TAX_CODE_OPTIONS = [
 
 type BoundAction = (prevState: FinanceInvoiceFormState, formData: FormData) => Promise<FinanceInvoiceFormState>;
 
+/**
+ * CG-AUDIT-2026-09-02 B7 (worklist half): one instance renders per billable
+ * readiness handoff row (the worklist table this session added to
+ * `page.tsx`) -- `billingReadinessHandoffId` is now bound into the action
+ * itself, never a hand-typed field, closing "Invoicing is driven by a
+ * hand-copied UUID."
+ */
 export function PrepareFinanceInvoiceFromReadinessForm({ action }: { action: BoundAction }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const paymentTermDaysId = `paymentTermDays-${useId()}`;
+  const taxCodeId = `taxCode-${useId()}`;
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4" noValidate>
-      <h2 className="text-sm font-semibold text-text-primary">Prepare invoice from readiness</h2>
-      <p className="text-xs text-text-secondary">Requires FIN:Edit. Idempotent per BillingReadinessHandoff -- inherits the exact governed revenue snapshot from Operations, never re-entered.</p>
-
-      <div className="flex flex-wrap gap-3">
-        <div className="w-96">
-          <FormField id="billingReadinessHandoffId" label="BillingReadinessHandoff ID">
-            <Input id="billingReadinessHandoffId" name="billingReadinessHandoffId" type="text" required invalid={Boolean(state.error)} />
-          </FormField>
-        </div>
-
-        <div className="w-32">
-          <FormField id="paymentTermDays" label="Payment term (days)">
-            <Input id="paymentTermDays" name="paymentTermDays" type="number" min="0" defaultValue={30} invalid={Boolean(state.error)} />
-          </FormField>
-        </div>
-
-        <div className="w-72">
-          <FormField id="taxCode" label="Tax code (optional)">
-            <Select id="taxCode" name="taxCode" defaultValue="" invalid={Boolean(state.error)}>
-              <option value="">No tax</option>
-              {TAX_CODE_OPTIONS.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-        </div>
+    <form action={formAction} className="flex flex-wrap items-end gap-2" noValidate>
+      <div className="w-24">
+        <FormField id={paymentTermDaysId} label="Term (days)">
+          <Input id={paymentTermDaysId} name="paymentTermDays" type="number" min="0" defaultValue={30} invalid={Boolean(state.error)} />
+        </FormField>
       </div>
 
-      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
+      <div className="w-56">
+        <FormField id={taxCodeId} label="Tax code">
+          <Select id={taxCodeId} name="taxCode" defaultValue="" invalid={Boolean(state.error)}>
+            <option value="">No tax</option>
+            {TAX_CODE_OPTIONS.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+      </div>
 
       <Button type="submit" loading={pending} loadingLabel="Preparing…" className="w-fit">
         Prepare invoice
       </Button>
+
+      {state.error ? (
+        <div className="w-full">
+          <ValidationMessage>{state.error}</ValidationMessage>
+        </div>
+      ) : null}
     </form>
   );
 }

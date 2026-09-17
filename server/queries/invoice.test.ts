@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { listFinanceInvoices, getFinanceInvoice, getFinanceInvoiceLines, InvoiceQueryError, type InvoiceQueryRpcClient } from "./invoice.ts";
+import { listFinanceInvoices, getFinanceInvoice, getFinanceInvoiceLines, listBillableReadinessHandoffs, InvoiceQueryError, type InvoiceQueryRpcClient } from "./invoice.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const INVOICE_ID = "623e4567-e89b-12d3-a456-426614174000";
@@ -79,5 +79,58 @@ describe("getFinanceInvoiceLines", () => {
     const lines = await getFinanceInvoiceLines(client, { invoiceId: INVOICE_ID, actorAuthUserId: ACTOR_ID });
     assert.equal(lines.length, 1);
     assert.equal(lines[0]?.amount, 15000000);
+  });
+});
+
+describe("listBillableReadinessHandoffs", () => {
+  test("maps every returned row, including an unmasked amount", async () => {
+    const client = fakeRpcClient({
+      data: [
+        {
+          id: INVOICE_ID,
+          job_order_id: TENANT_ID,
+          job_number: "JO-0001",
+          account_id: TENANT_ID,
+          customer_legal_name: "Acme Shipping Co",
+          currency: "IDR",
+          amount: "15000000.00",
+          amount_masked: false,
+          handed_off_at: "2026-03-10T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const handoffs = await listBillableReadinessHandoffs(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID });
+    assert.equal(handoffs.length, 1);
+    assert.equal(handoffs[0]?.jobNumber, "JO-0001");
+    assert.equal(handoffs[0]?.amount, 15000000);
+    assert.equal(handoffs[0]?.amountMasked, false);
+  });
+
+  test("maps a masked row (null amount/currency, amountMasked true)", async () => {
+    const client = fakeRpcClient({
+      data: [
+        {
+          id: INVOICE_ID,
+          job_order_id: TENANT_ID,
+          job_number: "JO-0002",
+          account_id: TENANT_ID,
+          customer_legal_name: "Gizmo Freight Co",
+          currency: null,
+          amount: null,
+          amount_masked: true,
+          handed_off_at: "2026-03-10T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const handoffs = await listBillableReadinessHandoffs(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID });
+    assert.equal(handoffs[0]?.amount, null);
+    assert.equal(handoffs[0]?.amountMasked, true);
+  });
+
+  test("wraps a database error into a typed InvoiceQueryError", async () => {
+    const client = fakeRpcClient({ data: null, error: { message: "insufficient_authority: identity lacks FIN:View for tenant" } });
+    await assert.rejects(() => listBillableReadinessHandoffs(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID }), InvoiceQueryError);
   });
 });

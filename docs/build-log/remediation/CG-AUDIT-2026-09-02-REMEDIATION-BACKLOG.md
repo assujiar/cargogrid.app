@@ -80,7 +80,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs a billing-model decision (partial/milestone billing) before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | DEFERRED_LARGE | schema redesign across `finance_journals`/`finance_journal_lines` |
 | B6 | Cost/cash never auto-post to GL | `CODE-BIG` | DEFERRED_LARGE | |
-| B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | DEFERRED_LARGE | needs a billable-jobs worklist UI |
+| B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **PARTIAL** | the worklist-UI half is fixed: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half (`app.check_customer_credit` never reads AR open items; no order-acceptance path calls it) is untouched -- separate, larger, deliberately deferred work |
 
 ## C — Indonesia
 
@@ -2800,3 +2800,62 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   Still open under A4: the other 11 import schemas' own UIs (each costs
   roughly one wrapper + one document-type registration + one route per this
   slice's own template, no new pattern needed).
+- 2026-09-17 — B7 (worklist half) closed: `finance/invoices/page.tsx` gained
+  a "Billable jobs" worklist table above the invoice queue, replacing the
+  free-text `BillingReadinessHandoff ID` input `invoice-forms.tsx` used to
+  require. `app.billing_readiness_handoffs` is append-only with no status
+  column at all, and the only existing read,
+  `app.list_billing_readiness_handoffs` (O1 remediation), is scoped to ONE
+  job order -- exactly the id Finance does not have without already knowing
+  which job order to look up, so it could not serve as a tenant-wide
+  worklist. New migration
+  `20260915010000_create_list_billable_readiness_handoffs.sql` adds
+  `app.list_billable_readiness_handoffs`: every handoff with no live
+  (non-void) `app.finance_invoices` row yet, joined to `app.job_orders`/
+  `app.accounts` for `job_number`/customer legal name. Amount/currency reuse
+  `app.prepare_finance_invoice_from_readiness`'s own exact revenue-snapshot
+  arithmetic (`subtotalAmount - discountAmount`, the job order's own
+  currency) rather than inventing a second calculation -- a worklist that
+  showed a different number than what preparing the invoice will actually
+  charge would be worse than showing none. Amount is masked behind
+  `app.has_view_selling_price`, mirroring `app.list_job_orders`'s own
+  precedent exactly (a Finance viewer with `FIN:View` but not Commercial's
+  "View selling price" sees every handoff but not its amount, "Masked" text,
+  the same convention purchase orders' own `PRC:View cost` split
+  established). Gated on `app.check_finance_invoice_authority('View', ...)`,
+  the same gate `app.list_finance_invoices`/`app.get_finance_invoice`
+  already use -- no `app.assert_actor_is_session_identity` call, since that
+  RULE A pattern is specific to the OPS-domain `app.can_access_record`
+  functions (confirmed by re-reading `list_finance_invoices`/
+  `get_finance_invoice`'s own bodies, neither of which calls it either).
+  `prepareFinanceInvoiceFromReadinessAction`'s `billingReadinessHandoffId`
+  is now a bound positional arg (the worklist's own per-row form binds it),
+  the same pattern every lifecycle action on this page already used for
+  `invoiceId` -- not a hand-typed FormData field.
+  The second half of B7 (`app.check_customer_credit` never reads AR open
+  items, so credit control cannot compute exposure, and no order-acceptance
+  path calls it) is untouched -- a separate, larger, deliberately deferred
+  piece of work, out of this slice's scope.
+  Applied this session's own HUNDRED-AND-FORTY-FIFTH-PASS lesson
+  proactively this time: verified the new `public.*` wrapper's revoke
+  statement explicitly names `anon, authenticated, service_role` (not just
+  `from public`) BEFORE running `db:test`, then re-confirmed with
+  `has_function_privilege` against a live disposable database that `anon`
+  holds zero EXECUTE on either the `app.*` or `public.*` function -- no
+  repeat of the ISS-2026-309 defect class this time.
+  New db-test section in `scripts/db-tests/finance-invoice.sql` reuses the
+  fixture's own existing handoffs: the first (already consumed by an issued
+  invoice) is confirmed EXCLUDED; the second (whose only invoice was
+  discarded/voided in an earlier test) is confirmed to reappear as billable,
+  masked for Finance Manager A (`FIN:View`, no `COM:View selling price`) and
+  correctly unmasked (15,000,000 IDR, real `job_number`, real customer
+  legal name) for Rep A (holds both); a third, genuinely fresh handoff is
+  confirmed to appear exactly once; Plain User A and a cross-tenant Finance
+  Manager B are both denied `insufficient_authority`.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  pre-existing warnings), the unit test suite (6,094 tests passing, +3 for
+  `listBillableReadinessHandoffs`), `db:test` (`ALL PASSED`), `git:check-paths`
+  (clean, 9 files checked), `security:check` (clean), and a real `next build`
+  (confirms `/finance/invoices` still builds with the new worklist).
+  `check-release-freeze`'s self-test digests updated (HUNDRED-AND-FORTY-SIXTH
+  PASS, migrations 543 -> 544, db-test files unchanged at 277).
