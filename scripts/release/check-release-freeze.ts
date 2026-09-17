@@ -5186,7 +5186,52 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "e1b912c83b0af0bebaf24e8266396d292501b40a9a46fad9b1b368656b19aa60",
+  migrationSetSha256: "ca3087ff6026e373163feadc9827c84baae16c29735d1b6d431443e67692acaa",
+  // HUNDRED-AND-FIFTY-FIRST PASS: CG-AUDIT-2026-09-02 A4, leave_opening_balance_import
+  // (the tenth of 12 import schemas). New migration
+  // 20260917050000_register_leave_opening_balance_import_source_document_type.sql
+  // registers a dedicated, HRS-owned leave_opening_balance_import_source
+  // DOCUMENT TYPE -- unlike item_import/attendance_device_import/
+  // timesheet_import (already fully catalogued before their own slices), no
+  // migration and no db-test fixture anywhere had ever registered a document
+  // type for this schema's raw source file at all;
+  // scripts/db-tests/hris-leave-permit-business-trip.sql's own bootstrap
+  // instead reuses the generic, COM-owned master_data_import_source document
+  // type this session's own HUNDRED-AND-FIFTIETH PASS registered. Rather than
+  // reuse that generic type for a genuinely HRS-owned, employee-linked
+  // opening-balance cutover file, this migration mirrors
+  // timesheet_import_source's/attendance_device_import_source's own
+  // one-document-type-per-schema precedent instead.
+  // server/mutations/leave.ts (20+ existing overtime/leave mutation
+  // wrappers, but ZERO for validate_leave_opening_balance_import_row/
+  // commit_leave_opening_balance_import_job) gained both as a from-scratch
+  // addition, reusing the generic PLT-131 parsers directly.
+  // app.commit_leave_opening_balance_import_job composes the richest
+  // authority stack of any A4 import schema so far: BOTH
+  // app.is_support_grant_authority (Supreme Admin or tenant_admin) AND
+  // HRS:Import (additive, never either-or), plus the same conditional MFA
+  // step-up and IP-allowlist gates attendance_device_import/timesheet_import
+  // carry. Duplicate handling follows finance_opening_balance_import's own
+  // convention, not attendance/timesheet's "not a master record" shape: the
+  // idempotency key is derived from the staging row's own id (never the
+  // file), so re-running the SAME job is a safe no-op, but
+  // app.leave_balance_ledger is append-only -- a corrected re-upload posts a
+  // brand-new entry on top of a wrong one rather than overwriting it. The
+  // wizard's own copy surfaces this as a one-time cutover action, not a
+  // routine batch import, and documents that correcting a mistake requires
+  // the separate app.adjust_leave_balance path outside this wizard entirely.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  // only pre-existing warnings; two new server-only files added to
+  // `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  // test suite (+6 for `validateLeaveOpeningBalanceImportRow`/
+  // `commitLeaveOpeningBalanceImportJob`), `db:test` (`ALL PASSED` -- no new
+  // db-test file needed, since `scripts/db-tests/hris-leave-permit-business-
+  // trip.sql`'s own existing ISS-2026-303 fixture already fully covers both
+  // RPCs' real behavior), `git:check-paths` (clean, 9 files checked),
+  // `security:check` (clean), and a real `next build` (confirms the new
+  // `/[tenantSlug]/hris/imports/leave-opening-balance` route).
+  // History: e1b912c83b0af0bebaf24e8266396d292501b40a9a46fad9b1b368656b19aa60
+  // (548 files, HUNDRED-AND-FIFTIETH PASS).
   // HUNDRED-AND-FIFTIETH PASS: CG-AUDIT-2026-09-02 A4, customer_import (the
   // fifth of 12 import schemas). New migration
   // 20260917040000_register_master_data_import_source_document_type.sql

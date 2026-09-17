@@ -41,6 +41,16 @@ import {
   type SyncEmployeeLeaveLifecycleStatusInput,
   type ApproveLeaveForPayrollInputInput,
 } from "../contracts/leave/leave.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitLeaveOpeningBalanceImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitLeaveOpeningBalanceImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type LeaveMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -87,6 +97,19 @@ export const LEAVE_KNOWN_MUTATION_ERROR_CODES = [
   // HRT-294 (CG-S12-HRT-022, ISS-2026-114): raised by app.publish_leave_type_policy_version
   // since HRT-280's own creation migration, never added here (API-parity gap).
   "policy_version_not_found",
+  // CG-AUDIT-2026-09-02 A4 (leave_opening_balance_import UI slice): app.commit_leave_opening_balance_import_job
+  // composes app.check_import_export_job_authority, app.is_support_grant_authority,
+  // app.assert_current_step_up_authorization, and app.assert_ip_allowed -- the same
+  // authority stack commit_attendance_device_import_job/commit_timesheet_import_job compose,
+  // plus the generic import_export_* prefixes app.commit_import_job/app.validate_staging_row raise.
+  "import_export_job_not_found",
+  "import_export_wrong_schema",
+  "import_export_job_not_committable",
+  "import_export_job_not_fully_validated",
+  "import_export_job_has_invalid_rows",
+  "job_actor_unauthorized",
+  "mfa_step_up_required",
+  "ip_not_allowed",
 ] as const;
 
 export type KnownLeaveMutationErrorCode = (typeof LEAVE_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -346,4 +369,39 @@ export async function approveLeaveForPayrollInput(client: LeaveMutationRpcClient
     // control a call site can forget to pass is not a control. Null outside a request.
     p_client_ip: await resolveRequestClientIp(),
   });
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, tenth import schema) ---
+// app.validate_leave_opening_balance_import_row returns app.import_staging_rows and
+// app.commit_leave_opening_balance_import_job returns app.jobs -- the SAME composite
+// types the generic PLT-131 app.validate_staging_row/app.commit_import_job
+// return, so both reuse the generic parsers directly, mirroring
+// server/mutations/attendance.ts's/overtime-timesheet.ts's own precedent.
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (employee_number, leave_type_code, source_reference), employee_number must resolve to an existing employee in this tenant, leave_type_code must resolve to a leave type of this tenant, units must be a positive numeric, and as_of_date must be a real date. */
+export async function validateLeaveOpeningBalanceImportRow(client: LeaveMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_leave_opening_balance_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new LeaveMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new LeaveMutationError("mutation_failed", "validate_leave_opening_balance_import_row returned no row");
+  return parseImportStagingRow(data as Record<string, unknown>);
+}
+
+/** Requires BOTH app.is_support_grant_authority (Supreme Admin or tenant_admin) AND HRS:Import (additive, never either-or) -- the richest authority composition of any A4 import schema so far, matching this row's own genuinely higher-stakes nature (a one-time cutover load, not a routine batch upload). Also gated by a conditional MFA step-up and a conditional IP allowlist check, identical in shape to commit_attendance_device_import_job/commit_timesheet_import_job. Calls app.load_opening_leave_balance per valid row, writing an append-only app.leave_balance_ledger row with event_type='opening_balance' -- an already-committed staging row (idempotency key derived from the staging row's own id) is skipped as a plain idempotent replay, never a silent double-post, but this import can never correct a previously-loaded wrong balance by re-running: a genuinely new row is a new ledger entry stacked on top, not an overwrite. */
+export async function commitLeaveOpeningBalanceImportJob(client: LeaveMutationRpcClient, input: CommitLeaveOpeningBalanceImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitLeaveOpeningBalanceImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_leave_opening_balance_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  if (error) throw new LeaveMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new LeaveMutationError("mutation_failed", "commit_leave_opening_balance_import_job returned no row");
+  return parseImportExportJob(data as Record<string, unknown>);
 }
