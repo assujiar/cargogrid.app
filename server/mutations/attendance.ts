@@ -31,6 +31,16 @@ import {
   type PublishAttendancePolicyVersionInput,
   type RecalculateAttendanceExceptionsInput,
 } from "../contracts/attendance/attendance.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitAttendanceDeviceImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitAttendanceDeviceImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type AttendanceMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -74,6 +84,16 @@ export const ATTENDANCE_KNOWN_MUTATION_ERROR_CODES = [
   "import_export_job_not_committable",
   "import_export_job_not_fully_validated",
   "import_export_job_has_invalid_rows",
+  // CG-AUDIT-2026-09-02 A4 (found while scoping attendance_device_import's UI
+  // slice): app.commit_attendance_device_import_job's latest redefinition
+  // (20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql)
+  // composes app.check_import_export_job_authority (job_actor_unauthorized),
+  // app.assert_current_step_up_authorization, and app.assert_ip_allowed --
+  // none of these three prefixes were in this file's own allowlist, despite
+  // the five sibling import_export_* codes already being pre-added.
+  "job_actor_unauthorized",
+  "mfa_step_up_required",
+  "ip_not_allowed",
 ] as const;
 
 export type KnownAttendanceMutationErrorCode = (typeof ATTENDANCE_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -304,4 +324,39 @@ export async function publishAttendancePolicyVersion(client: AttendanceMutationR
   const row = firstRow(data);
   if (!row) throw new AttendanceMutationError("mutation_failed", "publish_attendance_policy_version returned no row");
   return row;
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, seventh import schema) ---
+// app.validate_attendance_device_import_row returns app.import_staging_rows and
+// app.commit_attendance_device_import_job returns app.jobs -- the SAME composite
+// types the generic PLT-131 app.validate_staging_row/app.commit_import_job
+// return, so both reuse the generic parsers directly, mirroring
+// server/mutations/item-uom-master.ts's own precedent.
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (employee_number, event_type, event_at, device_label), event_type must be clock_in/clock_out, event_at must be a real ISO-8601 timestamp, and employee_number must resolve to an existing employee in this tenant. */
+export async function validateAttendanceDeviceImportRow(client: AttendanceMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_attendance_device_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new AttendanceMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new AttendanceMutationError("mutation_failed", "validate_attendance_device_import_row returned no row");
+  return parseImportStagingRow(data as Record<string, unknown>);
+}
+
+/** Requires HRS:Import, gated by the richest authority stack of any import schema so far: tenant membership, then HRS:Import, then a conditional MFA step-up (a strict no-op unless the tenant opted (HRS, Import) into its own additional_high_risk_actions), then a conditional IP allowlist check. Calls app._ingest_attendance_event per valid row -- the SAME engine the live self-service clock path uses, never a bespoke import-only write path. No duplicate-detection convention: an already-committed staging row (source_import_staging_row_id already bound) is a plain idempotent skip, since attendance events are not master records with a create-or-link concept. */
+export async function commitAttendanceDeviceImportJob(client: AttendanceMutationRpcClient, input: CommitAttendanceDeviceImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitAttendanceDeviceImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_attendance_device_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  if (error) throw new AttendanceMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new AttendanceMutationError("mutation_failed", "commit_attendance_device_import_job returned no row");
+  return parseImportExportJob(data as Record<string, unknown>);
 }

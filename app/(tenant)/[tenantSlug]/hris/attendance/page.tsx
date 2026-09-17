@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listAttendanceSessions, listAttendanceExceptions, listAttendanceCorrectionRequests, AttendanceQueryError } from "../../../../../server/queries/attendance.ts";
@@ -43,6 +44,12 @@ export default async function AttendanceAdminPage({ params }: { params: Promise<
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-xl font-semibold text-neutral-900">Attendance</h1>
+        <Link href={`/${tenantSlug}/hris/imports/attendance-devices`} className="text-sm text-primary underline">
+          Bulk import device events from CSV
+        </Link>
+      </div>
       <AttendanceAdminPanel
         sessions={sessions}
         exceptions={exceptions}
