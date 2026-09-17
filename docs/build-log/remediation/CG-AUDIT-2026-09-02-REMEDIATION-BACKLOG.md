@@ -107,7 +107,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | **DONE** | all twelve schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`, `payroll_loan_cutover_import`, `position_crosswalk_import`, `inventory_opening_balance_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, `hris/imports/leave-opening-balance/`, `hris/imports/payroll-loans/`, `hris/imports/position-crosswalk/`, and `operations/imports/inventory-opening-balance/` |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **DONE** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is now wired for all 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility), and ePOD signature/photo evidence (`app.access_epod_evidence_for_download`, gated on `OPS:Download` plus the parent shipment order's own `app.can_access_record` scope -- the same bar its document checklist sibling already uses). Closing the ePOD slice also surfaced and fixed a more fundamental gap: the `epod` document type itself was never registered by any real (non-db-test) migration anywhere in this repository, so a genuinely fresh tenant's first ePOD evidence upload would have failed immediately with `document_type_not_configured` in spite of every RPC being fully wired and tested -- fixed by the same global-catalogue-registration migration that adds the signed-download RPC. Out of A6's own scope, tracked separately under D4: every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
-| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
+| A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and five printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, invoice, and packing list, now exist end to end (`server/documents/`, five new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only; A6's own signed-download capability is now DONE (all 4 evidence flows, including ePOD), so embedding the real signature/photo images into the POD PDF is now a real follow-on, tracked as a NEW finding rather than done in this row (see execution log). Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Packing list required a from-scratch, standalone internal page (`operations/packing-tasks/[packingTaskId]/`) -- ATW-018's own domain (`server/queries/wms-packing.ts`) was real and fully tested but had zero pages/actions anywhere, confirmed by repo-wide search; no host list page for `wms_outbound_orders`/packing tasks exists anywhere in this codebase (a genuinely separate, larger gap -- an internal outbound-order/pick-pack worklist -- out of this slice's own scope), so the new page is reached directly by a packing task id, mirroring `finance/config/page.tsx`'s/`inventory-opening-balance`'s own standalone-and-unlinked precedent. Still open: faktur pajak, gated on new backend RPC work and the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
@@ -125,6 +125,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
 | NEW-1 | `app.claim_next_job`'s own audit-trail write (`capture_audit_event`) attributes the claim event to the job's ORIGINAL requester (`v_job.requested_by_auth_user_id`), not the calling worker -- so under a genuine (non-null) session identity, `capture_audit_event`'s own `assert_actor_is_session_identity` check raises `actor_identity_mismatch` for ANY caller who is not that exact original requester, before any of the job-type-specific authority guards (e.g. D2's) are ever reached. Discovered while writing a behavioral regression test for D2 in `advanced-tms-route-load-planning.sql` -- confirmed live, not theoretical. In production this is masked because the only real caller today is the job supervisor's service-role client (null session identity, which the check exempts), but it means NO job-claiming RPC in this family can currently be correctly exercised, or safely called, by any genuine authenticated session other than the job's own creator -- over-blocking legitimate cross-user operation of the SAME tenant's own queue, not just closing off cross-tenant abuse. | `CODE` | **DONE** | (this commit) |
+| NEW-2 | POD (proof of delivery) PDF prints text-only evidence metadata (filenames, no actual images) -- deliberately deferred at the time A7's POD printable was built because A6's own ePOD signed-download RPC did not exist yet. A6 is now DONE (`app.access_epod_evidence_for_download` mints a real, short-lived signed URL for signature/photo evidence). Embedding the real signature/photo images into the POD PDF (fetch each signed URL server-side, pass the resolved bytes/URL into `@react-pdf/renderer`'s `Image` component) is now unblocked but not yet done -- a real, bounded follow-on to A7, not required by any other open finding. | `CODE` | NEEDS_FOLLOWUP | discovered while closing A6; not actioned in that slice to keep it narrowly scoped to signed download alone |
 
 ## Housekeeping
 
@@ -3733,3 +3734,62 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   separately under D4: every scan still fails closed until an operator
   configures the platform integration encryption key and a real
   VirusTotal API key.
+
+- 2026-09-17 — A7 (packing list, the 5th printable document) closed. A
+  scoping pass confirmed ATW-018's own domain
+  (`app.wms_packing_tasks`/`app.wms_packages`/`app.wms_package_lines`,
+  `server/queries/wms-packing.ts` and its own real, tested
+  `server/mutations/wms-packing.ts`) was genuinely real and mutation-backed
+  -- not a read-only derived view -- but had zero pages/actions anywhere
+  in `app/`, confirmed by repo-wide grep for `wms-packing`/`packing-list`/
+  the RPC names themselves. Unlike invoice (which printed directly from an
+  existing list row), there was no host page anywhere to attach a print
+  link to at all: `operations/` has only a warehouse/zone topology page,
+  and the only page touching `wms_outbound_orders` is the customer-facing
+  portal, which by explicit prior design decision must never show
+  packing/pick internals to customers -- wrong authority domain and wrong
+  audience.
+  Fix: `server/documents/packing-list-document.tsx` (pure `@react-pdf/
+  renderer` presentation component, mirroring purchase-order-document.tsx's
+  own header+line-table+totals+signature-block shape, repeated once per
+  physical package since a warehouse worker checks off one carton/pallet
+  at a time against its own printed section) and
+  `server/documents/generate-packing-list.server.ts` (assembles the data
+  from `getWmsPackingTask`/`listWmsPackages`/`listWmsPackageLines`/
+  `getWmsOutboundOrder`/`listTenantWarehouses`/`getAccountById`/
+  `getItemMaster` -- no new schema, no new RPC; item code/name is resolved
+  once per distinct `itemMasterId` across every line via a `Map` cache,
+  never once per line, since the same item is frequently packed into more
+  than one package/line on a real outbound order; warehouse label is
+  resolved by fetching the caller's own scoped `listTenantWarehouses` and
+  matching by id, the only read query this codebase has for warehouse
+  identity, mirroring purchase-order's own "fetch the scoped list, pick
+  the matching row" precedent for vendor address). New Route Handler
+  `operations/packing-tasks/[packingTaskId]/print/route.ts`, gated by
+  `resolveOperationsAccessForRequest` exactly like the purchase-order/
+  surat-jalan/POD routes, mapping `packing_task_not_found` to a real 404.
+  New standalone page `operations/packing-tasks/[packingTaskId]/page.tsx`
+  (read-only: a packing task's header plus its packages table and the
+  print link) -- unlinked from any other page, mirroring `finance/config/
+  page.tsx`'s/`inventory-opening-balance`'s own standalone precedent,
+  since no host list page for packing tasks exists anywhere yet (a
+  genuinely separate, larger gap -- a real internal outbound-order/
+  pick-pack worklist -- explicitly out of this printable-document slice's
+  own scope). Neither new page/route needed adding to `eslint.config.js`'s
+  `serviceRoleImportGuard` ignores list -- both use the RLS-scoped
+  `createSupabaseServerClient`, never the service-role client.
+  Rendering verified directly with a throwaway `renderToBuffer` smoke
+  script against representative fake data (both a confirmed package with
+  lines and an open, empty package) before this commit -- 5320 real PDF
+  bytes produced, no react-pdf runtime style error (a class of bug
+  `tsc`/`eslint` cannot catch, since `StyleSheet.create` values are only
+  validated by react-pdf itself at render time).
+  Full Tier A gate suite verified clean: `typecheck`, targeted + full
+  `lint` (0 errors, only pre-existing warnings), the full unit test suite,
+  `db:test` (`ALL PASSED` -- no schema change, so no new db-test file
+  needed), `git:check-paths`, `security:check`, `release:check-freeze`
+  (unchanged -- no new migration, no new db-test file, so neither digest
+  moves), and a real `next build` confirming the two new routes compile.
+  A7 remains PARTIAL: faktur pajak is still gated on new backend RPC work
+  and the tax-SME product decisions tracked elsewhere in this backlog
+  (C1/C2) -- not actionable without a product ruling.
