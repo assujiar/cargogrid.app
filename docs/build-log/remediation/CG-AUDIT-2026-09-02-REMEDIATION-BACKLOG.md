@@ -105,7 +105,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
-| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **PARTIAL** | eleven schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`, `payroll_loan_cutover_import`, `position_crosswalk_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, `hris/imports/leave-opening-balance/`, `hris/imports/payroll-loans/`, and `hris/imports/position-crosswalk/`. Only 1 schema's own adapter remains (`inventory_opening_balance_import`, OPS) -- exists and is tested but has no UI yet, estimated at the same one-wrapper-plus-one-route cost as the eleven closed so far |
+| A4 | No import UI over 12 working import schemas | `CODE-BIG` | **DONE** | all twelve schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`, `payroll_loan_cutover_import`, `position_crosswalk_import`, `inventory_opening_balance_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, `hris/imports/leave-opening-balance/`, `hris/imports/payroll-loans/`, `hris/imports/position-crosswalk/`, and `operations/imports/inventory-opening-balance/` |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
@@ -3585,3 +3585,70 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   document-type-registration state has not yet been directly confirmed and
   should not be assumed either way without checking, per this backlog's own
   standing lesson from the last three slices.
+- 2026-09-17 — A4 (`inventory_opening_balance_import`, twelfth and FINAL
+  import schema) closed: **A4 is now fully DONE**, all 12 import schemas
+  finally have a real, complete UI end to end. A near-mechanical port of
+  `hris/imports/payroll-loans/`'s own trio to
+  `operations/imports/inventory-opening-balance/`, reusing
+  `server/policies/csv-import-parse.ts`, `storeFileBytesAndEnqueueScan`,
+  and the generic `stageImportRows`/`listImportStagingRows`/
+  `getImportExportJob` verbatim. Directly confirmed (never assumed): the
+  `import_export_schemas` row was already real, registered in
+  `20260831260000_create_inventory_and_leave_opening_balance_import_adapters.sql`
+  -- the SAME migration that also created `leave_opening_balance_import`'s
+  own schema kind -- but no document type for the raw source file existed
+  anywhere; the one existing db-test,
+  `scripts/db-tests/master-data-import.sql`, reuses the generic
+  `master_data_import_source` type. New migration `20260917070000`
+  registers a dedicated, OPS-owned `inventory_opening_balance_import_source`
+  document type instead, applying the identical reasoning the two
+  immediately preceding slices established.
+  `server/mutations/inventory-ledger.ts` (5 existing WMS mutation wrappers
+  -- post/reserve/release/consume/reverse -- but ZERO for
+  `validate_inventory_opening_balance_import_row`/
+  `commit_inventory_opening_balance_import_job`) gained both as a
+  from-scratch addition, reusing the generic PLT-131 parsers directly.
+  `app.commit_inventory_opening_balance_import_job` composes the same
+  authority stack `commit_payroll_loan_cutover_import_job`/
+  `commit_leave_opening_balance_import_job` compose: BOTH
+  `app.is_support_grant_authority` AND `OPS:Import` (additive), plus a
+  conditional MFA step-up and IP-allowlist gate. The importer also needs
+  genuine record scope over each row's own warehouse --
+  `app.post_inventory_movement` checks `app.can_access_record` against the
+  warehouse's own company org unit, invisible in this RPC's own guard list
+  since it lives inside the primitive itself. Duplicate handling mirrors
+  the same idempotency-key-derived-from-staging-row-id convention every
+  opening-balance-style A4 slice uses -- a corrected re-upload posts a
+  brand-new, additive stock movement rather than correcting a wrong one; a
+  genuine correction requires `app.reverse_inventory_movement` outside this
+  wizard entirely. No bespoke write path: every valid row calls
+  `app.post_inventory_movement`, the SAME primitive every other WMS write
+  composes.
+  No warehouse/inventory-management admin page exists anywhere in this
+  codebase yet (confirmed by repo-wide search, mirroring `item_import`'s
+  own identical situation) -- this page is standalone and unlinked,
+  mirroring `finance/config/page.tsx`'s own precedent.
+  Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  only pre-existing warnings; two new server-only files added to
+  `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  test suite (6,145 tests passing, +6 for
+  `validateInventoryOpeningBalanceImportRow`/
+  `commitInventoryOpeningBalanceImportJob`), `db:test` (`ALL PASSED`,
+  including `master-data-import.sql`'s own inventory-adapter regression --
+  no new db-test file needed), `git:check-paths` (clean, 8 files checked),
+  `security:check` (clean), and a real `next build` (confirms the new
+  `/[tenantSlug]/operations/imports/inventory-opening-balance` route).
+  `check-release-freeze`'s self-test digests were updated this slice (the
+  new document-type migration changed `migrationSetSha256`, HUNDRED-AND-
+  FIFTY-THIRD PASS, 551 files; `dbTestSetSha256` unchanged at 277 files, no
+  db-test file added), independently re-verified via `pnpm run
+  release:check-freeze` passing clean.
+  **A4 ("No import UI over 12 working import schemas") is now DONE.** All
+  12 import schemas -- `finance_opening_balance_import`, `employee_import`,
+  `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`,
+  `attendance_device_import`, `timesheet_import`,
+  `leave_opening_balance_import`, `payroll_loan_cutover_import`,
+  `position_crosswalk_import`, and `inventory_opening_balance_import` --
+  have a real, complete, Tier-A-gate-verified UI end to end (bootstrap,
+  upload+scan, stage+validate, review, commit), built across twelve
+  narrow, independently-verified slices this session.

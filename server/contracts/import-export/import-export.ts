@@ -311,6 +311,16 @@ export const CommitPositionCrosswalkImportJobInputSchema = z.object({
 });
 export type CommitPositionCrosswalkImportJobInput = z.input<typeof CommitPositionCrosswalkImportJobInputSchema>;
 
+/** app.commit_inventory_opening_balance_import_job's own input shape (CG-AUDIT-2026-09-02 A4, twelfth and final import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_payroll_loan_cutover_import_job's own identical gate structure. */
+export const CommitInventoryOpeningBalanceImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitInventoryOpeningBalanceImportJobInput = z.input<typeof CommitInventoryOpeningBalanceImportJobInputSchema>;
+
 export const CancelImportExportJobInputSchema = z.object({
   jobId: z.string().uuid(),
   reason: z.string().nullable().default(null),

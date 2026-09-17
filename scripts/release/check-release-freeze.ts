@@ -5186,7 +5186,62 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "8a8497f2551367ca69bf64a36cf672c04e5d822483283a08001d2ef952e59a31",
+  migrationSetSha256: "d0530ebaf1e15fc801292b52302dc28e56ed0161ca76adffece49ec552c705d0",
+  // HUNDRED-AND-FIFTY-THIRD PASS: CG-AUDIT-2026-09-02 A4, inventory_opening_balance_import
+  // (the twelfth and FINAL of 12 import schemas -- A4 is now fully closed).
+  // New migration
+  // 20260917070000_register_inventory_opening_balance_import_source_document_type.sql
+  // registers a dedicated, OPS-owned inventory_opening_balance_import_source
+  // DOCUMENT TYPE -- the SAME situation the two immediately preceding passes
+  // (leave_opening_balance_import, payroll_loan_cutover_import) hit: the
+  // import_export SCHEMA registration was already real
+  // (20260831260000_create_inventory_and_leave_opening_balance_import_adapters.sql
+  // -- the SAME migration that also registers leave_opening_balance_import's
+  // own schema kind), but no document type for the raw source file had
+  // ever been registered anywhere; scripts/db-tests/master-data-import.sql's
+  // own bootstrap instead reuses the generic, COM-owned
+  // master_data_import_source document type. Following the same reasoning
+  // as the 151st/152nd passes, this migration registers a dedicated type
+  // rather than reusing the generic one.
+  // server/mutations/inventory-ledger.ts (5 existing WMS mutation wrappers
+  // -- post/reserve/release/consume/reverse -- but ZERO for
+  // validate_inventory_opening_balance_import_row/
+  // commit_inventory_opening_balance_import_job) gained both as a
+  // from-scratch addition, reusing the generic PLT-131 parsers directly.
+  // app.commit_inventory_opening_balance_import_job composes the same
+  // authority stack commit_payroll_loan_cutover_import_job/
+  // commit_leave_opening_balance_import_job compose: BOTH
+  // app.is_support_grant_authority (Supreme Admin or tenant_admin) AND
+  // OPS:Import (additive, never either-or), plus a conditional MFA step-up
+  // and IP-allowlist gate. The importer also needs genuine record scope
+  // over each row's own warehouse -- app.post_inventory_movement checks
+  // app.can_access_record against the warehouse's own company org unit,
+  // invisible in this RPC's own guard list since it lives inside the
+  // primitive itself. Duplicate handling mirrors finance_opening_balance_
+  // import's/leave_opening_balance_import's/payroll_loan_cutover_import's
+  // own idempotency-key-derived-from-staging-row-id convention -- a
+  // corrected re-upload posts a brand-new, additive stock movement rather
+  // than correcting a wrong one. No bespoke write path: every valid row
+  // calls app.post_inventory_movement, the SAME primitive every other WMS
+  // write composes.
+  // No warehouse/inventory-management admin page exists anywhere in this
+  // codebase yet (confirmed by repo-wide search, mirroring item_import's
+  // own identical situation) -- this page is standalone and unlinked,
+  // mirroring finance/config/page.tsx's own precedent.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  // only pre-existing warnings; two new server-only files added to
+  // `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  // test suite (+6 for `validateInventoryOpeningBalanceImportRow`/
+  // `commitInventoryOpeningBalanceImportJob`), `db:test` (`ALL PASSED` --
+  // no new db-test file needed, since `scripts/db-tests/master-data-
+  // import.sql`'s own existing fixture already fully covers both RPCs'
+  // real behavior), `git:check-paths` (clean, 8 files checked),
+  // `security:check` (clean), and a real `next build` (confirms the new
+  // `/[tenantSlug]/operations/imports/inventory-opening-balance` route).
+  // A4 ("No import UI over 12 working import schemas") is now DONE: all 12
+  // import schemas have a real, complete UI end to end.
+  // History: 8a8497f2551367ca69bf64a36cf672c04e5d822483283a08001d2ef952e59a31
+  // (550 files, HUNDRED-AND-FIFTY-SECOND PASS).
   // HUNDRED-AND-FIFTY-SECOND PASS: CG-AUDIT-2026-09-02 A4, payroll_loan_cutover_import
   // (the eleventh of 12 import schemas). New migration
   // 20260917060000_register_payroll_loan_cutover_import_source_document_type.sql
