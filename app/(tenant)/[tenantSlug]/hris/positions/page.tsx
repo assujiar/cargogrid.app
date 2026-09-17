@@ -71,6 +71,9 @@ export default async function PositionCataloguePage({ params, searchParams }: { 
           <a href={`/${tenantSlug}/hris/organization`} className="text-primary underline">
             View organization tree
           </a>
+          <a href={`/${tenantSlug}/hris/imports/position-crosswalk`} className="text-primary underline">
+            Import position crosswalk from CSV
+          </a>
         </div>
       </div>
 

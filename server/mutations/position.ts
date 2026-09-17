@@ -36,6 +36,16 @@ import {
   type Position,
   type EmployeePositionAssignment,
 } from "../contracts/position/position.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitPositionCrosswalkImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitPositionCrosswalkImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type PositionMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -74,6 +84,21 @@ export const POSITION_KNOWN_MUTATION_ERROR_CODES = [
   "invalid_item",
   "too_many_items",
   "duplicate_employee",
+  // CG-AUDIT-2026-09-02 A4 (position_crosswalk_import UI slice): app.commit_position_crosswalk_import_job's
+  // latest redefinition (20260903133000_harden_tenant_id_disclosure_commercial_ops_hris_intelligence.sql)
+  // composes app.check_import_export_job_authority (job_actor_unauthorized),
+  // app.assert_current_step_up_authorization, and app.assert_ip_allowed -- the same
+  // authority stack commit_payroll_loan_cutover_import_job composes, plus the generic
+  // import_export_* prefixes app.commit_import_job/app.validate_staging_row raise.
+  "import_export_job_not_found",
+  "import_export_wrong_schema",
+  "import_export_job_not_committable",
+  "import_export_job_not_fully_validated",
+  "import_export_job_has_invalid_rows",
+  "job_actor_unauthorized",
+  "mfa_step_up_required",
+  "ip_not_allowed",
+  "import_row_no_longer_resolvable",
 ] as const;
 type KnownPositionMutationErrorCode = (typeof POSITION_KNOWN_MUTATION_ERROR_CODES)[number];
 export type PositionMutationErrorCode = KnownPositionMutationErrorCode | "mutation_failed";
@@ -308,4 +333,39 @@ export async function proposeBulkEmployeePositionAssignment(client: PositionMuta
   });
   if (error) throw new PositionMutationError(classifyError(error.message), error.message);
   return (data as Record<string, unknown>[] | null ?? []).map(parseEmployeePositionAssignment);
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, twelfth and final import schema) ---
+// app.validate_position_crosswalk_import_row returns app.import_staging_rows and
+// app.commit_position_crosswalk_import_job returns app.jobs -- the SAME composite
+// types the generic PLT-131 app.validate_staging_row/app.commit_import_job
+// return, so both reuse the generic parsers directly, mirroring
+// server/mutations/payroll.ts's own precedent.
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (employee_number, position_code, grade_code, manager_employee_number, assignment_type, change_reason, reason_note), employee_number/manager_employee_number must each resolve to an employee of this tenant, position_code/grade_code must each resolve to an ACTIVE position/grade, and assignment_type='secondary' requires change_reason='secondary_assignment' exactly. */
+export async function validatePositionCrosswalkImportRow(client: PositionMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_position_crosswalk_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new PositionMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new PositionMutationError("invalid_response", "validate_position_crosswalk_import_row returned no row");
+  return parseImportStagingRow(data as Record<string, unknown>);
+}
+
+/** Requires BOTH HRS:Import AND HRS:Edit (additive, never either-or) -- HRS:Edit is required because the adapter calls app.propose_employee_position_assignment, which itself independently demands it of every caller. Also gated by a conditional MFA step-up and a conditional IP allowlist check, identical in shape to commit_payroll_loan_cutover_import_job. Unlike every prior A4 import, this one never lands an immediately-effective record: each valid row creates a real status=pending_approval proposal via app.propose_employee_position_assignment (the SAME primitive the single-employee manual wizard at /hris/employees/[masterRecordId]/positions uses), reviewed through that same existing wizard -- no new approval UI exists or is needed for this slice. An already-committed staging row (source_import_staging_row_id already bound, backed by a partial unique index) is skipped as a plain idempotent replay, never a duplicate proposal; a resolved position/grade that went inactive between validate and commit fails closed with import_row_no_longer_resolvable rather than silently proceeding. */
+export async function commitPositionCrosswalkImportJob(client: PositionMutationRpcClient, input: CommitPositionCrosswalkImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitPositionCrosswalkImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_position_crosswalk_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  if (error) throw new PositionMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new PositionMutationError("invalid_response", "commit_position_crosswalk_import_job returned no row");
+  return parseImportExportJob(data as Record<string, unknown>);
 }
