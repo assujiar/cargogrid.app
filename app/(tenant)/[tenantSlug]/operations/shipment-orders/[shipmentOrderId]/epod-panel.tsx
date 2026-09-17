@@ -8,9 +8,17 @@ import { NumberInput } from "../../../../../../components/forms/number-input.tsx
 import { ValidationMessage } from "../../../../../../components/forms/validation-message.tsx";
 import { StatusBadge } from "../../../../../../components/ui/status-badge.tsx";
 import type { EpodCapture } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
-import type { ShipmentOrderFormState } from "./actions.ts";
+import type { ShipmentOrderFormState, EpodEvidenceDownloadState } from "./actions.ts";
 
 const INITIAL_STATE: ShipmentOrderFormState = { error: null };
+const INITIAL_DOWNLOAD_STATE: EpodEvidenceDownloadState = { error: null, download: null };
+
+type BoundDownloadAction = (prevState: EpodEvidenceDownloadState, formData: FormData) => Promise<EpodEvidenceDownloadState>;
+
+const ACCESS_RESULT_TONE: Record<"granted" | "denied", "success" | "danger"> = {
+  granted: "success",
+  denied: "danger",
+};
 
 const STATUS_TONE: Record<EpodCapture["status"], "success" | "warning" | "danger" | "neutral"> = {
   draft: "neutral",
@@ -30,6 +38,7 @@ export function EpodPanel({
   reviewAction,
   reviseAction,
   completeAction,
+  downloadEvidenceAction,
 }: {
   readonly shipmentDelivered: boolean;
   readonly history: readonly EpodCapture[];
@@ -39,6 +48,7 @@ export function EpodPanel({
   readonly reviewAction: (captureId: string, expectedVersion: number) => (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
   readonly reviseAction: (captureId: string) => (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
   readonly completeAction: (captureId: string, expectedVersion: number) => (prevState: ShipmentOrderFormState, formData: FormData) => Promise<ShipmentOrderFormState>;
+  readonly downloadEvidenceAction: (fileId: string) => BoundDownloadAction;
 }) {
   const [startState, startFormAction, startPending] = useActionState(startAction, INITIAL_STATE);
   const latest = history.find((c) => c.isLatestVersion) ?? null;
@@ -70,6 +80,21 @@ export function EpodPanel({
                 {capture.receiverName ? <span className="text-sm text-neutral-700">Receiver: {capture.receiverName}</span> : null}
               </div>
               {capture.reviewNotes ? <p className="mt-1 text-sm text-neutral-600">Notes: {capture.reviewNotes}</p> : null}
+              {capture.signatureFileId || capture.photoFileIds.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {capture.signatureFileId ? (
+                    <EpodEvidenceDownload fileId={capture.signatureFileId} label="signature" action={downloadEvidenceAction(capture.signatureFileId)} />
+                  ) : null}
+                  {capture.photoFileIds.map((fileId, index) => (
+                    <EpodEvidenceDownload
+                      key={fileId}
+                      fileId={fileId}
+                      label={capture.photoFileIds.length > 1 ? `photo ${index + 1}` : "photo"}
+                      action={downloadEvidenceAction(fileId)}
+                    />
+                  ))}
+                </div>
+              ) : null}
               {capture.isLatestVersion ? (
                 <EpodCaptureActions
                   capture={capture}
@@ -285,4 +310,33 @@ function EpodCaptureActions({
   }
 
   return null;
+}
+
+/** CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ePOD signature/photo evidence file. Mirrors DocumentChecklistPanel's own "Get download link" form exactly (app.access_epod_evidence_for_download only ever returns a real path once its own OPS:Download + record-scope + malware-scan gate is satisfied). */
+function EpodEvidenceDownload({ fileId, label, action }: { readonly fileId: string; readonly label: string; readonly action: BoundDownloadAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_DOWNLOAD_STATE);
+
+  return (
+    <form action={formAction} className="flex flex-col gap-1">
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating link…" className="w-fit text-xs">
+        Get {label} download link
+      </Button>
+      {state.download ? (
+        state.download.accessResult === "granted" && state.download.signedUrl ? (
+          <p className="text-xs">
+            <a href={state.download.signedUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+              Open {state.download.originalFilename ?? "file"}
+            </a>{" "}
+            <span className="text-neutral-500">— link expires in 5 minutes</span>
+          </p>
+        ) : (
+          <p role="status" className="flex items-center gap-2 text-xs">
+            <StatusBadge tone={ACCESS_RESULT_TONE[state.download.accessResult]} label="access denied" />
+            {state.download.accessReason ?? "no reason recorded"}
+          </p>
+        )
+      ) : null}
+      {state.error ? <ValidationMessage id={`${fileId}-download-error`}>{state.error}</ValidationMessage> : null}
+    </form>
+  );
 }

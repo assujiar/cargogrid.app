@@ -51,9 +51,11 @@ import {
   reviewEpodCapture,
   reviseEpodCapture,
   completeEpodCapture,
+  getEpodEvidenceSignedDownloadUrl,
   EpodCaptureReviewMutationError,
+  type EpodEvidenceDownloadClient,
 } from "../../../../../../server/mutations/epod-capture-review.ts";
-import type { GeoJsonPoint } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
+import type { GeoJsonPoint, EpodEvidenceSignedDownload } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
 import {
   createActualCostDraft,
   addActualCostComponent,
@@ -877,6 +879,41 @@ export async function setEpodEvidenceAction(
 
   revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
   return { error: null };
+}
+
+export interface EpodEvidenceDownloadState {
+  readonly error: string | null;
+  readonly download: EpodEvidenceSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ePOD
+ * signature/photo evidence file. Uses the service-role client -- the
+ * underlying RPC (app.access_epod_evidence_for_download) is granted to
+ * service_role only, mirroring downloadChecklistItemEvidenceAction's own
+ * identical reasoning.
+ */
+export async function downloadEpodEvidenceAction(
+  tenantSlug: string,
+  fileId: string,
+  _prevState: EpodEvidenceDownloadState,
+  _formData: FormData,
+): Promise<EpodEvidenceDownloadState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace.", download: null };
+  }
+
+  const serviceRole: EpodEvidenceDownloadClient = createSupabaseServiceRoleClient();
+  try {
+    const result = await getEpodEvidenceSignedDownloadUrl(serviceRole, fileId, access.authUserId, access.authUserId);
+    return { error: null, download: result };
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not create a download link for this file: ${error.message}`, download: null };
+    }
+    throw error;
+  }
 }
 
 /** OPS-177: draft/revision_requested -> submitted. Requires a receiver name, at least one evidence file, and every referenced file to have already scanned clean. */

@@ -7,8 +7,10 @@ import {
   reviewEpodCapture,
   reviseEpodCapture,
   completeEpodCapture,
+  getEpodEvidenceSignedDownloadUrl,
   EpodCaptureReviewMutationError,
   type EpodCaptureReviewMutationRpcClient,
+  type EpodEvidenceDownloadClient,
 } from "./epod-capture-review.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -220,6 +222,93 @@ describe("completeEpodCapture", () => {
       (err: unknown) => {
         assert.ok(err instanceof EpodCaptureReviewMutationError);
         assert.equal(err.code, "invalid_transition");
+        return true;
+      },
+    );
+  });
+});
+
+describe("getEpodEvidenceSignedDownloadUrl", () => {
+  function fakeDownloadClient(
+    rpcResponse: { data: unknown; error: { message: string } | null },
+    signedUrlResponse?: { data: { signedUrl: string } | null; error: { message: string } | null },
+  ): { client: EpodEvidenceDownloadClient; calls: { fn: string; args: Record<string, unknown> }[]; signedUrlCalls: { bucket: string; path: string }[] } {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const signedUrlCalls: { bucket: string; path: string }[] = [];
+    const client = {
+      async rpc(fn: string, args: Record<string, unknown>) {
+        calls.push({ fn, args });
+        return rpcResponse;
+      },
+      storage: {
+        from(bucket: string) {
+          return {
+            async createSignedUrl(path: string) {
+              signedUrlCalls.push({ bucket, path });
+              return signedUrlResponse ?? { data: null, error: { message: "unexpected createSignedUrl call" } };
+            },
+          };
+        },
+      },
+    } as unknown as EpodEvidenceDownloadClient;
+    return { client, calls, signedUrlCalls };
+  }
+
+  test("calls access_epod_evidence_for_download with the exact snake_case params and mints a signed URL once granted", async () => {
+    const { client, calls, signedUrlCalls } = fakeDownloadClient(
+      {
+        data: {
+          bucket_id: "tenant-documents",
+          storage_path: "tenants/t1/epod/signature.png",
+          original_filename: "signature.png",
+          mime_type: "image/png",
+          access_result: "granted",
+          access_reason: null,
+        },
+        error: null,
+      },
+      { data: { signedUrl: "https://signed.example/signature.png" }, error: null },
+    );
+
+    const result = await getEpodEvidenceSignedDownloadUrl(client, FILE_ID, ACTOR_ID, "rep");
+
+    assert.equal(calls[0]?.fn, "access_epod_evidence_for_download");
+    assert.deepEqual(calls[0]?.args, { p_file_id: FILE_ID, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "rep", p_correlation_id: null });
+    assert.deepEqual(signedUrlCalls, [{ bucket: "tenant-documents", path: "tenants/t1/epod/signature.png" }]);
+    assert.deepEqual(result, { accessResult: "granted", accessReason: null, signedUrl: "https://signed.example/signature.png", originalFilename: "signature.png" });
+  });
+
+  test("returns the denial reason without ever calling Storage", async () => {
+    const { client, signedUrlCalls } = fakeDownloadClient({
+      data: { bucket_id: null, storage_path: null, original_filename: null, mime_type: null, access_result: "denied", access_reason: "document_infected_quarantined" },
+      error: null,
+    });
+
+    const result = await getEpodEvidenceSignedDownloadUrl(client, FILE_ID, ACTOR_ID, "rep");
+
+    assert.equal(signedUrlCalls.length, 0);
+    assert.deepEqual(result, { accessResult: "denied", accessReason: "document_infected_quarantined", signedUrl: null, originalFilename: null });
+  });
+
+  test("classifies epod_evidence_file_not_found", async () => {
+    const { client } = fakeDownloadClient({ data: null, error: { message: "epod_evidence_file_not_found: no matching evidence file" } });
+    await assert.rejects(
+      () => getEpodEvidenceSignedDownloadUrl(client, FILE_ID, ACTOR_ID, "rep"),
+      (err: unknown) => {
+        assert.ok(err instanceof EpodCaptureReviewMutationError);
+        assert.equal(err.code, "epod_evidence_file_not_found");
+        return true;
+      },
+    );
+  });
+
+  test("classifies epod_evidence_file_not_linked", async () => {
+    const { client } = fakeDownloadClient({ data: null, error: { message: "epod_evidence_file_not_linked: file is not linked to any ePOD capture" } });
+    await assert.rejects(
+      () => getEpodEvidenceSignedDownloadUrl(client, FILE_ID, ACTOR_ID, "rep"),
+      (err: unknown) => {
+        assert.ok(err instanceof EpodCaptureReviewMutationError);
+        assert.equal(err.code, "epod_evidence_file_not_linked");
         return true;
       },
     );

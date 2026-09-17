@@ -135,3 +135,44 @@ export const GetEpodCaptureHistoryInputSchema = z.object({
   actorAuthUserId: z.string().uuid(),
 });
 export type GetEpodCaptureHistoryInput = z.input<typeof GetEpodCaptureHistoryInputSchema>;
+
+export const EPOD_EVIDENCE_ACCESS_RESULTS = ["granted", "denied"] as const;
+export const EpodEvidenceAccessResultSchema = z.enum(EPOD_EVIDENCE_ACCESS_RESULTS);
+export type EpodEvidenceAccessResult = z.infer<typeof EpodEvidenceAccessResultSchema>;
+
+/**
+ * app.access_epod_evidence_for_download's own raw row (CG-AUDIT-2026-09-02
+ * A6, service_role-only). DOES carry storage_path -- it never reaches the
+ * browser, only server-side code that immediately mints a signed URL from
+ * it. Not re-exported past the mutation function that parses it, same
+ * discipline as every sibling download-source type.
+ */
+export const EpodEvidenceDownloadSourceSchema = z.object({
+  bucketId: z.string().nullable(),
+  storagePath: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  accessResult: EpodEvidenceAccessResultSchema,
+  accessReason: z.string().nullable(),
+});
+export type EpodEvidenceDownloadSource = z.infer<typeof EpodEvidenceDownloadSourceSchema>;
+
+export function parseEpodEvidenceDownloadSource(row: Record<string, unknown>): EpodEvidenceDownloadSource {
+  return EpodEvidenceDownloadSourceSchema.parse({
+    bucketId: row.bucket_id ?? null,
+    storagePath: row.storage_path ?? null,
+    originalFilename: row.original_filename ?? null,
+    mimeType: row.mime_type ?? null,
+    accessResult: row.access_result,
+    accessReason: row.access_reason ?? null,
+  });
+}
+
+/** The public-facing result of minting a signed download URL for one ePOD evidence file -- never carries storage_path/bucket_id, only the already-signed, short-lived URL a browser can safely open directly. */
+export const EpodEvidenceSignedDownloadSchema = z.object({
+  accessResult: EpodEvidenceAccessResultSchema,
+  accessReason: z.string().nullable(),
+  signedUrl: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+});
+export type EpodEvidenceSignedDownload = z.infer<typeof EpodEvidenceSignedDownloadSchema>;

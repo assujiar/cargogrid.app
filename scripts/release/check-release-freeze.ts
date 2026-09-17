@@ -5186,7 +5186,77 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "d0530ebaf1e15fc801292b52302dc28e56ed0161ca76adffece49ec552c705d0",
+  migrationSetSha256: "612bd8a59232f940ab9fa607520e8b98c056358fa5687a5fba87adc43fb6b5a1",
+  // HUNDRED-AND-FIFTY-FOURTH PASS: CG-AUDIT-2026-09-02 A6, ePOD evidence signed
+  // download -- the 4th and final of the audit's own named deadlocked
+  // upload/download flows (vendor compliance, shipment document checklist,
+  // ticket-reply attachments were already fixed; ePOD's own upload side was
+  // fixed by an earlier pass this session -- this pass closes its download
+  // side, and with it A6 entirely). New migration
+  // 20260917080000_a6_epod_evidence_signed_download.sql does two things:
+  // (1) registers 'epod'/'document:epod' as real app.document_types/
+  // app.config_types catalogue rows -- confirmed live via repo-wide grep
+  // that NO real (non-db-test) migration had ever done this, only 10+
+  // scripts/db-tests/*.sql fixtures independently, each against its own
+  // disposable database; a genuinely fresh tenant's first ePOD evidence
+  // upload would have failed immediately with document_type_not_configured
+  // in spite of app.set_epod_evidence/app.initiate_file_upload both being
+  // fully wired and fully tested. Mirrors
+  // 20260914060000_register_gps_device_installation_document_type.sql's own
+  // shape verbatim (that migration's own comment explicitly name-drops
+  // 'epod'/'pod' as a same-shaped example still outstanding at the time it
+  // was written). (2) adds app.authorize_epod_evidence_file_access (a
+  // narrowly-scoped sibling of app.authorize_shipment_document_evidence_
+  // file_access/app.authorize_ticket_attachment_evidence_file_access) and
+  // app.access_epod_evidence_for_download, parameterized by p_file_id (the
+  // ticket-attachment precedent's own shape, since app.epod_captures has
+  // both a single signature_file_id and a photo_file_ids array -- a
+  // capture-id-parameterized RPC would still need a second parameter
+  // picking which file). Gated on app.evaluate_permission(..., 'OPS',
+  // 'Download') plus app.can_access_record against the parent shipment
+  // order's own owner_user_id/lead_record_scope_org_unit_ids -- the SAME
+  // record-scope bar the shipment document checklist's own sibling RPC
+  // already uses, since ePOD evidence has no narrower record-scope concept
+  // of its own. ISS-2026-146-safe from birth: the initial not-found branch
+  // folds app.has_active_tenant_membership in, so a zero-relationship
+  // cross-tenant probe against a real file_id never sees this tenant's real
+  // tenant_id interpolated into a later insufficient_authority message.
+  // Plus matching public.* wrappers for both new functions, identical
+  // security mode and the standard service_role-only grant set (RGL-394
+  // Option-2).
+  // server/mutations/epod-capture-review.ts gained
+  // getEpodEvidenceSignedDownloadUrl (mirrors getShipmentDocumentChecklist
+  // ItemSignedDownloadUrl/getTicketAttachmentSignedDownloadUrl exactly:
+  // calls the RPC first, only mints a real Storage signed URL once
+  // accessResult='granted', storage_path/bucketId never leave the
+  // function), plus two new classified error codes
+  // (epod_evidence_file_not_found/epod_evidence_file_not_linked) and 4 new
+  // unit tests. server/contracts/epod-capture-review/epod-capture-review.ts
+  // gained the matching EpodEvidenceDownloadSource/EpodEvidenceSignedDownload
+  // schema pair. app/(tenant)/[tenantSlug]/operations/shipment-orders/
+  // [shipmentOrderId]/actions.ts (already on eslint.config.js's
+  // serviceRoleImportGuard ignores list -- no eslint.config.js edit needed)
+  // gained downloadEpodEvidenceAction; epod-panel.tsx now renders a "Get
+  // signature/photo download link" control per evidence file on every
+  // capture version in history (not just the latest), mirroring
+  // DocumentChecklistPanel's own "Get download link" form exactly.
+  // Full Tier A gate suite verified clean: `typecheck`, targeted + full
+  // `lint` (0 errors, only pre-existing warnings), the unit test suite
+  // (+4 new tests for getEpodEvidenceSignedDownloadUrl, 6149/6149 pass),
+  // `db:test` (`ALL PASSED` -- no new db-test file needed, since every
+  // existing epod-capture-review/customer-epod/operations-* db-test
+  // fixture that registers 'epod' itself continues to do so unaffected by
+  // this migration's own idempotent `on conflict (code) do nothing`),
+  // `git:check-paths` (clean, 8 files checked), `security:check` (clean),
+  // and a real `next build`.
+  // A6 ("No Storage bucket/policies; uploads never store bytes; malware-scan
+  // status never advances, deadlocking 3+ flows") is now DONE: all 4 real
+  // evidence flows have real upload+scan AND real signed download. Out of
+  // A6's own scope, tracked separately under D4: every scan still fails
+  // closed until an operator configures the encryption key and a real
+  // VirusTotal API key.
+  // History: d0530ebaf1e15fc801292b52302dc28e56ed0161ca76adffece49ec552c705d0
+  // (551 files, HUNDRED-AND-FIFTY-THIRD PASS).
   // HUNDRED-AND-FIFTY-THIRD PASS: CG-AUDIT-2026-09-02 A4, inventory_opening_balance_import
   // (the twelfth and FINAL of 12 import schemas -- A4 is now fully closed).
   // New migration

@@ -13,6 +13,7 @@ import {
   ReviseEpodCaptureInputSchema,
   CompleteEpodCaptureInputSchema,
   parseEpodCapture,
+  parseEpodEvidenceDownloadSource,
   type StartEpodCaptureInput,
   type SetEpodEvidenceInput,
   type SubmitEpodCaptureInput,
@@ -20,6 +21,7 @@ import {
   type ReviseEpodCaptureInput,
   type CompleteEpodCaptureInput,
   type EpodCapture,
+  type EpodEvidenceSignedDownload,
 } from "../contracts/epod-capture-review/epod-capture-review.ts";
 
 export type EpodCaptureReviewMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -41,6 +43,8 @@ export const EPOD_CAPTURE_REVIEW_KNOWN_MUTATION_ERROR_CODES = [
   "epod_revision_reason_required",
   "epod_not_latest_version",
   "insufficient_authority",
+  "epod_evidence_file_not_found",
+  "epod_evidence_file_not_linked",
 ] as const;
 type KnownEpodCaptureReviewMutationErrorCode = (typeof EPOD_CAPTURE_REVIEW_KNOWN_MUTATION_ERROR_CODES)[number];
 export type EpodCaptureReviewMutationErrorCode = KnownEpodCaptureReviewMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -176,4 +180,64 @@ export async function completeEpodCapture(client: EpodCaptureReviewMutationRpcCl
     throw new EpodCaptureReviewMutationError("invalid_response", "complete_epod_capture returned no row");
   }
   return parseEpodCapture(data as Record<string, unknown>);
+}
+
+/**
+ * Widens EpodCaptureReviewMutationRpcClient with the one extra capability
+ * this single function needs: minting a signed URL against the real Storage
+ * bucket. Only ever satisfied by a service-role client -- the underlying RPC
+ * this calls is granted to service_role only.
+ */
+export type EpodEvidenceDownloadClient = EpodCaptureReviewMutationRpcClient & {
+  storage: {
+    from(bucket: string): {
+      createSignedUrl(path: string, expiresInSeconds: number): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }>;
+    };
+  };
+};
+
+const SIGNED_DOWNLOAD_URL_TTL_SECONDS = 300;
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ePOD
+ * signature/photo evidence file. Calls the service_role-only
+ * app.access_epod_evidence_for_download RPC first (OPS:Download + the
+ * parent shipment order's own app.can_access_record scope, then the
+ * malware-scan/classification gate); only once that RPC reports
+ * accessResult='granted' does this function call Storage at all.
+ * storage_path/bucketId never leave this function -- the caller only ever
+ * sees the already-signed URL. Mirrors getShipmentDocumentChecklistItemSignedDownloadUrl/
+ * getTicketAttachmentSignedDownloadUrl exactly.
+ */
+export async function getEpodEvidenceSignedDownloadUrl(
+  client: EpodEvidenceDownloadClient,
+  fileId: string,
+  actorAuthUserId: string,
+  actorLabel: string,
+): Promise<EpodEvidenceSignedDownload> {
+  const { data, error } = await client.rpc("access_epod_evidence_for_download", {
+    p_file_id: fileId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_actor_label: actorLabel,
+    p_correlation_id: null,
+  });
+  if (error) {
+    throw new EpodCaptureReviewMutationError(classifyError(error.message), error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") {
+    throw new EpodCaptureReviewMutationError("invalid_response", "access_epod_evidence_for_download returned no row");
+  }
+  const source = parseEpodEvidenceDownloadSource(row as Record<string, unknown>);
+
+  if (source.accessResult !== "granted" || !source.bucketId || !source.storagePath) {
+    return { accessResult: source.accessResult, accessReason: source.accessReason, signedUrl: null, originalFilename: null };
+  }
+
+  const { data: signed, error: signError } = await client.storage.from(source.bucketId).createSignedUrl(source.storagePath, SIGNED_DOWNLOAD_URL_TTL_SECONDS);
+  if (signError || !signed) {
+    throw new EpodCaptureReviewMutationError("invalid_response", `could not mint a signed download URL: ${signError?.message ?? "no data returned"}`);
+  }
+
+  return { accessResult: "granted", accessReason: null, signedUrl: signed.signedUrl, originalFilename: source.originalFilename };
 }

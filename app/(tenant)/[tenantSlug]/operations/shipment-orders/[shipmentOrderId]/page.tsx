@@ -72,6 +72,7 @@ import {
   reviewEpodCaptureAction,
   reviseEpodCaptureAction,
   completeEpodCaptureAction,
+  downloadEpodEvidenceAction,
   createActualCostDraftAction,
   addActualCostComponentAction,
   removeActualCostComponentAction,
@@ -330,6 +331,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundReviseEpodCaptureAction = (captureId: string) => reviseEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId);
   const boundCompleteEpodCaptureAction = (captureId: string, expectedVersion: number) =>
     completeEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion, shipment.recordVersion, randomUUID());
+  const boundDownloadEpodEvidenceAction = (fileId: string) => downloadEpodEvidenceAction.bind(null, tenantSlug, fileId);
   const boundCreateActualCostDraftAction = createActualCostDraftAction.bind(null, tenantSlug, shipment.id);
   const boundAddActualCostComponentAction = addActualCostComponentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", randomUUID());
   const boundRemoveActualCostComponentAction = (componentId: string) => removeActualCostComponentAction.bind(null, tenantSlug, shipment.id, componentId);
@@ -537,6 +539,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
             reviewAction={boundReviewEpodCaptureAction}
             reviseAction={boundReviseEpodCaptureAction}
             completeAction={boundCompleteEpodCaptureAction}
+            downloadEvidenceAction={boundDownloadEpodEvidenceAction}
           />
         </section>
       ) : null}

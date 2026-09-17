@@ -106,7 +106,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | **DONE** | all twelve schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`, `payroll_loan_cutover_import`, `position_crosswalk_import`, `inventory_opening_balance_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, `hris/imports/leave-opening-balance/`, `hris/imports/payroll-loans/`, `hris/imports/position-crosswalk/`, and `operations/imports/inventory-opening-balance/` |
-| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **PARTIAL** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is wired for 3 of the 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), and ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility -- no new permission concept needed). Still bounded, not DONE: ePOD evidence still lacks signed download (the same RPC pattern is directly reusable -- no UI blocker anymore, since evidence capture itself is now a real file upload); every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
+| A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **DONE** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is now wired for all 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility), and ePOD signature/photo evidence (`app.access_epod_evidence_for_download`, gated on `OPS:Download` plus the parent shipment order's own `app.can_access_record` scope -- the same bar its document checklist sibling already uses). Closing the ePOD slice also surfaced and fixed a more fundamental gap: the `epod` document type itself was never registered by any real (non-db-test) migration anywhere in this repository, so a genuinely fresh tenant's first ePOD evidence upload would have failed immediately with `document_type_not_configured` in spite of every RPC being fully wired and tested -- fixed by the same global-catalogue-registration migration that adds the signed-download RPC. Out of A6's own scope, tracked separately under D4: every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and four printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, and invoice, now exist end to end (`server/documents/`, four new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD is deliberately text-only pending A6's own still-open signed-download capability. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Still open: faktur pajak and packing list printables -- packing list specifically needs real UI/mutation wiring first (its own backend domain, `server/queries/wms-packing.ts`, is real and tested but has zero pages/actions anywhere, so there is nothing yet to print); faktur pajak needs new backend RPC work and is also gated on the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 
@@ -3652,3 +3652,84 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   have a real, complete, Tier-A-gate-verified UI end to end (bootstrap,
   upload+scan, stage+validate, review, commit), built across twelve
   narrow, independently-verified slices this session.
+
+- 2026-09-17 — A6 (ePOD evidence signed download, the 4th and final of the
+  audit's own named deadlocked upload/download flows) closed. ePOD's own
+  upload side was already fixed by an earlier pass this session
+  (real signature/photo `File` objects, real bytes stored, a real malware
+  scan enqueued); `epod-panel.tsx` still never rendered
+  `capture.signatureFileId`/`photoFileIds` at all, so there was no way to
+  ever fetch that evidence back out. Scoping this slice surfaced a second,
+  more fundamental gap: repo-wide grep confirmed the `epod` document type
+  itself was never registered by any real (non-db-test) migration --
+  every one of 10+ `scripts/db-tests/*.sql` fixtures registers it
+  independently, against its own disposable database, and nothing else
+  ever did. Since `app.resolve_document_type_definition` (the function
+  `app.initiate_file_upload` always calls first) raises
+  `document_type_not_configured` whenever no tenant has ever published a
+  `document:<code>` config object, and a tenant can never publish one
+  until the matching `app.config_types` row exists, a genuinely fresh
+  tenant's first ePOD evidence upload would have failed immediately in
+  spite of `app.set_epod_evidence`/`app.initiate_file_upload` both being
+  fully wired and fully tested -- the exact same class of gap
+  `20260914060000_register_gps_device_installation_document_type.sql`
+  already fixed for `gps_device_installation` (that migration's own
+  comment explicitly name-drops `epod`/`pod` as a same-shaped example
+  still outstanding at the time it was written).
+  Fix: new migration `20260917080000_a6_epod_evidence_signed_download.sql`
+  registers `epod`/`document:epod` as real global catalogue rows
+  (mirroring `20260914060000`'s own shape verbatim), then adds
+  `app.authorize_epod_evidence_file_access` (a narrowly-scoped sibling of
+  `app.authorize_shipment_document_evidence_file_access`/
+  `app.authorize_ticket_attachment_evidence_file_access`) and
+  `app.access_epod_evidence_for_download`, parameterized by `p_file_id`
+  (the ticket-attachment precedent's own shape, since
+  `app.epod_captures` carries both a single `signature_file_id` and a
+  `photo_file_ids` array). Gated on `app.evaluate_permission(..., 'OPS',
+  'Download')` plus `app.can_access_record` against the parent shipment
+  order's own `owner_user_id`/`lead_record_scope_org_unit_ids` -- the
+  SAME record-scope bar the shipment document checklist's own sibling RPC
+  already uses, since ePOD evidence has no narrower record-scope concept
+  of its own. ISS-2026-146-safe from birth: the initial not-found branch
+  folds `app.has_active_tenant_membership` in, so a zero-relationship
+  cross-tenant probe against a real `file_id` never sees this tenant's
+  real `tenant_id` interpolated into a later `insufficient_authority`
+  message. Plus matching `public.*` wrappers for both new functions
+  (RGL-394 Option-2).
+  `server/mutations/epod-capture-review.ts` gained
+  `getEpodEvidenceSignedDownloadUrl` (mirrors
+  `getShipmentDocumentChecklistItemSignedDownloadUrl`/
+  `getTicketAttachmentSignedDownloadUrl` exactly: calls the RPC first,
+  only mints a real Storage signed URL once `accessResult='granted'`,
+  `storage_path`/`bucketId` never leave the function) plus two new
+  classified error codes and 4 new unit tests (all passing).
+  `server/contracts/epod-capture-review/epod-capture-review.ts` gained
+  the matching `EpodEvidenceDownloadSource`/`EpodEvidenceSignedDownload`
+  schema pair. `actions.ts` (already on `eslint.config.js`'s
+  `serviceRoleImportGuard` ignores list -- no `eslint.config.js` edit
+  needed) gained `downloadEpodEvidenceAction`; `epod-panel.tsx` now
+  renders a "Get signature/photo download link" control per evidence
+  file on every capture version in history (not just the latest, since
+  full version history -- including rejected versions' own evidence --
+  remains inspectable by design), mirroring `DocumentChecklistPanel`'s
+  own "Get download link" form exactly.
+  Full Tier A gate suite verified clean: `typecheck`, targeted + full
+  `lint` (0 errors, only pre-existing warnings), the unit test suite
+  (+4 new tests, 6149/6149 pass), `db:test` (`ALL PASSED` -- no new
+  db-test file needed, since every existing fixture that registers
+  `epod` itself continues to do so unaffected by this migration's own
+  idempotent `on conflict (code) do nothing`), `git:check-paths` (clean,
+  8 files checked), `security:check` (clean), `release:check-freeze`
+  (self-test digests updated -- the new migration changed
+  `migrationSetSha256`, HUNDRED-AND-FIFTY-FOURTH PASS, 552 files;
+  `dbTestSetSha256` unchanged at 277 files, no db-test file added --
+  independently re-verified via `pnpm run release:check-freeze` passing
+  clean), and a real `next build`.
+  **A6 ("No Storage bucket/policies; uploads never store bytes;
+  malware-scan status never advances, deadlocking 3+ flows") is now
+  DONE.** All 4 real evidence-upload flows -- vendor compliance, shipment
+  document checklist, ticket-reply attachments, and ePOD -- now have real
+  upload+scan AND real signed download. Out of A6's own scope, tracked
+  separately under D4: every scan still fails closed until an operator
+  configures the platform integration encryption key and a real
+  VirusTotal API key.
