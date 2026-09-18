@@ -115,7 +115,7 @@ scoped and left for a dedicated follow-up session) Â· `NEEDS_PRODUCT_DECISION` Â
 | ID | Item | Class | Status |
 |---|---|---|---|
 | E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` | NEEDS_PRODUCT_DECISION |
-| E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` despite a fully shipped billing lifecycle reaching a terminal reconciled state with nowhere to go |
+| E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2, re-dispositioned `DEFERRED_LARGE` after a closer schema check): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` -- closing it for real needs widening `finance_invoices`' own mandatory `job_order_id`/`billing_readiness_handoff_id` structural invariants (or a second, parallel invoicing primitive), a real product/schema decision, not a quick FK addition |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, â€¦) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
 | E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap |
 | E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | **PARTIAL** | the webhook half was closed after a dedicated research pass found the original audit's own literal finding ("`app.queue_webhook_delivery` is referenced by 0 other database functions") true on exactly one narrow point, not "no webhook publisher" wholesale: real schema, HMAC-SHA256 signing, SSRF guarding at both registration and dispatch time, the real outbound HTTP worker, job-type registration, wiring into the production supervisor loop, and a reachable tenant admin UI all already existed and were already tested (`20260719150000_create_api_key_webhook_primitives.sql`, `20260804040000_create_intelligence_webhook_management.sql`) -- it was simply dead-gated, never called from any real business event. Closed by adding one `app._enqueue_webhook_delivery` call (a new internal, authority-check-free decision core extracted from `app.queue_webhook_delivery`, mirroring B7's own `app._evaluate_customer_credit` precedent) to each of the three event types the schema's own seed data already anticipated -- `shipment.status_changed` (`app.transition_shipment_order`), `ticket.created` (`app._create_ticket`, covering all three channels: internal/customer/helpdesk), and `invoice.issued` (`app.issue_finance_invoice`). Still open: GraphQL/OpenAPI -- genuinely, confirmedly absent (no `graphql` package dependency, no resolver, no spec file), independently confirmed by two later release-readiness checkpoints; a real, separate REST-based external API surface does already exist (`app/api/v1/*`, API-key gateway, rate limiting, versioning) that could be documented with an OpenAPI spec far more cheaply than building GraphQL, but that is a product/scope call this session does not make unilaterally |
@@ -4422,9 +4422,28 @@ scoped and left for a dedicated follow-up session) Â· `NEEDS_PRODUCT_DECISION` Â
   `invoice_id`/FK to `app.finance_invoices` despite a fully shipped,
   reachable billing lifecycle (rate components -> capture -> calculate ->
   hold/review/approve -> handoff -> reconciliation outcome) reaching a
-  terminal reconciled state with nowhere to go -- confirmed real and
-  bounded (an FK column plus one linking RPC), not yet closed. E3 is
-  PARTIAL, not DONE.
+  terminal reconciled state with nowhere to go -- confirmed real. A
+  follow-up direct check of `app.finance_invoices`' own schema (not done by
+  the original research pass) found this is NOT the small, mechanical "one
+  FK column plus one linking RPC" fix it first looked like: `finance_
+  invoices.job_order_id`/`.billing_readiness_handoff_id` are both mandatory
+  (`not null`, the latter also `unique (tenant_id, billing_readiness_
+  handoff_id)`), and `app.finance_ar_open_items.source_document_type`'s own
+  CHECK constraint admits only `('invoice', 'opening_balance')` -- there is
+  structurally no way today to create an invoice, or an AR open item, for a
+  charge that has no corresponding job order at all, which a pure storage/
+  handling 3PL charge genuinely does not. Closing this for real means
+  either widening `finance_invoices`' own core structural invariants (a
+  nullable job-order source alongside a new nullable warehouse-billing
+  source, with a check ensuring exactly one is set -- a change to a table
+  A7's own invoice PDF and every AR report already depend on) or a second,
+  parallel invoicing primitive for warehouse-only billing -- genuinely
+  `CODE-BIG`, and which shape is correct is a real product/schema decision
+  this session should not make unilaterally, the same class of judgment
+  call B6b's own internal-cost-to-GL gap was correctly left to a future
+  decision for. E3 piece 2 is re-dispositioned `DEFERRED_LARGE` on this
+  more accurate understanding, not closeable as a quick follow-on. E3
+  overall is PARTIAL, not DONE.
   Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
   only pre-existing warnings), the full unit test suite (6160/6160,
   unaffected -- this is a pure database-level fix with no TS/UI blast
