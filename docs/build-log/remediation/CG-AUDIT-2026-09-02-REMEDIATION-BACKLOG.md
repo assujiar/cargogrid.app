@@ -115,7 +115,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status |
 |---|---|---|---|
 | E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` | NEEDS_PRODUCT_DECISION |
-| E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE |
+| E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` despite a fully shipped billing lifecycle reaching a terminal reconciled state with nowhere to go |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
 | E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap |
 | E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | **PARTIAL** | the webhook half was closed after a dedicated research pass found the original audit's own literal finding ("`app.queue_webhook_delivery` is referenced by 0 other database functions") true on exactly one narrow point, not "no webhook publisher" wholesale: real schema, HMAC-SHA256 signing, SSRF guarding at both registration and dispatch time, the real outbound HTTP worker, job-type registration, wiring into the production supervisor loop, and a reachable tenant admin UI all already existed and were already tested (`20260719150000_create_api_key_webhook_primitives.sql`, `20260804040000_create_intelligence_webhook_management.sql`) -- it was simply dead-gated, never called from any real business event. Closed by adding one `app._enqueue_webhook_delivery` call (a new internal, authority-check-free decision core extracted from `app.queue_webhook_delivery`, mirroring B7's own `app._evaluate_customer_credit` precedent) to each of the three event types the schema's own seed data already anticipated -- `shipment.status_changed` (`app.transition_shipment_order`), `ticket.created` (`app._create_ticket`, covering all three channels: internal/customer/helpdesk), and `invoice.issued` (`app.issue_finance_invoice`). Still open: GraphQL/OpenAPI -- genuinely, confirmedly absent (no `graphql` package dependency, no resolver, no spec file), independently confirmed by two later release-readiness checkpoints; a real, separate REST-based external API surface does already exist (`app/api/v1/*`, API-key gateway, rate limiting, versioning) that could be documented with an OpenAPI spec far more cheaply than building GraphQL, but that is a product/scope call this session does not make unilaterally |
@@ -4346,3 +4346,90 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `release:check-freeze` (HUNDRED-AND-FIFTY-NINTH PASS, both digests
   updated -- one new migration file, zero new db-test files, two existing
   db-test files gaining real new coverage), and a real `next build`.
+- 2026-09-18 — E3 (bounded core, piece 1 of 2) closed via a dedicated
+  research pass, the same "verify before trusting a deferred label"
+  discipline that found B7's/B2a's/E6's/B4's/A2b's own real bounded cores.
+  The original finding ("No UoM on stock; free-text locations; warehouse
+  billing has no invoice FK") was carried as one undivided `DEFERRED_LARGE`
+  item and turned out to bundle three genuinely different, independently-
+  verifiable claims.
+  "No UoM on stock" was itself overstated: a real, governed UOM registry
+  (`app.uoms`/`app.uom_conversions`/`app.convert_uom_quantity`, ATW-011A,
+  `20260730160000_create_advanced_tms_item_uom_master.sql`) and `app.
+  item_masters.base_uom_code` have existed since before this audit was
+  even written, and `app.inventory_movement_lines.uom_code` is already
+  `not null references app.uoms(code)`, validated on every post. But a
+  real, live, reachable bug survived inside that framing: `app.post_
+  inventory_movement` (confirmed via a case-insensitive search this time,
+  after E6's own earlier miss on exactly this class of mistake -- the true
+  current version last redefined in `20260730530000_harden_operations_
+  inventory_tracking_record_scope.sql`) validated a posted line's
+  `uom_code` is a real, registered ACTIVE code, but never checked it
+  matches the item's own `base_uom_code`, and never converted -- it added
+  the raw `signed_quantity` straight onto `app.inventory_balances.
+  on_hand`. `app.inventory_balances`' own dimension key carries no
+  `uom_code` column at all, so two movements against the identical balance
+  row (same tenant/warehouse/owner/item/location/lot/serial/status) posted
+  in DIFFERENT UOMs were summed as if they were the same unit -- 5 DOZ + 50
+  PCS read back as `on_hand=55`, not the true 110 PCS. Not a rare edge
+  case: `20260831260000_create_inventory_and_leave_opening_balance_import_
+  adapters.sql` (this session's own A4 work) passes the import file's raw,
+  user-chosen `uom_code` straight through to `app.post_inventory_movement`
+  after only checking it is a registered ACTIVE code, never that it
+  matches the item's own base unit.
+  Closed: new migration `20260918040000_e3_uom_normalization_inventory_
+  balance.sql` converts each line's as-posted quantity into the item's own
+  `base_uom_code` via the already-existing, already-proven `app.convert_
+  uom_quantity` BEFORE it is used in any on_hand arithmetic --
+  `inventory_balances.on_hand` is now always expressed consistently in the
+  item's own base unit, regardless of which registered unit any individual
+  movement was posted in. `app.inventory_movement_lines`' own `signed_
+  quantity`/`uom_code` columns stay the as-posted, as-reported transaction
+  record, unchanged -- only the balance arithmetic is normalized. A
+  movement already posted in the item's own base unit (confirmed the
+  overwhelming common case by the research) is a complete no-op:
+  `convert_uom_quantity`'s own early-return short-circuits to the
+  identical raw quantity, so this fix changes zero observable behavior for
+  every existing caller already using the base unit. A genuine cross-
+  category mismatch (e.g. a weight-category UOM against a count-controlled
+  item) now fails closed with the already-established `uom_conversion_not_
+  registered` rather than silently corrupting the balance -- a strict
+  hardening, never a new capability. `CREATE OR REPLACE FUNCTION`, not
+  DROP+CREATE (the return type is unchanged), so the existing grant set
+  was preserved automatically.
+  "Free-text locations," the second half of E3's own original bundled
+  claim, was confirmed FALSE for warehouse locations as re-verified here:
+  `app.warehouse_locations` is a fully structured, hierarchical, FK-
+  enforced table (code/name/location_type/parent_id/path/depth/zone/
+  capacity), unchanged and already correct -- not touched by this
+  migration. The genuine free-text-location gap the original audit
+  paragraph actually described (`app.shipment_orders.origin`/`.
+  destination`, plain `text not null` columns) is a separate, TMS-side
+  finding, not part of this WMS-scoped bounded core, and stays out of
+  scope here.
+  New db-test coverage: `scripts/db-tests/advanced-tms-inventory-ledger.
+  sql` gained a dedicated test block proving the conversion end to end -- a
+  fresh item posted 100 PCS (base unit, a no-op conversion) then a second
+  movement posted in DOZ (2 DOZ = 24 PCS via the seeded `app.uom_
+  conversions` row) proves the balance reads 124, not the pre-fix 102; the
+  movement line's own as-posted `signed_quantity`/`uom_code` (2/DOZ) is
+  proven unchanged; a cross-category UOM (KG against a PCS item) is proven
+  to fail closed with `uom_conversion_not_registered` without mutating the
+  balance. The full `db:test` suite (every other caller of this shared
+  posting primitive, the opening-balance-import adapter's own `master-
+  data-import.sql` included) confirmed `ALL PASSED` with zero regressions.
+  Still open: E3 piece 2, `app.warehouse_billing_handoffs` has no
+  `invoice_id`/FK to `app.finance_invoices` despite a fully shipped,
+  reachable billing lifecycle (rate components -> capture -> calculate ->
+  hold/review/approve -> handoff -> reconciliation outcome) reaching a
+  terminal reconciled state with nowhere to go -- confirmed real and
+  bounded (an FK column plus one linking RPC), not yet closed. E3 is
+  PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6160/6160,
+  unaffected -- this is a pure database-level fix with no TS/UI blast
+  radius), a full `pnpm run db:test` (`ALL PASSED`), `git:check-paths`,
+  `security:check`, `release:check-freeze` (HUNDRED-AND-SIXTIETH PASS,
+  both digests updated -- one new migration file, zero new db-test files,
+  one existing db-test file gaining real new coverage), and a real `next
+  build`.

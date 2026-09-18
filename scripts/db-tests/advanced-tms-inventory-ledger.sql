@@ -232,6 +232,75 @@ begin
   end;
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 E3: app.post_inventory_movement normalizes each line into the item''s own base_uom_code before any on_hand arithmetic -- a movement posted in a DIFFERENT registered UOM is converted, never summed raw against a balance row with no uom_code dimension of its own; a movement already in the base unit is a complete no-op; a cross-category UOM fails closed with uom_conversion_not_registered rather than corrupting the balance'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeinv1');
+  v_warehouse_id uuid := (select id from app.warehouses where tenant_id = v_tenant1 and code = 'WH-INV-1');
+  v_dock_id uuid := (select id from app.warehouse_locations where tenant_id = v_tenant1 and code = 'DOCK-1');
+  v_account_id uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Inv Customer Alpha');
+  v_item app.item_masters;
+  v_balance app.inventory_balances;
+begin
+  -- A fresh item (base_uom_code='PCS'), so this block's own balance row is
+  -- untouched by, and touches nothing in, any other block in this file.
+  v_item := app.create_item_master(v_tenant1, v_account_id, 'SKU-INV-UOM-TEST', 'Inv UOM Test Widget', null, 'PCS', false, false, false, '00000000-0000-0000-0000-000000100102', 'rep');
+
+  -- Opening balance posted in the item's own base unit (PCS) -- the common
+  -- case, and app.convert_uom_quantity's own early-return makes this a
+  -- complete no-op: 100 PCS in, on_hand=100.
+  perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'opening_balance', 'opening_balance', null, 'idem-uom-open-1', null,
+    jsonb_build_array(jsonb_build_object('owner_account_id', v_account_id, 'item_master_id', v_item.id, 'location_id', v_dock_id, 'uom_code', 'PCS', 'signed_quantity', 100)),
+    '00000000-0000-0000-0000-000000100102', 'rep');
+
+  -- A second movement against the SAME balance row (same item/location/no
+  -- lot/no serial/on_hand status), posted in a DIFFERENT registered UOM
+  -- (DOZ, 1 DOZ = 12 PCS per the seeded app.uom_conversions row). Pre-fix,
+  -- this summed the raw quantities (100 + 2 = 102); post-fix, it must
+  -- convert first (100 + convert(2, 'DOZ', 'PCS') = 100 + 24 = 124).
+  perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'adjustment', 'manual', null, 'idem-uom-adj-1', 'cross-uom conversion proof',
+    jsonb_build_array(jsonb_build_object('owner_account_id', v_account_id, 'item_master_id', v_item.id, 'location_id', v_dock_id, 'uom_code', 'DOZ', 'signed_quantity', 2)),
+    '00000000-0000-0000-0000-000000100102', 'rep');
+
+  select * into v_balance from app.inventory_balances
+    where tenant_id = v_tenant1 and warehouse_id = v_warehouse_id and owner_account_id = v_account_id and item_master_id = v_item.id
+      and location_id = v_dock_id and lot_number is null and serial_number is null and status = 'on_hand';
+  if v_balance.on_hand <> 124 then
+    raise exception 'assertion failed: expected on_hand=124 (100 PCS + 2 DOZ converted to 24 PCS), got % -- cross-UOM movements are being summed raw, not converted', v_balance.on_hand;
+  end if;
+
+  -- app.inventory_movement_lines' own signed_quantity/uom_code stay the
+  -- as-posted record, UNCHANGED by the balance-side conversion -- the
+  -- second line still reads 2 DOZ, never silently rewritten to 24 PCS.
+  if not exists (
+    select 1 from app.inventory_movement_lines
+    where tenant_id = v_tenant1 and item_master_id = v_item.id and location_id = v_dock_id and uom_code = 'DOZ' and signed_quantity = 2
+  ) then
+    raise exception 'assertion failed: expected the movement line''s own as-posted signed_quantity/uom_code to remain 2/DOZ, never rewritten to the converted base-unit value';
+  end if;
+
+  -- A cross-category UOM (KG, weight, against a PCS/count-based item) has
+  -- no registered conversion path -- fails closed, never silently 1:1.
+  begin
+    perform app.post_inventory_movement(v_tenant1, v_warehouse_id, 'adjustment', 'manual', null, 'idem-uom-badcat-1', 'cross-category rejection',
+      jsonb_build_array(jsonb_build_object('owner_account_id', v_account_id, 'item_master_id', v_item.id, 'location_id', v_dock_id, 'uom_code', 'KG', 'signed_quantity', 1)),
+      '00000000-0000-0000-0000-000000100102', 'rep');
+    raise exception 'assertion failed: expected uom_conversion_not_registered -- KG (weight) has no registered conversion to PCS (count)';
+  exception
+    when others then
+      if sqlerrm not like 'uom_conversion_not_registered%' then raise; end if;
+  end;
+
+  -- The rejected cross-category attempt above must not have mutated the
+  -- balance at all.
+  select * into v_balance from app.inventory_balances
+    where tenant_id = v_tenant1 and warehouse_id = v_warehouse_id and owner_account_id = v_account_id and item_master_id = v_item.id
+      and location_id = v_dock_id and lot_number is null and serial_number is null and status = 'on_hand';
+  if v_balance.on_hand <> 124 then
+    raise exception 'assertion failed: expected on_hand to remain 124 after the rejected cross-category attempt, got %', v_balance.on_hand;
+  end if;
+end $$;
+
 \echo '>> app.post_inventory_movement (transfer): must balance to exactly zero across its own lines; a balanced transfer moves stock between locations atomically'
 do $$
 declare

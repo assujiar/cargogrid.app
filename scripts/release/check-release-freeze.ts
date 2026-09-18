@@ -5186,7 +5186,41 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "ec5e66e655131efa2d61ff3389c521074f37c0cab44cd536f38ca6c98eb26aaf",
+  migrationSetSha256: "e0a9178d924ef30febb0e85ebcd9655a7e3aee53ced08a08069b1f6335da95c0",
+  // HUNDRED-AND-SIXTIETH PASS: CG-AUDIT-2026-09-02 E3 (bounded core, piece 1
+  // of 2), "No UoM on stock; free-text locations; warehouse billing has no
+  // invoice FK". One new migration (20260918040000_e3_uom_normalization_
+  // inventory_balance.sql, 558 files, +1). A dedicated research pass found
+  // "no UoM on stock" overstated -- a real, governed UOM registry (app.uoms/
+  // app.uom_conversions/app.convert_uom_quantity, ATW-011A) and app.item_
+  // masters.base_uom_code already existed -- but a real, live, reachable bug
+  // survived inside that framing: app.post_inventory_movement validated a
+  // posted line's uom_code is a registered ACTIVE code but never converted
+  // it to the item's own base_uom_code before on_hand arithmetic, and app.
+  // inventory_balances carries no uom_code dimension of its own -- two
+  // movements against the identical balance row posted in different UOMs
+  // were summed raw (5 DOZ + 50 PCS read back as on_hand=55, not the true
+  // 110 PCS). Reachable today via 20260831260000's own inventory_opening_
+  // balance_import adapter, which passes the file's raw, user-chosen
+  // uom_code straight through after only checking it is registered/active,
+  // never that it matches the item's own base unit. Fixed by converting via
+  // app.convert_uom_quantity before any on_hand arithmetic -- a no-op for
+  // the common already-base-unit case (confirmed the fix changes zero
+  // observable behavior for every existing caller), and a genuine cross-
+  // category mismatch now fails closed with the already-established uom_
+  // conversion_not_registered rather than corrupting the balance. app.
+  // inventory_movement_lines' own signed_quantity/uom_code stay the as-
+  // posted record, unchanged. "Free-text locations" was confirmed FALSE for
+  // warehouse locations (already a structured, FK-enforced table) -- the
+  // genuine free-text gap is app.shipment_orders.origin/.destination, a
+  // separate TMS-side finding, out of this WMS-scoped piece. Still open:
+  // E3 piece 2, app.warehouse_billing_handoffs has no invoice_id/FK to app.
+  // finance_invoices despite a fully shipped, reachable billing lifecycle
+  // reaching a terminal reconciled state with nowhere to go -- confirmed
+  // real and bounded, not yet closed.
+  // History: ec5e66e655131efa2d61ff3389c521074f37c0cab44cd536f38ca6c98eb26aaf
+  // (557 files, HUNDRED-AND-FIFTY-NINTH PASS).
+  //
   // HUNDRED-AND-FIFTY-NINTH PASS: CG-AUDIT-2026-09-02 A2b (customer-portal-
   // sign-in half, bounded core). One new migration (20260918030000_a2b_
   // customer_portal_sign_in_entry_points.sql, 557 files, +1). A dedicated
@@ -7484,7 +7518,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "f6333c25c845d16afedd57c35b0ba678f1a4be7a553ebd0f1c01521b780c0c76",
+  dbTestSetSha256: "5a4e73b44d38136d88e26ed09406dd264e8885bdbab2c2e26f5a8be4e283c286",
+  // HUNDRED-AND-SIXTIETH PASS: same CG-AUDIT-2026-09-02 E3 piece-1 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), one EXISTING file gained real new coverage:
+  // scripts/db-tests/advanced-tms-inventory-ledger.sql, a new test block
+  // proving app.post_inventory_movement's own cross-UOM conversion end to
+  // end -- a fresh item posted 100 PCS (base unit, a no-op conversion),
+  // then a second movement posted in DOZ (2 DOZ = 24 PCS via the seeded
+  // app.uom_conversions row) proves the balance reads 124, not the pre-fix
+  // 102; the movement line's own as-posted signed_quantity/uom_code (2/DOZ)
+  // is proven unchanged; a cross-category UOM (KG against a PCS item) is
+  // proven to fail closed with uom_conversion_not_registered without
+  // mutating the balance. The full db:test suite (every other caller of
+  // this shared posting primitive, the opening-balance-import adapter's own
+  // master-data-import.sql included) confirmed ALL PASSED with zero
+  // regressions.
+  // History: f6333c25c845d16afedd57c35b0ba678f1a4be7a553ebd0f1c01521b780c0c76
+  // (279 files, HUNDRED-AND-FIFTY-NINTH PASS).
+  //
   // HUNDRED-AND-FIFTY-NINTH PASS: same CG-AUDIT-2026-09-02 A2b slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), two EXISTING files gained real new coverage:
