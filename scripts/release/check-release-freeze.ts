@@ -5186,7 +5186,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "f96a78c8f5f1d91773a6077337c99ef7ce7453375201de6f63f8b8ac1f5da579",
+  migrationSetSha256: "c2518d68d76053eaae0ba6c10a3058a3b52265d57af4749ce01224479dc43194",
+  // HUNDRED-AND-FIFTY-SIXTH PASS: CG-AUDIT-2026-09-02 B2a (general ledger
+  // trial balance). One new migration
+  // (20260918000000_b2a_finance_trial_balance.sql, 554 files, +1): adds
+  // app.get_finance_trial_balance (+ its public.* wrapper) -- the one
+  // aggregating GL read (finance_accounts joined against posted,
+  // dated-eligible finance_journal_lines/finance_journals) the audit's own
+  // finding said did not exist anywhere. A dedicated research pass found
+  // the original "weeks of report-building effort" DEFERRED_LARGE estimate
+  // accurate for P&L/balance sheet/year-end close, but not for a trial
+  // balance -- every hard part (double-entry enforcement, chart-of-accounts
+  // typing, fiscal periods, the wrapper convention, even a working
+  // precedent for the exact summation math in app.get_finance_cash_position)
+  // already existed; this was assembly, not invention. History:
+  // f96a78c8f5f1d91773a6077337c99ef7ce7453375201de6f63f8b8ac1f5da579 (553
+  // files, HUNDRED-AND-FIFTY-FIFTH PASS).
   // HUNDRED-AND-FIFTY-FIFTH PASS: CG-AUDIT-2026-09-02 B7 (second half),
   // "Invoicing keyed off a hand-copied UUID; no credit control" -- the
   // worklist-UI half was fixed earlier this session
@@ -7356,7 +7371,19 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "20b567dec4705f5d4fc9e4efc8e1f1321825c856c4a985910d8c49266e11d227",
+  dbTestSetSha256: "bef1eb92a914b834db62c72d54330c42234401df5ad5dd7433824100b3a7f126",
+  // HUNDRED-AND-FIFTY-SIXTH PASS: same CG-AUDIT-2026-09-02 B2a slice as
+  // migrationSetSha256's own note immediately above -- one new db-test file
+  // (scripts/db-tests/finance-trial-balance.sql, 278 files, +1): proves the
+  // FIN:View authority gate, cross-tenant isolation, that only posted
+  // journals on/before p_as_of_date count (a draft-only journal and a
+  // future-dated posted journal are each excluded), that an account touched
+  // by more than one journal currency yields one row per currency rather
+  // than a blended sum, that a zero-activity account still appears at 0/0,
+  // and that company scoping mirrors app.list_finance_accounts' own
+  // established `company_id is not distinct from p_company_id` semantics.
+  // History: 20b567dec4705f5d4fc9e4efc8e1f1321825c856c4a985910d8c49266e11d227
+  // (277 files, HUNDRED-AND-FIFTY-FIFTH PASS).
   // HUNDRED-AND-FIFTY-FIFTH PASS: same CG-AUDIT-2026-09-02 B7 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (277 files unchanged), but two existing fixtures gained real new
