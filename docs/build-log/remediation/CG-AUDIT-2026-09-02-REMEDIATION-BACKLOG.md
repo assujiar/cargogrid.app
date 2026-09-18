@@ -118,7 +118,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
 | E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap |
-| E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | DEFERRED_LARGE |
+| E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | **PARTIAL** | the webhook half was closed after a dedicated research pass found the original audit's own literal finding ("`app.queue_webhook_delivery` is referenced by 0 other database functions") true on exactly one narrow point, not "no webhook publisher" wholesale: real schema, HMAC-SHA256 signing, SSRF guarding at both registration and dispatch time, the real outbound HTTP worker, job-type registration, wiring into the production supervisor loop, and a reachable tenant admin UI all already existed and were already tested (`20260719150000_create_api_key_webhook_primitives.sql`, `20260804040000_create_intelligence_webhook_management.sql`) -- it was simply dead-gated, never called from any real business event. Closed by adding one `app._enqueue_webhook_delivery` call (a new internal, authority-check-free decision core extracted from `app.queue_webhook_delivery`, mirroring B7's own `app._evaluate_customer_credit` precedent) to each of the three event types the schema's own seed data already anticipated -- `shipment.status_changed` (`app.transition_shipment_order`), `ticket.created` (`app._create_ticket`, covering all three channels: internal/customer/helpdesk), and `invoice.issued` (`app.issue_finance_invoice`). Still open: GraphQL/OpenAPI -- genuinely, confirmedly absent (no `graphql` package dependency, no resolver, no spec file), independently confirmed by two later release-readiness checkpoints; a real, separate REST-based external API surface does already exist (`app/api/v1/*`, API-key gateway, rate limiting, versioning) that could be documented with an OpenAPI spec far more cheaply than building GraphQL, but that is a product/scope call this session does not make unilaterally |
 
 ## New findings discovered during remediation (not in the original audit)
 
@@ -3989,3 +3989,120 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   db:test` (`ALL PASSED`), `git:check-paths`, `security:check`, and
   `release:check-freeze` (HUNDRED-AND-FIFTY-SIXTH PASS, both digests
   updated -- one new migration file, one new db-test file).
+- 2026-09-18 — E6 (webhook half) closed via a dedicated research pass, the
+  same "verify before trusting a deferred label" discipline that found
+  B7's and B2a's own real bounded cores. The original finding ("Outbound
+  webhooks have no publisher. `app.queue_webhook_delivery` is referenced
+  by 0 other database functions and nothing outside its own module")
+  turned out true on exactly one narrow point -- confirmed by reading the
+  actual current code, never assumed: `supabase/migrations/20260719150000_
+  create_api_key_webhook_primitives.sql` already defines a real,
+  complete schema (`app.webhook_endpoints`/`webhook_subscriptions`/
+  `webhook_deliveries`/`webhook_delivery_attempts`, HMAC-SHA256 signing,
+  an SSRF guard at registration); `20260804040000_create_intelligence_
+  webhook_management.sql` (IAE-012) already extended `app.queue_webhook_
+  delivery` to enqueue a real `app.jobs` `webhook_retry` job per genuinely
+  new delivery; `lib/webhooks/process-webhook-delivery-job.server.ts`
+  already is a real outbound HTTP client (fetch with a 10s timeout, HMAC
+  headers, a dispatch-time SSRF re-check catching DNS rebinding, a
+  tenant-id cross-check closing ISS-2026-178) already wired into the
+  production `scripts/jobs/supervisor.ts` own "webhook-delivery" lane
+  (the same real dispatch loop A5 already wired up for every other job
+  type); and `app/(tenant)/[tenantSlug]/admin/api-keys/` already gives a
+  tenant admin a real, reachable UI to register an endpoint, rotate its
+  secret, send a test delivery, and replay a dead-lettered one. The one
+  real, confirmed gap: zero business-logic call sites anywhere in this
+  repository ever called `app.queue_webhook_delivery` from a real domain
+  mutation -- reachable only from its own test file and the manual
+  "send test" console action, precisely the same "real, tested, dead-
+  gated" shape B7's own `check_customer_credit` had.
+  Closed: new migration
+  `20260918010000_e6_wire_webhook_delivery_triggers.sql` adds `app.
+  _enqueue_webhook_delivery` -- a new internal, authority-check-free
+  decision/fan-out core extracted from `app.queue_webhook_delivery`
+  (mirrors B7's own `app._evaluate_customer_credit` precedent exactly):
+  `app.queue_webhook_delivery`'s own `app.check_webhook_trigger_
+  authority` gate (requiring the calling identity to hold active tenant
+  membership) is correct for its own existing callers (the manual
+  send-test/replay console actions, where the acting identity IS the
+  literal caller), but would be the WRONG gate to transitively impose on
+  a business-event trigger fired from inside an already-authorized
+  mutation -- each of `app._create_ticket`/`app.issue_finance_invoice`/
+  `app.transition_shipment_order` already enforces its own correct
+  authority model for the underlying action (including a customer-channel
+  ticket, filed by a `customer_user`-layer identity whose own membership
+  shape this migration does not need to, and must not, reason about to
+  fire a webhook side effect of an already-authorized action).
+  `app.queue_webhook_delivery` itself becomes a thin wrapper (check
+  authority, then delegate) -- its own existing callers and grants are
+  entirely unaffected. One additional `perform app._enqueue_webhook_
+  delivery(...)` call was added to each of the three event types the
+  schema's own IAE-012 seed data already anticipated, at their natural,
+  already-existing, already-tested trigger points: `shipment.status_
+  changed` in `app.transition_shipment_order` (idempotency-keyed per
+  transition, since one shipment order fires this many times over its
+  life -- never deduped against a prior transition on the same order);
+  `ticket.created` in `app._create_ticket` (the one shared engine behind
+  all three channels -- internal/customer/helpdesk -- so wiring it once
+  covers every channel); `invoice.issued` in `app.issue_finance_invoice`
+  (a curated field set, never the raw row, sent to a tenant-registered
+  external endpoint).
+  Self-caught regression during authoring, fixed before commit, not after
+  a test failure alone caught it downstream: an initial grep for
+  `transition_shipment_order`'s own current live definition used a
+  lowercase-only pattern and missed two later hardening migrations that
+  use uppercase `CREATE OR REPLACE FUNCTION`
+  (`20260730520000_harden_stale_version_no_op_and_swallowed_idempotency_
+  guard.sql`, the ATW-032/ISS-2026-034 fix for a swallowed lost-update
+  bug, and `20260902201000_harden_tenant_id_disclosure_operations.sql`,
+  the ISS-2026-146 fold-in that prevents a zero-membership caller from
+  ever reaching a tenant-id-disclosing `insufficient_authority` branch) --
+  a full `db:test` run caught the live symptom directly (a cross-tenant
+  isolation assertion in `operations-shipment-lifecycle.sql` expecting a
+  generic `shipment_order_not_found` instead got the older, tenant-id-
+  disclosing `insufficient_authority` branch). Fixed by re-deriving the
+  function from a case-insensitive search and byte-for-byte diffing all
+  three replaced functions (`app._create_ticket`, `app.issue_finance_
+  invoice`, `app.transition_shipment_order`) against their true latest
+  live bodies (two dropped, purely cosmetic comments were also restored)
+  before this migration was committed -- the same "never assume, always
+  verify with the real full gate suite" discipline this session has
+  applied throughout.
+  New db-test file `scripts/db-tests/webhook-business-event-triggers.sql`
+  proves: a real helpdesk-channel ticket creation, a real customer-channel
+  ticket creation, a real invoice issuance, and a real shipment order
+  transition each genuinely enqueue a real `app.webhook_deliveries` row
+  whose payload matches the real mutated entity (never merely a
+  hypothetical wiring); the customer-channel ticket fires the event
+  without being blocked by a second, unrelated authority check (this
+  migration's own central design claim, directly exercised); a shipment
+  order transitioning twice (`draft` -> `confirmed` -> `cancelled`) fires
+  two distinct deliveries, never deduped against each other; cross-tenant
+  isolation (tenant B's own endpoint never receives tenant A's events);
+  a tenant with zero registered webhook endpoints incurs no error creating
+  a ticket (a safe no-op, zero delivery rows produced); and that `app.
+  queue_webhook_delivery`'s own public authority gate still denies a
+  non-member actor, unaffected by the refactor.
+  Still open under E6: GraphQL/OpenAPI. Genuinely, confirmedly absent --
+  no `graphql`/`apollo` package dependency, no resolver files, no `/api/
+  graphql` route, no OpenAPI spec file anywhere in the repository, self-
+  disclosed by `server/policies/graphql-complexity.ts`'s own header and
+  independently confirmed by two later release-readiness checkpoints
+  (`docs/build-log/release-go-live/RGL-396.md`, `RGL-397.md`). A real,
+  separate REST-based external API surface does already exist
+  (`20260804010000_create_intelligence_public_api_platform.sql`'s own
+  API-key gateway with atomic rate limiting and a versioned `app.
+  api_versions` registry, plus 8 real route handlers under `app/api/v1/`)
+  that could be documented with an OpenAPI spec far more cheaply than
+  building GraphQL from scratch, but whether that REST-plus-OpenAPI
+  surface is an acceptable substitute for the audit's own literal
+  GraphQL requirement is a product/scope decision this session does not
+  make unilaterally. E6 is PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6150/6150,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED` across 280+ files, including the one
+  that caught the self-corrected regression above), `git:check-paths`,
+  `security:check`, `release:check-freeze` (HUNDRED-AND-FIFTY-SEVENTH
+  PASS, both digests updated -- one new migration file, one new db-test
+  file), and a real `next build`.

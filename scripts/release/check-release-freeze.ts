@@ -5186,7 +5186,48 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "c2518d68d76053eaae0ba6c10a3058a3b52265d57af4749ce01224479dc43194",
+  migrationSetSha256: "7984255cd3b0d95d965c7ad59e4901dd55df0f5188325cc48e563add8e4eccf8",
+  // HUNDRED-AND-FIFTY-SEVENTH PASS: CG-AUDIT-2026-09-02 E6 (webhook half),
+  // "Outbound webhooks have no publisher. app.queue_webhook_delivery is
+  // referenced by 0 other database functions and nothing outside its own
+  // module." One new migration
+  // (20260918010000_e6_wire_webhook_delivery_triggers.sql, 555 files, +1).
+  // A dedicated research pass found the schema (app.webhook_endpoints/
+  // subscriptions/deliveries/delivery_attempts, HMAC-SHA256 signing, SSRF
+  // guarding at both registration and dispatch time), the real outbound
+  // HTTP worker (lib/webhooks/process-webhook-delivery-job.server.ts), its
+  // job-type registration, its wiring into the production supervisor loop
+  // (scripts/jobs/supervisor.ts's own "webhook-delivery" lane), and a
+  // reachable tenant admin UI (admin/api-keys) all already existed and were
+  // already tested -- the literal finding was accurate on exactly one
+  // narrow point: nothing ever called app.queue_webhook_delivery from a
+  // real business event. Closed by adding one app._enqueue_webhook_delivery
+  // call to each of the three event types IAE-012's own seed data already
+  // anticipated (shipment.status_changed, ticket.created, invoice.issued),
+  // at their natural, already-existing, already-tested trigger points
+  // (app.transition_shipment_order, app._create_ticket, app.
+  // issue_finance_invoice) -- no new subsystem, no schema change.
+  // app._enqueue_webhook_delivery is a new internal, authority-check-free
+  // decision/fan-out core (mirrors CG-AUDIT-2026-09-02 B7's own app.
+  // _evaluate_customer_credit precedent) extracted from app.queue_webhook_
+  // delivery, which becomes a thin wrapper (check app.check_webhook_
+  // trigger_authority, then delegate) -- avoids transitively imposing that
+  // authority check's own "active tenant membership" requirement onto a
+  // customer-channel ticket's own already-correct, already-different
+  // authority model.
+  // Self-caught regression during authoring, fixed before commit: a first
+  // draft of app.transition_shipment_order's own replacement body was
+  // sourced from an outdated migration
+  // (20260730390000_harden_platform_operations_finance_idempotency_target_
+  // mismatch.sql) found via a grep pattern that missed two later
+  // uppercase-`CREATE OR REPLACE FUNCTION` hardening migrations
+  // (20260730520000, the ATW-032/ISS-2026-034 swallowed-lost-update fix,
+  // and 20260902201000, the ISS-2026-146 tenant-membership fold-in) --
+  // caught by re-deriving the call sites from a case-insensitive search and
+  // byte-for-byte diffing all three replaced functions against their true
+  // latest live bodies before this migration was ever committed. History:
+  // c2518d68d76053eaae0ba6c10a3058a3b52265d57af4749ce01224479dc43194 (554
+  // files, HUNDRED-AND-FIFTY-SIXTH PASS).
   // HUNDRED-AND-FIFTY-SIXTH PASS: CG-AUDIT-2026-09-02 B2a (general ledger
   // trial balance). One new migration
   // (20260918000000_b2a_finance_trial_balance.sql, 554 files, +1): adds
@@ -7371,7 +7412,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "bef1eb92a914b834db62c72d54330c42234401df5ad5dd7433824100b3a7f126",
+  dbTestSetSha256: "942d63ba9d2fc2c7f819302a4fdce68f1589ae5dffa7a50297409b3ec9b65b06",
+  // HUNDRED-AND-FIFTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 E6 slice as
+  // migrationSetSha256's own note immediately above -- one new db-test file
+  // (scripts/db-tests/webhook-business-event-triggers.sql, 279 files, +1):
+  // proves a real ticket creation (both helpdesk and customer channel),
+  // invoice issuance, and shipment status transition each genuinely enqueue
+  // a real app.webhook_deliveries row with a payload matching the real
+  // mutated entity; that a customer-channel ticket fires the event without
+  // being blocked by a second, unrelated authority check (this migration's
+  // own central design claim); that a shipment order transitioning twice
+  // fires two distinct deliveries, never deduped against each other; cross-
+  // tenant isolation; a tenant with zero registered endpoints incurs no
+  // error (safe no-op, zero deliveries); and that app.queue_webhook_
+  // delivery's own public authority gate (its existing callers) is
+  // unaffected by the refactor. History:
+  // bef1eb92a914b834db62c72d54330c42234401df5ad5dd7433824100b3a7f126 (278
+  // files, HUNDRED-AND-FIFTY-SIXTH PASS).
   // HUNDRED-AND-FIFTY-SIXTH PASS: same CG-AUDIT-2026-09-02 B2a slice as
   // migrationSetSha256's own note immediately above -- one new db-test file
   // (scripts/db-tests/finance-trial-balance.sql, 278 files, +1): proves the
