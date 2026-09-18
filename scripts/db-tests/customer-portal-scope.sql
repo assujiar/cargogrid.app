@@ -283,6 +283,52 @@ begin
   perform v_account_fresh;
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 A2b: app.list_my_pending_customer_portal_invites -- the one entry point letting an invited-but-not-yet-accepted identity discover its own pending invite (app.get_customer_portal_scope_context/app.resolve_customer_account_scope both deliberately exclude a status=invited row, and app.list_customer_portal_account_memberships is account_admin-only, so before this RPC alpha-pending had NO way to ever find its own membership id/version to accept)'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'cps1');
+  v_tenant2 uuid := (select id from app.tenants where slug = 'cps2');
+  v_account_alpha uuid := (select id from app.accounts where tenant_id = v_tenant1 and legal_name = 'Cps1 Account Alpha');
+  v_rows record;
+  v_count integer;
+begin
+  -- alpha-pending (300012) is still genuinely invited (not yet accepted) at
+  -- this point in the file -- the real accept happens later, in the
+  -- app.accept_customer_portal_invite test block below. Exactly one pending
+  -- invite: Alpha, role=member.
+  select count(*) into v_count from app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300012', v_tenant1);
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 pending invite for alpha-pending, got %', v_count;
+  end if;
+
+  select * into v_rows from app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300012', v_tenant1) limit 1;
+  if v_rows.account_id <> v_account_alpha or v_rows.account_name <> 'Cps1 Account Alpha' or v_rows.role <> 'member' then
+    raise exception 'assertion failed: expected alpha-pending''s own pending row to name Alpha/member, got account_id=% account_name=% role=%', v_rows.account_id, v_rows.account_name, v_rows.role;
+  end if;
+
+  -- alpha-member (300011) already accepted earlier in this file (now
+  -- status=active) -- zero pending invites, an already-active membership is
+  -- never listed here.
+  select count(*) into v_count from app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300011', v_tenant1);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero pending invites for alpha-member (already active), got %', v_count;
+  end if;
+
+  -- Cross-tenant isolation: alpha-pending's own real pending invite lives in
+  -- cps1, not cps2.
+  select count(*) into v_count from app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300012', v_tenant2);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero pending invites for alpha-pending in cps2 (their real invite is in cps1), got %', v_count;
+  end if;
+
+  -- An identity with genuinely zero relationship to this tenant gets a real
+  -- empty array, never an error.
+  select count(*) into v_count from app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300050', v_tenant1);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero pending invites for impersonator (no relationship to this tenant at all), got %', v_count;
+  end if;
+end $$;
+
 \echo '>> app.accept_customer_portal_invite: forged/copied auth_user_id is rejected (only the invited identity may accept); stale_version is rejected; a second accept on an already-active membership is rejected'
 do $$
 declare
@@ -707,7 +753,7 @@ begin
   end;
 end $$;
 
-\echo '>> raw-table RLS/grant defense-in-depth: authenticated holds NO direct table privilege on either new table (service_role only, design decision 3); anon holds no EXECUTE on any new function; authenticated holds EXECUTE on all 8'
+\echo '>> raw-table RLS/grant defense-in-depth: authenticated holds NO direct table privilege on either new table (service_role only, design decision 3); anon holds no EXECUTE on any new function; authenticated holds EXECUTE on all 9 (8 CPL-300 + A2b''s own app.list_my_pending_customer_portal_invites)'
 do $$
 declare
   v_fn text;
@@ -720,7 +766,8 @@ declare
     'app.accept_customer_portal_invite(uuid, integer, uuid)',
     'app.set_customer_portal_account_membership_status(uuid, integer, text, text, uuid, text)',
     'app.list_customer_portal_account_memberships(uuid, uuid, uuid, timestamptz, uuid, integer)',
-    'app.grant_initial_customer_portal_account_admin(uuid, uuid, uuid, uuid, text)'
+    'app.grant_initial_customer_portal_account_admin(uuid, uuid, uuid, uuid, text)',
+    'app.list_my_pending_customer_portal_invites(uuid, uuid)'
   ];
 begin
   if has_table_privilege('authenticated', 'app.customer_portal_account_memberships', 'SELECT') then
@@ -831,10 +878,24 @@ begin
       if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
   end;
 
+  -- CG-AUDIT-2026-09-02 A2b: app.list_my_pending_customer_portal_invites carries
+  -- the identical self-identity check -- session 300050 may not claim to be
+  -- 300010 to read 300010's own pending invites either.
+  begin
+    perform app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300010', v_tenant1);
+    raise exception 'assertion failed: expected actor_identity_mismatch from app.list_my_pending_customer_portal_invites -- session 300050 may not claim to be 300010';
+  exception
+    when others then
+      if sqlerrm not like 'actor_identity_mismatch%' then raise; end if;
+  end;
+
   -- A session correctly naming ITSELF still gets a real (empty) answer, never
   -- an error -- the check rejects impersonation, not ordinary self-service use.
   if app.resolve_customer_account_scope('00000000-0000-0000-0000-000000300050', v_tenant1) <> array[]::uuid[] then
     raise exception 'assertion failed: expected impersonator''s own scope to be a real empty array, not an error, when naming itself';
+  end if;
+  if exists (select 1 from app.list_my_pending_customer_portal_invites('00000000-0000-0000-0000-000000300050', v_tenant1)) then
+    raise exception 'assertion failed: expected impersonator''s own pending-invite list to be a real empty result, not an error, when naming itself';
   end if;
 
   reset role;

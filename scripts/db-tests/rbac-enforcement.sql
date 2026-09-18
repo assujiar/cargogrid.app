@@ -487,6 +487,20 @@ declare
     -- data). Genuinely correct-by-design, not a live gap -- added here per
     -- this test's own documented escape hatch.
     'accept_customer_portal_invite',
+    -- CG-AUDIT-2026-09-02 A2b: app.list_my_pending_customer_portal_invites is
+    -- the identical raw self-row-identity shape immediately above --
+    -- assert_actor_is_session_identity(p_auth_user_id) first, then every
+    -- returned row is filtered `where cpam.auth_user_id = p_auth_user_id`,
+    -- so the caller-supplied identity can only ever see rows naming itself,
+    -- never a third party's. It is deliberately NOT covered by app.actor_
+    -- holds_customer_user_layer (the base regex keyword list above) because
+    -- an invited-but-not-yet-accepted identity holds no customer_user-layer
+    -- principal yet by definition (that layer is granted on accept, not on
+    -- invite, per app.accept_customer_portal_invite's own Tier C review fix
+    -- comment) -- this RPC is the one deliberate exception letting such an
+    -- identity discover its own pending invite in the first place. Genuinely
+    -- correct-by-design, not a live gap.
+    'list_my_pending_customer_portal_invites',
     -- IAE-026 (Prompt 354, Enterprise IAM SSO/SAML/SCIM): app.resolve_
     -- enterprise_idp_by_email_domain is deliberately anon-facing by design --
     -- the identical class app.resolve_tenant_by_domain above already
@@ -620,7 +634,10 @@ begin
   foreach v_fn in array array['resolve_customer_account_scope', 'actor_is_active_customer_portal_account_admin',
                               'get_customer_portal_scope_context', 'invite_customer_portal_user',
                               'accept_customer_portal_invite', 'set_customer_portal_account_membership_status',
-                              'list_customer_portal_account_memberships', 'grant_initial_customer_portal_account_admin'] loop
+                              'list_customer_portal_account_memberships', 'grant_initial_customer_portal_account_admin',
+                              -- CG-AUDIT-2026-09-02 A2b: the identical identity-is-the-scoping-
+                              -- mechanism shape as its 8 CPL-300 siblings above.
+                              'list_my_pending_customer_portal_invites'] loop
     if not exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.proname = v_fn

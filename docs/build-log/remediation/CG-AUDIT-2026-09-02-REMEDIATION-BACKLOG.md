@@ -103,7 +103,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A5 | No scheduler ever invokes `scripts/jobs/supervisor.ts` in production | `CODE` (a cron entry point) + `INFRA` (actually provisioning the schedule) | **PARTIAL** | CODE half done (this commit); INFRA half (setting `CRON_SECRET` on the live Vercel project) is an operator step this repository cannot perform, see execution log |
 | A1 | No cross-module navigation; 81/238 routes have no inbound link | `CODE-BIG` | **DONE** | (this commit) — new shared `components/domain/tenant-portal-nav.tsx` cross-module switcher wired into all 16 tenant-internal module layouts (14 previously-bare stub layouts upgraded to real access-checked shells, admin/commercial's own existing submenus kept alongside it) plus a new tenant Home landing page (`app/(tenant)/[tenantSlug]/page.tsx`, previously a bare 404) and a login-redirect fix (every tenant member landed on `/{slug}/admin`, a `tenant_admin`-only route that 403s any ordinary `org_user`) |
 | A2 | Tenant creation, user invite, role assignment, master-data entry all lack UI | `CODE-BIG` | **DONE** | (this commit) — `app/(supreme)/supreme/tenants/` (create-tenant form calling `provisionTenant`), `app/(tenant)/[tenantSlug]/admin/users/` (invite-user form calling a new `supabase.auth.admin.inviteUserByEmail` wrapper + `inviteUser`, since `inviteUser` alone only links an already-existing Auth identity), `app/(tenant)/[tenantSlug]/admin/roles/` (role create/version/permission/publish/assign/revoke UI, plus 4 new read RPCs — `list_role_versions`/`list_role_version_permissions`/`list_role_assignments_for_role`/`list_active_tenant_users_for_role_assignment` — the write RPCs had no way to see their own results again after a reload), and `app/(tenant)/[tenantSlug]/admin/organization/` (org-unit create/rename/move/activate-deactivate UI) all newly built over already-existing, already-tested backend capability |
-| A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | vendor layer is a schema-level product decision |
+| A2b | Customer portal has no sign-in route; no vendor principal layer exists at all | `CODE-BIG` / `PRODUCT` | **PARTIAL** | customer-portal-sign-in half closed -- the two CPL-300 RPCs (staff bootstrap grant, invitee accept) now have real UI callers, plus a new self-scoped RPC letting an invited identity discover its own pending invite. Vendor principal layer stays DEFERRED_LARGE -- a real, deliberately ratified PRODUCT decision (ADR-0022/PRC-267/ADR-0025 Part A), not an oversight |
 | A3b | No approval definition can ever be published (no UI); 8 flows hard-fail without one | `CODE-BIG` / `PRODUCT` | **FIXED** | `admin/approvals/` now publishes a tenant-scoped approval definition (`config_type_code='approval'`) via the existing, already-tested `publishApprovalDefinition`. One generic definition satisfies all 8 named dependent flows -- `app._resolve_approval_config_type_code` falls back to the plain `'approval'` type whenever no narrower per-domain override has been published. Zero new backend needed |
 | A4 | No import UI over 12 working import schemas | `CODE-BIG` | **DONE** | all twelve schemas (`finance_opening_balance_import`, `employee_import`, `vendor_import`, `vendor_rate_import`, `customer_import`, `item_import`, `attendance_device_import`, `timesheet_import`, `leave_opening_balance_import`, `payroll_loan_cutover_import`, `position_crosswalk_import`, `inventory_opening_balance_import`) now have a real, complete UI end to end (bootstrap, upload+scan, stage+validate, review, commit) at `finance/imports/opening-balances/`, `hris/imports/employees/`, `procurement/imports/vendors/`, `procurement/imports/vendor-rates/`, `commercial/imports/customers/`, `operations/imports/items/`, `hris/imports/attendance-devices/`, `hris/imports/timesheet/`, `hris/imports/leave-opening-balance/`, `hris/imports/payroll-loans/`, `hris/imports/position-crosswalk/`, and `operations/imports/inventory-opening-balance/` |
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **DONE** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is now wired for all 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility), and ePOD signature/photo evidence (`app.access_epod_evidence_for_download`, gated on `OPS:Download` plus the parent shipment order's own `app.can_access_record` scope -- the same bar its document checklist sibling already uses). Closing the ePOD slice also surfaced and fixed a more fundamental gap: the `epod` document type itself was never registered by any real (non-db-test) migration anywhere in this repository, so a genuinely fresh tenant's first ePOD evidence upload would have failed immediately with `document_type_not_configured` in spite of every RPC being fully wired and tested -- fixed by the same global-catalogue-registration migration that adds the signed-download RPC. Out of A6's own scope, tracked separately under D4: every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
@@ -4220,3 +4220,129 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   AND-FIFTY-EIGHTH PASS, both digests updated -- one new migration file,
   zero new db-test files, two existing db-test files gaining real new
   coverage), and a real `next build`.
+- 2026-09-18 — A2b (customer-portal-sign-in half) closed via a dedicated
+  research pass, the same "verify before trusting a deferred label"
+  discipline that found B7's/B2a's/E6's/B4's own real bounded cores. The
+  original finding ("Customer portal has no sign-in route; no vendor
+  principal layer exists at all") was carried as one undivided
+  `DEFERRED_LARGE` item ("vendor layer is a schema-level product
+  decision") and bundles two genuinely different situations.
+  The vendor principal layer half is confirmed, by direct evidence this
+  session had not previously surfaced, to be a real, deliberately
+  RATIFIED PRODUCT decision, not an oversight: `docs/build-log/phase-06/
+  PRC-267.md` ("Optional Vendor Portal") is explicitly `BLOCKED` --
+  pending a Platform-level external-identity ADR (`docs/adr/ADR-0022`)
+  that was never ratified -- and `docs/adr/ADR-0025` Part A instead
+  ratifies the alternative actually shipped: vendor (and customer) API
+  keys reuse `app.api_keys`, data-scoped never actor-scoped, staff-issued
+  only, confirmed by `20260804030000_create_intelligence_vendor_api.sql`'s
+  own header ("No fifth principal layer... no login/session concept at
+  all"). The routes this session itself had just seen in a `next build`
+  (`/vendor-intake/[token]`, `/api/v1/vendor/assignments/...`) are exactly
+  this deliberate substitute, not a persistent vendor login -- confirmed
+  live: no `app.vendor_users`/`app.vendor_principals` exists anywhere.
+  `DEFERRED_LARGE` stays accurate for the vendor half; this migration does
+  not touch that boundary.
+  The customer-portal-sign-in half was stale, not accurate. The
+  `customer_user` principal layer (ADR-0024) is real, extensive, and
+  already load-bearing -- ~90 migrations, dozens of `server/contracts|
+  mutations|queries/customer-portal-*` files, real sign-in via the shared
+  `app/(public)/login/actions.ts` entry point every layer uses. What was
+  genuinely still missing was narrow and mechanical, not a product/schema
+  decision: CPL-300 (`20260801010000_create_customer_portal_account_
+  scope.sql`) shipped `app.grant_initial_customer_portal_account_admin`
+  (tenant-admin-only bootstrap seeding the first account_admin on a
+  brand-new account) and `app.accept_customer_portal_invite` (an invited
+  identity accepting a subsequent self-service invite) with real, tested
+  RPCs and typed `server/mutations/customer-portal-scope.ts` wrappers --
+  but that migration's own §9 deliberately chartered "the full Customer
+  User Management UI" to CPL-315, which built the self-service invite/
+  role/status/access-review UI for an ALREADY-active account_admin, never
+  a caller for either of these two RPCs. Confirmed by a repo-wide grep:
+  zero non-test/non-contract call sites for either function anywhere in
+  `app/`, `server/`, or `lib/` before this migration.
+  A deeper, previously-undisclosed gap the research surfaced: there was no
+  way for an invited-but-not-yet-accepted identity to ever DISCOVER their
+  own pending membership id/version to accept it. `app.get_customer_
+  portal_scope_context`/`app.resolve_customer_account_scope` both
+  intentionally scope to ACTIVE memberships only (the customer_user-layer
+  principal marker is granted at ACCEPT time, not invite time, per `app.
+  accept_customer_portal_invite`'s own Tier C review fix comment), and
+  `app.list_customer_portal_account_memberships` is account_admin-only --
+  an invited-but-not-active member cannot call it, by definition.
+  `lib/portal/customer-portal-guard.ts`'s own "forbidden" branch is
+  exactly the state an invited identity was stuck in: `customer-portal/
+  page.tsx` rendered a generic denied message with no path forward.
+  Closed: new migration `20260918030000_a2b_customer_portal_sign_in_
+  entry_points.sql` adds `app.list_my_pending_customer_portal_invites` --
+  the one deliberate exception to "only an active customer_user may read
+  its own scope" (mirrors `app.grant_initial_customer_portal_account_
+  admin`'s own documented exception to "Layer-4-only, never staff RBAC"),
+  self-identity-checked only (`app.assert_actor_is_session_identity`), no
+  further authority/layer check needed since the result is already scoped
+  to the caller's own `auth_user_id` -- a caller with zero genuine pending
+  invites gets a real empty array, never an error, mirroring every other
+  self-scoped "list my own X" RPC in this repository. RGL-394 Option-2
+  `public.*` wrapper included, with the ERR-2026-004 `anon`/`authenticated`/
+  `service_role`/`public` explicit revoke this session has repeatedly had
+  to apply to a fresh standalone-migration wrapper (the platform-level
+  `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public` rule
+  otherwise silently leaves an `anon` grant behind) -- caught immediately
+  by `public-api-wrapper-regression.sql`'s own zero-tolerance grant-set
+  check on the first quick-iteration run, fixed before it ever reached the
+  full suite.
+  The TS/UI blast radius: `server/contracts/customer-portal-scope/
+  customer-portal-scope.ts` (`CustomerPortalPendingInviteSchema`), `server/
+  queries/customer-portal-scope.ts` (`listMyPendingCustomerPortalInvites`)
+  -- `customer-portal/page.tsx`'s own "forbidden" branch now independently
+  checks for a real pending invite (via a direct `supabase.auth.getUser()`
+  call, deliberately NOT through the shared guard's own "forbidden" state,
+  which carries no `authUserId` and is reused by 30+ other customer-portal
+  pages this fix does not touch) and renders a new "Accept invite" panel
+  (`pending-invites-panel.tsx` + a new `accept-invite-actions.ts` Server
+  Action composing the already-existing, already-tested
+  `acceptCustomerPortalInvite` mutation wrapper) instead of the generic
+  denied message when one exists; `commercial/accounts/[accountId]/
+  page.tsx` (the natural staff-facing home for account-scoped actions,
+  already carrying `CreditPanel`) gains a new "Customer portal access"
+  panel wired to the already-existing `grantInitialCustomerPortalAccount
+  Admin` mutation wrapper via a new `customer-portal-actions.ts` Server
+  Action, gated purely by the RPC's own `CPT:Create` check (seeded since
+  CPL-300, never used from any UI until now, the identical "ready-made
+  seam" shape `OPS:Download` was before A6 wired it up) -- no client-side
+  authority re-derivation.
+  New db-test coverage: `scripts/db-tests/customer-portal-scope.sql`
+  gained a dedicated test block proving `list_my_pending_customer_portal_
+  invites`' own substantive behavior (returns the exact pending row for
+  the invited identity with the right account name/role, excludes an
+  already-active membership, cross-tenant isolation, a genuinely unrelated
+  identity gets a real empty array) plus the identical actor-identity-
+  mismatch impersonation-rejection assertion its four CPL-300 read-RPC
+  siblings already carry, and the raw-grant defense-in-depth check
+  extended from 8 to 9 functions; `scripts/db-tests/rbac-enforcement.sql`
+  gained the new function in the ATW-032 SECURITY DEFINER authority-
+  surface sweep's own reviewed-and-justified list (a written reason
+  mirroring `app.accept_customer_portal_invite`'s own identical raw
+  self-row-identity-equality justification immediately above it) and in
+  the CPL-300 Tier C Finding-1 named-list check requiring it call `app.
+  assert_actor_is_session_identity` directly, not merely transitively.
+  Deliberately left out of this bounded core, disclosed rather than
+  silently skipped: `app/(tenant)/[tenantSlug]/page.tsx`'s own post-login
+  landing behavior for a `customer_user` identity -- today it resolves
+  "forbidden" via the staff-only `app.resolve_access_context` (which
+  requires an active `app.tenant_user_identities` row, a staff-membership
+  concept a `customer_user` identity's own linkage semantics were never
+  written for) and shows a generic denied page rather than redirecting to
+  `/customer-portal`. Investigating this surfaced real entanglement with
+  `app.resolve_access_context`'s own load-bearing, 15+-consumer semantics
+  -- not a quick, safely bounded addition alongside this fix. A
+  `customer_user` who already knows the `/{tenantSlug}/customer-portal`
+  URL (from an invite email, an account admin, or this fix's own
+  bootstrap/accept flow) is unaffected. A2b is PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6160/6160,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`), `git:check-paths`, `security:check`,
+  `release:check-freeze` (HUNDRED-AND-FIFTY-NINTH PASS, both digests
+  updated -- one new migration file, zero new db-test files, two existing
+  db-test files gaining real new coverage), and a real `next build`.

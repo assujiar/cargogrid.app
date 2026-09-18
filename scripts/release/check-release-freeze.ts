@@ -5186,7 +5186,35 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "76f76c1164a3346b9cc55fad3cd29d332918fe7d5b4dd9cc2a804e101d37c5e8",
+  migrationSetSha256: "ec5e66e655131efa2d61ff3389c521074f37c0cab44cd536f38ca6c98eb26aaf",
+  // HUNDRED-AND-FIFTY-NINTH PASS: CG-AUDIT-2026-09-02 A2b (customer-portal-
+  // sign-in half, bounded core). One new migration (20260918030000_a2b_
+  // customer_portal_sign_in_entry_points.sql, 557 files, +1). A dedicated
+  // research pass found the vendor-principal-layer half of A2b is a real,
+  // deliberately ratified PRODUCT deferral (ADR-0022/PRC-267/ADR-0025 Part
+  // A -- vendor API keys are data-scoped, never actor-scoped, by design) --
+  // stays DEFERRED_LARGE, untouched. The customer-portal-sign-in half was
+  // stale, not accurate: CPL-300 already shipped app.grant_initial_
+  // customer_portal_account_admin (staff bootstrap) and app.accept_customer_
+  // portal_invite (invitee accept) with real, tested RPCs and typed mutation
+  // wrappers, but zero UI callers anywhere in this repository. A deeper,
+  // previously-undisclosed gap the research surfaced: no RPC let an invited-
+  // but-not-yet-accepted identity ever discover its own pending membership
+  // id/version to accept it (app.get_customer_portal_scope_context/app.
+  // resolve_customer_account_scope both deliberately exclude a status=
+  // invited row; app.list_customer_portal_account_memberships is account_
+  // admin-only). New RPC app.list_my_pending_customer_portal_invites (self-
+  // identity-checked only, the one deliberate pre-layer-grant exception)
+  // closes it. Staff UI on commercial/accounts/[accountId]/page.tsx (a new
+  // "Customer portal access" panel); invitee UI on customer-portal/page.tsx's
+  // own forbidden branch (a new "Accept invite" panel). Deliberately left
+  // out of this bounded core: app/(tenant)/[tenantSlug]/page.tsx's own post-
+  // login landing behavior for a customer_user identity (entangled with app.
+  // resolve_access_context's own load-bearing, 15+-consumer semantics, not a
+  // safely bounded addition alongside this fix).
+  // History: 76f76c1164a3346b9cc55fad3cd29d332918fe7d5b4dd9cc2a804e101d37c5e8
+  // (556 files, HUNDRED-AND-FIFTY-EIGHTH PASS).
+  //
   // HUNDRED-AND-FIFTY-EIGHTH PASS: CG-AUDIT-2026-09-02 B4 (bounded core), "Multi-
   // currency postings summed as raw numbers, no FX/base-amount columns". One new
   // migration (20260918020000_b4_ar_ap_exposure_currency_fix.sql, 556 files, +1).
@@ -7456,7 +7484,28 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "eaacedbb94b75b933e96c46982f92e504f524d32eb99f92434d48abd027fa9b0",
+  dbTestSetSha256: "f6333c25c845d16afedd57c35b0ba678f1a4be7a553ebd0f1c01521b780c0c76",
+  // HUNDRED-AND-FIFTY-NINTH PASS: same CG-AUDIT-2026-09-02 A2b slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), two EXISTING files gained real new coverage:
+  // scripts/db-tests/customer-portal-scope.sql (a new test block proving
+  // app.list_my_pending_customer_portal_invites' own substantive behavior --
+  // returns the exact pending row for the invited identity, excludes an
+  // already-active membership, cross-tenant isolation, a genuinely
+  // unrelated identity gets a real empty array -- plus the identical
+  // actor-identity-mismatch impersonation-rejection assertion its 4 CPL-300
+  // read-RPC siblings already carry, and an extended raw-grant defense-in-
+  // depth check from 8 to 9 functions) and scripts/db-tests/rbac-
+  // enforcement.sql (the new function added to the ATW-032 SECURITY DEFINER
+  // authority-surface sweep's own reviewed-and-justified list, with a
+  // written reason mirroring app.accept_customer_portal_invite's own
+  // identical raw self-row-identity-equality justification immediately
+  // above it, plus the CPL-300 Tier C Finding-1 named-list check widened to
+  // require it calls app.assert_actor_is_session_identity directly, not
+  // merely transitively).
+  // History: eaacedbb94b75b933e96c46982f92e504f524d32eb99f92434d48abd027fa9b0
+  // (279 files, HUNDRED-AND-FIFTY-EIGHTH PASS).
+  //
   // HUNDRED-AND-FIFTY-EIGHTH PASS: same CG-AUDIT-2026-09-02 B4 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), two EXISTING fixtures gained real new coverage:

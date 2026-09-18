@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { getAccountById, listSubsidiaryAccounts, AccountQueryError } from "../../../../../../server/queries/account.ts";
 import { getCreditProfileForAccount, getCreditProfileApprovalOverview } from "../../../../../../server/queries/credit.ts";
 import { CreditPanel } from "./credit-panel.tsx";
+import { CustomerPortalAccessPanel } from "./customer-portal-access-panel.tsx";
+import { grantInitialCustomerPortalAccountAdminAction } from "./customer-portal-actions.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
@@ -84,6 +86,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
       </dl>
 
       <CreditPanel tenantSlug={tenantSlug} accountId={account.id} profile={creditProfile} overview={creditApprovalOverview} />
+
+      <CustomerPortalAccessPanel grantAction={grantInitialCustomerPortalAccountAdminAction.bind(null, tenantSlug, account.id)} />
 
       {subsidiaries.length > 0 ? (
         <div className="rounded-md border border-neutral-200 p-4">
