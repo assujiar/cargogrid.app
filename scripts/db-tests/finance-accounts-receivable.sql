@@ -442,27 +442,72 @@ begin
 end;
 $$;
 
-\echo '>> exposure summary and list: totals/overdue counts reconcile; cross-tenant isolation -- Finance Manager B sees zero of tenant A''s own open items'
+\echo '>> exposure summary: one row per currency actually posted (never a blended cross-currency sum, CG-AUDIT-2026-09-02 B4); totals/overdue counts reconcile; the tenant''s own resolved base currency (no locale ever published) falls back to the platform default IDR; cross-tenant isolation -- Finance Manager B sees zero of tenant A''s own open items'
 do $$
 declare
   v_tenant_a uuid;
   v_tenant_b uuid;
   v_customer_id uuid;
-  v_summary jsonb;
+  v_row record;
   v_rows app.finance_ar_open_items[];
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_tenant_b := (select id from app.tenants where slug = 'acmearb');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
 
-  select app.get_finance_ar_exposure_summary(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502') into v_summary;
-  if (v_summary ->> 'openCount')::integer < 3 then
-    raise exception 'assertion failed: expected at least 3 open/partial/held items for tenant A''s own customer, got %', v_summary;
+  select * into v_row from app.get_finance_ar_exposure_summary(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502') where currency = 'USD';
+  if v_row.open_count < 3 then
+    raise exception 'assertion failed: expected at least 3 open/partial/held USD items for tenant A''s own customer, got %', v_row;
+  end if;
+  if v_row.base_currency <> 'IDR' then
+    raise exception 'assertion failed: expected the tenant''s own resolved base currency to fall back to the platform default IDR, got %', v_row.base_currency;
   end if;
 
   select array_agg(r) into v_rows from app.list_finance_ar_open_items(v_tenant_b, null, null, null, null, '00000000-0000-0000-0000-000000026505') r;
   if v_rows is not null and exists (select 1 from unnest(v_rows) r where r.tenant_id = v_tenant_a) then
     raise exception 'assertion failed: expected tenant B''s own list_finance_ar_open_items to never return a tenant A row';
+  end if;
+end;
+$$;
+
+\echo '>> exposure summary, real multi-currency (CG-AUDIT-2026-09-02 B4): a second open item posted in a currency with no published exchange rate yields a genuinely separate row (never blended into the USD total), fx_status=rate_unavailable, a null base figure -- never fabricated; publishing and approving a real USD->IDR rate then makes the existing USD row convert for real at the exact published rate'
+do $$
+declare
+  v_tenant_a uuid;
+  v_customer_id uuid;
+  v_source_id uuid;
+  v_rate app.finance_exchange_rates;
+  v_row_usd record;
+  v_row_eur record;
+  v_row_count integer;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeara');
+  v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  v_source_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-ar-b4-eur');
+
+  perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_source_id, 'EUR', 200, '2026-03-12'::date, '2026-04-11'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  select * into v_row_eur from app.get_finance_ar_exposure_summary(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502') where currency = 'EUR';
+  if v_row_eur.total_open <> 200 or v_row_eur.fx_status <> 'rate_unavailable' or v_row_eur.base_total_open is not null then
+    raise exception 'assertion failed: expected a genuinely separate EUR row (total 200, rate_unavailable, null base_total_open), got %', v_row_eur;
+  end if;
+
+  select * into v_row_usd from app.get_finance_ar_exposure_summary(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502') where currency = 'USD';
+  if v_row_usd.fx_status <> 'rate_unavailable' then
+    raise exception 'assertion failed: expected the USD row to also be rate_unavailable before any USD->IDR rate is published, got %', v_row_usd;
+  end if;
+
+  select * into v_rate from app.create_finance_exchange_rate_draft(v_tenant_a, 'spot', 'USD', 'IDR', 15700, 'manual', '2026-01-01'::timestamptz, null, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  perform app.approve_finance_exchange_rate(v_rate.id, v_rate.record_version, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  select * into v_row_usd from app.get_finance_ar_exposure_summary(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502') where currency = 'USD';
+  if v_row_usd.fx_status <> 'converted' or v_row_usd.base_total_open <> round(v_row_usd.total_open * 15700, 2) then
+    raise exception 'assertion failed: expected the USD row to convert for real at the exact published rate (15700) once approved, got %', v_row_usd;
+  end if;
+
+  select count(*) into v_row_count from app.get_finance_ar_exposure_summary(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502');
+  if v_row_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 rows (USD, EUR), never a single blended row, got %', v_row_count;
   end if;
 end;
 $$;

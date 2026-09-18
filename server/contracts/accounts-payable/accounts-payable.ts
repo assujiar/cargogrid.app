@@ -60,11 +60,23 @@ export const FinanceApOpenItemEventSchema = z.object({
 });
 export type FinanceApOpenItemEvent = z.infer<typeof FinanceApOpenItemEventSchema>;
 
+export const FinanceExposureFxStatusSchema = z.enum(["identity", "converted", "rate_unavailable"]);
+export type FinanceExposureFxStatus = z.infer<typeof FinanceExposureFxStatusSchema>;
+
+/** One currency's own real exposure -- app.get_finance_ap_exposure_summary returns
+ * a real row per currency actually posted, never a blended cross-currency sum
+ * (CG-AUDIT-2026-09-02 B4). baseTotalOpen/baseOverdueOpen are null exactly when
+ * fxStatus is "rate_unavailable" -- never a fabricated figure. */
 export const FinanceApExposureSummarySchema = z.object({
+  currency: z.string(),
   totalOpen: z.number(),
   openCount: z.number().int(),
   overdueOpen: z.number(),
   overdueCount: z.number().int(),
+  baseCurrency: z.string(),
+  baseTotalOpen: z.number().nullable(),
+  baseOverdueOpen: z.number().nullable(),
+  fxStatus: FinanceExposureFxStatusSchema,
 });
 export type FinanceApExposureSummary = z.infer<typeof FinanceApExposureSummarySchema>;
 
@@ -170,12 +182,27 @@ export function parseFinanceApOpenItemEvent(row: Record<string, unknown>): Finan
   });
 }
 
-/** Maps a raw app.get_finance_ap_exposure_summary() jsonb result to this contract's camelCase shape. */
+/** Maps one raw app.get_finance_ap_exposure_summary() row (snake_case) to this contract's camelCase shape. */
 export function parseFinanceApExposureSummary(row: Record<string, unknown>): FinanceApExposureSummary {
   return FinanceApExposureSummarySchema.parse({
-    totalOpen: typeof row.totalOpen === "string" ? Number(row.totalOpen) : row.totalOpen,
-    openCount: row.openCount,
-    overdueOpen: typeof row.overdueOpen === "string" ? Number(row.overdueOpen) : row.overdueOpen,
-    overdueCount: row.overdueCount,
+    currency: row.currency,
+    totalOpen: typeof row.total_open === "string" ? Number(row.total_open) : row.total_open,
+    openCount: row.open_count,
+    overdueOpen: typeof row.overdue_open === "string" ? Number(row.overdue_open) : row.overdue_open,
+    overdueCount: row.overdue_count,
+    baseCurrency: row.base_currency,
+    baseTotalOpen:
+      row.base_total_open === null || row.base_total_open === undefined
+        ? null
+        : typeof row.base_total_open === "string"
+          ? Number(row.base_total_open)
+          : row.base_total_open,
+    baseOverdueOpen:
+      row.base_overdue_open === null || row.base_overdue_open === undefined
+        ? null
+        : typeof row.base_overdue_open === "string"
+          ? Number(row.base_overdue_open)
+          : row.base_overdue_open,
+    fxStatus: row.fx_status,
   });
 }

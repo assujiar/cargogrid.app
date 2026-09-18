@@ -5186,7 +5186,51 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "7984255cd3b0d95d965c7ad59e4901dd55df0f5188325cc48e563add8e4eccf8",
+  migrationSetSha256: "76f76c1164a3346b9cc55fad3cd29d332918fe7d5b4dd9cc2a804e101d37c5e8",
+  // HUNDRED-AND-FIFTY-EIGHTH PASS: CG-AUDIT-2026-09-02 B4 (bounded core), "Multi-
+  // currency postings summed as raw numbers, no FX/base-amount columns". One new
+  // migration (20260918020000_b4_ar_ap_exposure_currency_fix.sql, 556 files, +1).
+  // A dedicated research pass found a real, live, shipped cross-currency blend
+  // bug, not a theoretical schema gap: app.get_finance_ar_exposure_summary/app.
+  // get_finance_ap_exposure_summary (confirmed via a case-insensitive search
+  // this time, after E6's own earlier miss) summed open_amount with NO currency
+  // filter at all, feeding the real "credit exposure" figure a Finance user sees
+  // today in the accounts-receivable/accounts-payable work-queue UI. This was
+  // structurally common, not a corner case -- app.finance_accounts.currency_
+  // restriction remains unenforced at posting time (confirmed by B2a's own
+  // research, re-confirmed here), so any multi-currency tenant posts to the same
+  // tenant-wide AR/AP control account regardless of currency. The "no FX/base-
+  // amount columns" half of the finding did NOT require inventing new FX
+  // machinery or redesigning finance_journal_lines as the backlog's own "schema
+  // redesign" phrase implied -- app.resolve_finance_exchange_rate (FIN-194,
+  // no authority check of its own) already provides real, governed, versioned,
+  // date-effective rate resolution, already proven and exercised by app.
+  // resolve_operations_fx_conversion (job profitability) and the loyalty-
+  // liability consolidated rollup, both of which already established the
+  // "convert what you can, mark rate_unavailable rather than fabricate" pattern
+  // this fix mirrors exactly. Fix: both functions widen from a single blended
+  // jsonb object to a real setof table, one row per currency actually posted
+  // (never blended, the same discipline B2a's own trial balance already
+  // established), each row also carrying a base-currency-converted figure via
+  // the tenant's own resolved app.resolve_tenant_locale default_currency --
+  // honestly null with fx_status=rate_unavailable when no rate covers now(),
+  // never fabricated. Disclosed behavior change: zero open items now returns
+  // zero rows (no real currency to anchor a zero row to), versus the old
+  // always-one-object shape -- the TS contract/query/UI layer (server/
+  // contracts+queries/accounts-{receivable,payable}, the two finance work-queue
+  // forms) was updated to match. Public.* wrappers required DROP + CREATE (a
+  // return-type change from jsonb to table, which CREATE OR REPLACE FUNCTION
+  // cannot do), mirroring 20260907160000's own established pattern for exactly
+  // this class of change. Still correctly deferred: retroactive FX/base-amount
+  // persistence on finance_journal_lines itself (the original, genuinely larger
+  // "schema redesign" reading), currency_restriction enforcement at posting
+  // time (related, separate, not yet scoped), and true consolidated multi-
+  // currency financial statements (already deferred under B2's own open half).
+  // B4 is PARTIAL, not DONE -- this closes the one live bug plus the one
+  // bounded reporting improvement the research pass found, not the whole
+  // finding. History:
+  // 7984255cd3b0d95d965c7ad59e4901dd55df0f5188325cc48e563add8e4eccf8 (555
+  // files, HUNDRED-AND-FIFTY-SEVENTH PASS).
   // HUNDRED-AND-FIFTY-SEVENTH PASS: CG-AUDIT-2026-09-02 E6 (webhook half),
   // "Outbound webhooks have no publisher. app.queue_webhook_delivery is
   // referenced by 0 other database functions and nothing outside its own
@@ -7412,7 +7456,20 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "942d63ba9d2fc2c7f819302a4fdce68f1589ae5dffa7a50297409b3ec9b65b06",
+  dbTestSetSha256: "eaacedbb94b75b933e96c46982f92e504f524d32eb99f92434d48abd027fa9b0",
+  // HUNDRED-AND-FIFTY-EIGHTH PASS: same CG-AUDIT-2026-09-02 B4 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), two EXISTING fixtures gained real new coverage:
+  // scripts/db-tests/finance-accounts-receivable.sql and finance-accounts-
+  // payable.sql each got their own existing exposure-summary assertion
+  // updated to the new per-currency-row shape, plus a new test block proving
+  // real multi-currency grouping end to end -- a second open item posted in
+  // an unrated currency yields a genuinely separate row with fx_status=
+  // rate_unavailable and a null base figure (never fabricated); publishing
+  // and approving a real USD->IDR exchange rate then makes the existing USD
+  // row convert for real at the exact published rate, never an approximation.
+  // History: 942d63ba9d2fc2c7f819302a4fdce68f1589ae5dffa7a50297409b3ec9b65b06
+  // (279 files, HUNDRED-AND-FIFTY-SEVENTH PASS).
   // HUNDRED-AND-FIFTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 E6 slice as
   // migrationSetSha256's own note immediately above -- one new db-test file
   // (scripts/db-tests/webhook-business-event-triggers.sql, 279 files, +1):

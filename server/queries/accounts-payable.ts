@@ -78,10 +78,12 @@ export async function getFinanceApOpenItemActivity(
 }
 
 /** FIN:View-gated. Internal Finance vendor-obligation aggregate. */
+/** One row per currency actually posted (never a blended cross-currency sum, CG-AUDIT-2026-09-02 B4) --
+ * an empty array means the vendor has zero open items, not "one zero row". */
 export async function getFinanceApExposureSummary(
   client: AccountsPayableQueryRpcClient,
   input: { tenantId: string; vendorMasterId: string; actorAuthUserId: string },
-): Promise<FinanceApExposureSummary> {
+): Promise<FinanceApExposureSummary[]> {
   const { data, error } = await client.rpc("get_finance_ap_exposure_summary", {
     p_tenant_id: input.tenantId,
     p_vendor_master_id: input.vendorMasterId,
@@ -90,8 +92,6 @@ export async function getFinanceApExposureSummary(
   if (error) {
     throw new AccountsPayableQueryError(error.message);
   }
-  if (!data || typeof data !== "object") {
-    throw new AccountsPayableQueryError("get_finance_ap_exposure_summary returned no result");
-  }
-  return parseFinanceApExposureSummary(data as Record<string, unknown>);
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => parseFinanceApExposureSummary(row as Record<string, unknown>));
 }

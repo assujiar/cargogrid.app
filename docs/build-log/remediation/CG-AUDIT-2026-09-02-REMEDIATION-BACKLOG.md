@@ -78,7 +78,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | B5 | Withholding tax added instead of deducted on customer invoices | `CODE` | **DONE** | (this commit) |
 | B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | **PARTIAL** | a dedicated research pass (the same "verify before trusting a deferred label" discipline that found B7's own real bounded core) found the original "weeks of report-building effort" estimate accurate for P&L/balance sheet/year-end close, but NOT for a trial balance/account balance -- every hard part (double-entry enforcement guaranteeing debits always equal credits, chart-of-accounts account_type/normal_balance classification, fiscal periods, the `public.*` wrapper convention, even a working precedent for the exact summation math in `app.get_finance_cash_position`) already existed and was already correct; this was assembly, not invention. Closed: `app.get_finance_trial_balance` -- every account for the tenant/company, joined against posted, dated-eligible `finance_journal_lines`, one row per (account, currency actually posted against it) rather than a silently-blended cross-currency sum (a real, disclosed limitation tying to the still-open B4 finding: `finance_journals.currency` is one field per whole journal, and `finance_accounts.currency_restriction` is defined but never enforced at posting time). Still open: P&L, balance sheet, GL report, and year-end close -- these need period-scoped net-income roll-up, account-hierarchy subtotaling, and a real reporting-currency/FX conversion layer that does not exist anywhere in this schema today (ties to B4), genuinely larger work; B2 remains PARTIAL, not DONE |
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | needs a billing-model decision (partial/milestone billing) before schema work |
-| B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | DEFERRED_LARGE | schema redesign across `finance_journals`/`finance_journal_lines` |
+| B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | **PARTIAL** | AR/AP exposure-summary cross-currency blend bug closed with honest per-currency + base-currency figures; `finance_journal_lines` retroactive FX persistence, `currency_restriction` enforcement at posting time, and true consolidated multi-currency financial statements remain deferred |
 | B6 | Cost/cash never auto-post to GL | `CODE` (AR/AP half) / `NEEDS_PRODUCT_DECISION` (internal-cost half) | **PARTIAL** | a dedicated recon pass found this MEDIUM overall, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL at all -- but the vendor-sourced path's own real precedent (`prepare_finance_vendor_bill_from_actual_cost`) never posts directly either: it stages a Finance-owned vendor-bill DRAFT that goes through Finance's own full review/approve/post lifecycle before it ever reaches the GL, honoring `app.shipment_actual_costs`' own explicit disclosed design boundary ("non-authoritative-for-payment operational figures," its creating migration's own words). A same-shape fix for internal cost needs an equivalent Finance-owned, Finance-reviewed document type to stage into -- none exists today, and inventing one (what document, what lifecycle, does it need its own approval step, which account absorbs it) is a real product decision, not a database migration a session can make unilaterally; a thin function posting internal-cost components straight to the GL would bypass that same governance model and treat internal cost as LESS governed than vendor cost, a new inconsistency worse than the gap it would close. See execution log |
 | B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **DONE** | the worklist-UI half: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half: `app.check_customer_credit` was never a stub -- it already read a real `app.credit_profiles`/`app.credit_profile_overrides` row and persisted every outcome -- but never consulted actual AR exposure (only the static approved limit) and was dead-gated code (reachable only via its own manual "Check eligibility" widget, never from any order-acceptance path). Now fixed: it sums real `app.finance_ar_open_items.open_amount` (status <> paid, same currency) into the comparison, and `app.prepare_job_order_handoff` (the correct singular acceptance-moment gate point) evaluates credit for the converted account and the quotation's own real total, raising `credit_blocked` for an affirmative credit-control decision already in force -- deliberately not for `blocked_no_profile` (credit profiles are opt-in, not mandatory). The decision core was factored into a new internal `app._evaluate_customer_credit` (no authority check of its own) after a full `db:test` run caught a real regression: a first draft called the public, COM:View-gated `check_customer_credit` directly, which broke a db-test fixture whose staff role holds COM:Edit but not COM:View -- fixed by having the internal function carry the logic and only the public wrapper add the authority check |
 
@@ -4106,3 +4106,117 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `security:check`, `release:check-freeze` (HUNDRED-AND-FIFTY-SEVENTH
   PASS, both digests updated -- one new migration file, one new db-test
   file), and a real `next build`.
+- 2026-09-18 — B4 (bounded core) closed via a dedicated research pass, the
+  same "verify before trusting a deferred label" discipline that found
+  B7's/B2a's/E6's own real bounded cores. The original finding
+  ("Multi-currency postings summed as raw numbers, no FX/base-amount
+  columns") was carried as one undivided `DEFERRED_LARGE` item ("schema
+  redesign across `finance_journals`/`finance_journal_lines`") and had
+  never itself been independently re-verified.
+  What the research found, all confirmed by reading the actual current
+  code, never assumed: `app.get_finance_ar_exposure_summary`/`app.
+  get_finance_ap_exposure_summary` (live since 20260729100000/
+  20260729130000, last touched by `20260810900000_harden_finance_
+  authority_chain_tierc_completeness.sql` -- confirmed via a case-
+  insensitive search this time, after E6's own earlier miss on exactly
+  this class of mistake) summed `app.finance_ar_open_items.open_amount`/
+  `app.finance_ap_open_items.open_amount` with NO currency filter or
+  grouping at all. Both are called live by `server/queries/accounts-
+  receivable.ts`/`server/queries/accounts-payable.ts` and rendered as a
+  "credit exposure" figure a real Finance user sees today -- any
+  customer/vendor with open items in more than one currency got a
+  financially meaningless blended total. A genuine, live, shipped bug,
+  not a theoretical schema gap, matching the severity class of this
+  session's own earlier B5/D3-series fixes -- and not a rare edge case,
+  since `app.finance_accounts.currency_restriction` is confirmed
+  unenforced at posting time (B2a's own research, re-confirmed here), so
+  any multi-currency tenant posts to the SAME tenant-wide AR/AP control
+  account regardless of currency.
+  The "no FX/base-amount columns" half of the finding did NOT require
+  inventing new FX machinery or redesigning `finance_journal_lines`, as
+  the backlog's own "schema redesign" phrase implied. `app.finance_
+  currency_exchange_rate` (FIN-194, 20260728230000) already provides a
+  real, governed, versioned (draft->approved->archived), date-effective
+  rate registry -- `app.resolve_finance_exchange_rate(tenant, rate_type,
+  source_currency, target_currency, as_of)` deterministically resolves a
+  real rate with NO authority check of its own (a pure SQL read, already
+  the correct shape to call from inside another gated function), and it
+  is already proven, exercised, non-theoretical machinery: `app.resolve_
+  operations_fx_conversion` (job-profitability) and the loyalty-liability
+  consolidated-rollup capability already use the identical "convert each
+  currency-scoped total, sum only what actually converted, mark what
+  didn't rather than fabricate a rate" pattern this fix mirrors. `app.
+  tenant_locale_versions.default_currency` (PLT-119, resolved via `app.
+  resolve_tenant_locale`) is already, in practice, this repository's own
+  real "base/reporting currency" concept -- already load-bearing for
+  exactly this purpose in job profitability and loyalty liability,
+  despite that migration's own header disclaiming it as "display
+  preference only." This fix reuses it the same way, not a new concept.
+  Closed: new migration `20260918020000_b4_ar_ap_exposure_currency_fix.
+  sql` widens both functions from a single blended `jsonb` object to a
+  real, honest per-currency breakdown (`setof table`, one row per
+  currency actually in play -- the same "never blend, group by currency"
+  discipline B2a's own trial balance already established), PLUS a
+  base-currency-converted figure on each row using the tenant's own
+  resolved `default_currency` and the real, already-proven FX machinery
+  above. A currency that already matches the tenant's base currency needs
+  no rate (`fx_status='identity'`, mirrors `app.resolve_operations_fx_
+  conversion`'s own identity fast path); a currency with no published
+  rate covering "now" returns `fx_status='rate_unavailable'` with a null
+  `base_total_open`/`base_overdue_open` -- NEVER a fabricated or
+  silently-zeroed figure, the same discipline the loyalty-liability
+  reconciliation's own `partial_rate_unavailable` already established.
+  Rolling the honest per-currency figures up into one further grand total
+  (if ever wanted) is left as a caller-side decision to the TS/UI layer
+  rather than baked into the RPC, so the RPC itself never silently
+  presents a partial (some-currencies-unconverted) result as complete.
+  Both functions required `DROP FUNCTION` + `CREATE FUNCTION` (a genuine
+  return-type change, `jsonb` -> `table(...)`, which `CREATE OR REPLACE`
+  cannot perform), so the migration explicitly re-revokes PUBLIC execute
+  on schema `app` afterward per this session's own established default-
+  privilege convention, plus DROP+CREATE `public.*` pass-through wrappers
+  with the full `anon`/`authenticated`/`service_role`/`public` revoke
+  pattern (RGL-394 Option-2). The full TS/UI blast radius was updated to
+  match the new per-currency array shape: `server/contracts/accounts-
+  receivable(-payable)/*.ts` (widened schema plus a shared `fxStatus`
+  enum, each module keeping its own independent copy per this codebase's
+  established no-cross-import convention between AR and AP), `server/
+  queries/accounts-receivable(-payable).ts` (return type now an array),
+  both modules' `actions.ts`/`*-forms.tsx` (a per-currency list with an
+  empty-state and an `fx_status`-conditional note replacing the old
+  single blended figure), and all four corresponding unit test files.
+  This intentionally changes the RPCs' observable behavior for a
+  zero-open-items caller from one row of zeroes to an empty array --
+  disclosed here, not silent, and the UI layer's new empty-state handles
+  it directly.
+  New db-test coverage added to the existing `finance-accounts-
+  receivable.sql`/`finance-accounts-payable.sql` fixture files (mirrored
+  pair, no new db-test file needed): the existing exposure-summary test
+  rewritten for the new per-row shape, plus a new multi-currency/FX block
+  that mints a second open item in a different currency, first proving
+  the `rate_unavailable` degrade path with no published rate, then
+  publishing and approving a real rate via the governed FIN-194 lifecycle
+  (`create_finance_exchange_rate_draft` -> `approve_finance_exchange_
+  rate`) and proving exact `converted` base-currency arithmetic, and
+  proving exactly two distinct per-currency rows are ever returned --
+  never blended into one.
+  Still deferred, correctly out of this bounded core's scope: retroactive
+  FX-rate persistence on `finance_journal_lines` itself (so a posted
+  entry's base-currency value is fixed at posting time rather than
+  recomputed live at query time against whatever rate is current then --
+  the "true" double-entry-accounting fix), enforcement of `app.finance_
+  accounts.currency_restriction` at posting time (a real, separate,
+  still-open hardening gap, confirmed unenforced by both B2a's and this
+  research pass), and true consolidated multi-currency financial
+  statements (trial balance / balance sheet / income statement rolled
+  into one reporting currency across every account, not just the two
+  AR/AP exposure summaries closed here). B4 is PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6154/6154,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`, confirmed via grep that no other
+  db-test file besides the two directly updated calls either function),
+  `git:check-paths`, `security:check`, `release:check-freeze` (HUNDRED-
+  AND-FIFTY-EIGHTH PASS, both digests updated -- one new migration file,
+  zero new db-test files, two existing db-test files gaining real new
+  coverage), and a real `next build`.

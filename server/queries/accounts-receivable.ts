@@ -82,11 +82,13 @@ export async function getFinanceArOpenItemActivity(
   return rows.map((row) => parseFinanceArOpenItemEvent(row as Record<string, unknown>));
 }
 
-/** FIN:View-gated. Internal Finance credit-exposure aggregate for one customer -- customer-facing visibility is deferred to Step 13. */
+/** FIN:View-gated. Internal Finance credit-exposure aggregate for one customer -- customer-facing visibility is deferred to Step 13.
+ * One row per currency actually posted (never a blended cross-currency sum, CG-AUDIT-2026-09-02 B4) -- an empty array means the
+ * customer has zero open items, not "one zero row". */
 export async function getFinanceArExposureSummary(
   client: AccountsReceivableQueryRpcClient,
   input: { tenantId: string; customerAccountId: string; actorAuthUserId: string },
-): Promise<FinanceArExposureSummary> {
+): Promise<FinanceArExposureSummary[]> {
   const { data, error } = await client.rpc("get_finance_ar_exposure_summary", {
     p_tenant_id: input.tenantId,
     p_customer_account_id: input.customerAccountId,
@@ -95,8 +97,6 @@ export async function getFinanceArExposureSummary(
   if (error) {
     throw new AccountsReceivableQueryError(error.message);
   }
-  if (!data || typeof data !== "object") {
-    throw new AccountsReceivableQueryError("get_finance_ar_exposure_summary returned no result");
-  }
-  return parseFinanceArExposureSummary(data as Record<string, unknown>);
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => parseFinanceArExposureSummary(row as Record<string, unknown>));
 }
