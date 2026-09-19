@@ -23,8 +23,16 @@ export interface FinanceInvoiceFormState {
   readonly error: string | null;
 }
 
+/**
+ * CG-AUDIT-2026-09-02 B7 (worklist half): `billingReadinessHandoffId` is now a
+ * bound positional arg (the worklist's own per-row form binds it, the same
+ * pattern every lifecycle action on this page already uses for `invoiceId`),
+ * not a hand-typed FormData field -- closes "Invoicing is driven by a
+ * hand-copied UUID."
+ */
 export async function prepareFinanceInvoiceFromReadinessAction(
   tenantSlug: string,
+  billingReadinessHandoffId: string,
   _prevState: FinanceInvoiceFormState,
   formData: FormData,
 ): Promise<FinanceInvoiceFormState> {
@@ -33,14 +41,10 @@ export async function prepareFinanceInvoiceFromReadinessAction(
     return { error: "You don't have access to this organization's Finance workspace." };
   }
 
-  const billingReadinessHandoffId = String(formData.get("billingReadinessHandoffId") ?? "").trim();
   const paymentTermDaysRaw = String(formData.get("paymentTermDays") ?? "30").trim();
   const taxCode = String(formData.get("taxCode") ?? "").trim().toUpperCase();
   const paymentTermDays = Number(paymentTermDaysRaw);
 
-  if (!billingReadinessHandoffId) {
-    return { error: "A BillingReadinessHandoff ID is required." };
-  }
   if (!Number.isFinite(paymentTermDays) || paymentTermDays < 0) {
     return { error: "Payment term days must be a non-negative number." };
   }

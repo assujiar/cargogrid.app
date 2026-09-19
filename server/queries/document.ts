@@ -14,18 +14,37 @@
  * runs as definer and bypasses RLS anyway. This module simply stops being the thing that
  * uses it.
  *
- * listDocumentTypes below is unchanged and stays a direct read: app.document_types is a
- * deliberately broadly-readable registry (app.document_types_select_all), not tenant data.
+ * listDocumentTypes below now goes through the app.list_document_types RPC (O1 remediation,
+ * cluster 5): app.document_types is a deliberately broadly-readable registry
+ * (app.document_types_select_all, a bare `using (true)` policy), but "app" is never exposed
+ * to PostgREST regardless of how permissive its own RLS policy is, so the direct
+ * `.from("document_types")` read this module used before had never actually worked in
+ * production -- the same defect class this whole module's header already documents for
+ * app.files. The new RPC is SECURITY INVOKER, zero actor parameter, matching
+ * app.list_milestone_codes' own identical precedent for a genuinely-open-RLS reference table.
+ *
+ * listFilesForRecord (O1 remediation, cluster 7): the same broken-`.from("files")`-never-worked
+ * defect, this time a record-scoped read embedded directly in
+ * app/(tenant)/[tenantSlug]/hris/employees/[masterRecordId]/page.tsx. Goes through the new
+ * `list_files_for_record` RPC (20260913050000), which mirrors `list_files_for_tenant` exactly
+ * (same per-row app.authorize_file_access('metadata_view') composition, same [1,200] clamp),
+ * scoped by (tenant_id, record_type, record_id) instead of tenant_id alone.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseFileSummary, parseDocumentType, type FileSummary, type DocumentType } from "../contracts/document/document.ts";
 import { BOUNDED_LIST_LIMIT, toBoundedListByCapReached, type BoundedList } from "./bounded-list.ts";
 
 export interface FileLookupClient {
   rpc(
-    fn: "list_files_for_tenant",
+    fn: "list_files_for_tenant" | "list_files_for_record",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/** Adapts a real Supabase client (whose own .rpc() returns a thenable query builder, not a plain Promise) into this module's narrower rpc-only contract -- same idiom as server/queries/procurement-approval.ts's toApprovalQueryRpcClient. */
+export function toFileLookupClient(client: Pick<SupabaseClient, "rpc">): FileLookupClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export class FileLookupError extends Error {
@@ -76,10 +95,44 @@ export async function listFilesForTenant(
   return toBoundedListByCapReached(((data as unknown[] | null) ?? []).map((row) => parseFileSummary(row as Record<string, unknown>)));
 }
 
+/**
+ * One record's own attachments (e.g. one employee's uploaded documents), as metadata.
+ *
+ * Goes through the `list_files_for_record` RPC (O1 remediation, cluster 7) rather than reading
+ * app.files directly -- mirrors `listFilesForTenant` above exactly (same per-row
+ * app.authorize_file_access composition and [1,200] clamp), scoped by (tenantId, recordType,
+ * recordId) instead of tenantId alone.
+ *
+ * `actorAuthUserId` must be the calling session's own identity -- the RPC asserts it.
+ */
+export async function listFilesForRecord(
+  client: FileLookupClient,
+  tenantId: string,
+  recordType: string,
+  recordId: string,
+  actorAuthUserId: string,
+  correlationId: string | null = null,
+): Promise<BoundedList<FileSummary>> {
+  const { data, error } = await client.rpc("list_files_for_record", {
+    p_tenant_id: tenantId,
+    p_record_type: recordType,
+    p_record_id: recordId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_correlation_id: correlationId,
+    p_limit: BOUNDED_LIST_LIMIT,
+  });
+
+  if (error) {
+    throw new FileLookupError(error.message);
+  }
+  if (data !== null && data !== undefined && !Array.isArray(data)) {
+    throw new FileLookupError("list_files_for_record returned a non-array result");
+  }
+  return toBoundedListByCapReached(((data as unknown[] | null) ?? []).map((row) => parseFileSummary(row as Record<string, unknown>)));
+}
+
 export interface DocumentTypeLookupClient {
-  from(table: "document_types"): {
-    select(columns: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-  };
+  rpc(fn: "list_document_types"): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 }
 
 export class DocumentTypeLookupError extends Error {
@@ -91,7 +144,7 @@ export class DocumentTypeLookupError extends Error {
 
 /** The full document-type registry -- broadly readable to any authenticated caller (app.document_types_select_all policy). */
 export async function listDocumentTypes(client: DocumentTypeLookupClient): Promise<DocumentType[]> {
-  const { data, error } = await client.from("document_types").select("*");
+  const { data, error } = await client.rpc("list_document_types");
 
   if (error) {
     throw new DocumentTypeLookupError(error.message);

@@ -652,11 +652,86 @@ begin
   end if;
 
   -- no raw storage_path is ever exposed through this RPC's own return shape.
+  -- Joined through information_schema.routines rather than pattern-matching
+  -- information_schema.parameters.specific_name directly: specific_name is
+  -- synthesized as <name>_<oid> and silently clipped to NAMEDATALEN-1 (63) bytes
+  -- total, which for this function's own OID clips the name itself mid-word --
+  -- live-confirmed clipped to '..._for_downloa_<oid>' (missing the final 'd'),
+  -- which broke a same-day earlier draft of this exact exclusion (a
+  -- 'not like %_for_download%' pattern that could never match the clipped value).
+  -- routines.routine_name is the real, unclipped name.
   if exists (
-    select 1 from information_schema.parameters
-    where specific_schema = 'app' and specific_name like 'access_vendor_compliance_document_evidence%' and parameter_name = 'storage_path'
+    select 1 from information_schema.routines r
+    join information_schema.parameters p on p.specific_schema = r.specific_schema and p.specific_name = r.specific_name
+    where r.routine_schema = 'app' and r.routine_name = 'access_vendor_compliance_document_evidence' and p.parameter_name = 'storage_path'
   ) then
     raise exception 'assertion failed: expected no storage_path column in app.access_vendor_compliance_document_evidence''s own return shape';
+  end if;
+end $$;
+
+\echo '>> CG-AUDIT-2026-09-02 A6 (signed download): app.access_vendor_compliance_document_evidence_for_download composes the identical PRC:Download + app.authorize_vendor_evidence_file_access(''signed_url_issued'') gate as its metadata_view/download-decision sibling, but DOES return storage_path/bucket_id once granted -- granted for clean evidence, denied (not raised) with storage_path/bucket_id nulled out once infected, insufficient_authority for an actor lacking PRC:Download, the same ISS-2026-146 not-found shape cross-tenant, and app.file_access_logs records every attempt with access_type=''signed_url_issued'''
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'pcmp1');
+  v_staff uuid := '00000000-0000-0000-0000-000000091102';
+  v_viewer uuid := '00000000-0000-0000-0000-000000091105';
+  v_t2_staff uuid := '00000000-0000-0000-0000-000000091202';
+  v_vendor_id uuid := (select master_record_id from app.vendor_profiles where tenant_id = v_tenant1 and idempotency_key = 'idem-pcmp-vendor-1');
+  v_doc app.vendor_compliance_documents;
+  v_result record;
+  v_log_count integer;
+begin
+  select * into v_doc from app.vendor_compliance_documents where vendor_master_record_id = v_vendor_id and is_latest_version and idempotency_key is null order by created_at desc limit 1;
+
+  -- granted: staff holds PRC:Download, the file is clean -- storage_path/bucket_id ARE returned this time.
+  select * into v_result from app.access_vendor_compliance_document_evidence_for_download(v_doc.id, v_staff, 'staff', null);
+  if v_result.access_result <> 'granted' or v_result.storage_path is null or v_result.bucket_id <> 'tenant-documents' or v_result.original_filename is null then
+    raise exception 'assertion failed: expected a granted signed-download access with a real storage_path/bucket_id, got result=% bucket=% path=% filename=%', v_result.access_result, v_result.bucket_id, v_result.storage_path, v_result.original_filename;
+  end if;
+
+  -- insufficient_authority: viewer holds View only, not Download.
+  begin
+    perform app.access_vendor_compliance_document_evidence_for_download(v_doc.id, v_viewer, 'viewer', null);
+    raise exception 'assertion failed: expected insufficient_authority for a viewer lacking PRC:Download (signed-download path)';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+
+  -- ISS-2026-146 shape: cross-tenant actor gets the same not-found a nonexistent id would, never a tenant_id-carrying insufficient_authority.
+  begin
+    perform app.access_vendor_compliance_document_evidence_for_download(v_doc.id, v_t2_staff, 'staff2', null);
+    raise exception 'assertion failed: expected vendor_compliance_document_not_found for a pcmp2 actor on the signed-download path';
+  exception
+    when others then
+      if sqlerrm not like 'vendor_compliance_document_not_found%' then raise; end if;
+  end;
+
+  -- denied, not raised, once infected -- storage_path/bucket_id nulled out exactly like the metadata_view sibling nulls file_id/original_filename.
+  perform set_config('app.scan_correction_reason', 'db-test: simulating the disclosed RPD-022 out-of-band re-flag of an already-clean file', true);
+  update app.files set malware_scan_status = 'infected' where id = v_doc.file_id;
+  select * into v_result from app.access_vendor_compliance_document_evidence_for_download(v_doc.id, v_staff, 'staff', null);
+  if v_result.access_result <> 'denied' or v_result.storage_path is not null or v_result.bucket_id is not null or v_result.access_reason is null then
+    raise exception 'assertion failed: expected a denied result with nulled-out storage_path/bucket_id for infected evidence, got result=% bucket=% path=% reason=%', v_result.access_result, v_result.bucket_id, v_result.storage_path, v_result.access_reason;
+  end if;
+  update app.files set malware_scan_status = 'clean' where id = v_doc.file_id;
+
+  -- PLT-128's own independent audit trail recorded both attempts above under access_type='signed_url_issued'.
+  select count(*) into v_log_count from app.file_access_logs where file_id = v_doc.file_id and accessed_by_auth_user_id = v_staff and access_type = 'signed_url_issued';
+  if v_log_count < 2 then
+    raise exception 'assertion failed: expected at least 2 app.file_access_logs rows for the staff actor''s own granted+denied signed-download attempts, got %', v_log_count;
+  end if;
+
+  -- storage_path IS present in this function's own return shape (the mirror-image
+  -- assertion of its sibling's own check above) -- joined through
+  -- information_schema.routines rather than pattern-matching the possibly-clipped
+  -- specific_name directly, same reasoning as that sibling check.
+  if not exists (
+    select 1 from information_schema.routines r
+    join information_schema.parameters p on p.specific_schema = r.specific_schema and p.specific_name = r.specific_name
+    where r.routine_schema = 'app' and r.routine_name = 'access_vendor_compliance_document_evidence_for_download' and p.parameter_name = 'storage_path'
+  ) then
+    raise exception 'assertion failed: expected app.access_vendor_compliance_document_evidence_for_download to declare a storage_path return column';
   end if;
 end $$;
 
@@ -1209,7 +1284,7 @@ begin
     and routine_name in (
       'create_vendor_compliance_requirement_draft', 'update_vendor_compliance_requirement_draft', 'publish_vendor_compliance_requirement',
       'archive_vendor_compliance_requirement', 'submit_vendor_compliance_document', 'renew_vendor_compliance_document',
-      'decide_vendor_compliance_document', 'access_vendor_compliance_document_evidence', 'request_vendor_compliance_waiver', 'decide_vendor_compliance_waiver',
+      'decide_vendor_compliance_document', 'access_vendor_compliance_document_evidence', 'access_vendor_compliance_document_evidence_for_download', 'request_vendor_compliance_waiver', 'decide_vendor_compliance_waiver',
       'revoke_vendor_compliance_waiver', 'expire_vendor_compliance_waivers', 'recalculate_vendor_compliance_status',
       'recalculate_tenant_vendor_compliance_status', 'get_vendor_compliance_requirement', 'list_vendor_compliance_requirements',
       'get_vendor_compliance_document', 'list_vendor_compliance_documents', 'list_vendor_compliance_document_versions',
@@ -1218,6 +1293,24 @@ begin
     and grantee = 'anon';
   if v_count <> 0 then
     raise exception 'assertion failed: expected zero anon EXECUTE grants on PRC-253 functions, found %', v_count;
+  end if;
+
+  -- CG-AUDIT-2026-09-02 A6: unlike its metadata_view/download-decision sibling
+  -- (granted to authenticated, self-checking), the signed-download RPC is
+  -- service_role-only -- storage_path can never safely reach a role the RLS-scoped
+  -- client executes as, per that function's own header comment.
+  select count(*) into v_count
+  from information_schema.routine_privileges
+  where routine_schema = 'app' and routine_name = 'access_vendor_compliance_document_evidence_for_download' and grantee in ('anon', 'authenticated');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected app.access_vendor_compliance_document_evidence_for_download to carry zero anon/authenticated EXECUTE grants (service_role only), found %', v_count;
+  end if;
+
+  select count(*) into v_count
+  from information_schema.routine_privileges
+  where routine_schema = 'public' and routine_name = 'access_vendor_compliance_document_evidence_for_download' and grantee in ('anon', 'authenticated');
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected public.access_vendor_compliance_document_evidence_for_download (the PostgREST-reachable wrapper) to carry zero anon/authenticated EXECUTE grants, found %', v_count;
   end if;
 
   select count(*) into v_count

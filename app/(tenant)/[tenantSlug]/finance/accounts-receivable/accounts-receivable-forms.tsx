@@ -66,9 +66,23 @@ export function FinanceArExposureLookupForm({ action }: { action: BoundLookupAct
       {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
 
       {state.result ? (
-        <p className="text-sm text-text-primary">
-          Total open: <span className="font-semibold">{state.result.totalOpen}</span> across {state.result.openCount} item(s); overdue: <span className="font-semibold">{state.result.overdueOpen}</span> across {state.result.overdueCount} item(s).
-        </p>
+        state.result.length === 0 ? (
+          <p className="text-sm text-text-secondary">No open items for this customer.</p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm text-text-primary">
+            {state.result.map((row) => (
+              <li key={row.currency}>
+                <span className="font-semibold">{row.currency}</span>: total open <span className="font-semibold">{row.totalOpen}</span> across {row.openCount} item(s); overdue{" "}
+                <span className="font-semibold">{row.overdueOpen}</span> across {row.overdueCount} item(s).
+                {row.fxStatus === "identity" ? null : row.fxStatus === "converted" ? (
+                  <span className="text-text-secondary"> (≈ {row.baseTotalOpen} {row.baseCurrency})</span>
+                ) : (
+                  <span className="text-text-secondary"> (no {row.baseCurrency} exchange rate available to convert)</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
       ) : null}
 
       <Button type="submit" loading={pending} loadingLabel="Looking up…" className="w-fit">

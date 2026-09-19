@@ -40,77 +40,78 @@ const MASKED_ROW = {
   updated_at: "2026-07-27T00:00:00.000Z",
 };
 
-function fakeTableClient(
-  response: { data: unknown; error: { message: string } | null; count?: number },
-  rpcResponse?: { data: unknown; error: { message: string } | null },
-  captureRange?: (from: number, to: number) => void,
+function fakeRpcClient(
+  responses: Record<string, { data: unknown; error: { message: string } | null }>,
+  capture?: { calls: { fn: string; args: Record<string, unknown> }[] },
 ): JobOrderQueryTableClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      limit: () => Promise.resolve(response),
-      range: (from: number, to: number) => {
-        captureRange?.(from, to);
-        return Promise.resolve(response);
-      },
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
   return {
-    from: () => chainNode(),
-    rpc: () => Promise.resolve(rpcResponse ?? response),
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture?.calls.push({ fn, args });
+      return responses[fn] ?? { data: null, error: { message: `no mock response for ${fn}` } };
+    },
   } as unknown as JobOrderQueryTableClient;
 }
 
 describe("getJobOrder", () => {
-  test("returns null (never an error) when no such row exists or RLS excludes it", async () => {
-    const client = fakeTableClient({ data: null, error: null });
-    const jobOrder = await getJobOrder(client, JOB_ORDER_ID);
+  test("returns null (never an error) when no such row exists or the caller's record scope excludes it", async () => {
+    const client = fakeRpcClient({ get_job_order: { data: [], error: null } });
+    const jobOrder = await getJobOrder(client, JOB_ORDER_ID, ACTOR_ID);
     assert.equal(jobOrder, null);
   });
 
   test("maps a masked row", async () => {
-    const client = fakeTableClient({ data: MASKED_ROW, error: null });
-    const jobOrder = await getJobOrder(client, JOB_ORDER_ID);
+    const client = fakeRpcClient({ get_job_order: { data: [MASKED_ROW], error: null } });
+    const jobOrder = await getJobOrder(client, JOB_ORDER_ID, ACTOR_ID);
     assert.equal(jobOrder?.revenueMasked, true);
     assert.equal(jobOrder?.revenueSnapshot, null);
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const client = fakeRpcClient({ get_job_order: { data: null, error: { message: "boom" } } });
     await assert.rejects(
-      () => getJobOrder(client, JOB_ORDER_ID),
+      () => getJobOrder(client, JOB_ORDER_ID, ACTOR_ID),
       (err: unknown) => err instanceof JobOrderQueryError,
     );
+  });
+
+  test("calls get_job_order with the job order id and actor id", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ get_job_order: { data: [MASKED_ROW], error: null } }, capture);
+    await getJobOrder(client, JOB_ORDER_ID, ACTOR_ID);
+    assert.deepEqual(capture.calls[0], { fn: "get_job_order", args: { p_job_order_id: JOB_ORDER_ID, p_actor_auth_user_id: ACTOR_ID } });
   });
 });
 
 describe("getJobOrderForHandoff", () => {
   test("returns null (never an error) when no Job Order has been converted yet", async () => {
-    const client = fakeTableClient({ data: null, error: null });
-    const jobOrder = await getJobOrderForHandoff(client, HANDOFF_ID);
+    const client = fakeRpcClient({ get_job_order_for_handoff: { data: [], error: null } });
+    const jobOrder = await getJobOrderForHandoff(client, HANDOFF_ID, ACTOR_ID);
     assert.equal(jobOrder, null);
   });
 
   test("maps a row", async () => {
-    const client = fakeTableClient({ data: MASKED_ROW, error: null });
-    const jobOrder = await getJobOrderForHandoff(client, HANDOFF_ID);
+    const client = fakeRpcClient({ get_job_order_for_handoff: { data: [MASKED_ROW], error: null } });
+    const jobOrder = await getJobOrderForHandoff(client, HANDOFF_ID, ACTOR_ID);
     assert.equal(jobOrder?.sourceHandoffId, HANDOFF_ID);
+  });
+
+  test("wraps an ambiguous_context error the same way as any other query error", async () => {
+    const client = fakeRpcClient({ get_job_order_for_handoff: { data: null, error: { message: "ambiguous_context: source_handoff_id matches 2 job orders" } } });
+    await assert.rejects(
+      () => getJobOrderForHandoff(client, HANDOFF_ID, ACTOR_ID),
+      (err: unknown) => err instanceof JobOrderQueryError,
+    );
   });
 });
 
 describe("listJobOrders", () => {
-  test("bounds the query to one 50-row default page, ordered by created_at descending", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [MASKED_ROW], error: null, count: 1 }, undefined, (from, to) => ranges.push([from, to]));
-    const result = await listJobOrders(client, { tenantId: TENANT_ID, page: 1 });
-    assert.deepEqual(ranges[0], [0, 49]);
+  test("passes the default page/pageSize and reads total_count off row 0", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ list_job_orders: { data: [{ ...MASKED_ROW, total_count: 1 }], error: null } }, capture);
+    const result = await listJobOrders(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
+    assert.equal(capture.calls[0]?.args.p_page, 1);
+    assert.equal(capture.calls[0]?.args.p_page_size, 50);
+    assert.equal(capture.calls[0]?.args.p_actor_auth_user_id, ACTOR_ID);
     assert.equal(result.jobOrders.length, 1);
     assert.equal(result.jobOrders[0]?.status, "draft");
     assert.equal(result.totalCount, 1);
@@ -118,30 +119,36 @@ describe("listJobOrders", () => {
     assert.equal(result.pageSize, 50);
   });
 
-  test("advances the page offset correctly for page 2 and clamps an oversized pageSize", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [], error: null, count: 0 }, undefined, (from, to) => ranges.push([from, to]));
-    await listJobOrders(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
-    assert.deepEqual(ranges[0], [100, 199]);
+  test("clamps an oversized pageSize and advances p_page for page 2", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ list_job_orders: { data: [], error: null } }, capture);
+    await listJobOrders(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 2, pageSize: 500 });
+    assert.equal(capture.calls[0]?.args.p_page, 2);
+    assert.equal(capture.calls[0]?.args.p_page_size, 100);
+  });
+
+  test("returns zero total_count, not an error, for a tenant with zero visible job orders", async () => {
+    const client = fakeRpcClient({ list_job_orders: { data: [], error: null } });
+    const result = await listJobOrders(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
+    assert.deepEqual(result.jobOrders, []);
+    assert.equal(result.totalCount, 0);
   });
 });
 
 describe("getJobOrderConversionReadiness", () => {
   test("maps a ready-with-no-blockers row", async () => {
-    const client = fakeTableClient(
-      { data: null, error: null },
-      { data: { ready: true, blocking_reasons: [], existing_job_order_id: null }, error: null },
-    );
+    const client = fakeRpcClient({
+      get_job_order_conversion_readiness: { data: { ready: true, blocking_reasons: [], existing_job_order_id: null }, error: null },
+    });
     const readiness = await getJobOrderConversionReadiness(client, { sourceHandoffId: HANDOFF_ID, actorAuthUserId: ACTOR_ID });
     assert.equal(readiness.ready, true);
     assert.deepEqual(readiness.blockingReasons, []);
   });
 
   test("maps an already_converted row carrying the existing Job Order id", async () => {
-    const client = fakeTableClient(
-      { data: null, error: null },
-      { data: { ready: false, blocking_reasons: ["already_converted"], existing_job_order_id: JOB_ORDER_ID }, error: null },
-    );
+    const client = fakeRpcClient({
+      get_job_order_conversion_readiness: { data: { ready: false, blocking_reasons: ["already_converted"], existing_job_order_id: JOB_ORDER_ID }, error: null },
+    });
     const readiness = await getJobOrderConversionReadiness(client, { sourceHandoffId: HANDOFF_ID, actorAuthUserId: ACTOR_ID });
     assert.equal(readiness.ready, false);
     assert.deepEqual(readiness.blockingReasons, ["already_converted"]);
@@ -149,7 +156,7 @@ describe("getJobOrderConversionReadiness", () => {
   });
 
   test("wraps an rpc error", async () => {
-    const client = fakeTableClient({ data: null, error: null }, { data: null, error: { message: "boom" } });
+    const client = fakeRpcClient({ get_job_order_conversion_readiness: { data: null, error: { message: "boom" } } });
     await assert.rejects(
       () => getJobOrderConversionReadiness(client, { sourceHandoffId: HANDOFF_ID, actorAuthUserId: ACTOR_ID }),
       (err: unknown) => err instanceof JobOrderQueryError,

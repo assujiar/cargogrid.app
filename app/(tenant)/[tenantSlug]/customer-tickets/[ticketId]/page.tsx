@@ -15,6 +15,7 @@ import { CustomerPortalNav } from "../../../../../components/domain/customer-por
 import { CustomerTicketDetailPanel } from "./customer-ticket-detail-panel.tsx";
 import {
   replyToCustomerTicketAction,
+  getCustomerTicketAttachmentDownloadLinkAction,
   transitionCustomerTicketStatusAction,
   searchCustomerTicketLinkCandidatesAction,
   linkCustomerTicketRecordAction,
@@ -111,6 +112,7 @@ export default async function CustomerTicketDetailPage({ params }: { params: Pro
         detail={detail}
         messages={messages}
         replyAction={replyToCustomerTicketAction.bind(null, tenantSlug, ticketId)}
+        downloadAttachmentAction={(fileId: string) => getCustomerTicketAttachmentDownloadLinkAction.bind(null, tenantSlug, fileId)}
         transitionAction={(toStatus) => transitionCustomerTicketStatusAction.bind(null, tenantSlug, ticketId, recordVersion, toStatus)}
         slaStatus={slaStatus}
         escalationStatus={escalationStatus}

@@ -13,6 +13,7 @@ import {
   ReviewDocumentChecklistItemInputSchema,
   parseDocumentRequirementDefinition,
   parseShipmentDocumentChecklistItem,
+  parseShipmentDocumentChecklistItemEvidenceDownloadSource,
   type CreateDocumentRequirementDraftInput,
   type PublishDocumentRequirementVersionInput,
   type PinShipmentDocumentChecklistInput,
@@ -20,6 +21,7 @@ import {
   type ReviewDocumentChecklistItemInput,
   type DocumentRequirementDefinition,
   type ShipmentDocumentChecklistItem,
+  type ShipmentDocumentChecklistItemSignedDownload,
 } from "../contracts/document-requirement/document-requirement.ts";
 import { parseFile, type File as PlatformFile } from "../contracts/document/document.ts";
 
@@ -199,6 +201,61 @@ export async function uploadShipmentDocumentFile(client: DocumentRequirementMuta
     throw new DocumentRequirementMutationError("invalid_response", "initiate_file_upload returned no row");
   }
   return parseFile(data as Record<string, unknown>);
+}
+
+/**
+ * Widens DocumentRequirementMutationRpcClient with the one extra capability
+ * this single function needs: minting a signed URL against the real Storage
+ * bucket. Only ever satisfied by a service-role client -- the underlying RPC
+ * this calls is granted to service_role only.
+ */
+export type ShipmentDocumentChecklistEvidenceDownloadClient = DocumentRequirementMutationRpcClient & {
+  storage: {
+    from(bucket: string): {
+      createSignedUrl(path: string, expiresInSeconds: number): Promise<{ data: { signedUrl: string } | null; error: { message: string } | null }>;
+    };
+  };
+};
+
+const SIGNED_DOWNLOAD_URL_TTL_SECONDS = 300;
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one shipment
+ * document checklist item's linked evidence file. Calls the service_role-only
+ * app.access_shipment_document_checklist_item_evidence_for_download RPC first
+ * (OPS:Download + the same app.can_access_record scope check
+ * link/reviewDocumentChecklistItem already use, then the malware-scan/
+ * classification gate); only once that RPC reports accessResult='granted' does
+ * this function call Storage at all. storage_path/bucketId never leave this
+ * function -- the caller only ever sees the already-signed URL.
+ */
+export async function getShipmentDocumentChecklistItemSignedDownloadUrl(
+  client: ShipmentDocumentChecklistEvidenceDownloadClient,
+  checklistItemId: string,
+  actorAuthUserId: string,
+  actorLabel: string,
+): Promise<ShipmentDocumentChecklistItemSignedDownload> {
+  const { data, error } = await client.rpc("access_shipment_document_checklist_item_evidence_for_download", {
+    p_checklist_item_id: checklistItemId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_actor_label: actorLabel,
+    p_correlation_id: null,
+  });
+  if (error) throw new DocumentRequirementMutationError(classifyError(error.message), error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== "object") throw new DocumentRequirementMutationError("invalid_response", "access_shipment_document_checklist_item_evidence_for_download returned no row");
+  const source = parseShipmentDocumentChecklistItemEvidenceDownloadSource(row as Record<string, unknown>);
+
+  if (source.accessResult !== "granted" || !source.bucketId || !source.storagePath) {
+    return { accessResult: source.accessResult, accessReason: source.accessReason, signedUrl: null, originalFilename: null };
+  }
+
+  const { data: signed, error: signError } = await client.storage.from(source.bucketId).createSignedUrl(source.storagePath, SIGNED_DOWNLOAD_URL_TTL_SECONDS);
+  if (signError || !signed) {
+    throw new DocumentRequirementMutationError("mutation_failed", `could not mint a signed download URL: ${signError?.message ?? "no data returned"}`);
+  }
+
+  return { accessResult: "granted", accessReason: null, signedUrl: signed.signedUrl, originalFilename: source.originalFilename };
 }
 
 /** approved requires the linked file to have already resolved to a clean malware scan (app.review_document_checklist_item's own document_checklist_unsafe_file gate). */

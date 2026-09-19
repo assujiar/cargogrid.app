@@ -90,6 +90,28 @@ export function parseCustomerPortalScopeContextRow(row: Record<string, unknown>)
   });
 }
 
+/** app.list_my_pending_customer_portal_invites (CG-AUDIT-2026-09-02 A2b) -- one row per still-`invited` membership for the calling identity in this tenant, the one state app.get_customer_portal_scope_context/app.resolve_customer_account_scope both deliberately exclude (customer_user layer is granted only on accept, not on invite). */
+export const CustomerPortalPendingInviteSchema = z.object({
+  membershipId: z.string().uuid(),
+  accountId: z.string().uuid(),
+  accountName: z.string(),
+  role: CustomerPortalMembershipRoleSchema,
+  recordVersion: z.number().int().positive(),
+  invitedAt: z.string().nullable(),
+});
+export type CustomerPortalPendingInvite = z.infer<typeof CustomerPortalPendingInviteSchema>;
+
+export function parseCustomerPortalPendingInvite(row: Record<string, unknown>): CustomerPortalPendingInvite {
+  return CustomerPortalPendingInviteSchema.parse({
+    membershipId: row.membership_id,
+    accountId: row.account_id,
+    accountName: row.account_name,
+    role: row.role,
+    recordVersion: row.record_version,
+    invitedAt: row.invited_at ?? null,
+  });
+}
+
 // --- Cursor pagination ---
 
 /**

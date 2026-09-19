@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { headers } from "next/headers";
+import { resolveRequestClientIp } from "../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../lib/supabase/service-role.ts";
 import { lookupPublicShipmentTracking } from "../../../../server/queries/public-tracking.ts";
 
@@ -38,12 +38,32 @@ const LIVE_ETA_STATUS_MESSAGE: Record<string, string> = {
  */
 export default async function PublicTrackingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const requestHeaders = await headers();
-  const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // CG-AUDIT-2026-09-02 D3: the FIRST x-forwarded-for hop is caller-controlled and a proxy
+  // only ever appends to it -- lib/security/client-ip.ts's own resolveRequestClientIp is the
+  // shared, correct resolution (x-real-ip first, else the LAST x-forwarded-for hop).
+  const ipAddress = (await resolveRequestClientIp()) ?? "unknown";
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const client = createSupabaseServiceRoleClient();
-  const result = await lookupPublicShipmentTracking(client, { rawToken: token, clientKey });
+  // CG-AUDIT-2026-09-02 F1: reproduced live against a booted build -- an unresolvable token
+  // produced an uncaught 500 here. app.lookup_public_shipment_tracking itself is designed to
+  // never raise (see its own header comment), but this page's OWN TS layer can still throw --
+  // lookupPublicShipmentTracking() raises PublicTrackingQueryError on a real RPC/network error
+  // or an unparseable row (a schema drift between this contract and the database's own return
+  // shape). This route is unauthenticated and outside every portal guard, so it must degrade to
+  // the same "Tracking unavailable" state a bad token already renders, never a raw crash --
+  // there is no session/tenant context here to fall back on the way an authenticated route can.
+  let result: Awaited<ReturnType<typeof lookupPublicShipmentTracking>>;
+  try {
+    result = await lookupPublicShipmentTracking(client, { rawToken: token, clientKey });
+  } catch {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
+        <h1 className="text-xl font-semibold text-neutral-900">Tracking unavailable</h1>
+        <p className="text-sm text-neutral-600">This tracking link is no longer valid.</p>
+      </main>
+    );
+  }
 
   if (result.lookupStatus !== "ok") {
     return (

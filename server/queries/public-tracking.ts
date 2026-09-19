@@ -1,8 +1,16 @@
 /**
  * Basic Public and Customer Tracking read queries (OPS-180, CG-S8-OPS-014). A thin,
- * typed wrapper around the one public RPC, app.lookup_public_shipment_tracking, plus
- * a direct RLS-scoped read of app.shipment_tracking_tokens for the internal management
- * panel (never exposes raw_token -- that is returned exactly once, at issuance).
+ * typed wrapper around the one public RPC, app.lookup_public_shipment_tracking.
+ * CG-AUDIT-2026-09-02 O1 remediation (cluster 4 batch 2,
+ * 20260911060000_close_o1_query_layer_cluster4_batch2_tracking_security.sql):
+ * the internal Operations tracking-token management panel's own read also now
+ * goes through app.get_active_shipment_tracking_token, a SECURITY DEFINER RPC
+ * (app is not exposed to PostgREST, and ISS-2026-232 also revoked
+ * authenticated's table-level SELECT on app.shipment_tracking_tokens in favor
+ * of an explicit column-level grant) that hand-picks the safe (token_hash-free)
+ * columns server-side and reproduces the table's own RLS predicate explicitly
+ * against a real, session-identity-checked actor (never exposes raw_token --
+ * that is returned exactly once, at issuance).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -25,22 +33,16 @@ export class PublicTrackingQueryError extends Error {
 }
 
 /** The current active token's metadata (status/expiry), if any -- for the Operations management panel. Never the raw token. */
-export async function getActiveShipmentTrackingToken(client: PublicTrackingQueryClient, shipmentOrderId: string): Promise<ShipmentTrackingToken | null> {
-  // ISS-2026-232: explicit column list, omitting token_hash -- `authenticated` no
-  // longer holds table-level SELECT on app.shipment_tracking_tokens (column-privilege
-  // closure), so a bare `select("*")` would now fail with a permission error for any
-  // caller using the ordinary authenticated-session client (this function's own real
-  // caller, the Operations tracking panel).
-  const { data, error } = await client
-    .from("shipment_tracking_tokens")
-    .select("id, tenant_id, shipment_order_id, status, expires_at, revoked_at, revoked_reason, created_by, created_at")
-    .eq("shipment_order_id", shipmentOrderId)
-    .eq("status", "active")
-    .maybeSingle();
+export async function getActiveShipmentTrackingToken(client: PublicTrackingQueryClient, shipmentOrderId: string, actorAuthUserId: string): Promise<ShipmentTrackingToken | null> {
+  const { data, error } = await client.rpc("get_active_shipment_tracking_token", {
+    p_shipment_order_id: shipmentOrderId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new PublicTrackingQueryError(error.message);
   }
-  return data ? parseShipmentTrackingToken(data as Record<string, unknown>) : null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? parseShipmentTrackingToken(row as Record<string, unknown>) : null;
 }
 
 /**

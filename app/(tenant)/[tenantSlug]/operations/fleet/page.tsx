@@ -8,6 +8,7 @@ import {
   listSimCards,
   listProviderVehicleMappings,
   listVehicleTrackingSourcePriorities,
+  listDeviceVehicleAssignmentHistory,
   FleetDriverDeviceQueryError,
 } from "../../../../../server/queries/fleet-driver-device.ts";
 import { searchMasterRecords, MasterDataQueryError, type MasterDataQueryRpcClient } from "../../../../../server/queries/master-data.ts";
@@ -28,6 +29,7 @@ import {
   unassignSimFromDeviceAction,
   registerProviderMappingAction,
   setVehicleSourcePriorityAction,
+  recordGpsDeviceInstallationAction,
 } from "./actions.ts";
 
 function masterMap(records: readonly MasterRecord[]): ReadonlyMap<string, MasterRecord> {
@@ -61,6 +63,7 @@ export default async function FleetPage({ params }: { params: Promise<{ tenantSl
   let sourcePriorities: VehicleTrackingSourcePriority[] = [];
   let vehicleMasterById: ReadonlyMap<string, MasterRecord> = new Map();
   let driverMasterById: ReadonlyMap<string, MasterRecord> = new Map();
+  let currentAssignmentIdByDeviceId: ReadonlyMap<string, string> = new Map();
 
   // Adapts the real Supabase client to `MasterDataQueryRpcClient`'s plain-`Promise`
   // shape -- `supabase.rpc()` itself returns a thenable `PostgrestFilterBuilder`, not a
@@ -94,6 +97,25 @@ export default async function FleetPage({ params }: { params: Promise<{ tenantSl
     ]);
     providerMappings = mappingsPerVehicle.flat();
     sourcePriorities = prioritiesPerVehicle.flat();
+
+    // CG-AUDIT-2026-09-02 E5: the "record installation" form needs each
+    // 'assigned'-status device's CURRENT device_vehicle_assignment_id
+    // (app.record_gps_device_installation's own required parameter) --
+    // GpsDevice itself carries no such field (app.gps_devices and
+    // app.device_vehicle_assignments are deliberately separate tables,
+    // ATW-223's own append-only assignment-history design). Only fetched
+    // for devices that could actually show the form (status='assigned'),
+    // not every device.
+    const assignedDeviceIds = gpsDevices.filter((device) => device.status === "assigned").map((device) => device.id);
+    const assignmentHistories = await Promise.all(assignedDeviceIds.map((deviceId) => listDeviceVehicleAssignmentHistory(supabase, deviceId)));
+    const currentAssignmentMap = new Map<string, string>();
+    for (const history of assignmentHistories) {
+      const current = history.find((assignment) => assignment.isCurrent);
+      if (current) {
+        currentAssignmentMap.set(current.deviceId, current.id);
+      }
+    }
+    currentAssignmentIdByDeviceId = currentAssignmentMap;
   } catch (error) {
     if (!(error instanceof FleetDriverDeviceQueryError) && !(error instanceof MasterDataQueryError)) {
       throw error;
@@ -127,10 +149,14 @@ export default async function FleetPage({ params }: { params: Promise<{ tenantSl
         devices={devices}
         vehicles={vehicles}
         vehicleMasterById={vehicleMasterById}
+        currentAssignmentIdByDeviceId={currentAssignmentIdByDeviceId}
         registerAction={registerDeviceAction.bind(null, tenantSlug)}
         transitionActionFor={(deviceId, expectedVersion) => transitionDeviceStatusAction.bind(null, tenantSlug, deviceId, expectedVersion)}
         assignActionFor={(deviceId) => assignDeviceToVehicleAction.bind(null, tenantSlug, deviceId)}
         unassignActionFor={(deviceId) => unassignDeviceFromVehicleAction.bind(null, tenantSlug, deviceId)}
+        recordInstallationActionFor={(deviceId, assignmentId, expectedDeviceVersion) =>
+          recordGpsDeviceInstallationAction.bind(null, tenantSlug, deviceId, assignmentId, expectedDeviceVersion)
+        }
       />
 
       <SimSection

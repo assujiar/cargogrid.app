@@ -65,7 +65,7 @@ export default async function QuotationDetailPage({
 
   let quotation;
   try {
-    quotation = await getQuotationById(supabase, quotationId);
+    quotation = await getQuotationById(supabase, quotationId, access.authUserId);
   } catch (error) {
     if (!(error instanceof QuotationQueryError)) {
       throw error;
@@ -80,16 +80,16 @@ export default async function QuotationDetailPage({
   }
 
   const [lines, readiness, costingRequests, contacts, versions, approvalOverview, acceptanceTokens] = await Promise.all([
-    listQuotationLines(supabase, quotation.id),
+    listQuotationLines(supabase, quotation.id, access.authUserId),
     getQuotationSubmissionReadiness(supabase, quotation.id, access.authUserId),
-    listCostingRequestsForOpportunity(supabase, quotation.opportunityId),
-    listContacts(supabase, { tenantId: access.tenant.id, page: 1, pageSize: 50 }),
-    listQuotationVersions(supabase, quotation.rootQuotationId),
+    listCostingRequestsForOpportunity(supabase, quotation.opportunityId, access.authUserId),
+    listContacts(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page: 1, pageSize: 50 }),
+    listQuotationVersions(supabase, quotation.rootQuotationId, access.authUserId),
     getQuotationApprovalOverview(supabase, quotation, access.authUserId),
-    listQuotationAcceptanceTokens(supabase, quotation.id),
+    listQuotationAcceptanceTokens(supabase, quotation.id, access.authUserId),
   ]);
 
-  const calculationsByRequest = await Promise.all(costingRequests.map((request) => listMarginCalculationsForRequest(supabase, request.id)));
+  const calculationsByRequest = await Promise.all(costingRequests.map((request) => listMarginCalculationsForRequest(supabase, request.id, access.authUserId)));
   const availableCalculations: MarginCalculation[] = calculationsByRequest.flat().filter((calc) => calc.isCurrent);
 
   const editable = quotation.status === "draft" && quotation.isCurrent;
@@ -98,7 +98,7 @@ export default async function QuotationDetailPage({
   let conversionReadiness: AccountConversionReadiness | null = null;
   let duplicateCandidates: Account[] = [];
   if (quotation.customerDecision === "accepted") {
-    existingConversion = await getAccountConversionForQuotation(supabase, quotation.id);
+    existingConversion = await getAccountConversionForQuotation(supabase, { quotationId: quotation.id, actorAuthUserId: access.authUserId });
     if (!existingConversion) {
       conversionReadiness = await getAccountConversionReadiness(supabase, { quotationId: quotation.id, actorAuthUserId: access.authUserId });
       if (conversionReadiness.duplicateCandidateIds.length > 0) {
@@ -108,14 +108,14 @@ export default async function QuotationDetailPage({
     }
   }
 
-  const existingContract = existingConversion ? await getCustomerContractForQuotation(supabase, quotation.id) : null;
-  const existingHandoff = existingConversion ? await getJobOrderHandoffForQuotation(supabase, quotation.id) : null;
+  const existingContract = existingConversion ? await getCustomerContractForQuotation(supabase, quotation.id, access.authUserId) : null;
+  const existingHandoff = existingConversion ? await getJobOrderHandoffForQuotation(supabase, quotation.id, access.authUserId) : null;
 
   let comparisonPanel = null;
   if (compareWith) {
-    const otherQuotation = await getQuotationById(supabase, compareWith);
+    const otherQuotation = await getQuotationById(supabase, compareWith, access.authUserId);
     if (otherQuotation && otherQuotation.rootQuotationId === quotation.rootQuotationId) {
-      const otherLines = await listQuotationLines(supabase, otherQuotation.id);
+      const otherLines = await listQuotationLines(supabase, otherQuotation.id, access.authUserId);
       const diff = diffQuotationVersions({ quotation: otherQuotation, lines: otherLines }, { quotation, lines });
       comparisonPanel = <ComparisonPanel diff={diff} otherVersionNumber={otherQuotation.versionNumber} />;
     }

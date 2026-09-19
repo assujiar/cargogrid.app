@@ -40,7 +40,7 @@ export default async function FiscalPeriodDetailPage({ params }: { params: Promi
     if (!period) {
       notFound();
     }
-    checklistItems = await listFinancePeriodChecklistItems(supabase, periodId);
+    checklistItems = await listFinancePeriodChecklistItems(supabase, periodId, access.authUserId);
     readiness = await getFinancePeriodCloseReadiness(supabase, periodId, access.authUserId);
     history = await getFinancePeriodTransitionHistory(supabase, periodId, access.authUserId);
   } catch (error) {

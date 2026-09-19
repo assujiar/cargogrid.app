@@ -28,7 +28,7 @@ export default async function SalesPlanDetailPage({ params }: { params: Promise<
 
   let plan;
   try {
-    plan = await getSalesPlanById(supabase, planId);
+    plan = await getSalesPlanById(supabase, planId, access.authUserId);
   } catch (error) {
     if (!(error instanceof PipelineQueryError)) {
       throw error;
@@ -42,12 +42,12 @@ export default async function SalesPlanDetailPage({ params }: { params: Promise<
     notFound();
   }
 
-  const targets = await listSalesTargetsForPlan(supabase, plan.id);
+  const targets = await listSalesTargetsForPlan(supabase, plan.id, access.authUserId);
   const targetDetails = await Promise.all(
     targets.map(async (target) => {
       const [actual, snapshots] = await Promise.all([
         getSalesTargetActual(supabase, target.id, access.authUserId),
-        listForecastSnapshotsForTarget(supabase, target.id),
+        listForecastSnapshotsForTarget(supabase, target.id, access.authUserId),
       ]);
       return { target, actual, latestSnapshot: snapshots[0] ?? null };
     }),

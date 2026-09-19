@@ -34,8 +34,8 @@ export default async function CreditApprovalsInboxPage({ params }: { params: Pro
     items = [];
   }
 
-  const profiles = await Promise.all(items.map((item) => getCreditProfileById(supabase, item.creditProfileId)));
-  const accounts = await Promise.all(profiles.map((profile) => (profile ? getAccountById(supabase, profile.accountId) : null)));
+  const profiles = await Promise.all(items.map((item) => getCreditProfileById(supabase, item.creditProfileId, access.authUserId)));
+  const accounts = await Promise.all(profiles.map((profile) => (profile ? getAccountById(supabase, profile.accountId, access.authUserId) : null)));
   const rows = items.map((item, index) => ({ item, account: accounts[index] }));
 
   const columns: readonly DataTableColumn<(typeof rows)[number]>[] = [

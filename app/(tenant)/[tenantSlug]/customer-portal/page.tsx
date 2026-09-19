@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import { resolveCustomerPortalAccessForRequest } from "../../../../lib/portal/resolve-customer-portal-access.server.ts";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
-import { getCustomerPortalScopeContext, CustomerPortalScopeQueryError } from "../../../../server/queries/customer-portal-scope.ts";
+import { getCustomerPortalScopeContext, listMyPendingCustomerPortalInvites, CustomerPortalScopeQueryError } from "../../../../server/queries/customer-portal-scope.ts";
 import { PermissionState } from "../../../../components/ui/permission-state.tsx";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
 import { EmptyState } from "../../../../components/ui/empty-state.tsx";
 import { CustomerPortalNav } from "../../../../components/domain/customer-portal-nav.tsx";
 import { CustomerPortalScopePanel } from "./customer-portal-scope-panel.tsx";
+import { PendingInvitesPanel } from "./pending-invites-panel.tsx";
+import { acceptCustomerPortalInviteAction } from "./accept-invite-actions.ts";
 
 /**
  * Customer portal scope-preview screen (CPL-300, CG-S13-CPL-002) -- this
@@ -36,6 +38,35 @@ export default async function CustomerPortalPage({ params }: { params: Promise<{
 
   if (access.status === "unauthenticated") {
     redirect(`/login`);
+  }
+
+  if (access.status === "forbidden") {
+    // CG-AUDIT-2026-09-02 A2b: "forbidden" here means "authenticated, but
+    // holds no active customer_user-layer principal in this tenant yet" --
+    // exactly the state a genuinely invited-but-not-yet-accepted identity is
+    // in (the layer is granted on accept, not on invite). Check for a real
+    // pending invite before falling back to the generic denied message.
+    const supabaseForInvites = await createSupabaseServerClient();
+    const { data: userData } = await supabaseForInvites.auth.getUser();
+    const authUserId = userData.user?.id ?? null;
+
+    let pendingInvites: Awaited<ReturnType<typeof listMyPendingCustomerPortalInvites>> = [];
+    if (authUserId) {
+      try {
+        pendingInvites = await listMyPendingCustomerPortalInvites(supabaseForInvites, authUserId, access.tenant.id);
+      } catch (error) {
+        if (!(error instanceof CustomerPortalScopeQueryError)) throw error;
+      }
+    }
+
+    if (pendingInvites.length > 0) {
+      return (
+        <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-4">
+          <h1 className="text-xl font-semibold text-neutral-900">You&apos;re invited</h1>
+          <PendingInvitesPanel invites={pendingInvites} acceptAction={acceptCustomerPortalInviteAction.bind(null, tenantSlug)} />
+        </div>
+      );
+    }
   }
 
   if (access.status !== "allowed") {

@@ -15,6 +15,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../lib/supabase/service-role.ts";
 import { resolveCustomerTicketAccessForRequest } from "../../../../lib/portal/resolve-customer-ticket-access.server.ts";
 import {
   createCustomerTicket,
@@ -25,6 +26,8 @@ import {
   recordTicketLinkAccessDenial,
   linkTicketPortalRecord,
   unlinkTicketPortalRecord,
+  getTicketAttachmentSignedDownloadUrl,
+  type TicketAttachmentEvidenceDownloadClient,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
 import { searchTicketLinkCandidates, searchCustomerTicketLinkCandidatesPrecreate, searchTicketPortalLinkCandidates, TicketQueryError } from "../../../../server/queries/ticketing.ts";
@@ -38,6 +41,7 @@ import type {
   TicketPortalLinkEntityType,
   TicketPortalLinkCandidateRow,
   TicketPrecreateLinkEntityType,
+  TicketAttachmentSignedDownload,
 } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface CustomerTicketActionState {
@@ -221,6 +225,50 @@ export async function replyToCustomerTicketAction(tenantSlug: string, ticketId: 
   }
   revalidatePath(detailPath(tenantSlug, ticketId));
   return OK;
+}
+
+function toCustomerTicketAttachmentDownloadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): TicketAttachmentEvidenceDownloadClient {
+  return client;
+}
+
+export interface CustomerTicketAttachmentDownloadState {
+  readonly error: string | null;
+  readonly download: TicketAttachmentSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ticket
+ * attachment, for the customer-portal side. app.access_ticket_attachment_
+ * evidence_for_download (this session's own new RPC,
+ * 20260914050000_a6_ticket_attachment_signed_download.sql) needed NO changes
+ * to serve this caller -- it already gates on app.can_access_ticket (which
+ * a genuine requester/watcher already satisfies) plus the linked message's
+ * own visibility, and deliberately carries no staff-only exclusion (that
+ * exclusion exists only on the STAFF listing RPC, to keep a customer-layer
+ * caller off of internal-note visibility wholesale -- this RPC authorizes
+ * one already-known file id against one already-resolved message's own
+ * visibility instead, so the same protection already falls out of the
+ * visibility gate). access.status === "allowed" only proves tenant-level
+ * portal entry -- the real per-file authority is re-checked fresh inside
+ * the RPC itself, never assumed here.
+ */
+export async function getCustomerTicketAttachmentDownloadLinkAction(
+  tenantSlug: string,
+  fileId: string,
+  _prevState: CustomerTicketAttachmentDownloadState,
+  _formData: FormData,
+): Promise<CustomerTicketAttachmentDownloadState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, download: null };
+
+  const serviceRole = createSupabaseServiceRoleClient();
+  try {
+    const download = await getTicketAttachmentSignedDownloadUrl(toCustomerTicketAttachmentDownloadClient(serviceRole), fileId, access.authUserId, access.authUserId);
+    return { error: null, download };
+  } catch (error) {
+    if (error instanceof TicketMutationError) return { error: `Could not create a download link: ${error.message}`, download: null };
+    throw error;
+  }
 }
 
 export async function transitionCustomerTicketStatusAction(

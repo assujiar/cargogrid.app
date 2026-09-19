@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveProcurementAccessForRequest } from "../../../../../lib/portal/resolve-procurement-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listProcurementLinkedVendorRateVersions, ProcurementRateQueryError } from "../../../../../server/queries/procurement-rate.ts";
@@ -26,7 +27,7 @@ export default async function ProcurementRateDirectoryPage({ params }: { params:
   let loadFailed = false;
   let rows: Record<string, unknown>[] = [];
   try {
-    rows = await listProcurementLinkedVendorRateVersions(supabase, access.tenant.id);
+    rows = await listProcurementLinkedVendorRateVersions(supabase, access.tenant.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof ProcurementRateQueryError)) throw error;
     loadFailed = true;
@@ -52,12 +53,17 @@ export default async function ProcurementRateDirectoryPage({ params }: { params:
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">Vendor rates and pricelists</h1>
-        <p className="text-xs text-neutral-500">
-          The canonical vendor-rate engine (Phase 2, ADR-0015), extended with vendor identity linkage, weight/volume tiers, and lead-time/capacity terms (Phase 6, ADR-0020).
-          Vendor cost figures are masked here without PRC:View cost.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-900">Vendor rates and pricelists</h1>
+          <p className="text-xs text-neutral-500">
+            The canonical vendor-rate engine (Phase 2, ADR-0015), extended with vendor identity linkage, weight/volume tiers, and lead-time/capacity terms (Phase 6, ADR-0020).
+            Vendor cost figures are masked here without PRC:View cost.
+          </p>
+        </div>
+        <Link href={`/${tenantSlug}/procurement/imports/vendor-rates`} className="text-sm text-primary underline">
+          Bulk import from CSV
+        </Link>
       </div>
 
       <RateDirectoryPanel tenantSlug={tenantSlug} rates={rates} createAction={createProcurementRateVersionAction.bind(null, tenantSlug)} />

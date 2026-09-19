@@ -5,19 +5,21 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { boundedRange, toBoundedList, type BoundedList } from "./bounded-list.ts";
+import { toBoundedListByCapReached, type BoundedList } from "./bounded-list.ts";
 import {
   FindDuplicateAccountsInputSchema,
+  GetAccountConversionForQuotationInputSchema,
   GetAccountConversionReadinessInputSchema,
   parseAccount,
   parseAccountConversionReadiness,
   type FindDuplicateAccountsInput,
+  type GetAccountConversionForQuotationInput,
   type GetAccountConversionReadinessInput,
   type Account,
   type AccountConversionReadiness,
 } from "../contracts/account/account.ts";
 
-export type AccountQueryClient = Pick<SupabaseClient, "from" | "rpc">;
+export type AccountQueryClient = Pick<SupabaseClient, "rpc">;
 
 export class AccountQueryError extends Error {
   constructor(message: string) {
@@ -36,18 +38,16 @@ export class AccountQueryError extends Error {
  * reader believes they are looking at all their accounts when they are looking at the newest 200.
  * The type change is what forces every caller to decide what to say about that.
  */
-export async function listAccounts(client: AccountQueryClient, tenantId: string): Promise<BoundedList<Account>> {
-  const range = boundedRange();
-  const { data, error } = await client
-    .from("accounts")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .range(range.from, range.to);
+export async function listAccounts(client: AccountQueryClient, tenantId: string, actorAuthUserId: string): Promise<BoundedList<Account>> {
+  const { data, error } = await client.rpc("list_accounts", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new AccountQueryError(error.message);
   }
-  return toBoundedList((data ?? []).map((row: Record<string, unknown>) => parseAccount(row)));
+  return toBoundedListByCapReached((data ?? []).map((row: Record<string, unknown>) => parseAccount(row)));
 }
 
 /**
@@ -61,8 +61,11 @@ export async function listAccounts(client: AccountQueryClient, tenantId: string)
  * be under-reported with nothing indicating it. A targeted query is both correct and cheaper --
  * it was always the right shape, and the cap is what made that obvious.
  */
-export async function listSubsidiaryAccounts(client: AccountQueryClient, parentAccountId: string): Promise<Account[]> {
-  const { data, error } = await client.from("accounts").select("*").eq("parent_account_id", parentAccountId).order("created_at", { ascending: false });
+export async function listSubsidiaryAccounts(client: AccountQueryClient, parentAccountId: string, actorAuthUserId: string): Promise<Account[]> {
+  const { data, error } = await client.rpc("list_subsidiary_accounts", {
+    p_parent_account_id: parentAccountId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new AccountQueryError(error.message);
   }
@@ -70,15 +73,19 @@ export async function listSubsidiaryAccounts(client: AccountQueryClient, parentA
 }
 
 /** Returns null when not found or RLS denies it (matching every prior Commercial detail-page query's posture). */
-export async function getAccountById(client: AccountQueryClient, accountId: string): Promise<Account | null> {
-  const { data, error } = await client.from("accounts").select("*").eq("id", accountId).maybeSingle();
+export async function getAccountById(client: AccountQueryClient, accountId: string, actorAuthUserId: string): Promise<Account | null> {
+  const { data, error } = await client.rpc("get_account_by_id", {
+    p_account_id: accountId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new AccountQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseAccount(data as Record<string, unknown>);
+  return parseAccount(row as Record<string, unknown>);
 }
 
 /** Tenant-scoped only, fails closed on missing membership. */
@@ -104,17 +111,25 @@ export interface AccountConversionRecord {
   readonly outcome: "created" | "linked_existing";
 }
 
-/** Returns null when the quotation has never been converted. Reads app.account_conversions directly (tenant-wide RLS, same posture as app.accounts). */
-export async function getAccountConversionForQuotation(client: AccountQueryClient, quotationId: string): Promise<AccountConversionRecord | null> {
-  const { data, error } = await client.from("account_conversions").select("account_id, outcome").eq("quotation_id", quotationId).maybeSingle();
+/** Returns null when the quotation has never been converted. Reads app.account_conversions, scoped to the quotation's own record-access envelope (RGL-BLK-002 / CG-AUDIT-2026-09-02 O1). */
+export async function getAccountConversionForQuotation(
+  client: AccountQueryClient,
+  input: GetAccountConversionForQuotationInput,
+): Promise<AccountConversionRecord | null> {
+  const parsedInput = GetAccountConversionForQuotationInputSchema.parse(input);
+  const { data, error } = await client.rpc("get_account_conversion_for_quotation", {
+    p_quotation_id: parsedInput.quotationId,
+    p_actor_auth_user_id: parsedInput.actorAuthUserId,
+  });
   if (error) {
     throw new AccountQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  const row = data as { account_id: string; outcome: "created" | "linked_existing" };
-  return { accountId: row.account_id, outcome: row.outcome };
+  const typed = row as { account_id: string; outcome: "created" | "linked_existing" };
+  return { accountId: typed.account_id, outcome: typed.outcome };
 }
 
 /** Structural readiness + duplicate-candidate preview for one accepted quotation -- reason codes only, never a dollar figure. */

@@ -1,7 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { findDuplicateLeads, findExistingAccountsForLead, listLeads, getLeadById, LeadQueryError, type LeadQueryRpcClient } from "./lead.ts";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const LEAD_ID = "323e4567-e89b-12d3-a456-426614174000";
@@ -145,85 +144,53 @@ describe("findExistingAccountsForLead", () => {
   });
 });
 
-function fakeTableClient(
-  response: { data: unknown; error: { message: string } | null; count?: number },
-  capture: { calls: Record<string, unknown> },
-): Pick<SupabaseClient, "from"> {
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): LeadQueryRpcClient {
   const fake = {
-    from(table: string) {
-      capture.calls.table = table;
-      return {
-        select(columns: string, options?: { count?: string }) {
-          capture.calls.columns = columns;
-          capture.calls.countOption = options?.count;
-          return {
-            eq(column: string, value: unknown) {
-              capture.calls.eqColumn = column;
-              capture.calls.eqValue = value;
-              return {
-                order(column2: string, opts: { ascending: boolean }) {
-                  capture.calls.orderColumn = column2;
-                  capture.calls.ascending = opts.ascending;
-                  return {
-                    async range(from: number, to: number) {
-                      capture.calls.from = from;
-                      capture.calls.to = to;
-                      return response;
-                    },
-                  };
-                },
-                async maybeSingle() {
-                  const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-                  return { data: row, error: response.error };
-                },
-              };
-            },
-          };
-        },
-      };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.fn = fn;
+      capture.calls.args = args;
+      return response;
     },
   };
-  return fake as unknown as Pick<SupabaseClient, "from">;
+  return fake as unknown as LeadQueryRpcClient;
 }
 
 describe("listLeads", () => {
-  test("bounds the query to one 50-row default page, ordered by last_activity_at descending", async () => {
+  test("calls list_leads with tenant/actor/page/pageSize and maps total_count", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_LEAD_ROW], error: null, count: 1 }, capture);
+    const client = fakeRpcClient({ data: [{ ...VALID_LEAD_ROW, total_count: 1 }], error: null }, capture);
 
-    const result = await listLeads(client, { tenantId: TENANT_ID, page: 1 });
-    assert.equal(capture.calls.table, "leads");
-    assert.equal(capture.calls.eqValue, TENANT_ID);
-    assert.equal(capture.calls.orderColumn, "last_activity_at");
-    assert.equal(capture.calls.ascending, false);
-    assert.equal(capture.calls.from, 0);
-    assert.equal(capture.calls.to, 49);
+    const result = await listLeads(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
+    assert.equal(capture.calls.fn, "list_leads");
+    assert.deepEqual(capture.calls.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_page: 1, p_page_size: 50 });
     assert.equal(result.leads.length, 1);
     assert.equal(result.totalCount, 1);
   });
 
-  test("advances the page offset correctly for page 2 and clamps an oversized pageSize", async () => {
+  test("clamps an oversized pageSize before sending it", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null, count: 0 }, capture);
+    const client = fakeRpcClient({ data: [], error: null }, capture);
 
-    await listLeads(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
-    assert.equal(capture.calls.from, 100);
-    assert.equal(capture.calls.to, 199);
+    const result = await listLeads(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 2, pageSize: 500 });
+    assert.deepEqual(capture.calls.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_page: 2, p_page_size: 100 });
+    assert.equal(result.totalCount, 0);
   });
 });
 
 describe("getLeadById", () => {
   test("returns the parsed lead when found", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_LEAD_ROW], error: null }, capture);
-    const lead = await getLeadById(client, LEAD_ID);
+    const client = fakeRpcClient({ data: [VALID_LEAD_ROW], error: null }, capture);
+    const lead = await getLeadById(client, LEAD_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "get_lead_by_id");
+    assert.deepEqual(capture.calls.args, { p_lead_id: LEAD_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(lead?.id, LEAD_ID);
   });
 
-  test("returns null (never an error) when RLS/no-match yields zero rows", async () => {
+  test("returns null (never an error) when denied/no-match yields zero rows", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null }, capture);
-    const lead = await getLeadById(client, LEAD_ID);
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    const lead = await getLeadById(client, LEAD_ID, ACTOR_ID);
     assert.equal(lead, null);
   });
 });

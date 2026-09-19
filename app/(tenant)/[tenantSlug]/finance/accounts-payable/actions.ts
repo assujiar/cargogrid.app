@@ -83,7 +83,7 @@ export async function releaseFinanceApHoldAction(
 
 export interface FinanceApExposureLookupFormState {
   readonly error: string | null;
-  readonly result: FinanceApExposureSummary | null;
+  readonly result: readonly FinanceApExposureSummary[] | null;
 }
 
 export async function lookupFinanceApExposureAction(

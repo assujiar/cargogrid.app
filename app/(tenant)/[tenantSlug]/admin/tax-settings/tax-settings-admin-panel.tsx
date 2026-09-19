@@ -24,8 +24,11 @@ const STATUS_STYLE: Record<FinanceTaxRuleStatus, string> = {
 
 function formatRate(rule: FinanceTaxRuleVersion): string {
   if (rule.rateBasis === "percentage") {
-    // Trailing zeros trimmed: 11.000000 reads as 11%.
-    return `${Number(rule.rateValue).toString()}%`;
+    // CG-AUDIT-2026-09-02 C3: rateValue is stored as a fraction (`rate_value <= 1` per the
+    // percentage-basis CHECK constraint) -- e.g. 0.11 for an 11% rate -- so it must be scaled
+    // by 100 before display, or an 11% rate reads as "0.11%". Trailing zeros trimmed: 11.000000
+    // reads as 11%.
+    return `${(Number(rule.rateValue) * 100).toString()}%`;
   }
   return `${Number(rule.rateValue).toString()}${rule.currency ? ` ${rule.currency}` : ""}`;
 }

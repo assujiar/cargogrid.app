@@ -28,38 +28,14 @@ const CONTRACT_ROW = {
   updated_at: "2026-07-24T00:00:00.000Z",
 };
 
-function fakeClient(opts: {
-  tableResponse?: { data: unknown; error: { message: string } | null };
-  rpcResponse?: { data: unknown; error: { message: string } | null };
-}): ContractQueryClient & { calls: { table: string[]; rpc: { fn: string; args: Record<string, unknown> }[]; eqCalls: { column: string; value: unknown }[]; range: { from: number; to: number }[] } } {
+function fakeClient(opts: { rpcResponse?: { data: unknown; error: { message: string } | null } }): ContractQueryClient & {
+  calls: { rpc: { fn: string; args: Record<string, unknown> }[] };
+} {
   const calls = {
-    table: [] as string[],
     rpc: [] as { fn: string; args: Record<string, unknown> }[],
-    eqCalls: [] as { column: string; value: unknown }[],
-    range: [] as { from: number; to: number }[],
   };
   const fake = {
     calls,
-    from(table: string) {
-      calls.table.push(table);
-      const response = opts.tableResponse ?? { data: [], error: null };
-      const chain = {
-        eq(column: string, value: unknown) {
-          calls.eqCalls.push({ column, value });
-          return chain;
-        },
-        // ISS-2026-238: order() is now chainable because the bounded reads call .range() after
-        // it. The fake records the range so a test can assert the cap is actually applied --
-        // silently dropping it would let the unbounded read come back unnoticed.
-        order: () => chain,
-        range(from: number, to: number) {
-          calls.range.push({ from, to });
-          return response;
-        },
-        maybeSingle: async () => ({ data: Array.isArray(response.data) ? (response.data[0] ?? null) : response.data, error: response.error }),
-      };
-      return { select: () => chain };
-    },
     async rpc(fn: string, args: Record<string, unknown>) {
       calls.rpc.push({ fn, args });
       return opts.rpcResponse ?? { data: [], error: null };
@@ -69,30 +45,33 @@ function fakeClient(opts: {
 }
 
 describe("listCustomerContracts", () => {
-  test("reads from customer_contracts filtered by tenant_id, newest first", async () => {
-    const client = fakeClient({ tableResponse: { data: [CONTRACT_ROW], error: null } });
-    const contracts = await listCustomerContracts(client, TENANT_ID);
-    assert.equal(client.calls.table[0], "customer_contracts");
-    assert.deepEqual(client.calls.eqCalls, [{ column: "tenant_id", value: TENANT_ID }]);
+  test("calls list_customer_contracts with tenant/actor/limit, newest first", async () => {
+    const client = fakeClient({ rpcResponse: { data: [CONTRACT_ROW], error: null } });
+    const contracts = await listCustomerContracts(client, TENANT_ID, ACTOR_ID);
+    assert.equal(client.calls.rpc[0]?.fn, "list_customer_contracts");
+    assert.deepEqual(client.calls.rpc[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_limit: 200 });
     assert.equal(contracts.rows[0]?.status, "draft");
     assert.equal(contracts.truncated, false);
-    // ISS-2026-238: the cap is asserted, not assumed -- dropping the .range() would otherwise
-    // be invisible to the suite, which is how the unbounded read survived this long.
-    assert.deepEqual(client.calls.range, [{ from: 0, to: 200 }]);
+  });
+
+  test("reports truncated when the row count reaches the cap", async () => {
+    const client = fakeClient({ rpcResponse: { data: Array.from({ length: 200 }, () => CONTRACT_ROW), error: null } });
+    const contracts = await listCustomerContracts(client, TENANT_ID, ACTOR_ID);
+    assert.equal(contracts.truncated, true);
   });
 });
 
 describe("getCustomerContractById", () => {
   test("returns null when not found", async () => {
-    const client = fakeClient({ tableResponse: { data: [], error: null } });
-    const contract = await getCustomerContractById(client, CONTRACT_ID);
+    const client = fakeClient({ rpcResponse: { data: [], error: null } });
+    const contract = await getCustomerContractById(client, CONTRACT_ID, ACTOR_ID);
     assert.equal(contract, null);
   });
 
   test("wraps a query error", async () => {
-    const client = fakeClient({ tableResponse: { data: null, error: { message: "boom" } } });
+    const client = fakeClient({ rpcResponse: { data: null, error: { message: "boom" } } });
     await assert.rejects(
-      () => getCustomerContractById(client, CONTRACT_ID),
+      () => getCustomerContractById(client, CONTRACT_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof ContractQueryError);
         return true;
@@ -103,23 +82,24 @@ describe("getCustomerContractById", () => {
 
 describe("getCustomerContractForQuotation", () => {
   test("returns null when no contract exists", async () => {
-    const client = fakeClient({ tableResponse: { data: [], error: null } });
-    const contract = await getCustomerContractForQuotation(client, QUOTATION_ID);
+    const client = fakeClient({ rpcResponse: { data: [], error: null } });
+    const contract = await getCustomerContractForQuotation(client, QUOTATION_ID, ACTOR_ID);
     assert.equal(contract, null);
   });
 
   test("maps an existing contract row", async () => {
-    const client = fakeClient({ tableResponse: { data: [CONTRACT_ROW], error: null } });
-    const contract = await getCustomerContractForQuotation(client, QUOTATION_ID);
+    const client = fakeClient({ rpcResponse: { data: [CONTRACT_ROW], error: null } });
+    const contract = await getCustomerContractForQuotation(client, QUOTATION_ID, ACTOR_ID);
     assert.equal(contract?.id, CONTRACT_ID);
   });
 });
 
 describe("listCustomerContractPriceComponents", () => {
-  test("reads from the masked directory view", async () => {
-    const client = fakeClient({ tableResponse: { data: [], error: null } });
-    await listCustomerContractPriceComponents(client, CONTRACT_ID);
-    assert.equal(client.calls.table[0], "customer_contract_price_components_directory");
+  test("calls list_customer_contract_price_components with contract/actor", async () => {
+    const client = fakeClient({ rpcResponse: { data: [], error: null } });
+    await listCustomerContractPriceComponents(client, CONTRACT_ID, ACTOR_ID);
+    assert.equal(client.calls.rpc[0]?.fn, "list_customer_contract_price_components");
+    assert.deepEqual(client.calls.rpc[0]?.args, { p_contract_id: CONTRACT_ID, p_actor_auth_user_id: ACTOR_ID });
   });
 });
 

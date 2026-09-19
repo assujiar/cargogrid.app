@@ -52,7 +52,7 @@ describe("parseFinanceInvoice", () => {
     const parsed = parseFinanceInvoice({
       id: INVOICE_ID, tenant_id: TENANT_ID, company_id: null, invoice_number: "INV-2026-000001",
       customer_account_id: ACCOUNT_ID, job_order_id: JOB_ID, billing_readiness_handoff_id: HANDOFF_ID,
-      currency: "IDR", status: "issued", subtotal_amount: "15000000.00", tax_amount: "1650000.00", total_amount: "16650000.00",
+      currency: "IDR", status: "issued", subtotal_amount: "15000000.00", tax_amount: "1650000.00", withholding_tax_amount: "0.00", total_amount: "16650000.00",
       payment_term_days: 30, issue_date: "2026-03-15", due_date: "2026-04-14", posting_period_id: null, ar_open_item_id: null,
       submitted_by: "fe", submitted_at: "2026-03-14T00:00:00.000Z", approved_by: "fm", approved_at: "2026-03-14T00:00:00.000Z",
       issued_by: "fm", issued_at: "2026-03-15T00:00:00.000Z", void_reason: null, voided_by: null, voided_at: null,
@@ -60,6 +60,21 @@ describe("parseFinanceInvoice", () => {
     });
     assert.equal(parsed.totalAmount, 16650000);
     assert.equal(parsed.status, "issued");
+  });
+
+  test("CG-AUDIT-2026-09-02 B5: coerces a non-zero withholding_tax_amount", () => {
+    const parsed = parseFinanceInvoice({
+      id: INVOICE_ID, tenant_id: TENANT_ID, company_id: null, invoice_number: "INV-2026-000002",
+      customer_account_id: ACCOUNT_ID, job_order_id: JOB_ID, billing_readiness_handoff_id: HANDOFF_ID,
+      currency: "IDR", status: "draft", subtotal_amount: "15000000.00", tax_amount: "0.00", withholding_tax_amount: "300000.00", total_amount: "15000000.00",
+      payment_term_days: 30, issue_date: null, due_date: null, posting_period_id: null, ar_open_item_id: null,
+      submitted_by: null, submitted_at: null, approved_by: null, approved_at: null,
+      issued_by: null, issued_at: null, void_reason: null, voided_by: null, voided_at: null,
+      record_version: 1, created_by: "fm", created_at: "2026-03-10T00:00:00.000Z", updated_at: "2026-03-10T00:00:00.000Z",
+    });
+    assert.equal(parsed.withholdingTaxAmount, 300000);
+    assert.equal(parsed.taxAmount, 0);
+    assert.equal(parsed.totalAmount, 15000000);
   });
 });
 

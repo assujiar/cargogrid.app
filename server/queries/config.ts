@@ -12,14 +12,16 @@ import {
   ResolveConfigInputSchema,
   VerifyConfigVersionCurrentInputSchema,
   parseResolvedConfig,
+  parseConfigVersion,
   type ResolveConfigInput,
   type ResolvedConfig,
   type VerifyConfigVersionCurrentInput,
+  type ConfigVersion,
 } from "../contracts/config/config.ts";
 
 export interface ConfigQueryRpcClient {
   rpc(
-    fn: "resolve_config" | "verify_config_version_current",
+    fn: "resolve_config" | "verify_config_version_current" | "list_config_versions",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
@@ -117,4 +119,23 @@ export async function verifyConfigVersionCurrent(client: ConfigQueryRpcClient, i
     throw new ConfigQueryError("verify_config_version_current returned a non-boolean result");
   }
   return data;
+}
+
+/** Admin view-model read path: every draft/published/archived version for one config_object, newest first. app.list_config_versions (and its public.* wrapper) is granted to service_role only -- never authenticated -- so callers must pass a service-role client (mirroring the generic engine's own posture on draft-content browsing; see the function's own migration comment). Generic sibling of server/queries/finance-config.ts's own configTypeCode-narrowed listFinanceConfigVersions. */
+export async function listConfigVersions(
+  client: ConfigQueryRpcClient,
+  input: { configTypeCode: string; tenantId: string | null; scopeLevel: string; scopeId: string | null; actorAuthUserId: string },
+): Promise<ConfigVersion[]> {
+  const { data, error } = await client.rpc("list_config_versions", {
+    p_config_type_code: input.configTypeCode,
+    p_tenant_id: input.tenantId,
+    p_scope_level: input.scopeLevel,
+    p_scope_id: input.scopeId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+  });
+  if (error) {
+    throw new ConfigQueryError(error.message);
+  }
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => parseConfigVersion(row as Record<string, unknown>));
 }

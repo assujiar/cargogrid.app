@@ -34,6 +34,7 @@ const VALID_PRODUCTION_ENV = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "prod-anon-key",
   SUPABASE_SERVICE_ROLE_KEY: "prod-service-role-key",
   NEXT_PUBLIC_SITE_URL: "https://app.cargogrid.example",
+  CRON_SECRET: "prod-cron-secret",
 };
 
 describe("loadEnv — positive cases", () => {
@@ -83,6 +84,21 @@ describe("loadEnv — negative cases", () => {
       assert.ok(error instanceof EnvValidationError);
       assert.ok(error.message.includes("SUPABASE_SERVICE_ROLE_KEY"));
       assert.ok(!error.message.includes(SUPABASE_SERVICE_ROLE_KEY));
+    }
+  });
+
+  test("CG-AUDIT-2026-09-02 A5: CRON_SECRET is required in production but not in local — the first schema.ts entry to actually use `requiredIn`, so this is also the first regression test that env-class-conditional requiredness works at all", () => {
+    const env = loadEnv(VALID_LOCAL_ENV); // no CRON_SECRET in this fixture at all
+    assert.ok(!("CRON_SECRET" in env.values));
+
+    const { CRON_SECRET, ...prodWithoutCronSecret } = VALID_PRODUCTION_ENV;
+    try {
+      loadEnv(prodWithoutCronSecret);
+      assert.fail("expected EnvValidationError");
+    } catch (error) {
+      assert.ok(error instanceof EnvValidationError);
+      assert.ok(error.message.includes("CRON_SECRET"));
+      assert.ok(!error.message.includes(CRON_SECRET));
     }
   });
 

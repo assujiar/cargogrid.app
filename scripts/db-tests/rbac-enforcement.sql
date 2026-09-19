@@ -122,37 +122,40 @@ begin
 end;
 $$;
 
-\echo '>> a stale assignment (still active, but pointing at a now-archived, superseded role version) fails closed -- PLT-112 §23''s "stale permission fails closed"'
+\echo '>> CG-AUDIT-2026-09-02 A3: republishing a role version migrates a still-active assignment onto the newly published version, so it keeps evaluating allowed -- superseding this file''s own former "stale permission fails closed" expectation, which encoded the audit-confirmed bug (publish silently revoked every real holder) as this test''s own intended contract'
 do $$
 declare
   v_tenant_id uuid;
   v_role_id uuid;
+  v_assignment_id uuid;
   v_new_draft app.role_versions;
   v_decision app.rbac_decision;
+  v_bound_version_id uuid;
 begin
   v_tenant_id := (select id from app.tenants where slug = 'acmerbac');
   v_role_id := (select id from app.roles where name = 'RBAC Finance Approver');
+  select id into v_assignment_id from app.role_assignments
+  where tenant_id = v_tenant_id and auth_user_id = '00000000-0000-0000-0000-000000000401' and status = 'active'
+    and role_version_id = (select id from app.role_versions where role_id = v_role_id and status = 'published');
 
   -- Publish a *new* version of the same role -- this archives (supersedes) the version
-  -- the existing assignment still points to, without touching app.role_assignments itself.
+  -- the existing assignment used to point to; app.publish_role_version now migrates that
+  -- assignment onto the new version in the same transaction (CG-AUDIT-2026-09-02 A3), so
+  -- there is no longer a "stale" window between the two publishes to observe at all.
   select * into v_new_draft from app.create_role_version(v_role_id, 'tester');
   perform app.set_role_version_permissions(v_new_draft.id, array[(select id from app.permissions where resource_module_code = 'FIN' and action = 'Approve')], 'tester');
   perform app.publish_role_version(v_new_draft.id, now(), 'tester');
 
   v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
-  if v_decision.allowed or v_decision.reason <> 'no_granting_role' then
-    raise exception 'assertion failed: expected the stale assignment to deny (reason=no_granting_role), got allowed=% reason=%', v_decision.allowed, v_decision.reason;
+  if not v_decision.allowed or v_decision.reason <> 'role_grant' or v_decision.role_version_id <> v_new_draft.id then
+    raise exception 'assertion failed: expected the migrated assignment to still grant FIN:Approve via the newly published version %, got allowed=% reason=% role_version_id=%',
+      v_new_draft.id, v_decision.allowed, v_decision.reason, v_decision.role_version_id;
   end if;
 
-  -- re-assigning to the newly published version restores access -- proving the denial
-  -- above was caused by staleness, not by some other unrelated breakage.
-  perform app.assign_role(
-    v_tenant_id, v_new_draft.id,
-    '00000000-0000-0000-0000-000000000401', '00000000-0000-0000-0000-000000000401', 'tester'
-  );
-  v_decision := app.evaluate_permission('00000000-0000-0000-0000-000000000401', v_tenant_id, 'FIN', 'Approve');
-  if not v_decision.allowed then
-    raise exception 'assertion failed: expected access restored once re-assigned to the newly published version';
+  -- The SAME assignment row (id unchanged) was rebound, not replaced by a second row.
+  select role_version_id into v_bound_version_id from app.role_assignments where id = v_assignment_id;
+  if v_bound_version_id <> v_new_draft.id then
+    raise exception 'assertion failed: expected assignment % rebound to version %, still points at %', v_assignment_id, v_new_draft.id, v_bound_version_id;
   end if;
 end;
 $$;
@@ -484,6 +487,20 @@ declare
     -- data). Genuinely correct-by-design, not a live gap -- added here per
     -- this test's own documented escape hatch.
     'accept_customer_portal_invite',
+    -- CG-AUDIT-2026-09-02 A2b: app.list_my_pending_customer_portal_invites is
+    -- the identical raw self-row-identity shape immediately above --
+    -- assert_actor_is_session_identity(p_auth_user_id) first, then every
+    -- returned row is filtered `where cpam.auth_user_id = p_auth_user_id`,
+    -- so the caller-supplied identity can only ever see rows naming itself,
+    -- never a third party's. It is deliberately NOT covered by app.actor_
+    -- holds_customer_user_layer (the base regex keyword list above) because
+    -- an invited-but-not-yet-accepted identity holds no customer_user-layer
+    -- principal yet by definition (that layer is granted on accept, not on
+    -- invite, per app.accept_customer_portal_invite's own Tier C review fix
+    -- comment) -- this RPC is the one deliberate exception letting such an
+    -- identity discover its own pending invite in the first place. Genuinely
+    -- correct-by-design, not a live gap.
+    'list_my_pending_customer_portal_invites',
     -- IAE-026 (Prompt 354, Enterprise IAM SSO/SAML/SCIM): app.resolve_
     -- enterprise_idp_by_email_domain is deliberately anon-facing by design --
     -- the identical class app.resolve_tenant_by_domain above already
@@ -523,7 +540,48 @@ declare
     -- config-disclosure gap) and were fixed with an app.has_active_tenant_membership
     -- check instead of being exempted; see 20260810900000_harden_finance_authority_
     -- chain_tierc_completeness.sql's own header.
-    'list_n8n_action_allowlist', 'validate_automation_rule_definition'
+    'list_n8n_action_allowlist', 'validate_automation_rule_definition',
+    -- CG-AUDIT-2026-09-02 O1 remediation, cluster 2 batch 1 (2026-09-10,
+    -- 20260910010000_close_o1_query_layer_cluster2_batch1_identity_access.sql):
+    -- app.list_identity_tenant_links is the identical "raw self-row-identity
+    -- equality shape" app.get_self_employee/app.is_ticket_queue_member/app.
+    -- accept_customer_portal_invite/app.verify_mfa_step_up_challenge above already
+    -- document and are exempted for -- its own WHERE clause
+    -- (`tui.auth_user_id = p_actor_auth_user_id`) can only ever return the ONE
+    -- identity''s own linkage rows, and app.assert_actor_is_session_identity (RULE A)
+    -- is called first to prove the caller genuinely IS that identity, not merely
+    -- claims to be. There is no authority question left to ask once identity is
+    -- proven -- the self-scoping predicate IS the complete authority envelope, the
+    -- same structural reasoning app.get_self_employee''s own entry above documents
+    -- at length. Independently re-verified during this batch''s adversarial verify
+    -- pass, not accepted from the migration''s own header alone.
+    'list_identity_tenant_links',
+    -- app.list_permissions_for_module is a genuinely NEW, deliberate widening
+    -- decision (the first-ever grant of read access to app.permissions for any role
+    -- but service_role -- repo-wide grep confirmed zero prior create-policy/grant to
+    -- authenticated ever existed for this table) rather than a "no check needed"
+    -- exemption: it requires an active app.principal_memberships row for the caller
+    -- (`exists (select 1 from app.principal_memberships where auth_user_id =
+    -- p_actor_auth_user_id and status = ''active'')`) -- the same "does this identity
+    -- hold any real standing on the platform at all" primitive app.
+    -- resolve_access_context''s own unscoped-request branch already relies on --
+    -- before admitting any row. The check is a real, load-bearing authority gate
+    -- (closes the gap where app.revoke_auth_identity only flips app.
+    -- tenant_user_identities.status and never bans the underlying auth.users row, so
+    -- a revoked identity could otherwise retain a live JWT with zero current
+    -- standing); it is simply inlined as a direct `exists` against app.
+    -- principal_memberships rather than expressed through one of this sweep''s own
+    -- named keyword primitives, so the closure query above does not credit it
+    -- automatically. What it additionally discloses once admitted is bounded: app.
+    -- permissions carries no tenant_id/owner/org-unit column, and its 19
+    -- permission-action names x 9 module codes are already published in
+    -- docs/architecture/06_RLS_RBAC_WORKSTREAM.md sections 5.1/5.2 -- every row is
+    -- identical for every admitted caller, so this is a standing gate on WHO may
+    -- read the catalogue at all, not a per-row scope decision the closure''s
+    -- authority keywords are built to detect. Independently re-verified during this
+    -- batch''s adversarial verify pass against the table''s own real grant history,
+    -- not accepted from the migration''s own header alone.
+    'list_permissions_for_module'
   ];
 begin
   -- 1. The five internal helpers must carry NO authenticated grant. Each takes no actor
@@ -576,7 +634,10 @@ begin
   foreach v_fn in array array['resolve_customer_account_scope', 'actor_is_active_customer_portal_account_admin',
                               'get_customer_portal_scope_context', 'invite_customer_portal_user',
                               'accept_customer_portal_invite', 'set_customer_portal_account_membership_status',
-                              'list_customer_portal_account_memberships', 'grant_initial_customer_portal_account_admin'] loop
+                              'list_customer_portal_account_memberships', 'grant_initial_customer_portal_account_admin',
+                              -- CG-AUDIT-2026-09-02 A2b: the identical identity-is-the-scoping-
+                              -- mechanism shape as its 8 CPL-300 siblings above.
+                              'list_my_pending_customer_portal_invites'] loop
     if not exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.proname = v_fn
@@ -1189,19 +1250,32 @@ begin
     raise exception 'assertion failed: expected the role_assignments row to survive a raw app.users.status UPDATE untouched (that is the whole point of this test -- the cascade must NOT have fired), found 0 -- test fixture assumption broken';
   end if;
 
+  -- CG-AUDIT-2026-09-02 D3b: app.has_active_tenant_membership itself now excludes a
+  -- suspended/revoked app.users row (the audit's own live reproduction: a suspended
+  -- identity's session could still read arbitrary RLS-gated tenant data, since no RLS
+  -- policy ever went through evaluate_permission's own app.users check below -- they all
+  -- gate on has_active_tenant_membership directly). evaluate_permission's first gate
+  -- (has_active_tenant_membership, HDN-373 above) therefore now denies THIS exact scenario
+  -- earlier than the dedicated ISS-2026-072 check further down ever gets to -- reason
+  -- becomes the broader not_active_tenant_member, not the narrower not_active_platform_user.
+  -- Still correctly denied (allowed=false) either way; no application code anywhere
+  -- pattern-matches on either specific reason string (confirmed by repository-wide grep
+  -- before this change). The ISS-2026-072 check itself is untouched and remains real
+  -- defense in depth for any future path that reaches it with a still-true
+  -- has_active_tenant_membership.
   v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
   if v_decision.allowed then
     raise exception 'assertion failed: an actor whose app.users.status is suspended (via a raw UPDATE that never touched role_assignments) still evaluated allowed=true -- ISS-2026-072''s app.users.status half has reappeared';
   end if;
-  if v_decision.reason is distinct from 'not_active_platform_user' then
-    raise exception 'assertion failed: expected reason=not_active_platform_user for a suspended app.users row with a surviving active role_assignment, got %', v_decision.reason;
+  if v_decision.reason is distinct from 'not_active_tenant_member' then
+    raise exception 'assertion failed: expected reason=not_active_tenant_member (CG-AUDIT-2026-09-02 D3b -- has_active_tenant_membership itself now closes this) for a suspended app.users row with a surviving active role_assignment, got %', v_decision.reason;
   end if;
 
   -- Same proof for 'revoked'.
   update app.users set status = 'revoked' where tenant_id = v_tenant_id and auth_user_id = v_actor;
   v_decision := app.evaluate_permission(v_actor, v_tenant_id, 'FIN', 'Approve');
-  if v_decision.allowed or v_decision.reason is distinct from 'not_active_platform_user' then
-    raise exception 'assertion failed: expected reason=not_active_platform_user for a revoked app.users row too, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
+  if v_decision.allowed or v_decision.reason is distinct from 'not_active_tenant_member' then
+    raise exception 'assertion failed: expected reason=not_active_tenant_member for a revoked app.users row too, got allowed=%, reason=%', v_decision.allowed, v_decision.reason;
   end if;
 
   -- Restoring app.users.status alone (still bypassing app.transition_user_status) is

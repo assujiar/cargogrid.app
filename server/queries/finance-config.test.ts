@@ -137,9 +137,9 @@ describe("getFinanceConfigVersionItems", () => {
 describe("listFinanceRoundingModes", () => {
   function fakeTableClient(rows: unknown[]): FinanceRoundingModesTableClient {
     return {
-      from: () => ({
-        select: async () => ({ data: rows, error: null }),
-      }),
+      async rpc() {
+        return { data: rows, error: null };
+      },
     } as unknown as FinanceRoundingModesTableClient;
   }
 

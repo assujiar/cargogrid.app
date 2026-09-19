@@ -95,23 +95,30 @@ describe("getShipmentMilestoneProjection", () => {
   });
 });
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): MilestoneManagementQueryTableClient {
+function fakeTableClient(
+  response: { data: unknown; error: { message: string } | null },
+  capture?: { calls: { fn: string; args: unknown }[] },
+): MilestoneManagementQueryTableClient {
   return {
-    from: () => ({
-      select: () => ({
-        order: () => Promise.resolve(response),
-      }),
-    }),
+    async rpc(fn: string, args?: unknown) {
+      capture?.calls.push({ fn, args });
+      return response;
+    },
   } as unknown as MilestoneManagementQueryTableClient;
 }
 
 describe("listMilestoneCodes", () => {
-  test("maps every row in the returned array", async () => {
-    const client = fakeTableClient({
-      data: [{ code: "picked_up", name: "Picked Up", category: "pickup", is_customer_visible: true, affects_eta: false, is_terminal: false, registered_by: "tester", created_at: "2026-07-27T00:00:00.000Z" }],
-      error: null,
-    });
+  test("calls list_milestone_codes with no arguments and maps every row", async () => {
+    const capture = { calls: [] as { fn: string; args: unknown }[] };
+    const client = fakeTableClient(
+      {
+        data: [{ code: "picked_up", name: "Picked Up", category: "pickup", is_customer_visible: true, affects_eta: false, is_terminal: false, registered_by: "tester", created_at: "2026-07-27T00:00:00.000Z" }],
+        error: null,
+      },
+      capture,
+    );
     const codes = await listMilestoneCodes(client);
+    assert.equal(capture.calls[0]?.fn, "list_milestone_codes");
     assert.equal(codes.length, 1);
     assert.equal(codes[0]?.code, "picked_up");
   });

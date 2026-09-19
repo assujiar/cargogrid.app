@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { BOUNDED_LIST_LIMIT } from "./bounded-list.ts";
 import {
   parseFinanceSubledgerBatch,
   parseFinanceSubledgerLine,
@@ -25,21 +26,25 @@ export class SubledgerQueryError extends Error {
 }
 
 /** FIN:View-gated. Bounded (200-row), server-filtered list, most-recent first. */
+/** CG-AUDIT-2026-09-02 F3: `afterId`/`limit` optional and additive -- see server/queries/accounts-receivable.ts#listFinanceArOpenItems's own header comment for the full rationale. */
 export async function listFinanceSubledgerBatches(
   client: SubledgerQueryRpcClient,
-  input: { tenantId: string; companyId: string | null; sourceType: string | null; actorAuthUserId: string },
+  input: { tenantId: string; companyId: string | null; sourceType: string | null; actorAuthUserId: string; limit?: number; afterId?: string | null },
 ): Promise<FinanceSubledgerBatch[]> {
+  const limit = input.limit ?? BOUNDED_LIST_LIMIT;
   const { data, error } = await client.rpc("list_finance_subledger_batches", {
     p_tenant_id: input.tenantId,
     p_company_id: input.companyId,
     p_source_type: input.sourceType,
     p_actor_auth_user_id: input.actorAuthUserId,
+    p_limit: limit,
+    p_after_id: input.afterId ?? null,
   });
   if (error) {
     throw new SubledgerQueryError(error.message);
   }
   const rows = Array.isArray(data) ? data : [];
-  return rows.map((row) => parseFinanceSubledgerBatch(row as Record<string, unknown>));
+  return rows.slice(0, limit).map((row) => parseFinanceSubledgerBatch(row as Record<string, unknown>));
 }
 
 /** FIN:View-gated. Every debit/credit line for one batch, ordered by line_number. */

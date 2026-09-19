@@ -40,33 +40,11 @@ function recordingClient(response: { data: unknown; error: { message: string } |
   return { client, calls };
 }
 
-function recordingFromClient(response: { data: unknown; error: { message: string } | null }): {
-  client: ProcurementDashboardQueryClient;
-  calls: { table: string }[];
-} {
-  const calls: { table: string }[] = [];
-  const chain = {
-    eq() {
-      return chain;
-    },
-    order() {
-      return response;
-    },
-  };
-  const client = {
-    from(table: string) {
-      calls.push({ table });
-      return { select: () => chain };
-    },
-  } as unknown as ProcurementDashboardQueryClient;
-  return { client, calls };
-}
-
 const SCOPE_FILTER = { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID };
 
 describe("listActiveProcurementMetricDefinitions", () => {
-  test("reads from procurement_metric_definitions, not an RPC", async () => {
-    const { client, calls } = recordingFromClient({
+  test("calls list_active_procurement_metric_definitions with no arguments", async () => {
+    const { client, calls } = recordingClient({
       data: [
         {
           id: "923e4567-e89b-12d3-a456-426614174000",
@@ -93,12 +71,12 @@ describe("listActiveProcurementMetricDefinitions", () => {
       error: null,
     });
     const rows = await listActiveProcurementMetricDefinitions(client);
-    assert.equal(calls[0]?.table, "procurement_metric_definitions");
+    assert.equal(calls[0]?.fn, "list_active_procurement_metric_definitions");
     assert.equal(rows[0]?.metricGroup, "vendor_risk_compliance");
   });
 
   test("wraps a query error", async () => {
-    const { client } = recordingFromClient({ data: null, error: { message: "relation does not exist" } });
+    const { client } = recordingClient({ data: null, error: { message: "relation does not exist" } });
     await assert.rejects(() => listActiveProcurementMetricDefinitions(client), (err: unknown) => err instanceof ProcurementDashboardQueryError);
   });
 });

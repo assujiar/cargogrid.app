@@ -90,9 +90,40 @@ describe("parseFinanceApOpenItemEvent", () => {
 });
 
 describe("parseFinanceApExposureSummary", () => {
-  test("maps a raw jsonb summary result, coercing string numbers", () => {
-    const parsed = parseFinanceApExposureSummary({ totalOpen: "600.00", openCount: 3, overdueOpen: "0", overdueCount: 0 });
+  test("maps one raw per-currency row, coercing string numbers (CG-AUDIT-2026-09-02 B4)", () => {
+    const parsed = parseFinanceApExposureSummary({
+      currency: "USD",
+      total_open: "600.00",
+      open_count: 3,
+      overdue_open: "0",
+      overdue_count: 0,
+      base_currency: "IDR",
+      base_total_open: "9450000.00",
+      base_overdue_open: "0",
+      fx_status: "converted",
+    });
+    assert.equal(parsed.currency, "USD");
     assert.equal(parsed.totalOpen, 600);
     assert.equal(parsed.openCount, 3);
+    assert.equal(parsed.baseCurrency, "IDR");
+    assert.equal(parsed.baseTotalOpen, 9450000);
+    assert.equal(parsed.fxStatus, "converted");
+  });
+
+  test("maps a rate_unavailable row with null base figures, never a fabricated conversion", () => {
+    const parsed = parseFinanceApExposureSummary({
+      currency: "EUR",
+      total_open: "100.00",
+      open_count: 1,
+      overdue_open: "0",
+      overdue_count: 0,
+      base_currency: "IDR",
+      base_total_open: null,
+      base_overdue_open: null,
+      fx_status: "rate_unavailable",
+    });
+    assert.equal(parsed.baseTotalOpen, null);
+    assert.equal(parsed.baseOverdueOpen, null);
+    assert.equal(parsed.fxStatus, "rate_unavailable");
   });
 });

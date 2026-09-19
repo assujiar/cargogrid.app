@@ -24,7 +24,7 @@ export interface TenantLookupResult {
 
 export interface CustomerPortalGuardDeps {
   getCurrentUserId(): Promise<string | null>;
-  findTenantBySlug(slug: string): Promise<TenantLookupResult | null>;
+  findTenantBySlug(slug: string, authUserId: string): Promise<TenantLookupResult | null>;
   actorHoldsCustomerUserLayer(tenantId: string, authUserId: string): Promise<boolean>;
 }
 
@@ -41,7 +41,7 @@ export async function resolveCustomerPortalAccess(deps: CustomerPortalGuardDeps,
     return { status: "unauthenticated" };
   }
 
-  const tenant = await deps.findTenantBySlug(tenantSlug);
+  const tenant = await deps.findTenantBySlug(tenantSlug, authUserId);
   if (!tenant) {
     return { status: "tenant_not_found" };
   }

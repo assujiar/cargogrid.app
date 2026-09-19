@@ -1,17 +1,18 @@
 /**
- * Supreme Admin portal global tenant-list query (PLT-136, CG-S6-PLT-033). Reads
- * `app.tenants` directly through the RLS-scoped `authenticated` client, never
- * service-role -- `PLT-113`'s own `tenants_select_own_tenant` policy already grants a
- * Supreme Admin visibility into every row (`app.has_active_tenant_membership()`
- * resolves `true` for any tenant when the caller `app.is_supreme_admin()`, confirmed
- * by direct inspection of that function's own body, not assumed), so no service-role
- * bypass is needed for this read path -- consistent with Prompt 136 §16's "no browser
- * service key," extended here to "no *server-side* service-role reach where RLS
- * already grants exactly the intended visibility."
+ * Supreme Admin portal global tenant-list query (PLT-136, CG-S6-PLT-033). Goes
+ * through app.list_supreme_tenants (RPC, SECURITY INVOKER, zero actor parameter
+ * -- O1 remediation, cluster 6), never a service-role client -- `PLT-113`'s own
+ * `tenants_select_own_tenant` policy already grants a Supreme Admin visibility
+ * into every row (`app.has_active_tenant_membership()` resolves `true` for any
+ * tenant when the caller `app.is_supreme_admin()`, confirmed by direct
+ * inspection of that function's own body, not assumed), so no service-role
+ * bypass is needed for this read path -- consistent with Prompt 136 §16's "no
+ * browser service key," extended here to "no *server-side* service-role reach
+ * where RLS already grants exactly the intended visibility."
  *
  * Bounded, server-paginated (Prompt 136 §17: "paginated global queries... strict query
  * guards") -- `pageSize` clamped to `[1, 100]`, the same cap `server/queries/portal-users.ts`
- * already established.
+ * already established (now enforced on both sides of the RPC boundary).
  */
 
 import { z } from "zod";
@@ -57,27 +58,22 @@ function parseSupremeTenant(row: Record<string, unknown>): SupremeTenant {
 }
 
 export async function listSupremeTenants(
-  client: Pick<SupabaseClient, "from">,
+  client: Pick<SupabaseClient, "rpc">,
   input: ListSupremeTenantsInput,
 ): Promise<ListSupremeTenantsResult> {
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize), 1), MAX_PAGE_SIZE);
   const page = Math.max(Math.trunc(input.page), 1);
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  const { data, error, count } = await client
-    .from("tenants")
-    .select("id, slug, name, canonical_status", { count: "exact" })
-    .order("name", { ascending: true })
-    .range(from, to);
+  const { data, error } = await client.rpc("list_supreme_tenants", { p_page: page, p_page_size: pageSize });
 
   if (error) {
     throw new SupremeTenantsQueryError(error.message);
   }
 
+  const rows = (data ?? []) as Record<string, unknown>[];
   return {
-    tenants: (data ?? []).map((row: Record<string, unknown>) => parseSupremeTenant(row)),
-    totalCount: count ?? 0,
+    tenants: rows.map((row) => parseSupremeTenant(row)),
+    totalCount: rows.length > 0 ? Number(rows[0]!.total_count) : 0,
     page,
     pageSize,
   };

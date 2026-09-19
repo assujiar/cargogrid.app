@@ -80,6 +80,22 @@ export async function processExternalSyncJob(client: ProcessExternalSyncJobRpcCl
     return { outcome: "failed", recordedCount: 0, skippedCount: 0, errorMessage };
   }
 
+  // CG-AUDIT-2026-09-02 D3d: app.enqueue_job validates only that the caller holds active
+  // membership in the tenant they NAME as the job's own tenant -- it applies no validation
+  // to any id embedded inside the job payload. Reproduced live: an authenticated caller can
+  // enqueue an external_sync job under their OWN tenant naming a FOREIGN tenant's
+  // connection_id in the payload. Every other worker in this family already fails closed on
+  // this (../webhooks/process-webhook-delivery-job.server.ts, ISS-2026-178) -- this worker
+  // did not: it resolved connection.tenantId and used it to write the sync snapshot without
+  // ever comparing it back to job.tenantId, so a foreign connection's data/credential would
+  // be polled and recorded under the wrong tenant. Fail closed before any live dispatch or
+  // state-machine write, mirroring the webhook worker's own fix exactly.
+  if (connection.tenantId !== job.tenantId) {
+    const errorMessage = `${adapterCode} connection ${connectionId} belongs to tenant ${connection.tenantId}, not the enqueuing job's tenant ${job.tenantId}`;
+    await recordJobFailure(client, { jobId: job.jobId, errorMessage, actorAuthUserId, actorLabel });
+    return { outcome: "failed", recordedCount: 0, skippedCount: 0, errorMessage };
+  }
+
   const pollUrl = typeof connection.connectionConfig.pollUrl === "string" ? connection.connectionConfig.pollUrl : null;
   if (!pollUrl) {
     const errorMessage = `${adapterCode} connection ${connectionId} has no pollUrl configured`;

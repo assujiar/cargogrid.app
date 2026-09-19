@@ -23,15 +23,20 @@ import {
   revokeVendorComplianceWaiver,
   recalculateVendorComplianceStatus,
   accessVendorComplianceDocumentEvidence,
+  getVendorComplianceDocumentSignedDownloadUrl,
   VendorComplianceMutationError,
+  type VendorComplianceEvidenceDownloadClient,
 } from "../../../../../../server/mutations/vendor-compliance.ts";
 import { getVendorComplianceRequirement, VendorComplianceQueryError } from "../../../../../../server/queries/vendor-compliance.ts";
 import { initiateFileUpload, DocumentMutationError, type DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
+import type { BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
+import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
 import type {
   VendorComplianceDocumentDecision,
   VendorComplianceWaiverDecision,
   VendorComplianceAccessType,
   VendorComplianceDocumentEvidenceAccess,
+  VendorComplianceDocumentSignedDownload,
 } from "../../../../../../server/contracts/vendor-compliance/vendor-compliance.ts";
 
 export interface VendorComplianceActionState {
@@ -71,6 +76,46 @@ async function requireAccess(tenantSlug: string) {
  */
 function toDocumentClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient {
   return client as unknown as DocumentMutationRpcClient;
+}
+
+/**
+ * Same adapter-cast reasoning as toDocumentClient above, for app.enqueue_job
+ * (CG-AUDIT-2026-09-02 A6). Unlike initiate_file_upload, enqueue_job IS granted to
+ * `authenticated` (20260730410000_harden_job_type_single_source_of_truth.sql) and
+ * performs its own internal app.check_job_authority check -- the RLS-scoped
+ * `supabase` client is correct here, the same "authenticated-grantable, self-
+ * checking RPC uses the RLS-scoped client" precedent
+ * accessVendorComplianceDocumentEvidenceAction already established below.
+ */
+function toBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): BackgroundJobMutationRpcClient {
+  return client as unknown as BackgroundJobMutationRpcClient;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: stores the real evidence bytes behind
+ * app.initiate_file_upload's server-generated storage_path, then enqueues the
+ * malware_scan job that resolves malware_scan_status away from 'pending' -- the
+ * first real production caller anywhere in this repository of
+ * app.record_file_scan_result (see lib/malware-scan/process-malware-scan-job.server.ts's
+ * own header). Delegates to the shared lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts
+ * helper, extracted from this exact function once shipment document checklist uploads
+ * (app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/actions.ts)
+ * needed the identical sequence -- kept as a thin same-name wrapper here so neither of
+ * this file's own two call sites needed to change.
+ */
+function toEvidenceUploadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient & StorageUploadClient {
+  return client as unknown as DocumentMutationRpcClient & StorageUploadClient;
+}
+
+async function storeEvidenceBytesAndEnqueueScan(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  serviceRoleClient: ReturnType<typeof createSupabaseServiceRoleClient>,
+  uploaded: { id: string; storagePath: string; mimeType: string; originalFilename: string },
+  evidenceFile: File,
+  tenantId: string,
+  actorAuthUserId: string,
+): Promise<{ error: string } | null> {
+  return storeFileBytesAndEnqueueScan(toEvidenceUploadClient(serviceRoleClient), toBackgroundJobClient(supabase), uploaded, evidenceFile, tenantId, actorAuthUserId, "evidence file");
 }
 
 function detailPath(tenantSlug: string, vendorMasterRecordId: string): string {
@@ -122,8 +167,9 @@ export async function submitVendorComplianceDocumentAction(tenantSlug: string, v
   }
 
   let evidenceFileId: string;
+  const serviceRoleClient = createSupabaseServiceRoleClient();
   try {
-    const uploaded = await initiateFileUpload(toDocumentClient(createSupabaseServiceRoleClient()), {
+    const uploaded = await initiateFileUpload(toDocumentClient(serviceRoleClient), {
       tenantId: access.tenant.id,
       documentTypeCode,
       recordType: "vendor_compliance",
@@ -141,6 +187,9 @@ export async function submitVendorComplianceDocumentAction(tenantSlug: string, v
       actorLabel: access.authUserId,
     });
     evidenceFileId = uploaded.id;
+
+    const storeError = await storeEvidenceBytesAndEnqueueScan(supabase, serviceRoleClient, uploaded, evidenceFile, access.tenant.id, access.authUserId);
+    if (storeError) return storeError;
   } catch (error) {
     if (error instanceof DocumentMutationError) return { error: `Could not upload this evidence file: ${error.message}` };
     throw error;
@@ -187,8 +236,9 @@ export async function renewVendorComplianceDocumentAction(
   const supabase = await createSupabaseServerClient();
 
   let evidenceFileId: string;
+  const serviceRoleClient = createSupabaseServiceRoleClient();
   try {
-    const uploaded = await initiateFileUpload(toDocumentClient(createSupabaseServiceRoleClient()), {
+    const uploaded = await initiateFileUpload(toDocumentClient(serviceRoleClient), {
       tenantId: access.tenant.id,
       documentTypeCode,
       recordType: "vendor_compliance",
@@ -206,6 +256,9 @@ export async function renewVendorComplianceDocumentAction(
       actorLabel: access.authUserId,
     });
     evidenceFileId = uploaded.id;
+
+    const storeError = await storeEvidenceBytesAndEnqueueScan(supabase, serviceRoleClient, uploaded, evidenceFile, access.tenant.id, access.authUserId);
+    if (storeError) return storeError;
   } catch (error) {
     if (error instanceof DocumentMutationError) return { error: `Could not upload this renewal evidence file: ${error.message}` };
     throw error;
@@ -265,6 +318,48 @@ export async function accessVendorComplianceDocumentEvidenceAction(
     return { error: null, access: result };
   } catch (error) {
     if (error instanceof VendorComplianceMutationError) return { error: `Could not access this evidence file: ${error.message}`, access: null };
+    throw error;
+  }
+}
+
+/** Same adapter-cast reasoning as toDocumentClient above. app.access_vendor_compliance_document_evidence_for_download (CG-AUDIT-2026-09-02 A6) is granted to service_role only, never authenticated -- storage_path cannot safely be handed to any RPC the RLS-scoped client could reach, per that function's own header comment -- so this one genuinely needs the service-role client, unlike its metadata_view/download-decision sibling immediately above. */
+function toVendorComplianceEvidenceDownloadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): VendorComplianceEvidenceDownloadClient {
+  return client as unknown as VendorComplianceEvidenceDownloadClient;
+}
+
+export interface VendorComplianceEvidenceDownloadState {
+  readonly error: string | null;
+  readonly download: VendorComplianceDocumentSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6, third and final piece of "wire upload + signed download +
+ * scanning" for vendor compliance evidence (upload and scanning were already wired by
+ * an earlier pass). Mints a short-lived (5 minute) signed URL server-side; the
+ * browser never sees storage_path, only the already-signed URL, which it opens
+ * directly (Supabase Storage itself authorizes GETs against a valid signed token,
+ * independent of any further RLS check).
+ */
+export async function downloadVendorComplianceDocumentEvidenceAction(
+  tenantSlug: string,
+  documentId: string,
+  _prevState: VendorComplianceEvidenceDownloadState,
+  _formData: FormData,
+): Promise<VendorComplianceEvidenceDownloadState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, download: null };
+
+  const serviceRoleClient = createSupabaseServiceRoleClient();
+  try {
+    const result = await getVendorComplianceDocumentSignedDownloadUrl(toVendorComplianceEvidenceDownloadClient(serviceRoleClient), {
+      documentId,
+      correlationId: null,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+    return { error: null, download: result };
+  } catch (error) {
+    if (error instanceof VendorComplianceMutationError) return { error: `Could not create a download link for this evidence file: ${error.message}`, download: null };
     throw error;
   }
 }

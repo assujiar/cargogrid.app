@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseCustomerPortalAccountMembership,
   parseCustomerPortalScopeContextRow,
+  parseCustomerPortalPendingInvite,
   CustomerPortalMembershipCursorSchema,
   InviteCustomerPortalUserInputSchema,
   AcceptCustomerPortalInviteInputSchema,
@@ -127,6 +128,35 @@ describe("parseCustomerPortalScopeContextRow", () => {
     assert.equal((row as Record<string, unknown>).normalized_legal_name, undefined);
     assert.equal((row as Record<string, unknown>).duplicate_fingerprint, undefined);
     assert.equal((row as Record<string, unknown>).owner_user_id, undefined);
+  });
+});
+
+describe("parseCustomerPortalPendingInvite", () => {
+  test("maps a pending invite row", () => {
+    const invite = parseCustomerPortalPendingInvite({
+      membership_id: MEMBERSHIP_ID,
+      account_id: ACCOUNT_ID,
+      account_name: "Acme Logistics",
+      role: "member",
+      record_version: 1,
+      invited_at: "2026-09-18T00:00:00.000Z",
+    });
+    assert.equal(invite.membershipId, MEMBERSHIP_ID);
+    assert.equal(invite.accountName, "Acme Logistics");
+    assert.equal(invite.role, "member");
+    assert.equal(invite.recordVersion, 1);
+  });
+
+  test("tolerates a null invited_at", () => {
+    const invite = parseCustomerPortalPendingInvite({
+      membership_id: MEMBERSHIP_ID,
+      account_id: ACCOUNT_ID,
+      account_name: "Acme Logistics",
+      role: "account_admin",
+      record_version: 1,
+      invited_at: null,
+    });
+    assert.equal(invite.invitedAt, null);
   });
 });
 

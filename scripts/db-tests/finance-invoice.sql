@@ -291,7 +291,20 @@ begin
     raise exception 'assertion failed: expected status approved, got %', v_invoice.status;
   end if;
 
+  -- CG-AUDIT-2026-09-02 B1 regression: issue_finance_invoice is called for real by
+  -- server/mutations/invoice.ts through the RLS-scoped `authenticated` client (via its
+  -- public.* Option-2 wrapper), never as the superuser this file otherwise runs as --
+  -- running this exact call as role `authenticated` (no JWT claims needed: the audit's
+  -- own reproduction was a pure table-grant error, "permission denied for table
+  -- finance_invoices", not an RLS/identity failure -- assert_actor_is_session_identity
+  -- already treats a null session identity as trusted) is the only way this suite would
+  -- have caught B1 (the function was SECURITY INVOKER with authenticated holding no
+  -- table privileges, so this exact call raised that permission error in production
+  -- while still passing every db-test that called it unqualified as the connecting
+  -- superuser).
+  set local role authenticated;
   select * into v_invoice from app.issue_finance_invoice(v_invoice.id, v_invoice.record_version, '2026-03-15'::date, '00000000-0000-0000-0000-000000027503', 'financemanagera');
+  reset role;
   if v_invoice.status <> 'issued' or v_invoice.invoice_number !~ '^INV-2026-[0-9]{6}$' or v_invoice.due_date <> '2026-04-14'::date then
     raise exception 'assertion failed: expected status issued, a real invoice_number, and due_date 2026-04-14 (issue_date + 30d), got status=% number=% due=%', v_invoice.status, v_invoice.invoice_number, v_invoice.due_date;
   end if;
@@ -404,6 +417,119 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 A7: app.get_finance_invoice -- the single-invoice-by-id read this checkpoint adds (only list_finance_invoices/get_finance_invoice_lines existed before). FIN:View-gated like its sibling reads; Plain User A (no FIN grant) is denied; Finance Manager A reads their own tenant''s invoice in full (no cost-masking concept exists for invoices, unlike purchase orders); a genuine stranger to the invoice''s tenant (Finance Manager B) gets the same finance_invoice_not_found a nonexistent id would produce'
+do $$
+declare
+  v_tenant_a uuid := (select id from app.tenants where slug = 'acmeinva');
+  v_invoice app.finance_invoices;
+  v_read app.finance_invoices;
+begin
+  select * into v_invoice from app.finance_invoices where tenant_id = v_tenant_a and status = 'issued';
+
+  begin
+    perform app.get_finance_invoice(v_invoice.id, '00000000-0000-0000-0000-000000027505');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User A (no FIN grant)';
+  exception
+    when insufficient_privilege then
+      if sqlerrm not like 'insufficient_authority%' then
+        raise exception 'assertion failed: expected insufficient_authority, got %', sqlerrm;
+      end if;
+  end;
+
+  v_read := app.get_finance_invoice(v_invoice.id, '00000000-0000-0000-0000-000000027503');
+  if v_read.id <> v_invoice.id or v_read.invoice_number is distinct from v_invoice.invoice_number or v_read.total_amount <> v_invoice.total_amount then
+    raise exception 'assertion failed: expected app.get_finance_invoice to return the real, unmasked invoice row for Finance Manager A, got %', v_read;
+  end if;
+
+  begin
+    perform app.get_finance_invoice(v_invoice.id, '00000000-0000-0000-0000-000000027506');
+    raise exception 'assertion failed: expected finance_invoice_not_found -- Finance Manager B has zero relationship to tenant A';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'finance_invoice_not_found%' then
+        raise exception 'assertion failed: expected finance_invoice_not_found, got %', sqlerrm;
+      end if;
+  end;
+
+  begin
+    perform app.get_finance_invoice(gen_random_uuid(), '00000000-0000-0000-0000-000000027503');
+    raise exception 'assertion failed: a nonexistent invoice id must be refused';
+  exception
+    when no_data_found then
+      if sqlerrm not like 'finance_invoice_not_found%' then
+        raise exception 'assertion failed: expected finance_invoice_not_found for a nonexistent id, got %', sqlerrm;
+      end if;
+  end;
+
+  raise notice 'PASS: app.get_finance_invoice -- FIN:View-gated (Plain User A denied), returns the real unmasked row for Finance Manager A, and folds both a cross-tenant stranger and a nonexistent id into the identical finance_invoice_not_found';
+end;
+$$;
+
+\echo '>> CG-AUDIT-2026-09-02 B7 (worklist half): app.list_billable_readiness_handoffs -- every BillingReadinessHandoff not yet consumed by a live invoice. FIN:View-gated like get_finance_invoice; Plain User A denied, Finance Manager B (zero relationship to tenant A) denied; Finance Manager A (no COM:View selling price) sees both still-billable handoffs (the discarded-invoice one and a genuinely fresh one) but never the already-issued one, with amount masked; Rep A (holds COM:View selling price too) sees the same two handoffs with the real unmasked amount'
+do $$
+declare
+  v_tenant_a uuid;
+  v_job app.job_orders;
+  v_evaluation app.billing_readiness_evaluations;
+  v_handoff3 app.billing_readiness_handoffs;
+  v_rows record;
+  v_count integer;
+  v_handoff1_id uuid;
+  v_handoff2_id uuid;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeinva');
+  select * into v_job from app.job_orders where tenant_id = v_tenant_a;
+  v_handoff1_id := (select id from app.billing_readiness_handoffs where job_order_id = v_job.id and idempotency_key = 'invoice-fixture-handoff-1');
+  v_handoff2_id := (select id from app.billing_readiness_handoffs where job_order_id = v_job.id and idempotency_key = 'invoice-fixture-handoff-2');
+
+  -- A third, genuinely fresh handoff that has never been invoiced at all.
+  select * into v_evaluation from app.evaluate_billing_readiness(v_job.id, 'fixture: third handoff for the B7 worklist test', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_evaluation from app.override_billing_readiness(v_job.id, v_evaluation.record_version, 'fixture: third override', '00000000-0000-0000-0000-000000027502', 'rep');
+  select * into v_handoff3 from app.handoff_billing_readiness(v_job.id, 'invoice-fixture-handoff-3', '00000000-0000-0000-0000-000000027502', 'rep');
+
+  begin
+    perform app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027505');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User A (no FIN grant)';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  begin
+    perform app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027506');
+    raise exception 'assertion failed: expected insufficient_authority for Finance Manager B (zero relationship to tenant A)';
+  exception
+    when insufficient_privilege then
+      null;
+  end;
+
+  -- Finance Manager A: FIN:View but no COM:View selling price -- both still-billable
+  -- handoffs appear, masked, never the already-issued one.
+  select count(*) into v_count from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027503') r where r.id = v_handoff1_id;
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected the already-issued handoff to be excluded from the worklist';
+  end if;
+
+  select * into v_rows from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027503') r where r.id = v_handoff2_id;
+  if v_rows.amount is not null or not v_rows.amount_masked then
+    raise exception 'assertion failed: expected the discarded-invoice handoff to reappear as billable, masked for Finance Manager A, got amount=% masked=%', v_rows.amount, v_rows.amount_masked;
+  end if;
+
+  select count(*) into v_count from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027503') r where r.id = v_handoff3.id;
+  if v_count <> 1 then
+    raise exception 'assertion failed: expected the genuinely fresh handoff to appear exactly once in Finance Manager A''s worklist';
+  end if;
+
+  -- Rep A: FIN:View AND COM:View selling price -- same two handoffs, real unmasked amount.
+  select * into v_rows from app.list_billable_readiness_handoffs(v_tenant_a, '00000000-0000-0000-0000-000000027502') r where r.id = v_handoff2_id;
+  if v_rows.amount_masked or v_rows.amount <> 15000000 or v_rows.currency <> 'IDR' or v_rows.job_number <> v_job.job_number or v_rows.customer_legal_name is null then
+    raise exception 'assertion failed: expected Rep A to see the real unmasked amount (15,000,000 IDR) and a real customer name for the discarded-invoice handoff, got %', v_rows;
+  end if;
+
+  raise notice 'PASS: app.list_billable_readiness_handoffs -- FIN:View-gated (Plain User A and Finance Manager B both denied), excludes the already-issued handoff, includes the discarded-invoice handoff and a genuinely fresh one, and masks amount behind COM:View selling price exactly like app.list_job_orders';
+end;
+$$;
+
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new FIN-197 function (ERR-2026-004 regression guard)'
 do $$
 declare
@@ -413,7 +539,8 @@ begin
   for v_fn in select unnest(array[
     'touch_finance_invoice_row', 'check_finance_invoice_authority', 'prepare_finance_invoice_from_readiness',
     'submit_finance_invoice_for_approval', 'discard_finance_invoice_draft', 'approve_finance_invoice',
-    'issue_finance_invoice', 'list_finance_invoices', 'get_finance_invoice_lines'
+    'issue_finance_invoice', 'list_finance_invoices', 'get_finance_invoice_lines',
+    'get_finance_invoice', 'list_billable_readiness_handoffs'
   ]) loop
     select bool_or(has_function_privilege('anon', p.oid, 'EXECUTE'))
       into v_anon_has

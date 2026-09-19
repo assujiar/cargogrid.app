@@ -17,7 +17,6 @@ import {
   type CustomerQuotationView,
 } from "../contracts/quotation/quotation-acceptance.ts";
 
-export type QuotationAcceptanceQueryTableClient = Pick<SupabaseClient, "from">;
 export type QuotationAcceptanceQueryRpcClient = Pick<SupabaseClient, "rpc">;
 
 export class QuotationAcceptanceQueryError extends Error {
@@ -27,13 +26,12 @@ export class QuotationAcceptanceQueryError extends Error {
   }
 }
 
-/** Every acceptance token for one quotation, most recently sent first -- record-scoped via RLS (app.quotation_acceptance_tokens_select_scoped), token_hash never selected. */
-export async function listQuotationAcceptanceTokens(client: QuotationAcceptanceQueryTableClient, quotationId: string): Promise<QuotationAcceptanceToken[]> {
-  const { data, error } = await client
-    .from("quotation_acceptance_tokens")
-    .select("id, tenant_id, quotation_id, status, channel, recipient_contact_id, recipient_email, expires_at, sent_at, sent_by, revoked_at, revoked_reason, consumed_at, created_by, created_at")
-    .eq("quotation_id", quotationId)
-    .order("sent_at", { ascending: false });
+/** Every acceptance token for one quotation, most recently sent first -- record-scoped via app.quotation_acceptance_tokens_select_scoped's own authority predicate, token_hash never selected. */
+export async function listQuotationAcceptanceTokens(client: QuotationAcceptanceQueryRpcClient, quotationId: string, actorAuthUserId: string): Promise<QuotationAcceptanceToken[]> {
+  const { data, error } = await client.rpc("list_quotation_acceptance_tokens", {
+    p_quotation_id: quotationId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new QuotationAcceptanceQueryError(error.message);
   }

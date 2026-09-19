@@ -39,7 +39,7 @@ export default async function DispatchQueuePage({
   let result: ListDispatchReadyQueueResult | null = null;
   let loadFailed = false;
   try {
-    result = await listDispatchReadyQueue(supabase, { tenantId: access.tenant.id, page });
+    result = await listDispatchReadyQueue(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page });
   } catch (error) {
     if (!(error instanceof BasicDispatchQueryError)) {
       throw error;

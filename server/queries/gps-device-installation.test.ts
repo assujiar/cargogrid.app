@@ -22,53 +22,56 @@ const ROW = {
   updated_at: "2026-08-03T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }, expectMaybeSingle: boolean): GpsDeviceInstallationQueryClient {
+function fakeRpcClient(
+  response: { data: unknown; error: { message: string } | null },
+  capture?: (fn: string, args: Record<string, unknown>) => void,
+): GpsDeviceInstallationQueryClient {
   return {
-    from(table: string) {
-      assert.equal(table, "gps_device_installations");
-      const chain = {
-        select() {
-          return chain;
-        },
-        eq() {
-          return chain;
-        },
-        order() {
-          return response;
-        },
-        async maybeSingle() {
-          return response;
-        },
-      };
-      return expectMaybeSingle ? chain : chain;
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      capture?.(fn, args);
+      return Promise.resolve(response);
     },
   } as unknown as GpsDeviceInstallationQueryClient;
 }
 
 describe("listGpsDeviceInstallations", () => {
   test("maps rows for a tenant", async () => {
-    const client = fakeTableClient({ data: [ROW], error: null }, false);
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const rows = await listGpsDeviceInstallations(client, TENANT_ID);
+    assert.equal(capturedFn, "list_gps_device_installations");
+    assert.equal(capturedArgs?.p_tenant_id, TENANT_ID);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.technicianLabel, "Budi Teknisi");
   });
 
   test("throws on a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } }, false);
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(() => listGpsDeviceInstallations(client, TENANT_ID), GpsDeviceInstallationQueryError);
   });
 });
 
 describe("getGpsDeviceInstallationForAssignment", () => {
   test("returns null when none was ever recorded", async () => {
-    const client = fakeTableClient({ data: null, error: null }, true);
+    const client = fakeRpcClient({ data: [], error: null });
     const installation = await getGpsDeviceInstallationForAssignment(client, ASSIGNMENT_ID);
     assert.equal(installation, null);
   });
 
   test("parses a real row", async () => {
-    const client = fakeTableClient({ data: ROW, error: null }, true);
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const installation = await getGpsDeviceInstallationForAssignment(client, ASSIGNMENT_ID);
+    assert.equal(capturedFn, "get_gps_device_installation_for_assignment");
+    assert.equal(capturedArgs?.p_device_vehicle_assignment_id, ASSIGNMENT_ID);
     assert.ok(installation);
     assert.equal(installation?.deviceVehicleAssignmentId, ASSIGNMENT_ID);
   });

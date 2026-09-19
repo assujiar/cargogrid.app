@@ -32,33 +32,40 @@ const LAND_ROW = {
   updated_at: "2026-07-27T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): ShipmentModeBaselineQueryTableClient {
+function fakeRpcClient(
+  response: { data: unknown; error: { message: string } | null },
+  capture?: (fn: string, args: Record<string, unknown>) => void,
+): ShipmentModeBaselineQueryTableClient {
   return {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: () => Promise.resolve(response),
-        }),
-      }),
-    }),
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      capture?.(fn, args);
+      return Promise.resolve(response);
+    },
   } as unknown as ShipmentModeBaselineQueryTableClient;
 }
 
 describe("getShipmentModeProfile", () => {
   test("returns null (never an error) when no profile has been set yet or RLS excludes it", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const client = fakeRpcClient({ data: [], error: null });
     const profile = await getShipmentModeProfile(client, SHIPMENT_ID);
     assert.equal(profile, null);
   });
 
   test("maps a land profile", async () => {
-    const client = fakeTableClient({ data: LAND_ROW, error: null });
+    let capturedFn: string | undefined;
+    let capturedArgs: Record<string, unknown> | undefined;
+    const client = fakeRpcClient({ data: [LAND_ROW], error: null }, (fn, args) => {
+      capturedFn = fn;
+      capturedArgs = args;
+    });
     const profile = await getShipmentModeProfile(client, SHIPMENT_ID);
+    assert.equal(capturedFn, "get_shipment_mode_profile");
+    assert.equal(capturedArgs?.p_shipment_order_id, SHIPMENT_ID);
     assert.equal(profile?.mode, "land");
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => getShipmentModeProfile(client, SHIPMENT_ID),
       (err: unknown) => err instanceof ShipmentModeBaselineQueryError,

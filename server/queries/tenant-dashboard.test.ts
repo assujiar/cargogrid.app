@@ -52,34 +52,31 @@ const VALID_WIDGET_ROW = {
   created_at: "2026-08-02T00:00:00.000Z",
 };
 
-/** Mirrors server/queries/report.test.ts's own chain fake -- chainable and awaitable regardless of which trailing method (.limit()/.maybeSingle()/direct await) a given query function uses. */
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): TenantDashboardQueryTableClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      limit: () => Promise.resolve(response),
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
-  return { from: () => chainNode() } as unknown as TenantDashboardQueryTableClient;
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
+  client: TenantDashboardQueryTableClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
+      calls.push({ fn, args });
+      return response;
+    },
+  } as unknown as TenantDashboardQueryTableClient;
+  return { client, calls };
 }
 
 describe("listTenantDashboards", () => {
-  test("maps dashboard rows", async () => {
-    const client = fakeTableClient({ data: [VALID_DASHBOARD_ROW], error: null });
+  test("calls list_tenant_dashboards and maps dashboard rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_DASHBOARD_ROW], error: null });
     const dashboards = await listTenantDashboards(client, TENANT_ID);
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID });
     assert.equal(dashboards.length, 1);
     assert.equal(dashboards[0]?.name, "Executive Overview");
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const { client } = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => listTenantDashboards(client, TENANT_ID),
       (err: unknown) => err instanceof TenantDashboardQueryError,
@@ -89,39 +86,49 @@ describe("listTenantDashboards", () => {
 
 describe("getTenantDashboardById", () => {
   test("returns null (never an error) when not found", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const dashboard = await getTenantDashboardById(client, DASHBOARD_ID);
     assert.equal(dashboard, null);
   });
 
   test("parses a matched row", async () => {
-    const client = fakeTableClient({ data: VALID_DASHBOARD_ROW, error: null });
+    const { client, calls } = fakeRpcClient({ data: [VALID_DASHBOARD_ROW], error: null });
     const dashboard = await getTenantDashboardById(client, DASHBOARD_ID);
+    assert.deepEqual(calls[0]?.args, { p_dashboard_id: DASHBOARD_ID });
     assert.equal(dashboard?.id, DASHBOARD_ID);
   });
 });
 
 describe("listTenantDashboardVersions", () => {
-  test("maps version-history rows, newest first", async () => {
-    const client = fakeTableClient({ data: [VALID_VERSION_ROW], error: null });
+  test("calls list_tenant_dashboard_versions and maps version-history rows, newest first", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_VERSION_ROW], error: null });
     const versions = await listTenantDashboardVersions(client, DASHBOARD_ID);
+    assert.deepEqual(calls[0]?.args, { p_dashboard_id: DASHBOARD_ID });
     assert.equal(versions.length, 1);
     assert.equal(versions[0]?.versionNumber, 1);
   });
 });
 
 describe("getTenantDashboardVersionById", () => {
-  test("parses a matched row", async () => {
-    const client = fakeTableClient({ data: VALID_VERSION_ROW, error: null });
+  test("returns null (never an error) when not found", async () => {
+    const { client } = fakeRpcClient({ data: [], error: null });
     const version = await getTenantDashboardVersionById(client, VERSION_ID);
-    assert.equal(version?.status, "draft");
+    assert.equal(version, null);
+  });
+
+  test("parses a matched row", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_VERSION_ROW], error: null });
+    const version = await getTenantDashboardVersionById(client, VERSION_ID);
+    assert.deepEqual(calls[0]?.args, { p_version_id: VERSION_ID });
+    assert.equal(version?.id, VERSION_ID);
   });
 });
 
 describe("listDashboardWidgets", () => {
-  test("maps widget rows in display order", async () => {
-    const client = fakeTableClient({ data: [VALID_WIDGET_ROW], error: null });
+  test("calls list_dashboard_widgets and maps widget rows in display order", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_WIDGET_ROW], error: null });
     const widgets = await listDashboardWidgets(client, VERSION_ID);
+    assert.deepEqual(calls[0]?.args, { p_dashboard_version_id: VERSION_ID });
     assert.equal(widgets.length, 1);
     assert.equal(widgets[0]?.reportTypeCode, "finance_billing_summary");
   });

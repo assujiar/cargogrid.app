@@ -36,7 +36,7 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
 
   let request;
   try {
-    request = await getCostingRequestById(supabase, requestId);
+    request = await getCostingRequestById(supabase, requestId, access.authUserId);
   } catch (error) {
     if (!(error instanceof CostingQueryError)) {
       throw error;
@@ -51,14 +51,14 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
   }
 
   const [components, responses] = await Promise.all([
-    listCostingRequestComponents(supabase, request.id),
-    listCostingResponsesForRequest(supabase, request.id),
+    listCostingRequestComponents(supabase, request.id, access.authUserId),
+    listCostingResponsesForRequest(supabase, request.id, access.authUserId),
   ]);
 
   const responseComponentsByResponse = await Promise.all(
     responses.map(async (response) => ({
       response,
-      components: response.costMasked ? [] : await listCostingResponseComponents(supabase, response.id),
+      components: response.costMasked ? [] : await listCostingResponseComponents(supabase, response.id, access.authUserId),
     })),
   );
 
@@ -66,8 +66,8 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
   let candidateRates: RateVersion[];
   try {
     [rateSelections, candidateRates] = await Promise.all([
-      listRateSelectionsForRequest(supabase, request.id),
-      listActiveVendorRates(supabase, access.tenant.id),
+      listRateSelectionsForRequest(supabase, request.id, access.authUserId),
+      listActiveVendorRates(supabase, access.tenant.id, access.authUserId),
     ]);
   } catch (error) {
     if (!(error instanceof RateQueryError)) {
@@ -79,7 +79,7 @@ export default async function CostingRequestDetailPage({ params }: { params: Pro
 
   let marginCalculations: MarginCalculation[];
   try {
-    marginCalculations = await listMarginCalculationsForRequest(supabase, request.id);
+    marginCalculations = await listMarginCalculationsForRequest(supabase, request.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof MarginQueryError)) {
       throw error;

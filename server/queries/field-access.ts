@@ -43,11 +43,10 @@ export async function canAccessRecord(client: FieldAccessRpcClient, input: CanAc
 }
 
 export interface UserDirectoryLookupClient {
-  from(table: "users_directory"): {
-    select(columns: string): {
-      eq(column: string, value: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
+  rpc(
+    fn: "list_user_directory",
+    args: { p_tenant_id: string; p_actor_auth_user_id: string },
+  ): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 }
 
 export class UserDirectoryLookupError extends Error {
@@ -57,9 +56,12 @@ export class UserDirectoryLookupError extends Error {
   }
 }
 
-/** The field-masked directory for a tenant -- email is redacted per row unless the caller holds HRS:View personal data (RLS + app.has_view_personal_data() decide this server-side, not the caller). */
-export async function listUserDirectory(client: UserDirectoryLookupClient, tenantId: string): Promise<UserDirectoryEntry[]> {
-  const { data, error } = await client.from("users_directory").select("*").eq("tenant_id", tenantId);
+/** The field-masked directory for a tenant -- email is redacted per row unless the caller holds HRS:View personal data (app.has_view_personal_data() decides this server-side, not the caller). RPC-backed via app.list_user_directory (CG-AUDIT-2026-09-02 O1 cluster 2) -- the app schema is not exposed to PostgREST. */
+export async function listUserDirectory(client: UserDirectoryLookupClient, tenantId: string, actorAuthUserId: string): Promise<UserDirectoryEntry[]> {
+  const { data, error } = await client.rpc("list_user_directory", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
 
   if (error) {
     throw new UserDirectoryLookupError(error.message);

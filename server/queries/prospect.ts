@@ -25,6 +25,7 @@ export type ProspectQueryRpcClient = Pick<SupabaseClient, "rpc">;
 
 export interface ListProspectsInput {
   readonly tenantId: string;
+  readonly actorAuthUserId: string;
   readonly page: number;
   readonly pageSize?: number;
 }
@@ -75,42 +76,47 @@ export async function getProspectConversionReadiness(client: ProspectQueryRpcCli
   return ConversionReadinessSchema.parse({ ready: typedRow.ready, missing: typedRow.missing });
 }
 
-/** Server-side paginated Prospect queue -- RLS (prospects_select_scoped) is the real scope gate; this query only bounds page size and orders deterministically. */
-export async function listProspects(client: Pick<SupabaseClient, "from">, input: ListProspectsInput): Promise<ListProspectsResult> {
+/** Server-side paginated Prospect queue -- app.list_prospects reproduces prospects_select_scoped's own authority predicate exactly; this query only bounds page size and orders deterministically. */
+export async function listProspects(client: ProspectQueryRpcClient, input: ListProspectsInput): Promise<ListProspectsResult> {
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
   const page = Math.max(Math.trunc(input.page), 1);
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  const { data, error, count } = await client
-    .from("prospects")
-    .select("*", { count: "exact" })
-    .eq("tenant_id", input.tenantId)
-    .order("updated_at", { ascending: false })
-    .range(from, to);
+  const { data, error } = await client.rpc("list_prospects", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+    p_page: page,
+    p_page_size: pageSize,
+  });
 
   if (error) {
     throw new ProspectQueryError(error.message);
   }
 
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const totalCount = rows.length > 0 ? Number(rows[0]!.total_count) : 0;
+
   return {
-    prospects: (data ?? []).map((row: Record<string, unknown>) => parseProspect(row)),
-    totalCount: count ?? 0,
+    prospects: rows.map((row) => parseProspect(row)),
+    totalCount,
     page,
     pageSize,
   };
 }
 
-/** A single prospect by id, for the Prospect Detail view -- returns null (never an error) when RLS/no-match yields zero rows. */
-export async function getProspectById(client: Pick<SupabaseClient, "from">, prospectId: string): Promise<Prospect | null> {
-  const { data, error } = await client.from("prospects").select("*").eq("id", prospectId).maybeSingle();
+/** A single prospect by id, for the Prospect Detail view -- app.get_prospect_by_id returns null (never an error) when denied/no-match yields zero rows. */
+export async function getProspectById(client: ProspectQueryRpcClient, prospectId: string, actorAuthUserId: string): Promise<Prospect | null> {
+  const { data, error } = await client.rpc("get_prospect_by_id", {
+    p_prospect_id: prospectId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new ProspectQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseProspect(data as Record<string, unknown>);
+  return parseProspect(row as Record<string, unknown>);
 }
 
 /** COM-161: reuses app.find_duplicate_accounts' own legal_name+tax_id fingerprint match, surfaced at Prospect stage. Advisory only, never blocks qualification. Fails closed (raises) for an actor with no active membership in tenantId. */

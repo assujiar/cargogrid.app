@@ -342,7 +342,7 @@ describe("validateVendorRateImportRow", () => {
 });
 
 describe("commitVendorRateImportJob", () => {
-  test("calls commit_vendor_rate_import_job with the exact snake_case params, defaulting allowPartial to false", async () => {
+  test("calls commit_vendor_rate_import_job with the exact snake_case params, defaulting allowPartial to false and clientIp to null", async () => {
     const calls: { fn: string; args: Record<string, unknown> }[] = [];
     const client = fakeRpcClient({ data: { job_id: JOB_ID, status: "completed" }, error: null }, calls);
 
@@ -351,7 +351,17 @@ describe("commitVendorRateImportJob", () => {
     assert.equal(calls[0]?.fn, "commit_vendor_rate_import_job");
     assert.equal(calls[0]?.args.p_job_id, JOB_ID);
     assert.equal(calls[0]?.args.p_allow_partial, false);
+    assert.equal(calls[0]?.args.p_client_ip, null);
     assert.equal(job.status, "completed");
+  });
+
+  test("passes clientIp through when supplied", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcClient({ data: { job_id: JOB_ID, status: "completed" }, error: null }, calls);
+
+    await commitVendorRateImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "203.0.113.5" });
+
+    assert.equal(calls[0]?.args.p_client_ip, "203.0.113.5");
   });
 
   test("classifies import_export_job_has_invalid_rows", async () => {
@@ -361,6 +371,27 @@ describe("commitVendorRateImportJob", () => {
       (err: unknown) => {
         assert.ok(err instanceof ProcurementRateMutationError);
         assert.equal(err.code, "import_export_job_has_invalid_rows");
+        return true;
+      },
+    );
+  });
+
+  test("classifies mfa_step_up_required and ip_not_allowed (CG-AUDIT-2026-09-02 A4)", async () => {
+    const mfaClient = fakeRpcClient({ data: null, error: { message: "mfa_step_up_required: PRC:Import requires a current MFA step-up verification" } }, []);
+    await assert.rejects(
+      () => commitVendorRateImportJob(mfaClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ProcurementRateMutationError);
+        assert.equal(err.code, "mfa_step_up_required");
+        return true;
+      },
+    );
+    const ipClient = fakeRpcClient({ data: null, error: { message: "ip_not_allowed: malformed IP address denied for scope" } }, []);
+    await assert.rejects(
+      () => commitVendorRateImportJob(ipClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "bad-ip" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ProcurementRateMutationError);
+        assert.equal(err.code, "ip_not_allowed");
         return true;
       },
     );

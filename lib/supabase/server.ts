@@ -19,7 +19,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { buildSessionCookieOptions } from "../auth/session-cookie-options.ts";
+import { buildSessionCookieOptions, mergeSessionCookieOptions } from "../auth/session-cookie-options.ts";
 
 function requireEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY"): string {
   const value = process.env[name];
@@ -42,7 +42,7 @@ export async function createSupabaseServerClient() {
       setAll(cookiesToSet) {
         try {
           for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, { ...sessionCookieOptions, ...options });
+            cookieStore.set(name, value, mergeSessionCookieOptions(sessionCookieOptions, options));
           }
         } catch {
           // Called from a Server Component render, where Next.js does not allow

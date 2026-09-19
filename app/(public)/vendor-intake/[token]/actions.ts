@@ -11,7 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { headers } from "next/headers";
+import { resolveRequestClientIp } from "../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../lib/supabase/service-role.ts";
 import { redeemVendorIntakeToken } from "../../../../server/mutations/vendor-profile.ts";
 import type { VendorIntakeSubmitResult } from "../../../../server/contracts/vendor-profile/vendor-profile.ts";
@@ -39,9 +39,11 @@ export async function redeemVendorIntakeTokenAction(rawToken: string, _prevState
   // client_key is a sha256 hash of the caller's own best-effort IP address, never the
   // raw IP itself (app.vendor_intake_attempts is retained as rate-limit evidence) --
   // the same disclosed "no verified identity" shape app/(public)/tracking/[token]/
-  // page.tsx already established.
-  const requestHeaders = await headers();
-  const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // page.tsx already established. CG-AUDIT-2026-09-02 D3: the FIRST x-forwarded-for hop is
+  // caller-controlled and a proxy only ever appends to it -- lib/security/client-ip.ts's
+  // own resolveRequestClientIp is the shared, correct resolution (x-real-ip first, else the
+  // LAST x-forwarded-for hop).
+  const ipAddress = (await resolveRequestClientIp()) ?? "unknown";
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const client = createSupabaseServiceRoleClient();

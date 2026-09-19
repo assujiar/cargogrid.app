@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { resolveRequestClientIp } from "../../../../lib/security/client-ip.ts";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
 import { resolveCommercialAccessForRequest } from "../../../../lib/portal/resolve-commercial-access.server.ts";
 import {
@@ -70,10 +70,12 @@ export async function createIntegrationConnectionAction(tenantSlug: string, _pre
 
   // ISS-2026-150 closure fix: the caller's best-effort client IP, threaded through so
   // app.create_integration_connection can enforce the tenant's own IP allowlist
-  // restriction (scope 'admin') when one is configured -- same x-forwarded-for-derived
-  // shape as app/(public)/vendor-intake/register/[tenantSlug]/actions.ts.
-  const requestHeaders = await headers();
-  const clientIp = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+  // restriction (scope 'admin') when one is configured. CG-AUDIT-2026-09-02 D3: this used
+  // to take the FIRST x-forwarded-for hop directly, which a client fully controls and a
+  // proxy only ever appends to -- spoofable outright for an access control this is not a
+  // subtlety for. lib/security/client-ip.ts's own resolveRequestClientIp is the shared,
+  // correct resolution (x-real-ip first, else the LAST x-forwarded-for hop).
+  const clientIp = await resolveRequestClientIp();
 
   const supabase = await createSupabaseServerClient();
   try {

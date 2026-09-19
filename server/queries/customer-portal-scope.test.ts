@@ -4,6 +4,7 @@ import {
   resolveCustomerAccountScope,
   getCustomerPortalScopeContext,
   listCustomerPortalAccountMemberships,
+  listMyPendingCustomerPortalInvites,
   CustomerPortalScopeQueryError,
   type CustomerPortalScopeQueryClient,
 } from "./customer-portal-scope.ts";
@@ -125,5 +126,39 @@ describe("listCustomerPortalAccountMemberships", () => {
     const { client } = fakeRpcClient({ data: [], error: null });
     const result = await listCustomerPortalAccountMemberships(client, TENANT_ID, ACCOUNT_ID, ACTOR_ID);
     assert.deepEqual(result, []);
+  });
+});
+
+describe("listMyPendingCustomerPortalInvites", () => {
+  test("maps every returned row and passes the exact param names", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: [{ membership_id: MEMBERSHIP_ID, account_id: ACCOUNT_ID, account_name: "Acme Logistics", role: "member", record_version: 1, invited_at: "2026-09-18T00:00:00.000Z" }],
+      error: null,
+    });
+    const result = await listMyPendingCustomerPortalInvites(client, AUTH_USER_ID, TENANT_ID);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.accountName, "Acme Logistics");
+    assert.equal(result[0]?.membershipId, MEMBERSHIP_ID);
+    assert.deepEqual(calls[0], {
+      fn: "list_my_pending_customer_portal_invites",
+      args: { p_auth_user_id: AUTH_USER_ID, p_tenant_id: TENANT_ID },
+    });
+  });
+
+  test("returns an empty array (never throws) for an identity with no pending invites", async () => {
+    const { client } = fakeRpcClient({ data: [], error: null });
+    const result = await listMyPendingCustomerPortalInvites(client, AUTH_USER_ID, TENANT_ID);
+    assert.deepEqual(result, []);
+  });
+
+  test("returns an empty array when the RPC returns null", async () => {
+    const { client } = fakeRpcClient({ data: null, error: null });
+    const result = await listMyPendingCustomerPortalInvites(client, AUTH_USER_ID, TENANT_ID);
+    assert.deepEqual(result, []);
+  });
+
+  test("throws on an RPC error", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "unexpected: boom" } });
+    await assert.rejects(() => listMyPendingCustomerPortalInvites(client, AUTH_USER_ID, TENANT_ID), CustomerPortalScopeQueryError);
   });
 });

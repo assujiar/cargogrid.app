@@ -41,11 +41,11 @@ interface RecordedCalls {
   jobFailures: Record<string, unknown>[];
 }
 
-function mockClient(pollUrl: string | null, recorded: RecordedCalls = { syncEvents: [], jobFailures: [] }, credential: string | null = "test-credential-value"): ProcessLogisticsPartnerSyncJobRpcClient {
+function mockClient(pollUrl: string | null, recorded: RecordedCalls = { syncEvents: [], jobFailures: [] }, credential: string | null = "test-credential-value", connectionTenantId: string = TENANT_ID): ProcessLogisticsPartnerSyncJobRpcClient {
   return {
     rpc: async (fn: string, args: Record<string, unknown>) => {
       if (fn === "get_logistics_partner_connection_for_sync") {
-        return { data: { tenant_id: TENANT_ID, adapter_code: "carrier_status_api", connection_status: "active", connection_config: pollUrl ? { pollUrl } : {} }, error: null };
+        return { data: { tenant_id: connectionTenantId, adapter_code: "carrier_status_api", connection_status: "active", connection_config: pollUrl ? { pollUrl } : {} }, error: null };
       }
       if (fn === "get_logistics_partner_credential") {
         return { data: credential, error: null };
@@ -176,6 +176,29 @@ describe("processLogisticsPartnerSyncJob", () => {
 
     assert.equal(result.outcome, "failed");
     assert.match(result.errorMessage ?? "", /refusing to poll/);
+  });
+
+  test("CG-AUDIT-2026-09-02 D3d: a connection whose own tenant_id does not match the enqueuing job's tenant_id fails closed without a live HTTP call", async () => {
+    let called = false;
+    const { server, url } = await startServer((_req, res) => {
+      called = true;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ events: [] }));
+    });
+    const OTHER_TENANT_ID = "723e4567-e89b-12d3-a456-426614174000";
+    try {
+      const recorded: RecordedCalls = { syncEvents: [], jobFailures: [] };
+      const client = mockClient(url, recorded, "test-credential-value", OTHER_TENANT_ID);
+      const result = await processLogisticsPartnerSyncJob(client, jobRow(), "test-worker", "test-worker", ALLOW_ALL_URLS);
+
+      assert.equal(result.outcome, "failed");
+      assert.match(result.errorMessage ?? "", /belongs to tenant/);
+      assert.equal(called, false, "must never dispatch a live HTTP call for a cross-tenant connection/job mismatch");
+      assert.equal(recorded.syncEvents.length, 0);
+      assert.equal(recorded.jobFailures.length, 1);
+    } finally {
+      server.close();
+    }
   });
 
   test("throws for a malformed job payload this repository's own trigger never produces", async () => {

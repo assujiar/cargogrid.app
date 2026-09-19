@@ -36,8 +36,14 @@ import {
   linkDocumentToChecklistItem,
   reviewDocumentChecklistItem,
   uploadShipmentDocumentFile,
+  getShipmentDocumentChecklistItemSignedDownloadUrl,
   DocumentRequirementMutationError,
+  type ShipmentDocumentChecklistEvidenceDownloadClient,
 } from "../../../../../../server/mutations/document-requirement.ts";
+import type { ShipmentDocumentChecklistItemSignedDownload } from "../../../../../../server/contracts/document-requirement/document-requirement.ts";
+import type { DocumentMutationRpcClient } from "../../../../../../server/mutations/document.ts";
+import type { BackgroundJobMutationRpcClient } from "../../../../../../server/mutations/background-job.ts";
+import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
 import {
   startEpodCapture,
   setEpodEvidence,
@@ -45,9 +51,11 @@ import {
   reviewEpodCapture,
   reviseEpodCapture,
   completeEpodCapture,
+  getEpodEvidenceSignedDownloadUrl,
   EpodCaptureReviewMutationError,
+  type EpodEvidenceDownloadClient,
 } from "../../../../../../server/mutations/epod-capture-review.ts";
-import type { GeoJsonPoint } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
+import type { GeoJsonPoint, EpodEvidenceSignedDownload } from "../../../../../../server/contracts/epod-capture-review/epod-capture-review.ts";
 import {
   createActualCostDraft,
   addActualCostComponent,
@@ -569,14 +577,26 @@ export async function pinDocumentChecklistAction(tenantSlug: string, shipmentOrd
   return { error: null };
 }
 
+function toShipmentDocumentStoreClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient & StorageUploadClient {
+  return client as unknown as DocumentMutationRpcClient & StorageUploadClient;
+}
+
+function toShipmentDocumentBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): BackgroundJobMutationRpcClient {
+  return client as unknown as BackgroundJobMutationRpcClient;
+}
+
 /**
- * OPS-176: uploads file metadata through the Platform Document/File Engine
- * (app.initiate_file_upload, PLT-128, service_role-only -- lib/supabase/service-role.ts's
- * createSupabaseServiceRoleClient is the same "explicit actor, service-role execution"
- * pattern lib/portal/tenant-admin-guard-deps.server.ts already established), then links
- * the resulting file to this checklist item through the RLS-scoped authenticated client.
- * No live storage backend exists in this sandbox -- only filename/MIME/size metadata is
- * ever captured, the same disclosed constraint PLT-128's own migration recorded.
+ * OPS-176 (CG-AUDIT-2026-09-02 A6, third of the audit's own 3 named deadlocked
+ * flows -- vendor compliance document submission and its signed download are both
+ * already wired): uploads file metadata through the Platform Document/File Engine
+ * (app.initiate_file_upload, PLT-128, service_role-only), stores the REAL uploaded
+ * bytes and enqueues a malware_scan job (lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts,
+ * the same sequence vendor compliance evidence already uses), then links the
+ * resulting file to this checklist item through the RLS-scoped authenticated client.
+ * Previously this action only ever captured filename/MIME/size metadata typed into
+ * plain text fields -- no real File reached this action at all, so no file could
+ * ever leave malware_scan_status='pending' -- the exact still-open gap this
+ * backlog's own A6 status note named.
  */
 export async function uploadAndLinkDocumentAction(
   tenantSlug: string,
@@ -592,26 +612,40 @@ export async function uploadAndLinkDocumentAction(
     return { error: "You don't have access to this organization's Operations workspace." };
   }
 
-  const originalFilename = String(formData.get("originalFilename") ?? "");
-  const mimeType = String(formData.get("mimeType") ?? "");
-  const sizeBytes = Number(formData.get("sizeBytes") ?? 0);
+  const uploadedFile = formData.get("file");
+  if (!(uploadedFile instanceof File) || uploadedFile.size === 0) {
+    return { error: "Choose a file to upload." };
+  }
 
   try {
     const serviceRole = createSupabaseServiceRoleClient();
-    const file = await uploadShipmentDocumentFile(serviceRole, {
+    const uploaded = await uploadShipmentDocumentFile(serviceRole, {
       tenantId: access.tenant.id,
       shipmentOrderId,
       documentTypeCode,
-      originalFilename,
-      mimeType,
-      sizeBytes,
+      originalFilename: uploadedFile.name,
+      mimeType: uploadedFile.type || "application/octet-stream",
+      sizeBytes: uploadedFile.size,
       idempotencyKey,
       actorAuthUserId: access.authUserId,
       actorLabel: access.authUserId,
     });
 
     const supabase = await createSupabaseServerClient();
-    await linkDocumentToChecklistItem(supabase, { checklistItemId, fileId: file.id, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+    const storeError = await storeFileBytesAndEnqueueScan(
+      toShipmentDocumentStoreClient(serviceRole),
+      toShipmentDocumentBackgroundJobClient(supabase),
+      uploaded,
+      uploadedFile,
+      access.tenant.id,
+      access.authUserId,
+      "document",
+    );
+    if (storeError) {
+      return storeError;
+    }
+
+    await linkDocumentToChecklistItem(supabase, { checklistItemId, fileId: uploaded.id, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
   } catch (error) {
     if (error instanceof DocumentRequirementMutationError) {
       return { error: `Could not upload/link this document: ${error.message}` };
@@ -621,6 +655,41 @@ export async function uploadAndLinkDocumentAction(
 
   revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
   return { error: null };
+}
+
+export interface ChecklistItemDownloadState {
+  readonly error: string | null;
+  readonly download: ShipmentDocumentChecklistItemSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one checklist
+ * item's linked evidence file. Uses the service-role client -- the underlying
+ * RPC (app.access_shipment_document_checklist_item_evidence_for_download) is
+ * granted to service_role only, mirroring downloadVendorComplianceDocumentEvidenceAction's
+ * own identical reasoning.
+ */
+export async function downloadChecklistItemEvidenceAction(
+  tenantSlug: string,
+  checklistItemId: string,
+  _prevState: ChecklistItemDownloadState,
+  _formData: FormData,
+): Promise<ChecklistItemDownloadState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace.", download: null };
+  }
+
+  const serviceRole: ShipmentDocumentChecklistEvidenceDownloadClient = createSupabaseServiceRoleClient();
+  try {
+    const result = await getShipmentDocumentChecklistItemSignedDownloadUrl(serviceRole, checklistItemId, access.authUserId, access.authUserId);
+    return { error: null, download: result };
+  } catch (error) {
+    if (error instanceof DocumentRequirementMutationError) {
+      return { error: `Could not create a download link for this document: ${error.message}`, download: null };
+    }
+    throw error;
+  }
 }
 
 /** OPS-176: approve/reject the linked evidence for one checklist item. Approving an unscanned or unsafe file is rejected server-side (document_checklist_unsafe_file) regardless of what the UI disables. */
@@ -689,6 +758,25 @@ export async function startEpodCaptureAction(tenantSlug: string, shipmentOrderId
  * ePOD capture version. No live storage backend exists in this sandbox -- MIME type
  * and size are fixed placeholders, matching PLT-128's own disclosed constraint.
  */
+/**
+ * CG-AUDIT-2026-09-02 A6 (the 4th and last of the audit's own named
+ * deadlocked flows -- vendor compliance, shipment document checklist, and
+ * ticket-reply attachments were all fixed earlier this session): previously
+ * this action read plain TEXT filename fields (signatureFilename/
+ * photoFilename), never a real File object, and called uploadShipmentDocumentFile
+ * with a HARDCODED mimeType/sizeBytes -- no bytes were ever stored, no scan
+ * was ever enqueued, so a signature/photo "evidence" file could never leave
+ * malware_scan_status='pending'. Fixed by taking real `signatureFile`/
+ * `photoFile` File inputs and running the same upload+store+scan sequence
+ * uploadAndLinkDocumentAction already established for checklist evidence --
+ * both are optional (app.set_epod_evidence itself treats signature_file_id/
+ * photo_file_ids as nullable), but a present file must round-trip as real,
+ * clean-scannable bytes, never fabricated metadata. Geolocation/capturedAt
+ * remain plain scalar inputs -- app.set_epod_evidence never required a
+ * signature-pad canvas or live camera capture, only a real evidence file
+ * when one is provided; that richer capture UX can layer on top later with
+ * zero RPC/schema changes.
+ */
 export async function setEpodEvidenceAction(
   tenantSlug: string,
   shipmentOrderId: string,
@@ -704,49 +792,73 @@ export async function setEpodEvidenceAction(
 
   const receiverName = String(formData.get("receiverName") ?? "");
   const receiverPosition = String(formData.get("receiverPosition") ?? "").trim();
-  const signatureFilename = String(formData.get("signatureFilename") ?? "").trim();
-  const photoFilename = String(formData.get("photoFilename") ?? "").trim();
+  const signatureFile = formData.get("signatureFile");
+  const photoFile = formData.get("photoFile");
   const latitude = String(formData.get("latitude") ?? "").trim();
   const longitude = String(formData.get("longitude") ?? "").trim();
   const capturedAtLocal = String(formData.get("capturedAt") ?? "").trim();
 
+  const supabase = await createSupabaseServerClient();
   try {
     const serviceRole = createSupabaseServiceRoleClient();
     let signatureFileId: string | null = null;
-    if (signatureFilename.length > 0) {
-      const file = await uploadShipmentDocumentFile(serviceRole, {
+    if (signatureFile instanceof File && signatureFile.size > 0) {
+      const uploaded = await uploadShipmentDocumentFile(serviceRole, {
         tenantId: access.tenant.id,
         shipmentOrderId,
         documentTypeCode: "epod",
-        originalFilename: signatureFilename,
-        mimeType: "image/png",
-        sizeBytes: 20480,
+        originalFilename: signatureFile.name,
+        mimeType: signatureFile.type || "image/png",
+        sizeBytes: signatureFile.size,
         idempotencyKey: `${idempotencyKeyPrefix}-sig`,
         actorAuthUserId: access.authUserId,
         actorLabel: access.authUserId,
       });
-      signatureFileId = file.id;
+      const storeError = await storeFileBytesAndEnqueueScan(
+        toShipmentDocumentStoreClient(serviceRole),
+        toShipmentDocumentBackgroundJobClient(supabase),
+        uploaded,
+        signatureFile,
+        access.tenant.id,
+        access.authUserId,
+        "signature",
+      );
+      if (storeError) {
+        return storeError;
+      }
+      signatureFileId = uploaded.id;
     }
     let photoFileIds: string[] = [];
-    if (photoFilename.length > 0) {
-      const file = await uploadShipmentDocumentFile(serviceRole, {
+    if (photoFile instanceof File && photoFile.size > 0) {
+      const uploaded = await uploadShipmentDocumentFile(serviceRole, {
         tenantId: access.tenant.id,
         shipmentOrderId,
         documentTypeCode: "epod",
-        originalFilename: photoFilename,
-        mimeType: "image/jpeg",
-        sizeBytes: 102400,
+        originalFilename: photoFile.name,
+        mimeType: photoFile.type || "image/jpeg",
+        sizeBytes: photoFile.size,
         idempotencyKey: `${idempotencyKeyPrefix}-photo`,
         actorAuthUserId: access.authUserId,
         actorLabel: access.authUserId,
       });
-      photoFileIds = [file.id];
+      const storeError = await storeFileBytesAndEnqueueScan(
+        toShipmentDocumentStoreClient(serviceRole),
+        toShipmentDocumentBackgroundJobClient(supabase),
+        uploaded,
+        photoFile,
+        access.tenant.id,
+        access.authUserId,
+        "delivery photo",
+      );
+      if (storeError) {
+        return storeError;
+      }
+      photoFileIds = [uploaded.id];
     }
 
     const deliveryGeojson: GeoJsonPoint | null =
       latitude.length > 0 && longitude.length > 0 ? { type: "Point", coordinates: [Number(longitude), Number(latitude)] } : null;
 
-    const supabase = await createSupabaseServerClient();
     await setEpodEvidence(supabase, {
       captureId,
       receiverName: receiverName.trim().length === 0 ? null : receiverName,
@@ -767,6 +879,41 @@ export async function setEpodEvidenceAction(
 
   revalidatePath(`/${tenantSlug}/operations/shipment-orders/${shipmentOrderId}`);
   return { error: null };
+}
+
+export interface EpodEvidenceDownloadState {
+  readonly error: string | null;
+  readonly download: EpodEvidenceSignedDownload | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ePOD
+ * signature/photo evidence file. Uses the service-role client -- the
+ * underlying RPC (app.access_epod_evidence_for_download) is granted to
+ * service_role only, mirroring downloadChecklistItemEvidenceAction's own
+ * identical reasoning.
+ */
+export async function downloadEpodEvidenceAction(
+  tenantSlug: string,
+  fileId: string,
+  _prevState: EpodEvidenceDownloadState,
+  _formData: FormData,
+): Promise<EpodEvidenceDownloadState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace.", download: null };
+  }
+
+  const serviceRole: EpodEvidenceDownloadClient = createSupabaseServiceRoleClient();
+  try {
+    const result = await getEpodEvidenceSignedDownloadUrl(serviceRole, fileId, access.authUserId, access.authUserId);
+    return { error: null, download: result };
+  } catch (error) {
+    if (error instanceof EpodCaptureReviewMutationError) {
+      return { error: `Could not create a download link for this file: ${error.message}`, download: null };
+    }
+    throw error;
+  }
 }
 
 /** OPS-177: draft/revision_requested -> submitted. Requires a receiver name, at least one evidence file, and every referenced file to have already scanned clean. */

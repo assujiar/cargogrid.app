@@ -344,6 +344,53 @@ export function parseVendorComplianceDocumentEvidenceAccess(row: Record<string, 
   });
 }
 
+/**
+ * app.access_vendor_compliance_document_evidence_for_download's own row (CG-AUDIT-2026-09-02
+ * A6, service_role-only sibling of the RPC above). Unlike its sibling, this one DOES carry
+ * storage_path -- it is granted to service_role only, never authenticated, so it never
+ * reaches the browser directly; server-side code uses it once, immediately, to mint a
+ * signed URL, then discards it. This raw-row type is intentionally not re-exported past
+ * the mutation function that parses it.
+ */
+export const VendorComplianceDocumentEvidenceDownloadSourceSchema = z.object({
+  bucketId: z.string().nullable(),
+  storagePath: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  accessResult: VendorComplianceAccessResultSchema,
+  accessReason: z.string().nullable(),
+});
+export type VendorComplianceDocumentEvidenceDownloadSource = z.infer<typeof VendorComplianceDocumentEvidenceDownloadSourceSchema>;
+
+export function parseVendorComplianceDocumentEvidenceDownloadSource(row: Record<string, unknown>): VendorComplianceDocumentEvidenceDownloadSource {
+  return VendorComplianceDocumentEvidenceDownloadSourceSchema.parse({
+    bucketId: row.bucket_id ?? null,
+    storagePath: row.storage_path ?? null,
+    originalFilename: row.original_filename ?? null,
+    mimeType: row.mime_type ?? null,
+    accessResult: row.access_result,
+    accessReason: row.access_reason ?? null,
+  });
+}
+
+/** The public-facing result of minting a signed download URL -- never carries storage_path/bucket_id, only the already-signed, short-lived URL a browser can safely open directly. */
+export const VendorComplianceDocumentSignedDownloadSchema = z.object({
+  accessResult: VendorComplianceAccessResultSchema,
+  accessReason: z.string().nullable(),
+  signedUrl: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+});
+export type VendorComplianceDocumentSignedDownload = z.infer<typeof VendorComplianceDocumentSignedDownloadSchema>;
+
+/** Input to app.access_vendor_compliance_document_evidence_for_download -- access_type is not a parameter here, it is hardcoded server-side to 'signed_url_issued'. Fields spelled out rather than spread from the shared `actorFields` const below, since that const is declared later in this file (module-evaluation order, not just style). */
+export const AccessVendorComplianceDocumentEvidenceForDownloadInputSchema = z.object({
+  documentId: z.string().uuid(),
+  correlationId: z.string().uuid().nullable().optional(),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+});
+export type AccessVendorComplianceDocumentEvidenceForDownloadInput = z.infer<typeof AccessVendorComplianceDocumentEvidenceForDownloadInputSchema>;
+
 /** app.expire_vendor_compliance_waivers / app.recalculate_tenant_vendor_compliance_status's own bounded-sweep response shape. */
 export const VendorComplianceSweepResultSchema = z.object({
   count: z.number().int().nonnegative(),

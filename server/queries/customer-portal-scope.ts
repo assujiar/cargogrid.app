@@ -9,8 +9,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   parseCustomerPortalScopeContextRow,
   parseCustomerPortalAccountMembership,
+  parseCustomerPortalPendingInvite,
   type CustomerPortalScopeContextRow,
   type CustomerPortalAccountMembership,
+  type CustomerPortalPendingInvite,
 } from "../contracts/customer-portal-scope/customer-portal-scope.ts";
 
 export type CustomerPortalScopeQueryClient = Pick<SupabaseClient, "rpc">;
@@ -86,4 +88,24 @@ export async function listCustomerPortalAccountMemberships(
     throw new CustomerPortalScopeQueryError(error.message);
   }
   return ((data as Record<string, unknown>[] | null) ?? []).map(parseCustomerPortalAccountMembership);
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A2b: every still-`invited` membership for the calling
+ * identity in this tenant -- the one entry point app.get_customer_portal_
+ * scope_context/app.resolve_customer_account_scope both deliberately exclude
+ * (an invited-but-not-yet-accepted identity holds no customer_user-layer
+ * principal yet, so it is never "in scope"). Self-scoped only (the RPC
+ * asserts p_auth_user_id is the caller's own session identity); a caller
+ * with zero pending invites gets an empty array, never an error.
+ */
+export async function listMyPendingCustomerPortalInvites(client: CustomerPortalScopeQueryClient, authUserId: string, tenantId: string): Promise<CustomerPortalPendingInvite[]> {
+  const { data, error } = await client.rpc("list_my_pending_customer_portal_invites", {
+    p_auth_user_id: authUserId,
+    p_tenant_id: tenantId,
+  });
+  if (error) {
+    throw new CustomerPortalScopeQueryError(error.message);
+  }
+  return ((data as Record<string, unknown>[] | null) ?? []).map(parseCustomerPortalPendingInvite);
 }

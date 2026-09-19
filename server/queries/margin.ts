@@ -13,7 +13,7 @@ import {
   type MarginCalculation,
 } from "../contracts/margin/margin.ts";
 
-export type MarginQueryTableClient = Pick<SupabaseClient, "from">;
+export type MarginQueryTableClient = Pick<SupabaseClient, "rpc">;
 
 export class MarginQueryError extends Error {
   constructor(message: string) {
@@ -23,33 +23,40 @@ export class MarginQueryError extends Error {
 }
 
 /** The tenant's currently published margin rule, if any -- returns null (never an error) when none exists. */
-export async function getPublishedMarginRule(client: MarginQueryTableClient, tenantId: string): Promise<MarginRuleVersion | null> {
-  const { data, error } = await client.from("margin_rule_versions").select("*").eq("tenant_id", tenantId).eq("status", "published").maybeSingle();
+export async function getPublishedMarginRule(client: MarginQueryTableClient, tenantId: string, actorAuthUserId: string): Promise<MarginRuleVersion | null> {
+  const { data, error } = await client.rpc("get_published_margin_rule", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new MarginQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? (data[0] ?? null) : data;
+  if (!row) {
     return null;
   }
-  return parseMarginRuleVersion(data as Record<string, unknown>);
+  return parseMarginRuleVersion(row as Record<string, unknown>);
 }
 
 /** Every margin rule version for one tenant (any status), most recently created first. */
-export async function listMarginRuleVersions(client: MarginQueryTableClient, tenantId: string): Promise<MarginRuleVersion[]> {
-  const { data, error } = await client.from("margin_rule_versions").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false });
+export async function listMarginRuleVersions(client: MarginQueryTableClient, tenantId: string, actorAuthUserId: string): Promise<MarginRuleVersion[]> {
+  const { data, error } = await client.rpc("list_margin_rule_versions", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: 200,
+  });
   if (error) {
     throw new MarginQueryError(error.message);
   }
   return (data ?? []).map((row: Record<string, unknown>) => parseMarginRuleVersion(row));
 }
 
-/** Field-masked margin calculations for one costing request, most recently created first -- reads through app.margin_calculations_directory, never the base table directly. */
-export async function listMarginCalculationsForRequest(client: MarginQueryTableClient, costingRequestId: string): Promise<MarginCalculation[]> {
-  const { data, error } = await client
-    .from("margin_calculations_directory")
-    .select("*")
-    .eq("costing_request_id", costingRequestId)
-    .order("created_at", { ascending: false });
+/** Field-masked margin calculations for one costing request, most recently created first -- app.list_margin_calculations_for_request (SECURITY DEFINER) is the real scope/masking gate. */
+export async function listMarginCalculationsForRequest(client: MarginQueryTableClient, costingRequestId: string, actorAuthUserId: string): Promise<MarginCalculation[]> {
+  const { data, error } = await client.rpc("list_margin_calculations_for_request", {
+    p_costing_request_id: costingRequestId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new MarginQueryError(error.message);
   }

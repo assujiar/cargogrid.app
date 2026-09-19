@@ -1,19 +1,13 @@
 /**
- * Auth identity linkage lookup (PLT-107, CG-S6-PLT-004). Read path
- * (server/queries/, per docs/architecture/04_REPOSITORY_TARGET_STRUCTURE.md §8) wrapping
- * a direct table read -- app.tenant_user_identities has no bespoke lookup RPC (a plain
- * filtered select is the correct shape here, unlike PLT-106's evaluator which needed
- * real precedence logic).
+ * Auth identity linkage lookup (PLT-107, CG-S6-PLT-004). RPC-backed read of
+ * app.list_identity_tenant_links (CG-AUDIT-2026-09-02 O1 cluster 2) -- the app schema is
+ * not exposed to PostgREST, so a direct app.tenant_user_identities read never worked.
  */
 
 import { parseTenantUserIdentity, type TenantUserIdentity } from "../contracts/auth/identity.ts";
 
 export interface IdentityLookupClient {
-  from(table: "tenant_user_identities"): {
-    select(columns: string): {
-      eq(column: string, value: string): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
-    };
-  };
+  rpc(fn: "list_identity_tenant_links", args: { p_actor_auth_user_id: string }): Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 }
 
 export class IdentityLookupError extends Error {
@@ -23,9 +17,11 @@ export class IdentityLookupError extends Error {
   }
 }
 
-/** Every tenant an auth identity is currently linked to (any status -- caller filters by status if only active/invited linkages are wanted). */
+/** Every tenant the CALLING identity is currently linked to (any status -- caller filters by status if only active/invited linkages are wanted). Self-lookup only -- authUserId must be the caller's own session identity; the database rejects any other value with actor_identity_mismatch (ATW-031/032). */
 export async function listIdentityTenantLinks(client: IdentityLookupClient, authUserId: string): Promise<TenantUserIdentity[]> {
-  const { data, error } = await client.from("tenant_user_identities").select("*").eq("auth_user_id", authUserId);
+  const { data, error } = await client.rpc("list_identity_tenant_links", {
+    p_actor_auth_user_id: authUserId,
+  });
 
   if (error) {
     throw new IdentityLookupError(error.message);

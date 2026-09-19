@@ -65,12 +65,14 @@ import {
   pinDocumentChecklistAction,
   uploadAndLinkDocumentAction,
   reviewDocumentChecklistItemAction,
+  downloadChecklistItemEvidenceAction,
   startEpodCaptureAction,
   setEpodEvidenceAction,
   submitEpodCaptureAction,
   reviewEpodCaptureAction,
   reviseEpodCaptureAction,
   completeEpodCaptureAction,
+  downloadEpodEvidenceAction,
   createActualCostDraftAction,
   addActualCostComponentAction,
   removeActualCostComponentAction,
@@ -241,7 +243,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   let actualCostComponents: Awaited<ReturnType<typeof listActualCostComponents>> = [];
   let actualCostVariance = null;
   try {
-    actualCost = await getShipmentActualCost(supabase, shipment.id);
+    actualCost = await getShipmentActualCost(supabase, shipment.id, access.authUserId);
     if (actualCost && !actualCost.costMasked) {
       actualCostComponents = await listActualCostComponents(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
       actualCostVariance = await evaluateActualCostVariance(supabase, { actualCostId: actualCost.id, actorAuthUserId: access.authUserId });
@@ -255,7 +257,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
 
   let trackingToken;
   try {
-    trackingToken = await getActiveShipmentTrackingToken(supabase, shipment.id);
+    trackingToken = await getActiveShipmentTrackingToken(supabase, shipment.id, access.authUserId);
   } catch (error) {
     if (!(error instanceof PublicTrackingQueryError)) {
       throw error;
@@ -266,15 +268,15 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   let legNetworkEntries: LegNetworkEntry[];
   let legNetworkAggregateState;
   try {
-    const legs = await listShipmentLegs(supabase, shipment.id);
+    const legs = await listShipmentLegs(supabase, shipment.id, access.authUserId);
     legNetworkEntries = await Promise.all(
       legs.map(async (leg) => {
         const trackingPolicy = await getShipmentLegTrackingPolicy(supabase, leg.id);
         return {
           leg,
           stops: await listShipmentLegStops(supabase, leg.id),
-          cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id),
-          custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id),
+          cargoAllocation: await getShipmentLegCargoAllocation(supabase, leg.id, access.authUserId),
+          custodyEvents: await listShipmentLegCustodyEvents(supabase, leg.id, access.authUserId),
           trackingPolicy,
           resolvedTrackingPolicy: trackingPolicy?.trackingRequired ? await resolveLegTrackingPolicy(supabase, { shipmentLegId: leg.id, actorAuthUserId: access.authUserId }) : null,
           currentTrackingSession: await getCurrentShipmentLegTrackingSession(supabase, leg.id),
@@ -321,6 +323,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundUploadAndLinkDocumentAction = (checklistItemId: string, documentTypeCode: string) =>
     uploadAndLinkDocumentAction.bind(null, tenantSlug, shipment.id, checklistItemId, documentTypeCode, randomUUID());
   const boundReviewDocumentChecklistItemAction = (checklistItemId: string) => reviewDocumentChecklistItemAction.bind(null, tenantSlug, shipment.id, checklistItemId);
+  const boundDownloadChecklistItemEvidenceAction = (checklistItemId: string) => downloadChecklistItemEvidenceAction.bind(null, tenantSlug, checklistItemId);
   const boundStartEpodCaptureAction = startEpodCaptureAction.bind(null, tenantSlug, shipment.id, randomUUID());
   const boundSetEpodEvidenceAction = (captureId: string) => setEpodEvidenceAction.bind(null, tenantSlug, shipment.id, captureId, randomUUID());
   const boundSubmitEpodCaptureAction = (captureId: string, expectedVersion: number) => submitEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion);
@@ -328,6 +331,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
   const boundReviseEpodCaptureAction = (captureId: string) => reviseEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId);
   const boundCompleteEpodCaptureAction = (captureId: string, expectedVersion: number) =>
     completeEpodCaptureAction.bind(null, tenantSlug, shipment.id, captureId, expectedVersion, shipment.recordVersion, randomUUID());
+  const boundDownloadEpodEvidenceAction = (fileId: string) => downloadEpodEvidenceAction.bind(null, tenantSlug, fileId);
   const boundCreateActualCostDraftAction = createActualCostDraftAction.bind(null, tenantSlug, shipment.id);
   const boundAddActualCostComponentAction = addActualCostComponentAction.bind(null, tenantSlug, shipment.id, actualCost?.id ?? "", randomUUID());
   const boundRemoveActualCostComponentAction = (componentId: string) => removeActualCostComponentAction.bind(null, tenantSlug, shipment.id, componentId);
@@ -360,7 +364,25 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
         <h1 className="text-xl font-semibold text-neutral-900">{shipment.shipmentNumber}</h1>
         <StatusBadge tone={tone} label={label} />
         <Badge tone="neutral">{shipment.mode}</Badge>
-        <a href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/route-planning`} className="ml-auto text-sm font-medium text-primary underline">
+        <a
+          href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/surat-jalan`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto text-sm font-medium text-primary underline"
+        >
+          Print surat jalan
+        </a>
+        {epodHistory.length > 0 ? (
+          <a
+            href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/pod`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-primary underline"
+          >
+            Print POD
+          </a>
+        ) : null}
+        <a href={`/${tenantSlug}/operations/shipment-orders/${shipment.id}/route-planning`} className="text-sm font-medium text-primary underline">
           Route and load planning
         </a>
       </div>
@@ -501,6 +523,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
           pinAction={boundPinDocumentChecklistAction}
           uploadAction={boundUploadAndLinkDocumentAction}
           reviewAction={boundReviewDocumentChecklistItemAction}
+          downloadAction={boundDownloadChecklistItemEvidenceAction}
         />
       </section>
 
@@ -516,6 +539,7 @@ export default async function ShipmentOrderDetailPage({ params }: { params: Prom
             reviewAction={boundReviewEpodCaptureAction}
             reviseAction={boundReviseEpodCaptureAction}
             completeAction={boundCompleteEpodCaptureAction}
+            downloadEvidenceAction={boundDownloadEpodEvidenceAction}
           />
         </section>
       ) : null}

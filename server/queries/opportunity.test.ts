@@ -7,7 +7,6 @@ import {
   getOpportunityCostingReadiness,
   OpportunityQueryError,
   type OpportunityQueryRpcClient,
-  type OpportunityQueryTableClient,
 } from "./opportunity.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
@@ -51,72 +50,43 @@ const VALID_HISTORY_ROW = {
   changed_at: "2026-07-23T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null; count?: number }, capture: { calls: Record<string, unknown> }): OpportunityQueryTableClient {
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: { fn: string; args: Record<string, unknown> }[] }): OpportunityQueryRpcClient {
   const fake = {
-    from(table: string) {
-      capture.calls.table = table;
-      return {
-        select(columns: string, options?: { count?: string }) {
-          capture.calls.columns = columns;
-          capture.calls.countOption = options?.count;
-          return {
-            eq(column: string, value: unknown) {
-              capture.calls.eqColumn = column;
-              capture.calls.eqValue = value;
-              return {
-                order(column2: string, opts: { ascending: boolean }) {
-                  capture.calls.orderColumn = column2;
-                  capture.calls.ascending = opts.ascending;
-                  return {
-                    ...response,
-                    async range(from: number, to: number) {
-                      capture.calls.from = from;
-                      capture.calls.to = to;
-                      return response;
-                    },
-                  };
-                },
-                async maybeSingle() {
-                  const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-                  return { data: row, error: response.error };
-                },
-              };
-            },
-          };
-        },
-      };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.push({ fn, args });
+      return response;
     },
   };
-  return fake as unknown as OpportunityQueryTableClient;
+  return fake as unknown as OpportunityQueryRpcClient;
 }
 
 describe("listOpportunities", () => {
-  test("queries the field-masked opportunities_directory view, bounded to one 50-row default page", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_OPPORTUNITY_ROW], error: null, count: 1 }, capture);
+  test("calls list_opportunities with tenant/actor/page/pageSize, maps total_count", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [{ ...VALID_OPPORTUNITY_ROW, total_count: 1 }], error: null }, capture);
 
-    const result = await listOpportunities(client, { tenantId: TENANT_ID, page: 1 });
-    assert.equal(capture.calls.table, "opportunities_directory");
-    assert.equal(capture.calls.from, 0);
-    assert.equal(capture.calls.to, 49);
+    const result = await listOpportunities(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
+    assert.equal(capture.calls[0]?.fn, "list_opportunities");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID, p_page: 1, p_page_size: 50 });
     assert.equal(result.opportunities.length, 1);
+    assert.equal(result.totalCount, 1);
     assert.equal(result.opportunities[0]?.valueMasked, true);
   });
 });
 
 describe("getOpportunityById", () => {
-  test("returns null (never an error) when RLS/no-match yields zero rows", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null }, capture);
-    const opportunity = await getOpportunityById(client, OPPORTUNITY_ID);
+  test("returns null (never an error) when denied/no-match yields zero rows", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    const opportunity = await getOpportunityById(client, OPPORTUNITY_ID, ACTOR_ID);
     assert.equal(opportunity, null);
   });
 
   test("wraps a query error", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: null, error: { message: "boom" } }, capture);
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } }, capture);
     await assert.rejects(
-      () => getOpportunityById(client, OPPORTUNITY_ID),
+      () => getOpportunityById(client, OPPORTUNITY_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof OpportunityQueryError);
         return true;
@@ -126,12 +96,12 @@ describe("getOpportunityById", () => {
 });
 
 describe("listOpportunityStageHistory", () => {
-  test("orders oldest first", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_HISTORY_ROW], error: null }, capture);
-    const history = await listOpportunityStageHistory(client, OPPORTUNITY_ID);
-    assert.equal(capture.calls.orderColumn, "changed_at");
-    assert.equal(capture.calls.ascending, true);
+  test("calls list_opportunity_stage_history with opportunity/actor", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeRpcClient({ data: [VALID_HISTORY_ROW], error: null }, capture);
+    const history = await listOpportunityStageHistory(client, OPPORTUNITY_ID, ACTOR_ID);
+    assert.equal(capture.calls[0]?.fn, "list_opportunity_stage_history");
+    assert.deepEqual(capture.calls[0]?.args, { p_opportunity_id: OPPORTUNITY_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(history.length, 1);
   });
 });

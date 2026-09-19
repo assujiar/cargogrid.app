@@ -7,6 +7,7 @@
  * refresh rather than silently clobbering a concurrent change.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   CreateOrgUnitInputSchema,
   MoveOrgUnitInputSchema,
@@ -25,6 +26,19 @@ export interface OrgHierarchyRpcClient {
     fn: "create_org_unit" | "move_org_unit" | "rename_org_unit" | "set_org_unit_status",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/**
+ * Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict
+ * `Promise`) -- structurally incompatible with this file's own hand-written
+ * `OrgHierarchyRpcClient` interface. The same `async (fn, args) => await
+ * client.rpc(fn, args)` adapter every other cross-module RPC composition in this
+ * repository already uses for that exact mismatch. Every function on this interface
+ * is `service_role`-only (this file's own migration's grants) -- the caller passes a
+ * service-role client, never the RLS-scoped one.
+ */
+export function toOrgHierarchyMutationRpcClient(client: Pick<SupabaseClient, "rpc">): OrgHierarchyRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export const ORG_HIERARCHY_KNOWN_ERROR_CODES = [

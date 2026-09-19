@@ -81,6 +81,16 @@ import {
   type VendorIntakeSubmitResult,
   type VendorSelfRegistrationTarget,
 } from "../contracts/vendor-profile/vendor-profile.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitVendorImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitVendorImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 
 export type VendorProfileMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -117,6 +127,20 @@ export const VENDOR_PROFILE_KNOWN_MUTATION_ERROR_CODES = [
   "invalid_validity",
   "token_not_found",
   "invalid_response",
+  // --- Staged import (CG-AUDIT-2026-09-02 A4, third import schema) ---
+  // app.validate_vendor_import_row/app.commit_vendor_import_job
+  // (supabase/migrations/20260830100000_create_vendor_import_adapter.sql,
+  // latest redefinition 20260903122000) compose the generic PLT-131
+  // framework's own errors plus these domain-specific ones.
+  "import_export_job_not_found",
+  "import_export_wrong_schema",
+  "job_actor_unauthorized",
+  "import_export_job_not_committable",
+  "import_export_job_not_fully_validated",
+  "import_export_job_has_invalid_rows",
+  "import_vendor_profile_already_bound",
+  "mfa_step_up_required",
+  "ip_not_allowed",
 ] as const;
 type KnownVendorProfileMutationErrorCode = (typeof VENDOR_PROFILE_KNOWN_MUTATION_ERROR_CODES)[number];
 export type VendorProfileMutationErrorCode = KnownVendorProfileMutationErrorCode | "mutation_failed";
@@ -594,4 +618,41 @@ export async function resolveVendorSelfRegistrationTarget(client: VendorProfileM
   const row = firstRow(data);
   if (!row) throw new VendorProfileMutationError("invalid_response", "resolve_vendor_self_registration_target returned no row");
   return parseVendorSelfRegistrationTarget(row);
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, third import schema) ---
+// app.validate_vendor_import_row returns app.import_staging_rows and
+// app.commit_vendor_import_job returns app.jobs -- the SAME composite types the
+// generic PLT-131 app.validate_staging_row/app.commit_import_job return, so both
+// reuse the generic parsers directly, mirroring
+// server/mutations/finance-opening-balance-import.ts's own precedent (never
+// server/mutations/employee.ts's own raw Record<string, unknown> return, which
+// predates that reusable-parser convention).
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (legal_name, trade_name, legal_entity_type, business_registration_number, vendor_category), whitespace-only legal_name, and payment_term_days shape -- and refuses a row that supplies intake_source or any lifecycle/approval/blacklist field (those are never importable). */
+export async function validateVendorImportRow(client: VendorProfileMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_vendor_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new VendorProfileMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new VendorProfileMutationError("invalid_response", "validate_vendor_import_row returned no row");
+  return parseImportStagingRow(data as Record<string, unknown>);
+}
+
+/** Requires PRC:Import AND is_support_grant_authority (additive, never either-or). Writes only through app.create_vendor_profile_draft (never a direct INSERT), forcing intake_source='bulk_import' and stamping source_import_staging_row_id. Runs duplicate-candidate sweeps (trigram legal-name match, exact business_registration_number match) that FLAG for human review, never block the commit. */
+export async function commitVendorImportJob(client: VendorProfileMutationRpcClient, input: CommitVendorImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitVendorImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_vendor_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  if (error) throw new VendorProfileMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new VendorProfileMutationError("invalid_response", "commit_vendor_import_job returned no row");
+  return parseImportExportJob(data as Record<string, unknown>);
 }

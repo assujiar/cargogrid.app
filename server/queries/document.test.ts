@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { listFilesForTenant, listDocumentTypes, FileLookupError, DocumentTypeLookupError, type FileLookupClient, type DocumentTypeLookupClient } from "./document.ts";
+import { listFilesForTenant, listFilesForRecord, listDocumentTypes, FileLookupError, DocumentTypeLookupError, type FileLookupClient, type DocumentTypeLookupClient } from "./document.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const VERSION_ID = "423e4567-e89b-12d3-a456-426614174000";
@@ -27,14 +27,9 @@ function fakeFileClient(
 
 function fakeDocumentTypeClient(response: { data: unknown[] | null; error: { message: string } | null }): DocumentTypeLookupClient {
   return {
-    from(table) {
-      assert.equal(table, "document_types");
-      return {
-        select(columns) {
-          assert.equal(columns, "*");
-          return Promise.resolve(response);
-        },
-      };
+    rpc(fn) {
+      assert.equal(fn, "list_document_types");
+      return Promise.resolve(response);
     },
   };
 }
@@ -129,6 +124,90 @@ describe("listFilesForTenant", () => {
   test("returns an empty array rather than throwing when there is nothing to see", async () => {
     const client = fakeFileClient({ data: [], error: null });
     const files = await listFilesForTenant(client, TENANT_ID, ACTOR_ID);
+    assert.deepEqual(files.rows, []);
+    assert.equal(files.truncated, false);
+  });
+});
+
+function fakeRecordFileClient(
+  response: { data: unknown; error: { message: string } | null },
+  onArgs?: (args: Record<string, unknown>) => void,
+): FileLookupClient {
+  return {
+    async rpc(fn, args) {
+      assert.equal(fn, "list_files_for_record");
+      onArgs?.(args);
+      return response;
+    },
+  };
+}
+
+describe("listFilesForRecord", () => {
+  test("maps every row the caller's RLS/authority grants visibility into", async () => {
+    const client = fakeRecordFileClient({
+      data: [
+        {
+          id: FILE_ID,
+          tenant_id: TENANT_ID,
+          document_type_code: "contract",
+          config_version_id: VERSION_ID,
+          record_type: "employee",
+          record_id: RECORD_ID,
+          classification: "confidential",
+          original_filename: "offer-letter.pdf",
+          mime_type: "application/pdf",
+          size_bytes: 102400,
+          malware_scan_status: "clean",
+          malware_scan_completed_at: "2026-07-19T00:00:00.000Z",
+          malware_scan_provider_ref: "provider-ref-1",
+          version_group_id: VERSION_GROUP_ID,
+          version_number: 1,
+          is_latest_version: true,
+          lifecycle_status: "active",
+          legal_hold: false,
+          legal_hold_reason: null,
+          deleted_at: null,
+          uploaded_by_auth_user_id: ACTOR_ID,
+          shared_org_unit_ids: [],
+          customer_account_ref: null,
+          idempotency_key: "idem-offer-letter-upload-1",
+          created_at: "2026-07-19T00:00:00.000Z",
+          updated_at: "2026-07-19T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const files = await listFilesForRecord(client, TENANT_ID, "employee", RECORD_ID, ACTOR_ID);
+    assert.equal(files.rows.length, 1);
+    assert.equal(files.rows[0]?.recordType, "employee");
+    assert.equal(files.truncated, false);
+  });
+
+  test("passes tenant, record type, record id, actor and correlation id through to the logged RPC", () => {
+    let seen: Record<string, unknown> | null = null;
+    const client = fakeRecordFileClient({ data: [], error: null }, (args) => {
+      seen = args;
+    });
+    return listFilesForRecord(client, TENANT_ID, "employee", RECORD_ID, ACTOR_ID).then(() => {
+      assert.deepEqual(seen, {
+        p_tenant_id: TENANT_ID,
+        p_record_type: "employee",
+        p_record_id: RECORD_ID,
+        p_actor_auth_user_id: ACTOR_ID,
+        p_correlation_id: null,
+        p_limit: 200,
+      });
+    });
+  });
+
+  test("wraps a database error into a typed error", async () => {
+    const client = fakeRecordFileClient({ data: null, error: { message: "connection reset" } });
+    await assert.rejects(() => listFilesForRecord(client, TENANT_ID, "employee", RECORD_ID, ACTOR_ID), FileLookupError);
+  });
+
+  test("returns an empty array rather than throwing when there is nothing to see", async () => {
+    const client = fakeRecordFileClient({ data: [], error: null });
+    const files = await listFilesForRecord(client, TENANT_ID, "employee", RECORD_ID, ACTOR_ID);
     assert.deepEqual(files.rows, []);
     assert.equal(files.truncated, false);
   });

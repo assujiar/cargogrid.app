@@ -34,7 +34,7 @@ export interface RegisterLoginSessionAccessContext {
 }
 
 export interface RegisterLoginSessionDeps {
-  findTenantBySlug(slug: string): Promise<RegisterLoginSessionTenantLookup | null>;
+  findTenantBySlug(slug: string, authUserId: string): Promise<RegisterLoginSessionTenantLookup | null>;
   resolveAccessContext(authUserId: string, tenantId: string): Promise<RegisterLoginSessionAccessContext | null>;
   registerSession(tenantId: string, authUserId: string, actorLabel: string): Promise<void>;
 }
@@ -58,7 +58,7 @@ export async function registerLoginSessionIfApplicable(deps: RegisterLoginSessio
     return;
   }
 
-  const tenant = await deps.findTenantBySlug(params.tenantSlug);
+  const tenant = await deps.findTenantBySlug(params.tenantSlug, params.authUserId);
   if (!tenant) {
     return;
   }

@@ -7,6 +7,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { resolveOperationsAccessForRequest } from "../../../../../lib/portal/resolve-operations-access.server.ts";
 import {
   registerVehicleOperationalProfile,
@@ -23,6 +24,15 @@ import {
   setVehicleTrackingSourcePriority,
   FleetDriverDeviceMutationError,
 } from "../../../../../server/mutations/fleet-driver-device.ts";
+import {
+  uploadGpsDeviceInstallationEvidenceFile,
+  recordGpsDeviceInstallation,
+  GpsDeviceInstallationMutationError,
+  type GpsDeviceInstallationMutationRpcClient,
+} from "../../../../../server/mutations/gps-device-installation.ts";
+import type { DocumentMutationRpcClient } from "../../../../../server/mutations/document.ts";
+import type { BackgroundJobMutationRpcClient } from "../../../../../server/mutations/background-job.ts";
+import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
 import type { VehicleOwnershipType, DeviceOwnershipType, GpsDeviceStatus } from "../../../../../server/contracts/fleet-driver-device/fleet-driver-device.ts";
 
 export interface FleetFormState {
@@ -361,6 +371,101 @@ export async function setVehicleSourcePriorityAction(tenantSlug: string, _prevSt
   } catch (error) {
     if (error instanceof FleetDriverDeviceMutationError) {
       return { error: `Could not set this vehicle's source priority: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/operations/fleet`);
+  return { error: null };
+}
+
+/**
+ * CG-AUDIT-2026-09-02 E5: app.record_gps_device_installation (ATW-226B) and
+ * its own authority/malware-scan gating already exist and are fully
+ * db-tested -- the real gap was that nothing in this app ever called the
+ * upload+store+scan sequence, so a device could never actually accumulate
+ * a clean-scanned evidence file to record. Mirrors uploadAndLinkDocumentAction's
+ * own shape (shipment-orders/actions.ts): app.initiate_file_upload is
+ * service_role-only, so the upload step runs through the service-role
+ * client, while app.record_gps_device_installation itself is
+ * `authenticated`-callable (it re-checks OPS:Edit via the reused
+ * app.transition_gps_device_status gate) and runs through the ordinary
+ * RLS-scoped client, exactly like every other write in this file.
+ */
+function toGpsDeviceInstallationStoreClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient & StorageUploadClient {
+  return client as unknown as DocumentMutationRpcClient & StorageUploadClient;
+}
+
+function toGpsDeviceInstallationUploadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): GpsDeviceInstallationMutationRpcClient {
+  return client;
+}
+
+function toGpsDeviceInstallationBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): BackgroundJobMutationRpcClient {
+  return client as unknown as BackgroundJobMutationRpcClient;
+}
+
+export async function recordGpsDeviceInstallationAction(
+  tenantSlug: string,
+  deviceId: string,
+  deviceVehicleAssignmentId: string,
+  expectedDeviceVersion: number,
+  _prevState: FleetFormState,
+  formData: FormData,
+): Promise<FleetFormState> {
+  const access = await resolveOperationsAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Operations workspace." };
+  }
+
+  const evidenceFile = formData.get("evidenceFile");
+  if (!(evidenceFile instanceof File) || evidenceFile.size === 0) {
+    return { error: "Choose an installation evidence photo to upload." };
+  }
+  const technicianLabel = String(formData.get("technicianLabel") ?? "").trim();
+  if (!technicianLabel) {
+    return { error: "A technician name is required." };
+  }
+  const installationNotesRaw = String(formData.get("installationNotes") ?? "").trim();
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const serviceRole = createSupabaseServiceRoleClient();
+    const uploaded = await uploadGpsDeviceInstallationEvidenceFile(toGpsDeviceInstallationUploadClient(serviceRole), {
+      tenantId: access.tenant.id,
+      deviceId,
+      originalFilename: evidenceFile.name,
+      mimeType: evidenceFile.type || "application/octet-stream",
+      sizeBytes: evidenceFile.size,
+      idempotencyKey: `gps-install-${deviceId}-${access.authUserId}-${Date.now()}`,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+
+    const storeError = await storeFileBytesAndEnqueueScan(
+      toGpsDeviceInstallationStoreClient(serviceRole),
+      toGpsDeviceInstallationBackgroundJobClient(supabase),
+      uploaded,
+      evidenceFile,
+      access.tenant.id,
+      access.authUserId,
+      "installation evidence photo",
+    );
+    if (storeError) {
+      return storeError;
+    }
+
+    await recordGpsDeviceInstallation(supabase, {
+      deviceVehicleAssignmentId,
+      evidenceFileId: uploaded.id,
+      technicianLabel,
+      installationNotes: installationNotesRaw.length === 0 ? null : installationNotesRaw,
+      expectedDeviceVersion,
+      actorAuthUserId: access.authUserId,
+      actorLabel: access.authUserId,
+    });
+  } catch (error) {
+    if (error instanceof GpsDeviceInstallationMutationError) {
+      return { error: `Could not record this installation: ${error.message}` };
     }
     throw error;
   }

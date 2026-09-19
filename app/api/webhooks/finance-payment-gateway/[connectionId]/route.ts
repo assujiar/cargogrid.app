@@ -19,6 +19,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { selectClientIp } from "../../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { ingestFinancePaymentGatewayWebhookEvent, type FinanceIntegrationsMutationRpcClient } from "../../../../../server/mutations/bank-payment-tax-integrations.ts";
 
@@ -46,8 +47,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ con
   // never the raw IP itself -- the identical disclosed convention every
   // prior webhook receiver already established, since
   // app.finance_payment_gateway_ingestion_attempts is retained as
-  // rate-limit evidence.
-  const ipAddress = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // rate-limit evidence. CG-AUDIT-2026-09-02 D3: the FIRST x-forwarded-for hop is
+  // caller-controlled and a proxy only ever appends to it -- lib/security/client-ip.ts's
+  // own selectClientIp is the shared, correct resolution (x-real-ip first, else the LAST
+  // x-forwarded-for hop).
+  const ipAddress = selectClientIp(request.headers.get("x-real-ip"), request.headers.get("x-forwarded-for")) ?? "unknown";
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   const client = createSupabaseServiceRoleClient() as unknown as FinanceIntegrationsMutationRpcClient;

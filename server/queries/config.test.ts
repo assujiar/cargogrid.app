@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { resolveConfig, verifyConfigVersionCurrent, ConfigResolutionCache, ConfigQueryError, type ConfigQueryRpcClient } from "./config.ts";
+import { resolveConfig, verifyConfigVersionCurrent, listConfigVersions, ConfigResolutionCache, ConfigQueryError, type ConfigQueryRpcClient } from "./config.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const VERSION_ID = "423e4567-e89b-12d3-a456-426614174000";
@@ -68,6 +68,51 @@ describe("verifyConfigVersionCurrent", () => {
     const client = fakeClient({ data: false, error: null });
     const isCurrent = await verifyConfigVersionCurrent(client, { configTypeCode: "approval", tenantId: TENANT_ID, expectedVersionId: VERSION_ID });
     assert.equal(isCurrent, false);
+  });
+});
+
+describe("listConfigVersions", () => {
+  test("maps every returned row to the ConfigVersion contract shape", async () => {
+    const client = fakeClient({
+      data: [
+        {
+          id: VERSION_ID,
+          config_object_id: "523e4567-e89b-12d3-a456-426614174000",
+          version_number: 1,
+          status: "draft",
+          effective_from: null,
+          effective_to: null,
+          cloned_from_version_id: null,
+          rollback_of_version_id: null,
+          created_by: "tenant-admin",
+          published_by: null,
+          published_at: null,
+          archived_at: null,
+          archived_reason: null,
+          record_version: 1,
+          created_at: "2026-07-19T00:00:00.000Z",
+          updated_at: "2026-07-19T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const versions = await listConfigVersions(client, { configTypeCode: "approval", tenantId: TENANT_ID, scopeLevel: "tenant", scopeId: null, actorAuthUserId: TENANT_ID });
+    assert.equal(versions.length, 1);
+    assert.equal(versions[0]?.status, "draft");
+  });
+
+  test("returns an empty array when no config_object exists yet at this scope", async () => {
+    const client = fakeClient({ data: [], error: null });
+    const versions = await listConfigVersions(client, { configTypeCode: "approval", tenantId: TENANT_ID, scopeLevel: "tenant", scopeId: null, actorAuthUserId: TENANT_ID });
+    assert.equal(versions.length, 0);
+  });
+
+  test("wraps a database error into a typed ConfigQueryError", async () => {
+    const client = fakeClient({ data: null, error: { message: "insufficient_authority: identity lacks authority" } });
+    await assert.rejects(
+      () => listConfigVersions(client, { configTypeCode: "approval", tenantId: TENANT_ID, scopeLevel: "tenant", scopeId: null, actorAuthUserId: TENANT_ID }),
+      ConfigQueryError,
+    );
   });
 });
 

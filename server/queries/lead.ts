@@ -26,6 +26,7 @@ export type LeadQueryRpcClient = Pick<SupabaseClient, "rpc">;
 
 export interface ListLeadsInput {
   readonly tenantId: string;
+  readonly actorAuthUserId: string;
   readonly page: number;
   readonly pageSize?: number;
 }
@@ -63,42 +64,47 @@ export async function findDuplicateLeads(client: LeadQueryRpcClient, input: Find
   return data.map((row) => parseLead(row as Record<string, unknown>));
 }
 
-/** Server-side paginated Lead List -- RLS (leads_select_scoped) is the real scope gate; this query only bounds page size and orders deterministically. Never loads an entire tenant's leads into the browser. */
-export async function listLeads(client: Pick<SupabaseClient, "from">, input: ListLeadsInput): Promise<ListLeadsResult> {
+/** Server-side paginated Lead List -- app.list_leads reproduces leads_select_scoped's own authority predicate exactly; this query only bounds page size and orders deterministically. Never loads an entire tenant's leads into the browser. */
+export async function listLeads(client: LeadQueryRpcClient, input: ListLeadsInput): Promise<ListLeadsResult> {
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
   const page = Math.max(Math.trunc(input.page), 1);
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  const { data, error, count } = await client
-    .from("leads")
-    .select("*", { count: "exact" })
-    .eq("tenant_id", input.tenantId)
-    .order("last_activity_at", { ascending: false })
-    .range(from, to);
+  const { data, error } = await client.rpc("list_leads", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+    p_page: page,
+    p_page_size: pageSize,
+  });
 
   if (error) {
     throw new LeadQueryError(error.message);
   }
 
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const totalCount = rows.length > 0 ? Number(rows[0]!.total_count) : 0;
+
   return {
-    leads: (data ?? []).map((row: Record<string, unknown>) => parseLead(row)),
-    totalCount: count ?? 0,
+    leads: rows.map((row) => parseLead(row)),
+    totalCount,
     page,
     pageSize,
   };
 }
 
-/** A single lead by id, for the Lead Detail view -- RLS (leads_select_scoped) returns zero rows, not an error, when the caller lacks access; the caller must treat null as "not found or not accessible" (never distinguished, per the same "no confirming/denying beyond what the viewer is already entitled to know" discipline PLT-135's own guard uses). */
-export async function getLeadById(client: Pick<SupabaseClient, "from">, leadId: string): Promise<Lead | null> {
-  const { data, error } = await client.from("leads").select("*").eq("id", leadId).maybeSingle();
+/** A single lead by id, for the Lead Detail view -- app.get_lead_by_id returns zero rows, not an error, when the caller lacks access; the caller must treat null as "not found or not accessible" (never distinguished, per the same "no confirming/denying beyond what the viewer is already entitled to know" discipline PLT-135's own guard uses). */
+export async function getLeadById(client: LeadQueryRpcClient, leadId: string, actorAuthUserId: string): Promise<Lead | null> {
+  const { data, error } = await client.rpc("get_lead_by_id", {
+    p_lead_id: leadId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new LeadQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseLead(data as Record<string, unknown>);
+  return parseLead(row as Record<string, unknown>);
 }
 
 /** COM-161: "is this Lead's company already a known Account" -- advisory only, never blocks capture. Fails closed (raises) for an actor with no active membership in tenantId. */

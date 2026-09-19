@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listEmployees, EmployeeQueryError } from "../../../../../server/queries/employee.ts";
@@ -54,9 +55,14 @@ export default async function EmployeeDirectoryPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">Employees</h1>
-        <p className="text-xs text-neutral-500">Canonical workforce identity, linked to Platform user and organization records. One employee identity, reused across HR, self-service, and downstream HRIS capabilities.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-900">Employees</h1>
+          <p className="text-xs text-neutral-500">Canonical workforce identity, linked to Platform user and organization records. One employee identity, reused across HR, self-service, and downstream HRIS capabilities.</p>
+        </div>
+        <Link href={`/${tenantSlug}/hris/imports/employees`} className="text-sm text-primary underline">
+          Bulk import from CSV
+        </Link>
       </div>
 
       <EmployeeDirectoryPanel tenantSlug={tenantSlug} employees={employees} statusFilter={statusFilter} search={q ?? ""} createAction={createEmployeeDraftAction.bind(null, tenantSlug)} />

@@ -218,6 +218,65 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 D1 regression: app.verify_mfa_step_up_challenge now requires the CALLING session itself to be authenticated at AAL2 (auth.jwt()->>''aal'' = ''aal2'') whenever a real session identity is present -- a genuine session at aal1 (no real second factor) can no longer self-assert verification; a genuine session already at aal2 (as it would be after really completing Supabase''s own client-side MFA flow) still succeeds'
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'iaemfa');
+  v_admin1 uuid := '00000000-0000-0000-0000-000031000001';
+  v_challenge app.mfa_step_up_challenges;
+begin
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'FIN', 'Approve', v_admin1, 'admin1');
+
+  -- A genuine session at AAL1 (no aal claim at all, or an explicit "aal1") cannot self-assert
+  -- verification -- exactly the gap the audit found: before this fix, this call succeeded.
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000031000001", "role": "authenticated"}';
+  begin
+    perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_requires_real_aal2_session for a genuine session with no aal2 claim, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    if sqlerrm !~ 'mfa_step_up_requires_real_aal2_session' then raise; end if;
+  end;
+  reset role;
+
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000031000001", "role": "authenticated", "aal": "aal1"}';
+  begin
+    perform app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+    raise exception 'assertion failed: expected mfa_step_up_requires_real_aal2_session for an explicit aal1 session, the call unexpectedly succeeded';
+  exception when insufficient_privilege then
+    if sqlerrm !~ 'mfa_step_up_requires_real_aal2_session' then raise; end if;
+  end;
+  reset role;
+
+  -- Still pending -- neither rejected attempt above consumed the challenge.
+  if (select status from app.mfa_step_up_challenges where id = v_challenge.id) <> 'pending' then
+    raise exception 'assertion failed: expected the challenge to remain pending after both AAL1 rejections';
+  end if;
+
+  -- A genuine session already authenticated at AAL2 -- as it would be after really completing
+  -- Supabase's own client-side supabase.auth.mfa.challengeAndVerify() flow -- still succeeds.
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000031000001", "role": "authenticated", "aal": "aal2"}';
+  v_challenge := app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+  reset role;
+  if v_challenge.status <> 'verified' then
+    raise exception 'assertion failed: expected a genuine AAL2 session to successfully verify the challenge, got status %', v_challenge.status;
+  end if;
+
+  -- A null session identity (service-role/nested-SECURITY-DEFINER-only context, auth.uid() is
+  -- null) is exempt, exactly like every one of the ~30 existing db-test call sites across the
+  -- other 12 files that depend on this function as a precondition and never simulate a
+  -- session at all -- confirmed unaffected by a full `pnpm run db:test` re-run, not merely by
+  -- this one assertion.
+  v_challenge := app.request_mfa_step_up_challenge(v_tenant1, 'IAM', 'Configure', v_admin1, 'admin1');
+  v_challenge := app.verify_mfa_step_up_challenge(v_challenge.id, v_admin1, 'admin1');
+  if v_challenge.status <> 'verified' then
+    raise exception 'assertion failed: expected a null-session (service-role-equivalent) caller to still verify successfully, got status %', v_challenge.status;
+  end if;
+end;
+$$;
+
 \echo '>> app.mfa_step_up_challenges expiry: a challenge past its own 10-minute challenge_expires_at cannot be verified'
 do $$
 declare

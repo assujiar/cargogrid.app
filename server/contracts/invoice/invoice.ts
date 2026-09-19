@@ -22,6 +22,7 @@ export const FinanceInvoiceSchema = z.object({
   status: FinanceInvoiceStatusSchema,
   subtotalAmount: z.number(),
   taxAmount: z.number(),
+  withholdingTaxAmount: z.number(),
   totalAmount: z.number(),
   paymentTermDays: z.number().int(),
   issueDate: z.string().nullable(),
@@ -70,6 +71,20 @@ export const PrepareFinanceInvoiceFromReadinessInputSchema = z.object({
 });
 export type PrepareFinanceInvoiceFromReadinessInput = z.input<typeof PrepareFinanceInvoiceFromReadinessInputSchema>;
 
+/** CG-AUDIT-2026-09-02 B7 (worklist half): one row of app.list_billable_readiness_handoffs -- every BillingReadinessHandoff not yet consumed by a live invoice, letting Finance pick one instead of typing its UUID by hand. amount/currency are null (with amountMasked=true) for a viewer without COM's "View selling price", mirroring app.list_job_orders' own masking. */
+export const BillableReadinessHandoffSchema = z.object({
+  id: z.string().uuid(),
+  jobOrderId: z.string().uuid(),
+  jobNumber: z.string(),
+  accountId: z.string().uuid(),
+  customerLegalName: z.string(),
+  currency: z.string().nullable(),
+  amount: z.number().nullable(),
+  amountMasked: z.boolean(),
+  handedOffAt: z.string(),
+});
+export type BillableReadinessHandoff = z.infer<typeof BillableReadinessHandoffSchema>;
+
 export const FinanceInvoiceLifecycleInputSchema = z.object({
   invoiceId: z.string().uuid(),
   expectedVersion: z.number().int().positive(),
@@ -102,6 +117,7 @@ export function parseFinanceInvoice(row: Record<string, unknown>): FinanceInvoic
     status: row.status,
     subtotalAmount: typeof row.subtotal_amount === "string" ? Number(row.subtotal_amount) : row.subtotal_amount,
     taxAmount: typeof row.tax_amount === "string" ? Number(row.tax_amount) : row.tax_amount,
+    withholdingTaxAmount: typeof row.withholding_tax_amount === "string" ? Number(row.withholding_tax_amount) : row.withholding_tax_amount,
     totalAmount: typeof row.total_amount === "string" ? Number(row.total_amount) : row.total_amount,
     paymentTermDays: row.payment_term_days,
     issueDate: row.issue_date,
@@ -136,5 +152,20 @@ export function parseFinanceInvoiceLine(row: Record<string, unknown>): FinanceIn
     taxCodeId: row.tax_code_id,
     taxRuleVersionId: row.tax_rule_version_id,
     createdAt: row.created_at,
+  });
+}
+
+/** Maps a raw app.list_billable_readiness_handoffs row (snake_case) to this contract's camelCase shape. */
+export function parseBillableReadinessHandoff(row: Record<string, unknown>): BillableReadinessHandoff {
+  return BillableReadinessHandoffSchema.parse({
+    id: row.id,
+    jobOrderId: row.job_order_id,
+    jobNumber: row.job_number,
+    accountId: row.account_id,
+    customerLegalName: row.customer_legal_name,
+    currency: row.currency,
+    amount: typeof row.amount === "string" ? Number(row.amount) : row.amount,
+    amountMasked: row.amount_masked,
+    handedOffAt: row.handed_off_at,
   });
 }

@@ -28,6 +28,7 @@ export type PortalUser = z.infer<typeof PortalUserSchema>;
 
 export interface ListPortalUsersInput {
   readonly tenantId: string;
+  readonly actorAuthUserId: string;
   readonly page: number;
   readonly pageSize: number;
 }
@@ -58,28 +59,29 @@ function parsePortalUser(row: Record<string, unknown>): PortalUser {
 }
 
 export async function listPortalUsers(
-  client: Pick<SupabaseClient, "from">,
+  client: Pick<SupabaseClient, "rpc">,
   input: ListPortalUsersInput,
 ): Promise<ListPortalUsersResult> {
   const pageSize = Math.min(Math.max(Math.trunc(input.pageSize), 1), MAX_PAGE_SIZE);
   const page = Math.max(Math.trunc(input.page), 1);
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  const { data, error, count } = await client
-    .from("users_directory")
-    .select("id, display_name, status, email, email_masked", { count: "exact" })
-    .eq("tenant_id", input.tenantId)
-    .order("display_name", { ascending: true })
-    .range(from, to);
+  const { data, error } = await client.rpc("list_portal_users", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+    p_page: page,
+    p_page_size: pageSize,
+  });
 
   if (error) {
     throw new PortalUsersQueryError(error.message);
   }
 
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const totalCount = rows.length > 0 ? Number(rows[0]?.total_count) : 0;
+
   return {
-    users: (data ?? []).map((row: Record<string, unknown>) => parsePortalUser(row)),
-    totalCount: count ?? 0,
+    users: rows.map((row) => parsePortalUser(row)),
+    totalCount,
     page,
     pageSize,
   };

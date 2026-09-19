@@ -201,3 +201,44 @@ export const GetShipmentDocumentChecklistInputSchema = z.object({
   actorAuthUserId: z.string().uuid(),
 });
 export type GetShipmentDocumentChecklistInput = z.input<typeof GetShipmentDocumentChecklistInputSchema>;
+
+export const DOCUMENT_CHECKLIST_ACCESS_RESULTS = ["granted", "denied"] as const;
+export const DocumentChecklistAccessResultSchema = z.enum(DOCUMENT_CHECKLIST_ACCESS_RESULTS);
+export type DocumentChecklistAccessResult = z.infer<typeof DocumentChecklistAccessResultSchema>;
+
+/**
+ * app.access_shipment_document_checklist_item_evidence_for_download's own raw
+ * row (CG-AUDIT-2026-09-02 A6, service_role-only). DOES carry storage_path --
+ * it never reaches the browser, only server-side code that immediately mints a
+ * signed URL from it. Not re-exported past the mutation function that parses
+ * it, same discipline as vendor-compliance's own download-source type.
+ */
+export const ShipmentDocumentChecklistItemEvidenceDownloadSourceSchema = z.object({
+  bucketId: z.string().nullable(),
+  storagePath: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  accessResult: DocumentChecklistAccessResultSchema,
+  accessReason: z.string().nullable(),
+});
+export type ShipmentDocumentChecklistItemEvidenceDownloadSource = z.infer<typeof ShipmentDocumentChecklistItemEvidenceDownloadSourceSchema>;
+
+export function parseShipmentDocumentChecklistItemEvidenceDownloadSource(row: Record<string, unknown>): ShipmentDocumentChecklistItemEvidenceDownloadSource {
+  return ShipmentDocumentChecklistItemEvidenceDownloadSourceSchema.parse({
+    bucketId: row.bucket_id ?? null,
+    storagePath: row.storage_path ?? null,
+    originalFilename: row.original_filename ?? null,
+    mimeType: row.mime_type ?? null,
+    accessResult: row.access_result,
+    accessReason: row.access_reason ?? null,
+  });
+}
+
+/** The public-facing result of minting a signed download URL -- never carries storage_path/bucket_id, only the already-signed, short-lived URL a browser can safely open directly. */
+export const ShipmentDocumentChecklistItemSignedDownloadSchema = z.object({
+  accessResult: DocumentChecklistAccessResultSchema,
+  accessReason: z.string().nullable(),
+  signedUrl: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+});
+export type ShipmentDocumentChecklistItemSignedDownload = z.infer<typeof ShipmentDocumentChecklistItemSignedDownloadSchema>;

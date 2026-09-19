@@ -1,9 +1,17 @@
 /**
- * Driver Mobile GPS session read queries (ATW-226C). app.driver_mobile_tracking_sessions
- * has no masked column so reads go directly against the base table (RLS-scoped
- * tenant-wide); position report history goes through app.get_driver_mobile_position_reports
- * for its own computed GeoJSON projection, the same pattern
- * server/queries/multi-leg-shipment.ts already established for stop locations.
+ * Driver Mobile GPS session read queries (ATW-226C). CG-AUDIT-2026-09-02 O1
+ * remediation (cluster 4 batch 2,
+ * 20260911060000_close_o1_query_layer_cluster4_batch2_tracking_security.sql):
+ * getDriverMobileTrackingSession now goes through app.get_driver_mobile_
+ * tracking_session, a SECURITY DEFINER RPC (app is not exposed to PostgREST,
+ * and ISS-2026-232 also revoked authenticated's table-level SELECT on
+ * app.driver_mobile_tracking_sessions in favor of an explicit column-level
+ * grant) that hand-picks the safe (token_hash-free) columns server-side and
+ * reproduces the table's own RLS predicate explicitly against a real,
+ * session-identity-checked actor; position report history goes through
+ * app.get_driver_mobile_position_reports for its own computed GeoJSON
+ * projection, the same pattern server/queries/multi-leg-shipment.ts already
+ * established for stop locations.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,21 +35,17 @@ export class DriverMobileTrackingQueryError extends Error {
 export async function getDriverMobileTrackingSession(
   client: DriverMobileTrackingQueryClient,
   shipmentLegTrackingSessionId: string,
+  actorAuthUserId: string,
 ): Promise<DriverMobileTrackingSession | null> {
-  // ISS-2026-232: explicit column list, omitting token_hash -- `authenticated` no
-  // longer holds table-level SELECT on app.driver_mobile_tracking_sessions
-  // (column-privilege closure); a bare `select("*")` would fail with a permission
-  // error for an authenticated-session caller.
-  const { data, error } = await client
-    .from("driver_mobile_tracking_sessions")
-    .select("id, tenant_id, shipment_leg_tracking_session_id, status, issued_at, expires_at, last_seen_at, revoked_at, revoked_reason, created_by, created_at")
-    .eq("shipment_leg_tracking_session_id", shipmentLegTrackingSessionId)
-    .eq("status", "active")
-    .maybeSingle();
+  const { data, error } = await client.rpc("get_driver_mobile_tracking_session", {
+    p_shipment_leg_tracking_session_id: shipmentLegTrackingSessionId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new DriverMobileTrackingQueryError(error.message);
   }
-  return data ? parseDriverMobileTrackingSession(data as Record<string, unknown>) : null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? parseDriverMobileTrackingSession(row as Record<string, unknown>) : null;
 }
 
 /** Every raw position report for one driver-mobile tracking session, newest first. */

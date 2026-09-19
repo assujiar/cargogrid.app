@@ -4,6 +4,7 @@
  * app.reassign_user_org_unit (supabase/migrations/20260716102620_create_users.sql).
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   InviteUserInputSchema,
   ReassignUserOrgUnitInputSchema,
@@ -22,6 +23,20 @@ export interface UserLifecycleRpcClient {
     fn: "invite_user" | "resend_invitation" | "transition_user_status" | "reassign_user_org_unit",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/**
+ * Supabase's own `.rpc()` returns a `PostgrestFilterBuilder` (thenable, not a strict
+ * `Promise`) -- structurally incompatible with this file's own hand-written
+ * `UserLifecycleRpcClient` interface. The same `async (fn, args) => await
+ * client.rpc(fn, args)` adapter every other cross-module RPC composition in this
+ * repository already uses for that exact mismatch (mirrors
+ * `server/queries/procurement-approval.ts`'s `toApprovalQueryRpcClient`). Every
+ * function on this interface is `service_role`-only (see this file's own migration's
+ * grants) -- the caller passes a service-role client, never the RLS-scoped one.
+ */
+export function toUserLifecycleRpcClient(client: Pick<SupabaseClient, "rpc">): UserLifecycleRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export const USER_LIFECYCLE_KNOWN_ERROR_CODES = [

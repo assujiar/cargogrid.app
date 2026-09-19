@@ -114,6 +114,14 @@ export const EMPLOYEE_KNOWN_MUTATION_ERROR_CODES = [
   "import_export_job_not_committable",
   "import_export_job_not_fully_validated",
   "import_export_job_has_invalid_rows",
+  // CG-AUDIT-2026-09-02 A4: app.commit_employee_import_job additionally
+  // composes a real employee_number uniqueness check (HDN-385,
+  // 20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql:573)
+  // plus the IP-allowlist step-up gate now that its own clientIp is passed
+  // through (this file's own commitEmployeeImportJob, above).
+  "employee_import_duplicate_employee_number",
+  "ip_not_allowed",
+  "mfa_step_up_required",
   "invalid_response",
   // HRT-295 / ISS-2026-104 + ISS-2026-108: app.terminate_employee/
   // app.suspend_employee/app.reactivate_employee now call app.transition_user_status,
@@ -584,6 +592,7 @@ export async function commitEmployeeImportJob(client: EmployeeMutationRpcClient,
     p_allow_partial: parsed.allowPartial,
     p_actor_auth_user_id: parsed.actorAuthUserId,
     p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
   });
   if (error) throw new EmployeeMutationError(classifyError(error.message), error.message);
   const row = firstRow(data);

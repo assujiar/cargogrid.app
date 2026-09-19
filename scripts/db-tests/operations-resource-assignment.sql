@@ -511,6 +511,78 @@ begin
   end if;
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 E2 regression: a REAL two-process concurrent race -- two DIFFERENT, non-terminal shipment orders on the SAME job order, both racing to assign the SAME brand-new vendor at the same instant. The sequential assignment_conflict guard cannot catch this (each process passes its own exists() check before either commits); resource_assignments_active_resource_unique must catch it instead -- exactly ONE may reach an active assignment, the other must be denied assignment_conflict (never a raw unique_violation), and never leave a phantom row of its own'
+do $$
+declare
+  v_tenant1 uuid;
+  v_job_order_id uuid;
+begin
+  v_tenant1 := (select id from app.tenants where slug = 'acmeres');
+  v_job_order_id := (select job_order_id from app.shipment_orders where id = (select shipment_order_id from app.resource_assignments where tenant_id = v_tenant1 limit 1));
+
+  perform app.create_master_record('vendor', v_tenant1, 'VEND-RACE', 'Race Trucking', '[]'::jsonb, '{}'::jsonb, '00000000-0000-0000-0000-000000009805', 'admin');
+
+  perform app.create_shipment_order_from_job(
+    v_job_order_id, 'idem-res-race-x', null, null, 'ocean_freight', 'land', 'Jakarta', 'Medan',
+    null, null, null, null, null, null, null, null, 'split: E2 race fixture x', '00000000-0000-0000-0000-000000009806', 'rep'
+  );
+  perform app.create_shipment_order_from_job(
+    v_job_order_id, 'idem-res-race-y', null, null, 'ocean_freight', 'land', 'Jakarta', 'Palembang',
+    null, null, null, null, null, null, null, null, 'split: E2 race fixture y', '00000000-0000-0000-0000-000000009806', 'rep'
+  );
+end $$;
+
+select id as race_shipment_x_id from app.shipment_orders where idempotency_key = 'idem-res-race-x' \gset
+select id as race_shipment_y_id from app.shipment_orders where idempotency_key = 'idem-res-race-y' \gset
+select id as race_vendor_id from app.master_records where tenant_id = (select id from app.tenants where slug = 'acmeres') and code = 'VEND-RACE' \gset
+select current_database() as pg_test_db \gset
+select pg_backend_pid()::text as race_bpid \gset
+
+\set race_sql_a 'select app.assign_resource(''' :race_shipment_x_id ''', ''vendor'', ''' :race_vendor_id ''', ''00000000-0000-0000-0000-000000009806'', ''repa'');'
+\set race_sql_b 'select app.assign_resource(''' :race_shipment_y_id ''', ''vendor'', ''' :race_vendor_id ''', ''00000000-0000-0000-0000-000000009806'', ''repa'');'
+
+\setenv PG_TEST_DB :pg_test_db
+\setenv RACE_SQL_A :race_sql_a
+\setenv RACE_SQL_B :race_sql_b
+\setenv RACE_OUT_A /tmp/cargogrid-resource-assignment-race-a-:race_bpid.out
+\setenv RACE_OUT_B /tmp/cargogrid-resource-assignment-race-b-:race_bpid.out
+
+\! bash scripts/db-tests/wms-picking-concurrency-helper.sh
+
+do $$
+declare
+  v_tenant1 uuid := (select id from app.tenants where slug = 'acmeres');
+  v_active_count integer;
+  v_winner_shipment_id uuid;
+  v_race_shipment_x_id uuid := (select id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-res-race-x');
+  v_race_shipment_y_id uuid := (select id from app.shipment_orders where tenant_id = v_tenant1 and idempotency_key = 'idem-res-race-y');
+  v_race_vendor_id uuid := (select id from app.master_records where tenant_id = v_tenant1 and code = 'VEND-RACE');
+begin
+  select count(*) into v_active_count
+    from app.resource_assignments
+    where resource_id = v_race_vendor_id and is_current and status = 'active';
+  select shipment_order_id into v_winner_shipment_id
+    from app.resource_assignments
+    where resource_id = v_race_vendor_id and is_current and status = 'active'
+    limit 1;
+
+  if v_active_count <> 1 then
+    raise exception 'assertion failed: CG-AUDIT-2026-09-02 E2 regressed -- expected exactly ONE of the two racing shipment orders to hold an active VEND-RACE assignment (never two, never zero -- a raw unique_violation reaching a caller means resource_assignments_active_resource_unique is not applied), got %. See the RACE_OUT_A/RACE_OUT_B process output captured above', v_active_count;
+  end if;
+  if v_winner_shipment_id <> v_race_shipment_x_id and v_winner_shipment_id <> v_race_shipment_y_id then
+    raise exception 'assertion failed: the one active VEND-RACE assignment landed on neither racing shipment order (%), something else is wrong', v_winner_shipment_id;
+  end if;
+
+  -- The loser's own function call raised before ever reaching its insert (or was caught
+  -- by the new exception handler) -- no partial/phantom row of any kind for it.
+  select count(*) into v_active_count from app.resource_assignments where resource_id = v_race_vendor_id;
+  if v_active_count <> 1 then
+    raise exception 'assertion failed: expected exactly one resource_assignments row total for VEND-RACE (the winner''s), found %', v_active_count;
+  end if;
+
+  raise notice 'concurrent assign-resource race proof: exactly 1 of 2 shipment orders reached an active VEND-RACE assignment after two genuinely concurrent psql processes raced app.assign_resource -- the loser was denied assignment_conflict, never a raw unique_violation';
+end $$;
+
 \echo '>> audit trail: every real resource-assignment mutation recorded a real app.audit_logs event, tenant-scoped'
 do $$
 declare
@@ -520,8 +592,8 @@ begin
   v_tenant1 := (select id from app.tenants where slug = 'acmeres');
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.resource_assignments' and action = 'assign_resource';
-  if v_count <> 6 then
-    raise exception 'assertion failed: expected exactly 6 assign_resource audit events (vendor+fleet+vehicle+driver on main, vendor on conflict, fleet re-assign on main), found %', v_count;
+  if v_count <> 7 then
+    raise exception 'assertion failed: expected exactly 7 assign_resource audit events (vendor+fleet+vehicle+driver on main, vendor on conflict, fleet re-assign on main, the CG-AUDIT-2026-09-02 E2 race winner below), found %', v_count;
   end if;
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.resource_assignments' and action = 'reassign_resource';

@@ -71,6 +71,7 @@ function formatAmount(currency: string | null, amount: number | null, masked: bo
 }
 
 export function PurchaseOrderDetailPanel({
+  tenantSlug,
   purchaseOrder,
   lines,
   history,
@@ -82,6 +83,7 @@ export function PurchaseOrderDetailPanel({
   amendAction,
   cancelAction,
 }: {
+  tenantSlug: string;
   purchaseOrder: PurchaseOrder;
   lines: readonly PurchaseOrderLine[];
   history: readonly PurchaseOrderEvent[];
@@ -120,15 +122,25 @@ export function PurchaseOrderDetailPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">
-          {purchaseOrder.poNumber} <span className="text-sm font-normal text-neutral-500">v{purchaseOrder.version}</span>
-        </h1>
-        <div className="mt-1 flex flex-wrap gap-2">
-          <StatusBadge tone={STATUS_TONE[purchaseOrder.status]} label={purchaseOrder.status} />
-          <StatusBadge tone={purchaseOrder.approvalStatus === "rejected" ? "danger" : purchaseOrder.approvalStatus === "approved" ? "success" : "neutral"} label={`approval: ${purchaseOrder.approvalStatus}`} />
-          <StatusBadge tone={purchaseOrder.fulfillmentStatus === "fulfilled" ? "success" : purchaseOrder.fulfillmentStatus === "partial" ? "info" : "neutral"} label={`fulfillment: ${purchaseOrder.fulfillmentStatus}`} />
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold text-neutral-900">
+            {purchaseOrder.poNumber} <span className="text-sm font-normal text-neutral-500">v{purchaseOrder.version}</span>
+          </h1>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <StatusBadge tone={STATUS_TONE[purchaseOrder.status]} label={purchaseOrder.status} />
+            <StatusBadge tone={purchaseOrder.approvalStatus === "rejected" ? "danger" : purchaseOrder.approvalStatus === "approved" ? "success" : "neutral"} label={`approval: ${purchaseOrder.approvalStatus}`} />
+            <StatusBadge tone={purchaseOrder.fulfillmentStatus === "fulfilled" ? "success" : purchaseOrder.fulfillmentStatus === "partial" ? "info" : "neutral"} label={`fulfillment: ${purchaseOrder.fulfillmentStatus}`} />
+          </div>
         </div>
+        <a
+          href={`/${tenantSlug}/procurement/purchase-orders/${purchaseOrder.id}/print`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-primary underline"
+        >
+          Print purchase order
+        </a>
       </div>
 
       <section className="rounded-md border border-neutral-200 p-4">

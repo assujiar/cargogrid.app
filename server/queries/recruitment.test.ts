@@ -7,6 +7,7 @@ import {
   listCandidates,
   listApplicationsForVacancy,
   getApplicationDetail,
+  getJobOfferForApplication,
   getMyAssignedInterviews,
   getOfferTimeline,
   getPublicOpenVacancySummaries,
@@ -154,6 +155,30 @@ describe("recruitment query wrappers", () => {
     const detail = await getApplicationDetail(client, ID_1, ACTOR_ID);
     assert.equal(detail.candidateFullName, "Ada Lovelace");
     assert.equal(detail.application.stage, "new");
+  });
+
+  test("getJobOfferForApplication resolves a matched offer", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: [
+        { id: ID_1, tenant_id: TENANT_ID, application_id: ID_2, status: "draft", approval_status: "not_required", approval_request_id: null, current_version_id: null, record_version: 1, created_at: "2026-08-09T00:00:00.000Z", updated_at: "2026-08-09T00:00:00.000Z" },
+      ],
+      error: null,
+    });
+    const offer = await getJobOfferForApplication(client, ID_2);
+    assert.equal(calls[0]?.fn, "get_job_offer_for_application");
+    assert.deepEqual(calls[0]?.args, { p_application_id: ID_2 });
+    assert.equal(offer?.status, "draft");
+  });
+
+  test("getJobOfferForApplication returns null (never an error) when the application has no offer yet", async () => {
+    const { client } = fakeRpcClient({ data: [], error: null });
+    const offer = await getJobOfferForApplication(client, ID_2);
+    assert.equal(offer, null);
+  });
+
+  test("getJobOfferForApplication wraps a database error into a typed error", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "connection reset" } });
+    await assert.rejects(() => getJobOfferForApplication(client, ID_2), RecruitmentQueryError);
   });
 
   test("getMyAssignedInterviews returns an empty array (never throws) for a caller with no linked employee", async () => {

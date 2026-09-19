@@ -38,11 +38,11 @@ interface RecordedCalls {
   jobFailures: Record<string, unknown>[];
 }
 
-function mockClient(pollUrl: string | null, recorded: RecordedCalls = { snapshots: [], jobFailures: [] }, credential: string | null = "test-credential-value"): ProcessExternalSyncJobRpcClient {
+function mockClient(pollUrl: string | null, recorded: RecordedCalls = { snapshots: [], jobFailures: [] }, credential: string | null = "test-credential-value", connectionTenantId: string = TENANT_ID): ProcessExternalSyncJobRpcClient {
   return {
     rpc: async (fn: string, args: Record<string, unknown>) => {
       if (fn === "get_external_sync_connection_for_sync") {
-        return { data: { tenant_id: TENANT_ID, adapter_code: "external_hr_system", connection_status: "active", connection_config: pollUrl ? { pollUrl } : {} }, error: null };
+        return { data: { tenant_id: connectionTenantId, adapter_code: "external_hr_system", connection_status: "active", connection_config: pollUrl ? { pollUrl } : {} }, error: null };
       }
       if (fn === "get_external_sync_credential") {
         return { data: credential, error: null };
@@ -168,6 +168,29 @@ describe("processExternalSyncJob", () => {
 
     assert.equal(result.outcome, "failed");
     assert.match(result.errorMessage ?? "", /refusing to poll/);
+  });
+
+  test("CG-AUDIT-2026-09-02 D3d: a connection whose own tenant_id does not match the enqueuing job's tenant_id fails closed without a live HTTP call", async () => {
+    let called = false;
+    const { server, url } = await startServer((_req, res) => {
+      called = true;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ records: [] }));
+    });
+    const OTHER_TENANT_ID = "723e4567-e89b-12d3-a456-426614174000";
+    try {
+      const recorded: RecordedCalls = { snapshots: [], jobFailures: [] };
+      const client = mockClient(url, recorded, "test-credential-value", OTHER_TENANT_ID);
+      const result = await processExternalSyncJob(client, jobRow(), "test-worker", "test-worker", ALLOW_ALL_URLS);
+
+      assert.equal(result.outcome, "failed");
+      assert.match(result.errorMessage ?? "", /belongs to tenant/);
+      assert.equal(called, false, "must never dispatch a live HTTP call for a cross-tenant connection/job mismatch");
+      assert.equal(recorded.snapshots.length, 0);
+      assert.equal(recorded.jobFailures.length, 1);
+    } finally {
+      server.close();
+    }
   });
 
   test("throws for a malformed job payload this repository's own trigger never produces", async () => {

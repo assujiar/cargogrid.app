@@ -6,7 +6,7 @@
  * direct column grant on those columns on the base tables.
  */
 
-import { boundedRange, toBoundedList, type BoundedList } from "./bounded-list.ts";
+import { BOUNDED_LIST_LIMIT, toBoundedListByCapReached, type BoundedList } from "./bounded-list.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   parseQuotation,
@@ -17,7 +17,7 @@ import {
   type QuotationReadiness,
 } from "../contracts/quotation/quotation.ts";
 
-export type QuotationQueryTableClient = Pick<SupabaseClient, "from">;
+export type QuotationQueryRpcClient = Pick<SupabaseClient, "rpc">;
 export type QuotationReadinessRpcClient = Pick<SupabaseClient, "rpc">;
 
 export class QuotationQueryError extends Error {
@@ -27,25 +27,28 @@ export class QuotationQueryError extends Error {
   }
 }
 
-/** Field-masked single quotation by id -- returns null for both "does not exist" and "exists but RLS denies it," matching every prior Commercial detail query's posture. */
-export async function getQuotationById(client: QuotationQueryTableClient, quotationId: string): Promise<Quotation | null> {
-  const { data, error } = await client.from("quotations_directory").select("*").eq("id", quotationId).maybeSingle();
+/** Field-masked single quotation by id -- app.get_quotation_by_id returns null for both "does not exist" and "exists but RLS denies it," matching every prior Commercial detail query's posture. */
+export async function getQuotationById(client: QuotationQueryRpcClient, quotationId: string, actorAuthUserId: string): Promise<Quotation | null> {
+  const { data, error } = await client.rpc("get_quotation_by_id", {
+    p_quotation_id: quotationId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new QuotationQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseQuotation(data as Record<string, unknown>);
+  return parseQuotation(row as Record<string, unknown>);
 }
 
 /** COM-152: every version sharing one root_quotation_id, oldest (version 1) first -- the version history list. */
-export async function listQuotationVersions(client: QuotationQueryTableClient, rootQuotationId: string): Promise<Quotation[]> {
-  const { data, error } = await client
-    .from("quotations_directory")
-    .select("*")
-    .eq("root_quotation_id", rootQuotationId)
-    .order("version_number", { ascending: true });
+export async function listQuotationVersions(client: QuotationQueryRpcClient, rootQuotationId: string, actorAuthUserId: string): Promise<Quotation[]> {
+  const { data, error } = await client.rpc("list_quotation_versions", {
+    p_root_quotation_id: rootQuotationId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new QuotationQueryError(error.message);
   }
@@ -53,12 +56,11 @@ export async function listQuotationVersions(client: QuotationQueryTableClient, r
 }
 
 /** Field-masked quotations for one opportunity, most recently created first. */
-export async function listQuotationsForOpportunity(client: QuotationQueryTableClient, opportunityId: string): Promise<Quotation[]> {
-  const { data, error } = await client
-    .from("quotations_directory")
-    .select("*")
-    .eq("opportunity_id", opportunityId)
-    .order("created_at", { ascending: false });
+export async function listQuotationsForOpportunity(client: QuotationQueryRpcClient, opportunityId: string, actorAuthUserId: string): Promise<Quotation[]> {
+  const { data, error } = await client.rpc("list_quotations_for_opportunity", {
+    p_opportunity_id: opportunityId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new QuotationQueryError(error.message);
   }
@@ -66,27 +68,25 @@ export async function listQuotationsForOpportunity(client: QuotationQueryTableCl
 }
 
 /** Field-masked quotations for one tenant (any opportunity), most recently created first -- backs the tenant-wide Quotations list page. */
-export async function listQuotationsForTenant(client: QuotationQueryTableClient, tenantId: string): Promise<BoundedList<Quotation>> {
-  const range = boundedRange();
-  const { data, error } = await client
-    .from("quotations_directory")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .range(range.from, range.to);
+export async function listQuotationsForTenant(client: QuotationQueryRpcClient, tenantId: string, actorAuthUserId: string): Promise<BoundedList<Quotation>> {
+  const { data, error } = await client.rpc("list_quotations_for_tenant", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: BOUNDED_LIST_LIMIT,
+  });
   if (error) {
     throw new QuotationQueryError(error.message);
   }
-  return toBoundedList((data ?? []).map((row: Record<string, unknown>) => parseQuotation(row)));
+  const rows = (data ?? []).map((row: Record<string, unknown>) => parseQuotation(row));
+  return toBoundedListByCapReached(rows, BOUNDED_LIST_LIMIT);
 }
 
 /** Field-masked lines for one quotation, ordered by line_no. */
-export async function listQuotationLines(client: QuotationQueryTableClient, quotationId: string): Promise<QuotationLine[]> {
-  const { data, error } = await client
-    .from("quotation_lines_directory")
-    .select("*")
-    .eq("quotation_id", quotationId)
-    .order("line_no", { ascending: true });
+export async function listQuotationLines(client: QuotationQueryRpcClient, quotationId: string, actorAuthUserId: string): Promise<QuotationLine[]> {
+  const { data, error } = await client.rpc("list_quotation_lines", {
+    p_quotation_id: quotationId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new QuotationQueryError(error.message);
   }

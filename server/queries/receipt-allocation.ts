@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { BOUNDED_LIST_LIMIT } from "./bounded-list.ts";
 import {
   parseFinanceReceipt,
   parseFinanceReceiptAllocation,
@@ -24,22 +25,26 @@ export class ReceiptAllocationQueryError extends Error {
 }
 
 /** FIN:View-gated. Bounded (200-row), server-filtered list, most-recent receipt date first. */
+/** CG-AUDIT-2026-09-02 F3: `afterId`/`limit` optional and additive -- see server/queries/accounts-receivable.ts#listFinanceArOpenItems's own header comment for the full rationale. */
 export async function listFinanceReceipts(
   client: ReceiptAllocationQueryRpcClient,
-  input: { tenantId: string; companyId: string | null; customerAccountId: string | null; status: string | null; actorAuthUserId: string },
+  input: { tenantId: string; companyId: string | null; customerAccountId: string | null; status: string | null; actorAuthUserId: string; limit?: number; afterId?: string | null },
 ): Promise<FinanceReceipt[]> {
+  const limit = input.limit ?? BOUNDED_LIST_LIMIT;
   const { data, error } = await client.rpc("list_finance_receipts", {
     p_tenant_id: input.tenantId,
     p_company_id: input.companyId,
     p_customer_account_id: input.customerAccountId,
     p_status: input.status,
     p_actor_auth_user_id: input.actorAuthUserId,
+    p_limit: limit,
+    p_after_id: input.afterId ?? null,
   });
   if (error) {
     throw new ReceiptAllocationQueryError(error.message);
   }
   const rows = Array.isArray(data) ? data : [];
-  return rows.map((row) => parseFinanceReceipt(row as Record<string, unknown>));
+  return rows.slice(0, limit).map((row) => parseFinanceReceipt(row as Record<string, unknown>));
 }
 
 /** FIN:View-gated. Full allocation lineage (applied and reversed) for one receipt, oldest first. */

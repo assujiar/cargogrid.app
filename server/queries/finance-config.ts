@@ -28,7 +28,7 @@ import {
 } from "../contracts/finance-config/finance-config.ts";
 
 export type FinanceConfigQueryRpcClient = Pick<SupabaseClient, "rpc">;
-export type FinanceRoundingModesTableClient = Pick<SupabaseClient, "from">;
+export type FinanceRoundingModesTableClient = Pick<SupabaseClient, "rpc">;
 
 export class FinanceConfigQueryError extends Error {
   constructor(message: string) {
@@ -143,11 +143,11 @@ export async function getFinanceConfigVersionItems(client: FinanceConfigQueryRpc
   return (data ?? {}) as Record<string, unknown>;
 }
 
-/** The bounded reference catalogue of rounding conventions (never a tax/legal rate) -- reused directly by FIN-194's own exchange-rate conversion rounding. */
+/** The bounded reference catalogue of rounding conventions (never a tax/legal rate) -- reused directly by FIN-194's own exchange-rate conversion rounding. app.list_finance_rounding_modes is a zero-actor-param SECURITY INVOKER function (app.finance_rounding_modes carries a broad `to authenticated using (true)` SELECT policy plus a direct table grant, so the real calling role already has everything it needs). */
 export async function listFinanceRoundingModes(client: FinanceRoundingModesTableClient): Promise<FinanceRoundingModeInfo[]> {
-  const { data, error } = await client.from("finance_rounding_modes").select("code, name, description");
+  const { data, error } = await client.rpc("list_finance_rounding_modes");
   if (error) {
     throw new FinanceConfigQueryError(error.message);
   }
-  return (data ?? []).map((row) => parseFinanceRoundingModeInfo(row as Record<string, unknown>));
+  return (data ?? []).map((row: Record<string, unknown>) => parseFinanceRoundingModeInfo(row));
 }

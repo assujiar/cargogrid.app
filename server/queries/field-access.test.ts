@@ -48,48 +48,52 @@ describe("canAccessRecord", () => {
   });
 });
 
-function fakeDirectoryClient(response: { data: unknown[] | null; error: { message: string } | null }): UserDirectoryLookupClient {
+const ACTOR_AUTH_USER_ID = "523e4567-e89b-12d3-a456-426614174000";
+
+function fakeDirectoryClient(
+  response: { data: unknown[] | null; error: { message: string } | null },
+  capture?: { calls: { fn: string; args: Record<string, unknown> }[] },
+): UserDirectoryLookupClient {
   return {
-    from() {
-      return {
-        select() {
-          return {
-            async eq() {
-              return response;
-            },
-          };
-        },
-      };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture?.calls.push({ fn, args });
+      return response;
     },
-  };
+  } as UserDirectoryLookupClient;
 }
 
 describe("listUserDirectory", () => {
-  test("maps every row, including the emailMasked flag", async () => {
-    const client = fakeDirectoryClient({
-      data: [
-        {
-          id: "423e4567-e89b-12d3-a456-426614174000",
-          tenant_id: TENANT_ID,
-          auth_user_id: AUTH_USER_ID,
-          display_name: "Jane Doe",
-          status: "active",
-          org_unit_id: null,
-          email: "j***@example.test",
-          email_masked: true,
-          created_at: "2026-07-16T00:00:00.000Z",
-          updated_at: "2026-07-16T00:00:00.000Z",
-        },
-      ],
-      error: null,
-    });
-    const entries = await listUserDirectory(client, TENANT_ID);
+  test("calls list_user_directory with the tenant and actor id, maps every row including the emailMasked flag", async () => {
+    const capture = { calls: [] as { fn: string; args: Record<string, unknown> }[] };
+    const client = fakeDirectoryClient(
+      {
+        data: [
+          {
+            id: "423e4567-e89b-12d3-a456-426614174000",
+            tenant_id: TENANT_ID,
+            auth_user_id: AUTH_USER_ID,
+            display_name: "Jane Doe",
+            status: "active",
+            org_unit_id: null,
+            email: "j***@example.test",
+            email_masked: true,
+            created_at: "2026-07-16T00:00:00.000Z",
+            updated_at: "2026-07-16T00:00:00.000Z",
+          },
+        ],
+        error: null,
+      },
+      capture,
+    );
+    const entries = await listUserDirectory(client, TENANT_ID, ACTOR_AUTH_USER_ID);
+    assert.equal(capture.calls[0]?.fn, "list_user_directory");
+    assert.deepEqual(capture.calls[0]?.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_AUTH_USER_ID });
     assert.equal(entries.length, 1);
     assert.equal(entries[0]?.emailMasked, true);
   });
 
   test("wraps a database error into a typed error", async () => {
     const client = fakeDirectoryClient({ data: null, error: { message: "connection reset" } });
-    await assert.rejects(() => listUserDirectory(client, TENANT_ID), UserDirectoryLookupError);
+    await assert.rejects(() => listUserDirectory(client, TENANT_ID, ACTOR_AUTH_USER_ID), UserDirectoryLookupError);
   });
 });

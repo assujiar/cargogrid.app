@@ -30,56 +30,30 @@ const DIRECTORY_ROW = {
 };
 
 describe("getShipmentActualCost", () => {
-  test("filters by shipment_order_id and is_current, returns the parsed row", async () => {
-    const calls: { table: string; filters: [string, unknown][] }[] = [];
+  test("calls get_shipment_actual_cost with shipment_order_id/actor, returns the parsed row", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
     const client = {
-      from(table: string) {
-        const filters: [string, unknown][] = [];
-        const builder = {
-          select() {
-            return builder;
-          },
-          eq(column: string, value: unknown) {
-            filters.push([column, value]);
-            return builder;
-          },
-          maybeSingle() {
-            calls.push({ table, filters });
-            return Promise.resolve({ data: DIRECTORY_ROW, error: null });
-          },
-        };
-        return builder;
+      async rpc(fn: string, args: Record<string, unknown>) {
+        capture.calls.fn = fn;
+        capture.calls.args = args;
+        return { data: [DIRECTORY_ROW], error: null };
       },
     } as unknown as ActualCostQueryClient;
 
-    const row = await getShipmentActualCost(client, SHIPMENT_ID);
-    assert.equal(calls[0]?.table, "shipment_actual_costs_directory");
-    assert.deepEqual(calls[0]?.filters, [
-      ["shipment_order_id", SHIPMENT_ID],
-      ["is_current", true],
-    ]);
+    const row = await getShipmentActualCost(client, SHIPMENT_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "get_shipment_actual_cost");
+    assert.deepEqual(capture.calls.args, { p_shipment_order_id: SHIPMENT_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(row?.id, COST_ID);
   });
 
   test("returns null when no current version exists", async () => {
     const client = {
-      from() {
-        const builder = {
-          select() {
-            return builder;
-          },
-          eq() {
-            return builder;
-          },
-          maybeSingle() {
-            return Promise.resolve({ data: null, error: null });
-          },
-        };
-        return builder;
+      async rpc() {
+        return { data: [], error: null };
       },
     } as unknown as ActualCostQueryClient;
 
-    const row = await getShipmentActualCost(client, SHIPMENT_ID);
+    const row = await getShipmentActualCost(client, SHIPMENT_ID, ACTOR_ID);
     assert.equal(row, null);
   });
 });

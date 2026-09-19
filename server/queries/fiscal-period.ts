@@ -20,7 +20,6 @@ import {
 } from "../contracts/fiscal-period/fiscal-period.ts";
 
 export type FiscalPeriodQueryRpcClient = Pick<SupabaseClient, "rpc">;
-export type FiscalPeriodChecklistTableClient = Pick<SupabaseClient, "from">;
 
 export class FiscalPeriodQueryError extends Error {
   constructor(message: string) {
@@ -69,13 +68,16 @@ export async function getFinancePeriodTransitionHistory(client: FiscalPeriodQuer
   return rows.map((row) => parseFinancePeriodTransition(row as Record<string, unknown>));
 }
 
-/** Direct RLS-scoped read of one period's own checklist items (app.finance_period_close_checklist_items carries a broad tenant-member SELECT policy, no RPC needed -- mirrors app.finance_rounding_modes' own direct-table-read convention). */
-export async function listFinancePeriodChecklistItems(client: FiscalPeriodChecklistTableClient, periodId: string): Promise<FinancePeriodChecklistItem[]> {
-  const { data, error } = await client.from("finance_period_close_checklist_items").select("*").eq("period_id", periodId).order("item_key", { ascending: true });
+/** RPC-backed read of one period's own close-checklist items via app.list_finance_period_checklist_items, item_key ascending. */
+export async function listFinancePeriodChecklistItems(client: FiscalPeriodQueryRpcClient, periodId: string, actorAuthUserId: string): Promise<FinancePeriodChecklistItem[]> {
+  const { data, error } = await client.rpc("list_finance_period_checklist_items", {
+    p_period_id: periodId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new FiscalPeriodQueryError(error.message);
   }
-  return (data ?? []).map((row) => parseFinancePeriodChecklistItem(row as Record<string, unknown>));
+  return (data ?? []).map((row: Record<string, unknown>) => parseFinancePeriodChecklistItem(row));
 }
 
 /** Deterministic date-to-period resolution -- the forward seam later posting capabilities will call. Returns null if no generated period covers the date. */

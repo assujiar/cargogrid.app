@@ -22,7 +22,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
 
   let contact;
   try {
-    contact = await getContactById(supabase, contactId);
+    contact = await getContactById(supabase, contactId, access.authUserId);
   } catch (error) {
     if (!(error instanceof ContactQueryError)) {
       throw error;

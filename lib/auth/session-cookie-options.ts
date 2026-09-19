@@ -46,3 +46,29 @@ export function buildSessionCookieOptions(config: SessionCookieConfig): SessionC
     maxAge: config.maxAgeSeconds ?? DEFAULT_SESSION_MAX_AGE_SECONDS,
   };
 }
+
+/**
+ * CG-AUDIT-2026-09-02 D3c. `@supabase/ssr`'s own `setAll` callback hands the cookie-write
+ * site a library-constructed `options` object that ALWAYS carries its own `httpOnly:false`
+ * and a 400-day `maxAge` for a real session cookie -- and, deliberately, `maxAge: 0` when
+ * the library is *clearing* a cookie (logout, or replacing stale chunks), which must still
+ * take effect or logout silently stops deleting the cookie. `lib/supabase/server.ts`
+ * previously did `{ ...sessionCookieOptions, ...libraryOptions }`, so the library's object,
+ * spread last, always won -- the exact inverse of this file's own documented contract
+ * ("httpOnly: always true").
+ *
+ * This merge applies the security-relevant attributes (`httpOnly`, `secure`, `sameSite`,
+ * `path`) from `sessionCookieOptions` unconditionally, and applies `sessionCookieOptions`'s
+ * own `maxAge` UNLESS the library is explicitly clearing the cookie (`libraryOptions.maxAge
+ * === 0`), in which case the clear is honored. Any other field the library sets (`domain`,
+ * chunk-related keys) passes through untouched -- this narrows exactly the two attributes
+ * the audit found inverted, without guessing at fields it did not.
+ */
+export function mergeSessionCookieOptions(sessionCookieOptions: SessionCookieOptions, libraryOptions: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const isClearing = libraryOptions.maxAge === 0;
+  return {
+    ...libraryOptions,
+    ...sessionCookieOptions,
+    maxAge: isClearing ? 0 : sessionCookieOptions.maxAge,
+  };
+}

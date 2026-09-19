@@ -65,6 +65,9 @@ export default async function SupremeLayout({ children }: { children: ReactNode 
             <a href="/supreme/helpdesk" className="text-neutral-700 hover:text-neutral-900">
               Helpdesk
             </a>
+            <a href="/supreme/integrations" className="text-neutral-700 hover:text-neutral-900">
+              Integrations
+            </a>
           </nav>
           {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
         </div>

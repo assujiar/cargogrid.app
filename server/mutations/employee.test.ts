@@ -367,7 +367,7 @@ describe("validateEmployeeImportRow", () => {
 });
 
 describe("commitEmployeeImportJob", () => {
-  test("calls commit_employee_import_job with the exact snake_case params, defaulting allowPartial to false", async () => {
+  test("calls commit_employee_import_job with the exact snake_case params, defaulting allowPartial to false and clientIp to null", async () => {
     const { client, calls } = fakeRpcClient({ data: { job_id: JOB_ID, status: "completed" }, error: null });
 
     const job = await commitEmployeeImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" });
@@ -375,7 +375,16 @@ describe("commitEmployeeImportJob", () => {
     assert.equal(calls[0]?.fn, "commit_employee_import_job");
     assert.equal(calls[0]?.args.p_job_id, JOB_ID);
     assert.equal(calls[0]?.args.p_allow_partial, false);
+    assert.equal(calls[0]?.args.p_client_ip, null);
     assert.equal(job.status, "completed");
+  });
+
+  test("passes clientIp through when supplied", async () => {
+    const { client, calls } = fakeRpcClient({ data: { job_id: JOB_ID, status: "completed" }, error: null });
+
+    await commitEmployeeImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "203.0.113.5" });
+
+    assert.equal(calls[0]?.args.p_client_ip, "203.0.113.5");
   });
 
   test("classifies import_export_job_has_invalid_rows", async () => {
@@ -385,6 +394,40 @@ describe("commitEmployeeImportJob", () => {
       (err: unknown) => {
         assert.ok(err instanceof EmployeeMutationError);
         assert.equal(err.code, "import_export_job_has_invalid_rows");
+        return true;
+      },
+    );
+  });
+
+  test("classifies employee_import_duplicate_employee_number (CG-AUDIT-2026-09-02 A4)", async () => {
+    const client = fakeRpcClient({ data: null, error: { message: "employee_import_duplicate_employee_number: employee_number EMP-1 (staging row x) already exists in tenant y" } }).client;
+    await assert.rejects(
+      () => commitEmployeeImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof EmployeeMutationError);
+        assert.equal(err.code, "employee_import_duplicate_employee_number");
+        return true;
+      },
+    );
+  });
+
+  test("classifies mfa_step_up_required and ip_not_allowed (CG-AUDIT-2026-09-02 A4)", async () => {
+    const mfaClient = fakeRpcClient({ data: null, error: { message: "mfa_step_up_required: HRS:Import requires a current MFA step-up verification" } }).client;
+    await assert.rejects(
+      () => commitEmployeeImportJob(mfaClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof EmployeeMutationError);
+        assert.equal(err.code, "mfa_step_up_required");
+        return true;
+      },
+    );
+
+    const ipClient = fakeRpcClient({ data: null, error: { message: "ip_not_allowed: malformed IP address denied for scope" } }).client;
+    await assert.rejects(
+      () => commitEmployeeImportJob(ipClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "bad-ip" }),
+      (err: unknown) => {
+        assert.ok(err instanceof EmployeeMutationError);
+        assert.equal(err.code, "ip_not_allowed");
         return true;
       },
     );

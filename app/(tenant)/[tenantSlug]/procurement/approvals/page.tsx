@@ -33,7 +33,7 @@ export default async function ProcurementApprovalsPage({ params }: { params: Pro
   try {
     [inbox, policies, exceptions] = await Promise.all([
       listProcurementApprovalInboxForActor(supabase, access.tenant.id, access.authUserId),
-      listProcurementApprovalPolicyVersions(supabase, access.tenant.id),
+      listProcurementApprovalPolicyVersions(supabase, access.tenant.id, access.authUserId),
       listProcurementExceptionRequests(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, statusFilter: null, limit: 100 }),
     ]);
   } catch (error) {

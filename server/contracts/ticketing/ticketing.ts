@@ -2356,4 +2356,46 @@ export type UnlinkTicketPortalRecordInput = z.infer<typeof UnlinkTicketPortalRec
 // about in advance).
 export const TICKET_PRECREATE_LINK_ENTITY_TYPES = ["shipment", "invoice", "warehouse_order", "document"] as const;
 export const TicketPrecreateLinkEntityTypeSchema = z.enum(TICKET_PRECREATE_LINK_ENTITY_TYPES);
+
+export const TICKET_ATTACHMENT_ACCESS_RESULTS = ["granted", "denied"] as const;
+export const TicketAttachmentAccessResultSchema = z.enum(TICKET_ATTACHMENT_ACCESS_RESULTS);
+export type TicketAttachmentAccessResult = z.infer<typeof TicketAttachmentAccessResultSchema>;
+
+/**
+ * app.access_ticket_attachment_evidence_for_download's own raw row
+ * (CG-AUDIT-2026-09-02 A6, service_role-only). DOES carry storage_path -- it
+ * never reaches the browser, only server-side code that immediately mints a
+ * signed URL from it. Not re-exported past the mutation function that parses
+ * it, same discipline as vendor-compliance/shipment-checklist's own
+ * download-source types.
+ */
+export const TicketAttachmentEvidenceDownloadSourceSchema = z.object({
+  bucketId: z.string().nullable(),
+  storagePath: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+  mimeType: z.string().nullable(),
+  accessResult: TicketAttachmentAccessResultSchema,
+  accessReason: z.string().nullable(),
+});
+export type TicketAttachmentEvidenceDownloadSource = z.infer<typeof TicketAttachmentEvidenceDownloadSourceSchema>;
+
+export function parseTicketAttachmentEvidenceDownloadSource(row: Record<string, unknown>): TicketAttachmentEvidenceDownloadSource {
+  return TicketAttachmentEvidenceDownloadSourceSchema.parse({
+    bucketId: row.bucket_id ?? null,
+    storagePath: row.storage_path ?? null,
+    originalFilename: row.original_filename ?? null,
+    mimeType: row.mime_type ?? null,
+    accessResult: row.access_result,
+    accessReason: row.access_reason ?? null,
+  });
+}
+
+/** The public-facing result of minting a signed download URL for one ticket attachment -- never carries storage_path/bucket_id, only the already-signed, short-lived URL a browser can safely open directly. */
+export const TicketAttachmentSignedDownloadSchema = z.object({
+  accessResult: TicketAttachmentAccessResultSchema,
+  accessReason: z.string().nullable(),
+  signedUrl: z.string().nullable(),
+  originalFilename: z.string().nullable(),
+});
+export type TicketAttachmentSignedDownload = z.infer<typeof TicketAttachmentSignedDownloadSchema>;
 export type TicketPrecreateLinkEntityType = z.infer<typeof TicketPrecreateLinkEntityTypeSchema>;

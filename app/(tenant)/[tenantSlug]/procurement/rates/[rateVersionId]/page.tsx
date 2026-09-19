@@ -28,8 +28,8 @@ export default async function ProcurementRateDetailPage({ params }: { params: Pr
   let rate: Awaited<ReturnType<typeof getRateVersionById>> = null;
   let tiers: Awaited<ReturnType<typeof listVendorRateTiers>> = [];
   try {
-    rate = await getRateVersionById(supabase, rateVersionId);
-    tiers = await listVendorRateTiers(supabase, rateVersionId);
+    rate = await getRateVersionById(supabase, rateVersionId, access.authUserId);
+    tiers = await listVendorRateTiers(supabase, rateVersionId, access.authUserId);
   } catch (error) {
     if (!(error instanceof RateQueryError) && !(error instanceof ProcurementRateQueryError)) throw error;
     loadFailed = true;

@@ -1,11 +1,13 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { createItemMaster, updateItemMaster, setItemMasterStatus, ItemUomMasterMutationError, type ItemUomMasterMutationRpcClient } from "./item-uom-master.ts";
+import { createItemMaster, updateItemMaster, setItemMasterStatus, validateItemImportRow, commitItemImportJob, ItemUomMasterMutationError, type ItemUomMasterMutationRpcClient } from "./item-uom-master.ts";
 
 const TENANT_ID = "223e4567-e89b-12d3-a456-426614174000";
 const ITEM_ID = "323e4567-e89b-12d3-a456-426614174000";
 const ACCOUNT_ID = "723e4567-e89b-12d3-a456-426614174000";
 const ACTOR_ID = "623e4567-e89b-12d3-a456-426614174000";
+const JOB_ID = "823e4567-e89b-12d3-a456-426614174000";
+const ROW_ID = "923e4567-e89b-12d3-a456-426614174000";
 
 function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
   client: ItemUomMasterMutationRpcClient;
@@ -194,6 +196,115 @@ describe("setItemMasterStatus", () => {
           actorLabel: "rep",
         }),
       (err: unknown) => err instanceof ItemUomMasterMutationError && err.code === "invalid_reason",
+    );
+  });
+});
+
+describe("validateItemImportRow (CG-AUDIT-2026-09-02 A4)", () => {
+  test("calls validate_item_import_row with the exact snake_case params", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: {
+        id: ROW_ID,
+        tenant_id: TENANT_ID,
+        job_id: JOB_ID,
+        row_number: 1,
+        raw_payload: { code: "SKU-100" },
+        validation_status: "valid",
+        error: null,
+        created_at: "2026-09-17T00:00:00.000Z",
+      },
+      error: null,
+    });
+    const row = await validateItemImportRow(client, { stagingRowId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" });
+
+    assert.deepEqual(calls[0]?.args, { p_staging_row_id: ROW_ID, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "tester" });
+    assert.equal(row.validationStatus, "valid");
+  });
+
+  test("wraps a database error into a typed ItemUomMasterMutationError", async () => {
+    const { client } = fakeRpcClient({ data: null, error: { message: "import_export_staging_row_not_found: no staging row" } });
+    await assert.rejects(() => validateItemImportRow(client, { stagingRowId: ROW_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }), ItemUomMasterMutationError);
+  });
+});
+
+describe("commitItemImportJob (CG-AUDIT-2026-09-02 A4)", () => {
+  test("calls commit_item_import_job with the exact snake_case params, including client IP, defaulting allowPartial to false", async () => {
+    const { client, calls } = fakeRpcClient({
+      data: {
+        job_id: JOB_ID,
+        tenant_id: TENANT_ID,
+        job_type: "import",
+        status: "completed",
+        priority: 0,
+        payload: {},
+        attempts: 0,
+        max_attempts: 3,
+        locked_by: null,
+        locked_until: null,
+        error: null,
+        result_url: null,
+        created_by: "tester",
+        created_at: "2026-09-17T00:00:00.000Z",
+        completed_at: "2026-09-17T00:05:00.000Z",
+        requested_by_auth_user_id: ACTOR_ID,
+        idempotency_key: "idem-item-import-job",
+        import_export_schema_code: "item_import",
+        source_file_id: "a23e4567-e89b-12d3-a456-426614174000",
+        result_file_id: null,
+        total_rows: 1,
+        processed_rows: 1,
+        valid_row_count: 1,
+        invalid_row_count: 0,
+        cancel_reason: null,
+        updated_at: "2026-09-17T00:05:00.000Z",
+      },
+      error: null,
+    });
+    const job = await commitItemImportJob(client, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "203.0.113.5" });
+
+    assert.deepEqual(calls[0]?.args, { p_job_id: JOB_ID, p_allow_partial: false, p_actor_auth_user_id: ACTOR_ID, p_actor_label: "tester", p_client_ip: "203.0.113.5" });
+    assert.equal(job.status, "completed");
+  });
+
+  test("classifies import_owner_account_not_found and import_blocked_legal_hold", async () => {
+    const ownerClient = fakeRpcClient({ data: null, error: { message: "import_owner_account_not_found: staged row 3 names owner_account_tax_id x, which no longer resolves to exactly one active account in tenant y" } }).client;
+    await assert.rejects(
+      () => commitItemImportJob(ownerClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ItemUomMasterMutationError);
+        assert.equal(err.code, "import_owner_account_not_found");
+        return true;
+      },
+    );
+    const holdClient = fakeRpcClient({ data: null, error: { message: "import_blocked_legal_hold: item master x is under legal hold, this import commit cannot target it" } }).client;
+    await assert.rejects(
+      () => commitItemImportJob(holdClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ItemUomMasterMutationError);
+        assert.equal(err.code, "import_blocked_legal_hold");
+        return true;
+      },
+    );
+  });
+
+  test("classifies mfa_step_up_required and ip_not_allowed", async () => {
+    const mfaClient = fakeRpcClient({ data: null, error: { message: "mfa_step_up_required: OPS:Import requires a current MFA step-up verification" } }).client;
+    await assert.rejects(
+      () => commitItemImportJob(mfaClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ItemUomMasterMutationError);
+        assert.equal(err.code, "mfa_step_up_required");
+        return true;
+      },
+    );
+    const ipClient = fakeRpcClient({ data: null, error: { message: "ip_not_allowed: malformed IP address denied for scope" } }).client;
+    await assert.rejects(
+      () => commitItemImportJob(ipClient, { jobId: JOB_ID, actorAuthUserId: ACTOR_ID, actorLabel: "tester", clientIp: "bad-ip" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ItemUomMasterMutationError);
+        assert.equal(err.code, "ip_not_allowed");
+        return true;
+      },
     );
   });
 });

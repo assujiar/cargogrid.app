@@ -48,74 +48,53 @@ const HANDOFF_ROW = {
   created_at: "2026-07-28T11:00:00.000Z",
 };
 
-function fakeClient(response: { data: unknown; error: { message: string } | null }): {
-  client: BillingReadinessQueryClient;
-  calls: { table: string; eqs: [string, unknown][]; order: [string, unknown] | null }[];
-} {
-  const calls: { table: string; eqs: [string, unknown][]; order: [string, unknown] | null }[] = [];
-  const client = {
-    from(table: string) {
-      const eqs: [string, unknown][] = [];
-      let orderCall: [string, unknown] | null = null;
-      const builder = {
-        select() {
-          return builder;
-        },
-        eq(column: string, value: unknown) {
-          eqs.push([column, value]);
-          return builder;
-        },
-        order(column: string, opts: unknown) {
-          orderCall = [column, opts];
-          calls.push({ table, eqs, order: orderCall });
-          return Promise.resolve(response);
-        },
-        async maybeSingle() {
-          calls.push({ table, eqs, order: null });
-          return response;
-        },
-      };
-      return builder;
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): BillingReadinessQueryClient {
+  const fake = {
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.fn = fn;
+      capture.calls.args = args;
+      return response;
     },
-  } as unknown as BillingReadinessQueryClient;
-  return { client, calls };
+  };
+  return fake as unknown as BillingReadinessQueryClient;
 }
 
 describe("getCurrentBillingReadinessEvaluation", () => {
-  test("filters by job_order_id and is_current, returns the parsed row", async () => {
-    const { client, calls } = fakeClient({ data: EVALUATION_ROW, error: null });
-    const row = await getCurrentBillingReadinessEvaluation(client, JOB_ORDER_ID);
-    assert.equal(calls[0]?.table, "billing_readiness_evaluations");
-    assert.deepEqual(calls[0]?.eqs, [
-      ["job_order_id", JOB_ORDER_ID],
-      ["is_current", true],
-    ]);
+  test("calls get_current_billing_readiness_evaluation with job_order_id/actor, returns the parsed row", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
+    const client = fakeRpcClient({ data: [EVALUATION_ROW], error: null }, capture);
+    const row = await getCurrentBillingReadinessEvaluation(client, JOB_ORDER_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "get_current_billing_readiness_evaluation");
+    assert.deepEqual(capture.calls.args, { p_job_order_id: JOB_ORDER_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(row?.id, EVAL_ID);
   });
 
   test("returns null when the Job Order has never been evaluated", async () => {
-    const { client } = fakeClient({ data: null, error: null });
-    const row = await getCurrentBillingReadinessEvaluation(client, JOB_ORDER_ID);
+    const capture = { calls: {} as Record<string, unknown> };
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    const row = await getCurrentBillingReadinessEvaluation(client, JOB_ORDER_ID, ACTOR_ID);
     assert.equal(row, null);
   });
 });
 
 describe("getBillingReadinessEvaluationHistory", () => {
-  test("orders by version_number ascending", async () => {
-    const { client, calls } = fakeClient({ data: [EVALUATION_ROW], error: null });
-    const history = await getBillingReadinessEvaluationHistory(client, JOB_ORDER_ID);
-    assert.equal(calls[0]?.table, "billing_readiness_evaluations");
-    assert.deepEqual(calls[0]?.order, ["version_number", { ascending: true }]);
+  test("calls list_billing_readiness_evaluations with job_order_id/actor", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
+    const client = fakeRpcClient({ data: [EVALUATION_ROW], error: null }, capture);
+    const history = await getBillingReadinessEvaluationHistory(client, JOB_ORDER_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_billing_readiness_evaluations");
+    assert.deepEqual(capture.calls.args, { p_job_order_id: JOB_ORDER_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(history.length, 1);
   });
 });
 
 describe("listBillingReadinessHandoffs", () => {
-  test("orders by handed_off_at descending", async () => {
-    const { client, calls } = fakeClient({ data: [HANDOFF_ROW], error: null });
-    const handoffs = await listBillingReadinessHandoffs(client, JOB_ORDER_ID);
-    assert.equal(calls[0]?.table, "billing_readiness_handoffs");
-    assert.deepEqual(calls[0]?.order, ["handed_off_at", { ascending: false }]);
+  test("calls list_billing_readiness_handoffs with job_order_id/actor", async () => {
+    const capture = { calls: {} as Record<string, unknown> };
+    const client = fakeRpcClient({ data: [HANDOFF_ROW], error: null }, capture);
+    const handoffs = await listBillingReadinessHandoffs(client, JOB_ORDER_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_billing_readiness_handoffs");
+    assert.deepEqual(capture.calls.args, { p_job_order_id: JOB_ORDER_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(handoffs[0]?.id, HANDOFF_ID);
   });
 });

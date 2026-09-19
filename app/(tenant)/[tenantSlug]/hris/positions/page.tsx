@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listPositionGrades, listPositions, PositionQueryError } from "../../../../../server/queries/position.ts";
+import { listOrgUnits, toOrgHierarchyRpcClient, OrgHierarchyQueryError } from "../../../../../server/queries/org-hierarchy.ts";
 import type { PositionGradeStatus, PositionStatus } from "../../../../../server/contracts/position/position.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../components/ui/permission-state.tsx";
@@ -36,13 +37,17 @@ export default async function PositionCataloguePage({ params, searchParams }: { 
       listPositions(supabase, access.tenant.id, access.authUserId, { statusFilter, search: q ?? null, limit: 50, afterCode: after ?? null }),
       listPositionGrades(supabase, access.tenant.id, access.authUserId),
     ]);
-    const { data: orgUnitRows, error: orgUnitError } = await supabase.from("org_units").select("id, name, unit_type").eq("tenant_id", access.tenant.id).eq("status", "active");
-    if (orgUnitError) throw new PositionQueryError(orgUnitError.message);
-    orgUnits = (orgUnitRows ?? []).map((row) => ({ id: String(row.id), name: String(row.name), unitType: String(row.unit_type) }));
+    orgUnits = await listOrgUnits(toOrgHierarchyRpcClient(supabase), access.tenant.id, { statusFilter: "active" });
   } catch (error) {
-    if (!(error instanceof PositionQueryError)) throw error;
-    if (error.message.startsWith("insufficient_authority")) denied = true;
-    else loadFailed = true;
+    if (error instanceof OrgHierarchyQueryError) {
+      loadFailed = true;
+    } else if (!(error instanceof PositionQueryError)) {
+      throw error;
+    } else if (error.message.startsWith("insufficient_authority")) {
+      denied = true;
+    } else {
+      loadFailed = true;
+    }
   }
 
   if (denied) {
@@ -65,6 +70,9 @@ export default async function PositionCataloguePage({ params, searchParams }: { 
           </a>
           <a href={`/${tenantSlug}/hris/organization`} className="text-primary underline">
             View organization tree
+          </a>
+          <a href={`/${tenantSlug}/hris/imports/position-crosswalk`} className="text-primary underline">
+            Import position crosswalk from CSV
           </a>
         </div>
       </div>

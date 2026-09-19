@@ -3,6 +3,13 @@
  * app.get_approval_request_history / app.list_pending_approval_steps_for_actor
  * (supabase/migrations/20260719090000_create_approval_engine.sql) -- the reusable
  * pending-approver/timeline view models Prompt 123 §15 calls for.
+ *
+ * getApprovalRequestStep / getApprovalRequestById (O1 remediation, cluster 7): replace two
+ * broken direct `.from()` reads embedded in procurement/approvals/[stepId]/page.tsx (app is
+ * not exposed to PostgREST). Both are SECURITY INVOKER, zero actor parameter -- see
+ * 20260913050000's own header for why (live RLS is the current, correct authority surface for
+ * both tables; app.check_approval_request_authority is a stale helper this series deliberately
+ * does not call).
  */
 
 import {
@@ -10,15 +17,17 @@ import {
   ListPendingApprovalStepsInputSchema,
   parseApprovalRequestHistoryEntry,
   parseApprovalRequestStep,
+  parseApprovalRequest,
   type GetApprovalRequestHistoryInput,
   type ListPendingApprovalStepsInput,
   type ApprovalRequestHistoryEntry,
   type ApprovalRequestStep,
+  type ApprovalRequest,
 } from "../contracts/approval/approval.ts";
 
 export interface ApprovalQueryRpcClient {
   rpc(
-    fn: "get_approval_request_history" | "list_pending_approval_steps_for_actor",
+    fn: "get_approval_request_history" | "list_pending_approval_steps_for_actor" | "get_approval_request_step" | "get_approval_request_by_id",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
@@ -68,4 +77,32 @@ export async function listPendingApprovalStepsForActor(
     throw new ApprovalQueryError("list_pending_approval_steps_for_actor returned a non-array result");
   }
   return data.map((row) => parseApprovalRequestStep(row as Record<string, unknown>));
+}
+
+/** One approval step by id. Returns null (never an error) when it does not exist or RLS hides it. */
+export async function getApprovalRequestStep(client: ApprovalQueryRpcClient, stepId: string): Promise<ApprovalRequestStep | null> {
+  const { data, error } = await client.rpc("get_approval_request_step", { p_step_id: stepId });
+
+  if (error) {
+    throw new ApprovalQueryError(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    return null;
+  }
+  return parseApprovalRequestStep(row as Record<string, unknown>);
+}
+
+/** One approval request by id. Returns null (never an error) when it does not exist or RLS hides it. */
+export async function getApprovalRequestById(client: ApprovalQueryRpcClient, requestId: string): Promise<ApprovalRequest | null> {
+  const { data, error } = await client.rpc("get_approval_request_by_id", { p_request_id: requestId });
+
+  if (error) {
+    throw new ApprovalQueryError(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    return null;
+  }
+  return parseApprovalRequest(row as Record<string, unknown>);
 }

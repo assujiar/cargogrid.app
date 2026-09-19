@@ -59,33 +59,31 @@ const VALID_RUN_ROW = {
   completed_at: null,
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): ScheduledReportQueryClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      limit: () => Promise.resolve(response),
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
-  return { from: () => chainNode() } as unknown as ScheduledReportQueryClient;
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
+  client: ScheduledReportQueryClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
+      calls.push({ fn, args });
+      return response;
+    },
+  } as unknown as ScheduledReportQueryClient;
+  return { client, calls };
 }
 
 describe("listScheduledReports", () => {
-  test("maps schedule rows", async () => {
-    const client = fakeTableClient({ data: [VALID_SCHEDULE_ROW], error: null });
+  test("calls list_scheduled_reports and maps schedule rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_SCHEDULE_ROW], error: null });
     const schedules = await listScheduledReports(client, TENANT_ID);
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID });
     assert.equal(schedules.length, 1);
     assert.equal(schedules[0]?.name, "Daily Billing Summary");
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const { client } = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => listScheduledReports(client, TENANT_ID),
       (err: unknown) => err instanceof ScheduledReportQueryError,
@@ -95,31 +93,34 @@ describe("listScheduledReports", () => {
 
 describe("getScheduledReportById", () => {
   test("returns null (never an error) when not found", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const schedule = await getScheduledReportById(client, SCHEDULE_ID);
     assert.equal(schedule, null);
   });
 
   test("parses a matched row", async () => {
-    const client = fakeTableClient({ data: VALID_SCHEDULE_ROW, error: null });
+    const { client, calls } = fakeRpcClient({ data: [VALID_SCHEDULE_ROW], error: null });
     const schedule = await getScheduledReportById(client, SCHEDULE_ID);
+    assert.deepEqual(calls[0]?.args, { p_scheduled_report_id: SCHEDULE_ID });
     assert.equal(schedule?.id, SCHEDULE_ID);
   });
 });
 
 describe("listScheduledReportRecipients", () => {
-  test("maps recipient rows", async () => {
-    const client = fakeTableClient({ data: [VALID_RECIPIENT_ROW], error: null });
+  test("calls list_scheduled_report_recipients and maps recipient rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_RECIPIENT_ROW], error: null });
     const recipients = await listScheduledReportRecipients(client, SCHEDULE_ID);
+    assert.deepEqual(calls[0]?.args, { p_scheduled_report_id: SCHEDULE_ID });
     assert.equal(recipients.length, 1);
     assert.equal(recipients[0]?.recipientAuthUserId, ACTOR_ID);
   });
 });
 
 describe("listScheduledReportRuns", () => {
-  test("maps run rows, newest first", async () => {
-    const client = fakeTableClient({ data: [VALID_RUN_ROW], error: null });
+  test("calls list_scheduled_report_runs and maps run rows, newest first", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_RUN_ROW], error: null });
     const runs = await listScheduledReportRuns(client, SCHEDULE_ID);
+    assert.deepEqual(calls[0]?.args, { p_scheduled_report_id: SCHEDULE_ID, p_limit: 25 });
     assert.equal(runs.length, 1);
     assert.equal(runs[0]?.recipientsReauthorized, 1);
   });

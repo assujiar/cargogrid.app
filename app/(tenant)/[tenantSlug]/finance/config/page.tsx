@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { resolveFinanceAccessForRequest } from "../../../../../lib/portal/resolve-finance-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { listFinanceConfigVersions, resolveFinanceConfig, getFinanceConfigVersionItems, FinanceConfigQueryError } from "../../../../../server/queries/finance-config.ts";
 import { FINANCE_CONFIG_CLASSES, type FinanceConfigClass, type ConfigVersion } from "../../../../../server/contracts/finance-config/finance-config.ts";
 import { DataTable, type DataTableColumn } from "../../../../../components/tables/data-table.tsx";
@@ -65,12 +66,24 @@ export default async function FinanceConfigPage({
 
   const selectedClass: FinanceConfigClass = isFinanceConfigClass(rawClass) ? rawClass : "finance_dimensions";
   const supabase = await createSupabaseServerClient();
+  // app.list_config_versions (and its public.* wrapper) is granted to
+  // service_role only, never authenticated (supabase/migrations/
+  // 20260717130000_create_configuration_engine.sql -- verified live against a
+  // disposable test database: has_function_privilege('authenticated', ...) is
+  // false). Calling it through the RLS-scoped `supabase` client above always
+  // raised a permission-denied error caught below as loadFailed, so this page
+  // rendered ErrorState for every real user -- a genuine pre-existing bug
+  // found while scoping A3b (which reuses this same RPC). Authority is still
+  // enforced inside the function itself via app.check_config_object_authority
+  // against the explicitly passed actorAuthUserId, so the service-role client
+  // does not widen who this page lets read the version list.
+  const configVersionsClient = createSupabaseServiceRoleClient();
 
   let versions: ConfigVersion[] = [];
   let effectiveItems: Record<string, unknown> | null = null;
   let loadFailed = false;
   try {
-    versions = await listFinanceConfigVersions(supabase, {
+    versions = await listFinanceConfigVersions(configVersionsClient, {
       configTypeCode: selectedClass,
       tenantId: access.tenant.id,
       scopeLevel: "tenant",

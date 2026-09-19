@@ -98,6 +98,7 @@ export default async function PayrollAdminPage({ params }: { params: Promise<{ t
 
   return (
     <PayrollAdminPanel
+      tenantSlug={tenantSlug}
       periods={periods}
       components={components}
       runs={runs}

@@ -15,6 +15,7 @@ const MASTER_RECORD_ID = "323e4567-e89b-12d3-a456-426614174000";
 const RATE_VERSION_ID = "423e4567-e89b-12d3-a456-426614174000";
 const REQUEST_ID = "523e4567-e89b-12d3-a456-426614174000";
 const SELECTION_ID = "623e4567-e89b-12d3-a456-426614174000";
+const ACTOR_ID = "723e4567-e89b-12d3-a456-426614174000";
 
 const VALID_RATE_VERSION_ROW = {
   rate_version_id: RATE_VERSION_ID,
@@ -65,61 +66,43 @@ const VALID_SELECTION_ROW = {
   created_at: "2026-07-24T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): RateQueryTableClient {
-  function chain(): Record<string, unknown> {
-    return {
-      eq(column: string, value: unknown) {
-        const eqCalls = (capture.calls.eqCalls ?? []) as { column: string; value: unknown }[];
-        eqCalls.push({ column, value });
-        capture.calls.eqCalls = eqCalls;
-        return chain();
-      },
-      order(column: string, opts: { ascending: boolean }) {
-        capture.calls.orderColumn = column;
-        capture.calls.ascending = opts.ascending;
-        return response;
-      },
-      async maybeSingle() {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return { data: row, error: response.error };
-      },
-    };
-  }
-
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }, capture: { calls: Record<string, unknown> }): RateQueryTableClient {
   const fake = {
-    from(table: string) {
-      capture.calls.table = table;
-      return { select: () => chain() };
+    async rpc(fn: string, args: Record<string, unknown>) {
+      capture.calls.fn = fn;
+      capture.calls.args = args;
+      return response;
     },
   };
   return fake as unknown as RateQueryTableClient;
 }
 
 describe("listRateVersionsForMasterRecord", () => {
-  test("queries the field-masked vendor_rate_versions_directory view, filtered by master_record_id, newest first", async () => {
+  test("calls list_rate_versions_for_master_record with master_record_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_RATE_VERSION_ROW], error: null }, capture);
-    const versions = await listRateVersionsForMasterRecord(client, MASTER_RECORD_ID);
-    assert.equal(capture.calls.table, "vendor_rate_versions_directory");
-    assert.equal(capture.calls.ascending, false);
+    const client = fakeRpcClient({ data: [VALID_RATE_VERSION_ROW], error: null }, capture);
+    const versions = await listRateVersionsForMasterRecord(client, MASTER_RECORD_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_rate_versions_for_master_record");
+    assert.deepEqual(capture.calls.args, { p_master_record_id: MASTER_RECORD_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(versions.length, 1);
     assert.equal(versions[0]?.vendorCode, "VENDOR-1");
   });
 });
 
 describe("getRateVersionById", () => {
-  test("returns null (never an error) when RLS/no-match yields zero rows", async () => {
+  test("calls get_rate_version_by_id and returns null when not found", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [], error: null }, capture);
-    const version = await getRateVersionById(client, RATE_VERSION_ID);
+    const client = fakeRpcClient({ data: [], error: null }, capture);
+    const version = await getRateVersionById(client, RATE_VERSION_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "get_rate_version_by_id");
+    assert.deepEqual(capture.calls.args, { p_rate_version_id: RATE_VERSION_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(version, null);
   });
 
   test("wraps a query error", async () => {
-    const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: null, error: { message: "boom" } }, capture);
+    const client = fakeRpcClient({ data: null, error: { message: "boom" } }, { calls: {} });
     await assert.rejects(
-      () => getRateVersionById(client, RATE_VERSION_ID),
+      () => getRateVersionById(client, RATE_VERSION_ID, ACTOR_ID),
       (err: unknown) => {
         assert.ok(err instanceof RateQueryError);
         return true;
@@ -129,35 +112,34 @@ describe("getRateVersionById", () => {
 });
 
 describe("listPendingRateVersions", () => {
-  test("filters by tenant_id and approval_status=pending_approval", async () => {
+  test("calls list_pending_rate_versions with tenant_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [{ ...VALID_RATE_VERSION_ROW, approval_status: "pending_approval" }], error: null }, capture);
-    const versions = await listPendingRateVersions(client, TENANT_ID);
-    const eqCalls = capture.calls.eqCalls as { column: string; value: unknown }[];
-    assert.deepEqual(eqCalls, [
-      { column: "tenant_id", value: TENANT_ID },
-      { column: "approval_status", value: "pending_approval" },
-    ]);
+    const client = fakeRpcClient({ data: [{ ...VALID_RATE_VERSION_ROW, approval_status: "pending_approval" }], error: null }, capture);
+    const versions = await listPendingRateVersions(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_pending_rate_versions");
+    assert.deepEqual(capture.calls.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(versions[0]?.approvalStatus, "pending_approval");
   });
 });
 
 describe("listActiveVendorRates", () => {
-  test("queries app.v_active_vendor_rates, filtered by tenant_id", async () => {
+  test("calls list_active_vendor_rates with tenant_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_RATE_VERSION_ROW], error: null }, capture);
-    const versions = await listActiveVendorRates(client, TENANT_ID);
-    assert.equal(capture.calls.table, "v_active_vendor_rates");
+    const client = fakeRpcClient({ data: [VALID_RATE_VERSION_ROW], error: null }, capture);
+    const versions = await listActiveVendorRates(client, TENANT_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_active_vendor_rates");
+    assert.deepEqual(capture.calls.args, { p_tenant_id: TENANT_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(versions.length, 1);
   });
 });
 
 describe("listRateSelectionsForRequest", () => {
-  test("queries the field-masked rate_selections_directory view", async () => {
+  test("calls list_rate_selections_for_request with costing_request_id/actor", async () => {
     const capture = { calls: {} as Record<string, unknown> };
-    const client = fakeTableClient({ data: [VALID_SELECTION_ROW], error: null }, capture);
-    const selections = await listRateSelectionsForRequest(client, REQUEST_ID);
-    assert.equal(capture.calls.table, "rate_selections_directory");
+    const client = fakeRpcClient({ data: [VALID_SELECTION_ROW], error: null }, capture);
+    const selections = await listRateSelectionsForRequest(client, REQUEST_ID, ACTOR_ID);
+    assert.equal(capture.calls.fn, "list_rate_selections_for_request");
+    assert.deepEqual(capture.calls.args, { p_costing_request_id: REQUEST_ID, p_actor_auth_user_id: ACTOR_ID });
     assert.equal(selections[0]?.amount, 15000000);
   });
 });

@@ -65,7 +65,7 @@ export default async function DispatchBoardPage({
   let result: ListDispatchBoardResult | null = null;
   let loadFailed = false;
   try {
-    result = await listDispatchBoard(supabase, { tenantId: access.tenant.id, page });
+    result = await listDispatchBoard(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page });
   } catch (error) {
     if (!(error instanceof DispatchBoardQueryError)) {
       throw error;

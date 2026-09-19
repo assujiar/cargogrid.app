@@ -7,6 +7,7 @@ import {
   exportPositions,
   previewEmployeePositionAssignmentImpact,
   getEmployeePositionAssignmentHistory,
+  listPositionIncumbents,
   getMyEmployeePositionAssignmentHistory,
   getEmployeeCurrentAssignment,
   getEmployeeManagerChain,
@@ -131,5 +132,29 @@ describe("history/current-assignment/hierarchy reads", () => {
     const { client, calls } = fakeClient({ data: [], error: null });
     await getOrgPositionTree(client, TENANT_ID, ACTOR_ID, ID_1);
     assert.equal(calls[0]?.args.p_root_org_unit_id, ID_1);
+  });
+
+  test("listPositionIncumbents calls list_position_incumbents with the exact snake_case params", async () => {
+    const { client, calls } = fakeClient({ data: [], error: null });
+    await listPositionIncumbents(client, ID_1, ACTOR_ID);
+    assert.equal(calls[0]?.fn, "list_position_incumbents");
+    assert.deepEqual(calls[0]?.args, { p_position_id: ID_1, p_actor_auth_user_id: ACTOR_ID });
+  });
+
+  test("listPositionIncumbents maps rows", async () => {
+    const { client } = fakeClient({
+      data: [
+        {
+          id: ID_1, tenant_id: TENANT_ID, master_record_id: ID_1, position_id: ID_1, grade_id: null, manager_employee_id: null,
+          assignment_type: "primary", allocation_pct: 100, effective_start_date: "2026-08-01", effective_end_date: null,
+          status: "active", change_reason: "hire", previous_assignment_id: null, decided_by: null, decided_at: null,
+          record_version: 1, created_by: "tester", created_at: "2026-08-01T00:00:00.000Z", updated_at: "2026-08-01T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    const result = await listPositionIncumbents(client, ID_1, ACTOR_ID);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.status, "active");
   });
 });

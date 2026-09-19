@@ -5,7 +5,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { parseFinanceInvoice, parseFinanceInvoiceLine, type FinanceInvoice, type FinanceInvoiceLine } from "../contracts/invoice/invoice.ts";
+import { parseFinanceInvoice, parseFinanceInvoiceLine, parseBillableReadinessHandoff, type FinanceInvoice, type FinanceInvoiceLine, type BillableReadinessHandoff } from "../contracts/invoice/invoice.ts";
+import { BOUNDED_LIST_LIMIT } from "./bounded-list.ts";
 
 export type InvoiceQueryRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -17,22 +18,68 @@ export class InvoiceQueryError extends Error {
 }
 
 /** FIN:View-gated. Bounded (200-row), server-filtered list, most-recent first. */
+/** CG-AUDIT-2026-09-02 F3: `afterId`/`limit` optional and additive -- see server/queries/accounts-receivable.ts#listFinanceArOpenItems's own header comment for the full rationale. */
 export async function listFinanceInvoices(
   client: InvoiceQueryRpcClient,
-  input: { tenantId: string; companyId: string | null; customerAccountId: string | null; status: string | null; actorAuthUserId: string },
+  input: { tenantId: string; companyId: string | null; customerAccountId: string | null; status: string | null; actorAuthUserId: string; limit?: number; afterId?: string | null },
 ): Promise<FinanceInvoice[]> {
+  const limit = input.limit ?? BOUNDED_LIST_LIMIT;
   const { data, error } = await client.rpc("list_finance_invoices", {
     p_tenant_id: input.tenantId,
     p_company_id: input.companyId,
     p_customer_account_id: input.customerAccountId,
     p_status: input.status,
     p_actor_auth_user_id: input.actorAuthUserId,
+    p_limit: limit,
+    p_after_id: input.afterId ?? null,
   });
   if (error) {
     throw new InvoiceQueryError(error.message);
   }
   const rows = Array.isArray(data) ? data : [];
-  return rows.map((row) => parseFinanceInvoice(row as Record<string, unknown>));
+  return rows.slice(0, limit).map((row) => parseFinanceInvoice(row as Record<string, unknown>));
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A7: single-invoice-by-id read (app.get_finance_invoice),
+ * the piece needed to build a printable invoice document -- only list reads
+ * existed before. FIN:View-gated; raises finance_invoice_not_found (folded
+ * with the tenant-membership check, ISS-2026-146-style) rather than
+ * returning null, matching getPurchaseOrder's own throw-never-null contract.
+ */
+export async function getFinanceInvoice(client: InvoiceQueryRpcClient, input: { invoiceId: string; actorAuthUserId: string }): Promise<FinanceInvoice> {
+  const { data, error } = await client.rpc("get_finance_invoice", {
+    p_invoice_id: input.invoiceId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+  });
+  if (error) {
+    throw new InvoiceQueryError(error.message);
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new InvoiceQueryError(`finance_invoice_not_found: ${input.invoiceId}`);
+  }
+  return parseFinanceInvoice(row as Record<string, unknown>);
+}
+
+/**
+ * CG-AUDIT-2026-09-02 B7 (worklist half): every BillingReadinessHandoff not
+ * yet consumed by a live invoice (app.list_billable_readiness_handoffs) --
+ * lets Finance pick one from a list instead of typing its UUID by hand
+ * (`finance/invoices/invoice-forms.tsx`'s own free-text field this closes).
+ * FIN:View-gated; amount/currency come back null with amountMasked=true for
+ * a viewer without COM's "View selling price".
+ */
+export async function listBillableReadinessHandoffs(client: InvoiceQueryRpcClient, input: { tenantId: string; actorAuthUserId: string }): Promise<BillableReadinessHandoff[]> {
+  const { data, error } = await client.rpc("list_billable_readiness_handoffs", {
+    p_tenant_id: input.tenantId,
+    p_actor_auth_user_id: input.actorAuthUserId,
+  });
+  if (error) {
+    throw new InvoiceQueryError(error.message);
+  }
+  const rows = Array.isArray(data) ? data : [];
+  return rows.map((row) => parseBillableReadinessHandoff(row as Record<string, unknown>));
 }
 
 /** FIN:View-gated. Every charge/tax line for one invoice, ordered by line_number. */

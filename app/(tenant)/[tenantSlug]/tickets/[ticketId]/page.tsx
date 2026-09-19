@@ -28,6 +28,7 @@ import { TicketDetailPanel } from "./ticket-detail-panel.tsx";
 import {
   replyToTicketAction,
   redactTicketMessageAction,
+  downloadTicketAttachmentAction,
   addTicketWatcherAction,
   removeTicketWatcherAction,
   assignTicketAction,
@@ -196,6 +197,7 @@ export default async function TicketDetailPage({ params }: { params: Promise<{ t
       suppressions={suppressions}
       replyAction={replyToTicketAction.bind(null, tenantSlug, ticketId)}
       redactAction={(messageId: string, expectedVersion: number) => redactTicketMessageAction.bind(null, tenantSlug, ticketId, messageId, expectedVersion)}
+      downloadAttachmentAction={(fileId: string) => downloadTicketAttachmentAction.bind(null, tenantSlug, fileId)}
       addWatcherAction={addTicketWatcherAction.bind(null, tenantSlug, ticketId)}
       removeWatcherAction={(watcherId: string, expectedVersion: number) => removeTicketWatcherAction.bind(null, tenantSlug, ticketId, watcherId, expectedVersion)}
       assignAction={assignTicketAction.bind(null, tenantSlug, ticketId, recordVersion)}

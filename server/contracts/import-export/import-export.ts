@@ -58,6 +58,8 @@ export const IMPORT_EXPORT_JOB_TYPES = [
   "loyalty_earning_evaluation_sweep", "loyalty_tier_recalculation_sweep", "loyalty_points_posting_sweep",
   // ISS-2026-129 item 2:
   "loyalty_benefit_issuance_sweep",
+  // CG-AUDIT-2026-09-02 A6:
+  "malware_scan",
 ] as const;
 export const ImportExportJobTypeSchema = z.enum(IMPORT_EXPORT_JOB_TYPES);
 export type ImportExportJobType = z.infer<typeof ImportExportJobTypeSchema>;
@@ -218,6 +220,106 @@ export const CommitImportJobInputSchema = z.object({
   actorLabel: z.string().min(1),
 });
 export type CommitImportJobInput = z.input<typeof CommitImportJobInputSchema>;
+
+/** app.commit_finance_opening_balance_import_job's own input shape (CG-AUDIT-2026-09-02 A4) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not. */
+export const CommitFinanceOpeningBalanceImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitFinanceOpeningBalanceImportJobInput = z.input<typeof CommitFinanceOpeningBalanceImportJobInputSchema>;
+
+/** app.commit_vendor_import_job's own input shape (CG-AUDIT-2026-09-02 A4, third import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not. */
+export const CommitVendorImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitVendorImportJobInput = z.input<typeof CommitVendorImportJobInputSchema>;
+
+/** app.commit_customer_import_job's own input shape (CG-AUDIT-2026-09-02 A4, fifth import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not. */
+export const CommitCustomerImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitCustomerImportJobInput = z.input<typeof CommitCustomerImportJobInputSchema>;
+
+/** app.commit_item_import_job's own input shape (CG-AUDIT-2026-09-02 A4, sixth import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not. */
+export const CommitItemImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitItemImportJobInput = z.input<typeof CommitItemImportJobInputSchema>;
+
+/** app.commit_attendance_device_import_job's own input shape (CG-AUDIT-2026-09-02 A4, seventh import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not. */
+export const CommitAttendanceDeviceImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitAttendanceDeviceImportJobInput = z.input<typeof CommitAttendanceDeviceImportJobInputSchema>;
+
+/** app.commit_timesheet_import_job's own input shape (CG-AUDIT-2026-09-02 A4, eighth import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_attendance_device_import_job's own identical gate structure. */
+export const CommitTimesheetImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitTimesheetImportJobInput = z.input<typeof CommitTimesheetImportJobInputSchema>;
+
+/** app.commit_leave_opening_balance_import_job's own input shape (CG-AUDIT-2026-09-02 A4, tenth import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_attendance_device_import_job's/commit_timesheet_import_job's own identical gate structure. */
+export const CommitLeaveOpeningBalanceImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitLeaveOpeningBalanceImportJobInput = z.input<typeof CommitLeaveOpeningBalanceImportJobInputSchema>;
+
+/** app.commit_payroll_loan_cutover_import_job's own input shape (CG-AUDIT-2026-09-02 A4, eleventh import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_leave_opening_balance_import_job's own identical gate structure. */
+export const CommitPayrollLoanCutoverImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitPayrollLoanCutoverImportJobInput = z.input<typeof CommitPayrollLoanCutoverImportJobInputSchema>;
+
+/** app.commit_position_crosswalk_import_job's own input shape (CG-AUDIT-2026-09-02 A4, twelfth and final import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_payroll_loan_cutover_import_job's own identical gate structure. */
+export const CommitPositionCrosswalkImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitPositionCrosswalkImportJobInput = z.input<typeof CommitPositionCrosswalkImportJobInputSchema>;
+
+/** app.commit_inventory_opening_balance_import_job's own input shape (CG-AUDIT-2026-09-02 A4, twelfth and final import schema) -- CommitImportJobInputSchema plus clientIp, since that domain adapter additionally composes the IP-allowlist step-up gate (app.assert_ip_allowed) the generic app.commit_import_job does not, mirroring commit_payroll_loan_cutover_import_job's own identical gate structure. */
+export const CommitInventoryOpeningBalanceImportJobInputSchema = z.object({
+  jobId: z.string().uuid(),
+  allowPartial: z.boolean().default(false),
+  actorAuthUserId: z.string().uuid(),
+  actorLabel: z.string().min(1),
+  clientIp: z.string().nullable().default(null),
+});
+export type CommitInventoryOpeningBalanceImportJobInput = z.input<typeof CommitInventoryOpeningBalanceImportJobInputSchema>;
 
 export const CancelImportExportJobInputSchema = z.object({
   jobId: z.string().uuid(),

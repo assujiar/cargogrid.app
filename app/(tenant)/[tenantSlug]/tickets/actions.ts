@@ -16,6 +16,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
+import { createSupabaseServiceRoleClient } from "../../../../lib/supabase/service-role.ts";
 import { resolveTicketAccessForRequest } from "../../../../lib/portal/resolve-ticket-access.server.ts";
 import {
   createTicketQueue,
@@ -25,6 +26,9 @@ import {
   createTicket,
   replyToTicket,
   initiateTicketAttachmentUpload,
+  getTicketAttachmentStoragePath,
+  getTicketAttachmentSignedDownloadUrl,
+  type TicketAttachmentEvidenceDownloadClient,
   redactTicketMessage,
   addTicketWatcher,
   removeTicketWatcher,
@@ -66,6 +70,9 @@ import {
   recordTicketLinkSummaryAccess,
   TicketMutationError,
 } from "../../../../server/mutations/ticketing.ts";
+import type { DocumentMutationRpcClient } from "../../../../server/mutations/document.ts";
+import type { BackgroundJobMutationRpcClient } from "../../../../server/mutations/background-job.ts";
+import { storeFileBytesAndEnqueueScan, type StorageUploadClient } from "../../../../lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts";
 import { previewTicketRouting, previewTicketEscalation, searchTicketLinkCandidates, TicketQueryError } from "../../../../server/queries/ticketing.ts";
 import { TICKET_LINK_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS } from "../../../../server/contracts/ticketing/ticketing.ts";
 import type { TicketRoutingPreviewRow, TicketEscalationPreviewRow, TicketLinkCandidateRow } from "../../../../server/contracts/ticketing/ticketing.ts";
@@ -80,6 +87,7 @@ import type {
   TicketEscalationTargetType,
   TicketLinkEntityType,
   TicketLinkRelationship,
+  TicketAttachmentSignedDownload,
 } from "../../../../server/contracts/ticketing/ticketing.ts";
 
 export interface TicketActionState {
@@ -103,9 +111,70 @@ function detailPath(tenantSlug: string, ticketId: string): string {
   return `/${tenantSlug}/tickets/${ticketId}`;
 }
 
+/**
+ * CG-AUDIT-2026-09-02 A6: adapter-cast reasoning identical to
+ * procurement/compliance/vendors/actions.ts's own toDocumentClient --
+ * app.get_ticket_attachment_storage_path (like app.initiate_file_upload/
+ * app.authorize_file_access) is granted to service_role only.
+ */
+function toTicketAttachmentStoreClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): DocumentMutationRpcClient & StorageUploadClient {
+  return client as unknown as DocumentMutationRpcClient & StorageUploadClient;
+}
+
+function toTicketAttachmentBackgroundJobClient(client: Awaited<ReturnType<typeof createSupabaseServerClient>>): BackgroundJobMutationRpcClient {
+  return client as unknown as BackgroundJobMutationRpcClient;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: app.access_ticket_attachment_evidence_for_download
+ * is service_role only (like app.get_ticket_attachment_storage_path above) --
+ * same adapter-cast reasoning. The real service-role client's own `.storage`
+ * member already satisfies TicketAttachmentEvidenceDownloadClient's shape
+ * structurally; this cast exists only to widen the `.rpc` return type the
+ * same way toTicketAttachmentStoreClient does.
+ */
+function toTicketAttachmentDownloadClient(client: ReturnType<typeof createSupabaseServiceRoleClient>): TicketAttachmentEvidenceDownloadClient {
+  return client as unknown as TicketAttachmentEvidenceDownloadClient;
+}
+
 function errorMessage(prefix: string, error: unknown): TicketActionState {
   if (error instanceof TicketMutationError) return { error: `${prefix}: ${error.message}` };
   throw error;
+}
+
+export interface TicketAttachmentDownloadState {
+  readonly error: string | null;
+  readonly download: TicketAttachmentSignedDownload | null;
+}
+
+const INITIAL_DOWNLOAD_STATE: TicketAttachmentDownloadState = { error: null, download: null };
+
+/**
+ * CG-AUDIT-2026-09-02 A6: mints a short-lived signed URL for one ticket
+ * attachment. access.status === "allowed" only proves tenant-level portal
+ * entry (same caveat replyToTicketAction's own header already documents) --
+ * the real per-file authority (app.can_access_ticket, message visibility,
+ * malware-scan status) is re-checked fresh inside
+ * app.access_ticket_attachment_evidence_for_download itself, never assumed
+ * here.
+ */
+export async function downloadTicketAttachmentAction(
+  tenantSlug: string,
+  fileId: string,
+  _prevState: TicketAttachmentDownloadState,
+  _formData: FormData,
+): Promise<TicketAttachmentDownloadState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return { error: NO_ACCESS.error, download: null };
+
+  const serviceRole = createSupabaseServiceRoleClient();
+  try {
+    const download = await getTicketAttachmentSignedDownloadUrl(toTicketAttachmentDownloadClient(serviceRole), fileId, access.authUserId, access.authUserId);
+    return { error: null, download };
+  } catch (error) {
+    if (error instanceof TicketMutationError) return { error: `Could not create a download link: ${error.message}`, download: null };
+    throw error;
+  }
 }
 
 // --- Queue/category catalog (TKT:Edit) ---
@@ -260,16 +329,25 @@ export async function replyToTicketAction(tenantSlug: string, ticketId: string, 
   // app.initiate_ticket_attachment_upload call FIRST -- that RPC re-checks
   // real requester-or-staff ticket authority itself (never trusted from
   // access.status === "allowed" alone, which only proves tenant-level portal
-  // entry) -- and only once every file has a clean, scoped app.files row does
-  // this action attempt the reply itself. A failed upload aborts before
-  // reply_to_ticket is ever called, so a reply is never posted with only
-  // SOME of its intended attachments.
+  // entry). CG-AUDIT-2026-09-02 A6: staging the metadata row is not enough on
+  // its own -- app.reply_to_ticket raises evidence_file_not_scanned for any
+  // attachment whose malware_scan_status isn't 'clean', and nothing ever
+  // reached 'clean' before this fix (no bytes were ever stored, no scan was
+  // ever queued), so every real reply with an attachment hard-failed. Each
+  // staged file's real bytes are now stored and a malware_scan job enqueued
+  // (lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts, the same
+  // sequence vendor compliance/shipment-checklist evidence already use) before
+  // moving to the next file -- a failed upload OR a failed store aborts before
+  // reply_to_ticket is ever called, so a reply is never posted with only SOME
+  // of its intended attachments, and never with a file that was never really
+  // stored.
   const files = formData
     .getAll("attachments")
     .filter((entry): entry is File => entry instanceof File && entry.size > 0 && entry.name.length > 0);
 
   const attachmentFileIds: string[] = [];
   try {
+    const serviceRole = createSupabaseServiceRoleClient();
     for (const [index, file] of files.entries()) {
       const uploaded = await initiateTicketAttachmentUpload(supabase, {
         ticketId,
@@ -281,6 +359,21 @@ export async function replyToTicketAction(tenantSlug: string, ticketId: string, 
         actorAuthUserId: access.authUserId,
         actorLabel: access.authUserId,
       });
+
+      const storagePath = await getTicketAttachmentStoragePath(serviceRole, uploaded.id, access.authUserId);
+      const storeError = await storeFileBytesAndEnqueueScan(
+        toTicketAttachmentStoreClient(serviceRole),
+        toTicketAttachmentBackgroundJobClient(supabase),
+        { id: uploaded.id, storagePath, mimeType: uploaded.mimeType, originalFilename: uploaded.originalFilename },
+        file,
+        access.tenant.id,
+        access.authUserId,
+        "attachment",
+      );
+      if (storeError) {
+        throw new TicketMutationError("mutation_failed", storeError.error);
+      }
+
       attachmentFileIds.push(uploaded.id);
     }
   } catch (error) {

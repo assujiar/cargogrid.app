@@ -22,7 +22,7 @@ export default async function RateVersionDetailPage({ params }: { params: Promis
 
   let rate;
   try {
-    rate = await getRateVersionById(supabase, rateVersionId);
+    rate = await getRateVersionById(supabase, rateVersionId, access.authUserId);
   } catch (error) {
     if (!(error instanceof RateQueryError)) {
       throw error;

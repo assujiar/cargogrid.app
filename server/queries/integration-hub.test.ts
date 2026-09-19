@@ -51,33 +51,31 @@ const VALID_HEALTH_CHECK_ROW = {
   checked_at: "2026-08-21T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): IntegrationHubQueryClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      limit: () => chainNode(),
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
-  return { from: () => chainNode() } as unknown as IntegrationHubQueryClient;
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
+  client: IntegrationHubQueryClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
+      calls.push({ fn, args });
+      return response;
+    },
+  } as unknown as IntegrationHubQueryClient;
+  return { client, calls };
 }
 
 describe("listIntegrationAdapters", () => {
-  test("maps adapter rows", async () => {
-    const client = fakeTableClient({ data: [VALID_ADAPTER_ROW], error: null });
+  test("calls list_integration_adapters and maps adapter rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_ADAPTER_ROW], error: null });
     const adapters = await listIntegrationAdapters(client);
+    assert.equal(calls[0]?.fn, "list_integration_adapters");
     assert.equal(adapters.length, 1);
     assert.equal(adapters[0]?.code, "iae_hub_test_adapter");
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const { client } = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => listIntegrationAdapters(client),
       (err: unknown) => err instanceof IntegrationHubQueryError,
@@ -86,9 +84,10 @@ describe("listIntegrationAdapters", () => {
 });
 
 describe("listIntegrationConnections", () => {
-  test("maps connection rows", async () => {
-    const client = fakeTableClient({ data: [VALID_CONNECTION_ROW], error: null });
+  test("calls list_integration_connections and maps connection rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_CONNECTION_ROW], error: null });
     const connections = await listIntegrationConnections(client, TENANT_ID);
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID });
     assert.equal(connections.length, 1);
     assert.equal(connections[0]?.name, "Primary Comms Adapter");
   });
@@ -96,22 +95,24 @@ describe("listIntegrationConnections", () => {
 
 describe("getIntegrationConnectionById", () => {
   test("returns null (never an error) when not found", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const connection = await getIntegrationConnectionById(client, CONNECTION_ID);
     assert.equal(connection, null);
   });
 
   test("parses a matched row", async () => {
-    const client = fakeTableClient({ data: VALID_CONNECTION_ROW, error: null });
+    const { client, calls } = fakeRpcClient({ data: [VALID_CONNECTION_ROW], error: null });
     const connection = await getIntegrationConnectionById(client, CONNECTION_ID);
+    assert.deepEqual(calls[0]?.args, { p_connection_id: CONNECTION_ID });
     assert.equal(connection?.id, CONNECTION_ID);
   });
 });
 
 describe("listIntegrationHealthChecks", () => {
-  test("maps health-check rows, newest first", async () => {
-    const client = fakeTableClient({ data: [VALID_HEALTH_CHECK_ROW], error: null });
+  test("calls list_integration_health_checks and maps health-check rows, newest first", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_HEALTH_CHECK_ROW], error: null });
     const checks = await listIntegrationHealthChecks(client, CONNECTION_ID);
+    assert.deepEqual(calls[0]?.args, { p_connection_id: CONNECTION_ID, p_limit: 25 });
     assert.equal(checks.length, 1);
     assert.equal(checks[0]?.status, "healthy");
   });

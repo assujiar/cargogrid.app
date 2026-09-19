@@ -26,7 +26,8 @@ export interface ResolvedAccessContextResult {
 
 export interface CommercialGuardDeps {
   getCurrentUserId(): Promise<string | null>;
-  findTenantBySlug(slug: string): Promise<TenantLookupResult | null>;
+  /** See `lib/portal/tenant-admin-guard.ts`'s own `findTenantBySlug` doc (CG-AUDIT-2026-09-02 Ø1) -- `authUserId` is asserted server-side against the real session identity. */
+  findTenantBySlug(slug: string, authUserId: string): Promise<TenantLookupResult | null>;
   resolveAccessContext(authUserId: string, tenantId: string): Promise<ResolvedAccessContextResult | null>;
 }
 
@@ -45,7 +46,7 @@ export async function resolveCommercialAccess(deps: CommercialGuardDeps, tenantS
     return { status: "unauthenticated" };
   }
 
-  const tenant = await deps.findTenantBySlug(tenantSlug);
+  const tenant = await deps.findTenantBySlug(tenantSlug, authUserId);
   if (!tenant) {
     return { status: "tenant_not_found_or_not_member" };
   }

@@ -16,9 +16,22 @@
  *     holder (the hidden inputs are), so a native `required` there would fire on typed
  *     text rather than on a chosen value.
  *   - `min-h-11`, HDN-381's 44px touch-target floor, which `Input` already carries.
+ *
+ * CG-AUDIT-2026-09-02 F2: each `<li role="option">` used to have `onMouseDown` as its
+ * only handler -- no key handler, no way to reach an option at all from the keyboard
+ * (WCAG 2.1.1 Level A). Fixed by adopting `Combobox`'s own already-correct WAI-ARIA
+ * combobox pattern verbatim rather than inventing a second one: real keyboard focus
+ * stays on the text input the whole time; `role="combobox"`/`aria-expanded`/
+ * `aria-controls`/`aria-activedescendant` on the input plus Up/Down/Enter/Escape tell an
+ * assistive-technology user which option is virtually focused and let them act on it
+ * without ever moving focus onto an `<li>` (the reason neither this fix nor `Combobox`
+ * puts `tabIndex` on the options themselves -- that would be a second, competing
+ * keyboard model, not a stricter one). Enter here adds the active option and clears the
+ * query rather than committing-and-closing, mirroring this component's own multi-value
+ * `add()` precisely as `onMouseDown` already did.
  */
 
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type KeyboardEvent } from "react";
 import { Badge } from "../ui/badge.tsx";
 
 export interface MultiSelectOption {
@@ -42,8 +55,10 @@ export interface MultiSelectProps {
 export function MultiSelect({ id, name, label, options, values, onChange, disabled, invalid, required, ...rest }: MultiSelectProps) {
   const generatedId = useId();
   const baseId = id ?? generatedId;
+  const listboxId = `${baseId}-listbox`;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   const selectedOptions = options.filter((option) => values.includes(option.value));
   const available = useMemo(
@@ -54,10 +69,30 @@ export function MultiSelect({ id, name, label, options, values, onChange, disabl
   function add(value: string) {
     onChange([...values, value]);
     setQuery("");
+    setActiveIndex(0);
   }
 
   function remove(value: string) {
     onChange(values.filter((v) => v !== value));
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((index) => Math.min(index + 1, available.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => Math.max(index - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const option = available[activeIndex];
+      if (option) {
+        add(option.value);
+      }
+    } else if (event.key === "Escape") {
+      setOpen(false);
+    }
   }
 
   return (
@@ -82,7 +117,12 @@ export function MultiSelect({ id, name, label, options, values, onChange, disabl
       ) : null}
       <input
         id={baseId}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        aria-activedescendant={open && available[activeIndex] ? `${listboxId}-${available[activeIndex].value}` : undefined}
         aria-label={label}
+        autoComplete="off"
         disabled={disabled}
         value={query}
         placeholder="Search…"
@@ -90,7 +130,9 @@ export function MultiSelect({ id, name, label, options, values, onChange, disabl
         onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
+          setActiveIndex(0);
         }}
+        onKeyDown={handleKeyDown}
         onBlur={() => setOpen(false)}
         aria-invalid={invalid || undefined}
         aria-required={required || undefined}
@@ -99,17 +141,19 @@ export function MultiSelect({ id, name, label, options, values, onChange, disabl
       />
       {name ? values.map((value) => <input key={value} type="hidden" name={name} value={value} />) : null}
       {open && available.length > 0 ? (
-        <ul role="listbox" aria-label={label} className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-neutral-200 bg-surface py-1 shadow-md">
-          {available.map((option) => (
+        <ul id={listboxId} role="listbox" aria-label={label} className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-neutral-200 bg-surface py-1 shadow-md">
+          {available.map((option, index) => (
             <li
               key={option.value}
+              id={`${listboxId}-${option.value}`}
               role="option"
               aria-selected={false}
+              // onMouseDown (not onClick) fires before the input's onBlur closes the list -- matching Combobox's own established reason for this exact choice.
               onMouseDown={(event) => {
                 event.preventDefault();
                 add(option.value);
               }}
-              className="cursor-pointer px-3 py-1.5 text-sm text-text-primary hover:bg-neutral-100"
+              className={`cursor-pointer px-3 py-1.5 text-sm ${index === activeIndex ? "bg-primary/10 text-primary" : "text-text-primary hover:bg-neutral-100"}`}
             >
               {option.label}
             </li>

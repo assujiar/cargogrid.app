@@ -322,4 +322,40 @@ begin
   raise notice 'ATW-031 evidence-gate proof: the client-reachable entry point refuses installed and leaves the device untouched, every other transition still works, and the internal core carries zero client grant -- app.record_gps_device_installation is the only route to installed';
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 E5 regression: supabase/migrations/20260914060000_register_gps_device_installation_document_type.sql''s own idempotent insert does not disturb this fixture''s own app.register_document_type(''gps_device_installation'', ...) call above -- both writers agree, whichever ran first is authoritative'
+do $$
+begin
+  -- (a) migration idempotency: this fixture's own setup block above already
+  -- registered 'gps_device_installation'/'document:gps_device_installation'
+  -- -- exactly one row of each must exist, whether the fixture's own call or
+  -- the migration's own insert (which runs first against a real database,
+  -- since migrations always apply before any db-test fixture) created it.
+  if (select count(*) from app.document_types where code = 'gps_device_installation') <> 1
+     or (select count(*) from app.config_types where code = 'document:gps_device_installation') <> 1 then
+    raise exception 'assertion failed: expected exactly one gps_device_installation document_type row and one document:gps_device_installation config_type row';
+  end if;
+
+  -- Re-runs the migration's own two statements verbatim (supabase/
+  -- migrations/20260914060000_register_gps_device_installation_document_
+  -- type.sql) -- must be a genuine no-op against a row this fixture's own
+  -- app.register_document_type call already created, never a duplicate row
+  -- or an error.
+  insert into app.document_types (code, name, owner_primitive_code, registered_by)
+  values ('gps_device_installation', 'GPS Device Installation Evidence', 'DOC', 'system')
+  on conflict (code) do nothing;
+  insert into app.config_types (code, name, owner_primitive_code, registered_by)
+  values ('document:gps_device_installation', 'GPS Device Installation Evidence', 'DOC', 'system')
+  on conflict (code) do nothing;
+
+  if (select count(*) from app.document_types where code = 'gps_device_installation') <> 1
+     or (select count(*) from app.config_types where code = 'document:gps_device_installation') <> 1
+     or (select name from app.document_types where code = 'gps_device_installation') <> 'GPS Device Installation Evidence'
+     or (select owner_primitive_code from app.document_types where code = 'gps_device_installation') <> 'DOC'
+  then
+    raise exception 'assertion failed: expected the migration''s own idempotent insert to be a genuine no-op against this fixture''s already-registered gps_device_installation row';
+  end if;
+
+  raise notice 'PASS: the migration''s own gps_device_installation/document:gps_device_installation catalogue insert agrees byte-for-byte with this fixture''s (and five other db-test fixtures'') own independent app.register_document_type call -- idempotent, no divergence';
+end $$;
+
 \echo 'advanced-tms-device-installation-evidence.sql: ALL PASSED'

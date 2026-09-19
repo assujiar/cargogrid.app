@@ -1592,12 +1592,25 @@ begin
   if v_decision.allowed then
     raise exception 'assertion failed: expected HRS:View denied for a suspended employee once role_assignments are revoked, got allowed=true';
   end if;
-  if not app.has_active_tenant_membership(v_tenant1, v_worker_auth) then
-    raise exception 'assertion failed: suspend deliberately does not revoke tenant_user_identities (unlike terminate) -- expected has_active_tenant_membership to remain true';
+  -- CG-AUDIT-2026-09-02 D3b: has_active_tenant_membership is the broad, RLS-policy-facing
+  -- gate (450+ policies across the whole schema) and now correctly excludes a suspended
+  -- app.users row -- the audit reproduced live that a suspended user's session could still
+  -- read arbitrary RLS-gated tenant data (e.g. app.tenants), not merely their own employee
+  -- profile. This is the narrow-but-real regression that the ORIGINAL, weaker assertion here
+  -- (deliberately expecting `true`) never caught: it verified suspend didn't lock the person
+  -- out of app.get_my_employee_profile, without also proving it didn't leave every OTHER
+  -- RLS-gated table open. The self-service HRT-295 was actually built for is preserved below
+  -- via app.has_active_identity_link, a narrower, purpose-built check the five self-service
+  -- RPCs (app.get_my_employee_profile and siblings) now use instead of the broad gate.
+  if app.has_active_tenant_membership(v_tenant1, v_worker_auth) then
+    raise exception 'assertion failed: CG-AUDIT-2026-09-02 D3b regression -- expected has_active_tenant_membership false for a suspended employee (the broad RLS gate must close, not merely permission-gated authority)';
+  end if;
+  if not app.has_active_identity_link(v_tenant1, v_worker_auth) then
+    raise exception 'assertion failed: expected has_active_identity_link (the narrow self-service check) to remain true for a suspended employee';
   end if;
   select count(*) into v_profile_count from app.get_my_employee_profile(v_tenant1, v_worker_auth);
   if v_profile_count <> 1 then
-    raise exception 'assertion failed: suspend deliberately preserves self-service reads (a suspended employee can still see their own profile / open a ticket about the suspension) -- expected 1 row, got %', v_profile_count;
+    raise exception 'assertion failed: suspend deliberately preserves self-service reads (a suspended employee can still see their own profile / open a ticket about the suspension) via app.has_active_identity_link -- expected 1 row, got %', v_profile_count;
   end if;
 
   -- --- reactivate (this capability's own existing un-suspend path, checked per

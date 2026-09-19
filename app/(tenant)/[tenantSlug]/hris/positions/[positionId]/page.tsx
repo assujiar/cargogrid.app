@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { resolveHrisAccessForRequest } from "../../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
-import { getPosition, listPositionGrades, PositionQueryError } from "../../../../../../server/queries/position.ts";
-import { parseEmployeePositionAssignment } from "../../../../../../server/contracts/position/position.ts";
+import { getPosition, listPositionGrades, listPositionIncumbents, PositionQueryError } from "../../../../../../server/queries/position.ts";
+import { listOrgUnits, toOrgHierarchyRpcClient, OrgHierarchyQueryError } from "../../../../../../server/queries/org-hierarchy.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../../components/ui/permission-state.tsx";
 import { PositionDetailPanel } from "./position-detail-panel.tsx";
@@ -43,30 +43,25 @@ export default async function PositionDetailPage({ params }: { params: Promise<{
   let position: Awaited<ReturnType<typeof getPosition>> | null = null;
   let grades: Awaited<ReturnType<typeof listPositionGrades>> = [];
   let orgUnits: { id: string; name: string; unitType: string }[] = [];
-  let incumbents: ReturnType<typeof parseEmployeePositionAssignment>[] = [];
+  let incumbents: Awaited<ReturnType<typeof listPositionIncumbents>> = [];
 
   try {
     position = await getPosition(supabase, positionId, access.authUserId);
     grades = await listPositionGrades(supabase, access.tenant.id, access.authUserId);
-    const { data: orgUnitRows, error: orgUnitError } = await supabase.from("org_units").select("id, name, unit_type").eq("tenant_id", access.tenant.id).eq("status", "active");
-    if (orgUnitError) throw new PositionQueryError(orgUnitError.message);
-    orgUnits = (orgUnitRows ?? []).map((row) => ({ id: String(row.id), name: String(row.name), unitType: String(row.unit_type) }));
-
-    const { data: assignmentRows, error: assignmentError } = await supabase
-      .from("employee_position_assignments")
-      .select(
-        "id, tenant_id, master_record_id, position_id, grade_id, manager_employee_id, assignment_type, allocation_pct, effective_start_date, effective_end_date, status, change_reason, previous_assignment_id, decided_by, decided_at, record_version, created_at, updated_at",
-      )
-      .eq("position_id", positionId)
-      .eq("status", "active")
-      .order("effective_start_date", { ascending: false });
-    if (assignmentError) throw new PositionQueryError(assignmentError.message);
-    incumbents = (assignmentRows ?? []).map((row) => parseEmployeePositionAssignment(row as Record<string, unknown>));
+    orgUnits = await listOrgUnits(toOrgHierarchyRpcClient(supabase), access.tenant.id, { statusFilter: "active" });
+    incumbents = await listPositionIncumbents(supabase, positionId, access.authUserId);
   } catch (error) {
-    if (!(error instanceof PositionQueryError)) throw error;
-    if (error.message.startsWith("insufficient_authority")) denied = true;
-    else if (error.message.startsWith("position_not_found")) notFoundError = true;
-    else loadFailed = true;
+    if (error instanceof OrgHierarchyQueryError) {
+      loadFailed = true;
+    } else if (!(error instanceof PositionQueryError)) {
+      throw error;
+    } else if (error.message.startsWith("insufficient_authority")) {
+      denied = true;
+    } else if (error.message.startsWith("position_not_found")) {
+      notFoundError = true;
+    } else {
+      loadFailed = true;
+    }
   }
 
   if (notFoundError) {

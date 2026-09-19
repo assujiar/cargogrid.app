@@ -3524,7 +3524,2478 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // ONLY the 9 job types with a real in-database executor; the other 24 are external handoffs and
   // stay pending rather than being claimed and dead-lettered -- a job marked completed whose work
   // never happened is strictly worse than one that never ran.
-  migrationSetSha256: "4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99",
+  // HUNDRED-AND-THIRD PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027 Part
+  // A -- see docs/build-log/remediation/CG-AUDIT-2026-09-02-REMEDIATION-BACKLOG.md): 500 files
+  // (+2). This is the independent launch-readiness audit's own remediation, not a Step 16/17
+  // release-lineage checkpoint -- recorded here because this file's own mechanism requires it,
+  // exactly as RGL-BLK-002-OPTION2-REMEDIATION.md's prior amendment above already did for an
+  // out-of-band fix of the same underlying defect class. Two new migrations: (1)
+  // 20260906090000, closing the audit's Ø1 finding for the tenant-admin-guard path --
+  // app.resolve_tenant_by_slug_for_actor plus its public.* Option-2 wrapper, replacing a
+  // supabase.from("tenants") call that targeted schema app (never exposed to PostgREST) with a
+  // real RPC path, mirroring app.tenants' own tenants_select_own_tenant RLS predicate exactly;
+  // (2) 20260907090000, closing the audit's B1 finding -- app.issue_finance_invoice and
+  // app.lock_finance_period (plus their existing public.* wrappers) converted from SECURITY
+  // INVOKER to SECURITY DEFINER with search_path now pinned, reproduced live before the fix
+  // ("permission denied for table finance_invoices" under the authenticated role) and verified
+  // fixed by the extended db-tests below.
+  // HUNDRED-AND-FOURTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 501 files (+1). One new migration, 20260907100000, closing the audit's D2
+  // finding -- app.run_next_route_planning_job's cross-tenant guard
+  // (assert_session_identity_in_tenant) sat INSIDE the function's own exception-swallowing
+  // block, so a cross-tenant claim was caught and recorded as a job failure instead of
+  // rolling back the job claim as the guard's own comment always said it did. The guard now
+  // sits outside that block; a separate, pre-existing, unrelated defect in
+  // app.claim_next_job's own audit-trail write (attributes the claim event to the job's
+  // ORIGINAL requester, not the calling worker) was discovered while verifying this fix and
+  // is tracked separately (NEW-1 in the remediation backlog), not fixed here.
+  // HUNDRED-AND-FIFTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 502 files (+1). One new migration, 20260907110000, closing the audit's D3b
+  // finding -- suspending a user through the governed RPC did not cut their RLS-gated
+  // access, because neither app.resolve_access_context nor app.has_active_tenant_membership
+  // (the RLS predicate underneath 450+ policies) read app.users.status at all, only
+  // app.tenant_user_identities.status (which suspend never touched, only revoke).
+  // Reproduced live per the audit before the fix. Both functions now additionally exclude a
+  // suspended/revoked app.users row via NOT EXISTS (an identity with no app.users row --
+  // e.g. a customer_user-layer portal principal -- is unaffected). A new app.
+  // has_active_identity_link (plus its public.* Option-2 wrapper) preserves the EXACT prior
+  // behavior for the narrow, already-reviewed set of self-service RPCs HRT-295 (ISS-2026-104)
+  // deliberately built to keep working through a temporary suspension -- app.
+  // get_my_employee_profile and 4 siblings, each reading only the caller's own row.
+  // HUNDRED-AND-SIXTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 503 files (+1). One new migration, 20260907120000, closing the audit's B8
+  // finding -- fifteen finance write RPCs (app.create_finance_journal_draft, app.
+  // lock_finance_period, app.create_and_post_finance_system_journal, app.
+  // create_finance_bank_account, app.execute_finance_reconciliation_run, app.
+  // generate_finance_fiscal_calendar, app.import_historical_finance_journal, app.
+  // post_finance_ap_open_item, app.post_finance_ar_open_item, app.
+  // post_finance_subledger_batch, app.prepare_finance_journal_adjustment, app.
+  // prepare_finance_journal_reversal, app.prepare_finance_settlement, app.
+  // capture_finance_receipt, app.create_finance_account_draft) accepted a caller-supplied
+  // p_company_id with no check that it was even a real org_units row for the caller's own
+  // tenant, let alone company-typed -- an authorized caller could tag finance data with
+  // another tenant's company_id, or a non-company org unit. A new shared precondition, app.
+  // assert_finance_company_org_unit(p_tenant_id, p_company_id), is now called immediately
+  // after each function's own authority (and, where present, IP-allowlist) checks: a no-op
+  // on a null company_id (company scoping stays optional), otherwise raises unless the id
+  // resolves to a same-tenant, unit_type='company' org_units row. Mirrors app.
+  // enforce_employee_org_unit_shape's own established tenant-scope + unit_type check;
+  // deliberately does not also require status='active', since several callers post
+  // historical finance data against a company that may since have been deactivated. The
+  // helper itself is SECURITY INVOKER with no explicit grant (mirroring app.
+  // assert_vendor_profile_editable's identical shape for an internal-only precondition
+  // never referenced from an RLS policy or called directly), so it needs no public.*
+  // wrapper.
+  // HUNDRED-AND-SEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 504 files (+1). One new migration, 20260907130000, closing the audit's B5
+  // finding -- PPH21/PPH23/PPH4_2 are seeded with finance_tax_codes.tax_type =
+  // 'withholding', but app.calculate_finance_tax returned base*rate with no branch on
+  // tax_type at all, and app.prepare_finance_invoice_from_readiness wrote that amount
+  // straight into tax_amount (ADDED to total_amount via the generated column) and app.
+  // issue_finance_invoice CREDITED it to a tax-payable liability -- both backwards for a
+  // genuine withholding tax, which the customer deducts at source and remits directly to
+  // the tax authority (never collected by CargoGrid, and a recoverable asset, not a
+  // payable). Fix: calculate_finance_tax now discloses the resolved rule's own taxType; a
+  // new finance_invoices.withholding_tax_amount column (additive, default 0) carries a
+  // withheld amount instead of tax_amount, leaving total_amount unaffected by it;
+  // issue_finance_invoice posts the AR open item and its own AR-control debit net of the
+  // withheld amount, and DEBITS (never credits) the tax rule's own governed
+  // recoverable_account_id (or the withholding_tax_receivable_default posting-map key)
+  // for it -- mirroring app.post_finance_vendor_bill's own established
+  // recoverable_account_id-debit pattern for input tax credits on the AP side. While
+  // writing this fix's own regression test (the first to ever configure a real
+  // recoverable_account_id/output_account_id on a tax rule and exercise
+  // issue_finance_invoice's branch logic against it), also found and fixed a latent,
+  // previously-unexercised bug in that same branch logic: a plpgsql row variable's own
+  // `IS NOT NULL` is true only when EVERY field of the row is non-null (SQL composite-type
+  // semantics), so `v_tax_rule is not null`/`v_tax_code is not null` silently read as false
+  // whenever the fetched row had any other nullable column set to null (e.g. currency) --
+  // never previously caught because no test before this one configured a real account on a
+  // tax rule. Fixed by checking each row's own guaranteed-NOT-NULL id column instead.
+  // HUNDRED-AND-EIGHTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 505 files (+1). One new migration, 20260907140000, closing the audit's E2
+  // finding -- "one vehicle, one shipment": app.assign_resource rejected a second active
+  // assignment for the same resource via an unlocked EXISTS read-then-write with no row
+  // lock and no exclusion constraint behind it, an independently confirmed race (two
+  // concurrent assignment requests for the SAME resource on DIFFERENT shipment orders
+  // could both pass before either committed). app.reassign_resource carried the
+  // byte-identical unlocked check for its own new resource, and app.
+  // resume_resource_assignment (returning a held assignment to active) carried no check of
+  // this kind AT ALL. Fix: a real partial unique index,
+  // resource_assignments_active_resource_unique on (tenant_id, resource_id) where
+  // is_current and status = 'active', makes the invariant genuine at the database level;
+  // each of the three functions now catches a real concurrent violation of it (GET STACKED
+  // DIAGNOSTICS, mirroring app.start_vendor_assessment's own established pattern) and
+  // re-raises the same named assignment_conflict/already_assigned errors the existing
+  // sequential pre-checks already gave, never a raw unique_violation; resume_resource_
+  // assignment also gained the sequential pre-check it never had at all. A live two-process
+  // concurrent race regression (scripts/db-tests/operations-resource-assignment.sql) proves
+  // it: exactly one of two racing app.assign_resource calls for the same resource reaches
+  // active, the other is denied assignment_conflict. The new hard invariant also made an
+  // existing fixture (scripts/db-tests/advanced-tms-shipment-tracking-health-writer.sql)
+  // unconstructible -- it deliberately bypassed app.assign_resource via a raw insert to
+  // give two shipments (E, F) the SAME active vehicle assignment, specifically to prove
+  // app.arbitrate_and_project_vehicle_position's own defensive multi-row loop handled that
+  // case, "in case a future assignment path ever legitimately produced one." E2's own fix
+  // makes that state permanently unconstructible through any path, so the loop can now only
+  // ever iterate 0 or 1 times -- the fixture was updated to give shipment F its own,
+  // separate vehicle (via the real assign_resource RPC) instead, with each dependent
+  // assertion (shared-fan-out telemetry, degraded, stale precedence) adapted to two
+  // independently-tracked vehicles rather than one shared one, preserving every one of its
+  // original assertions in spirit. The audit's own E2 paragraph also names app.
+  // milestone_codes shipping with 0 rows and no seed; a migration-time seed was drafted and
+  // tried but reverted -- it collided with at least 16 existing scripts/db-tests/*.sql
+  // fixtures that already register their own definitions for names a baseline set would
+  // obviously need (delivered, departed_origin, out_for_delivery, customs_hold among them),
+  // since app.milestone_codes is a genuinely platform-wide, non-tenant-scoped registry and
+  // app.register_milestone_code is idempotent (a pre-seeded row silently pre-empts a later
+  // fixture's own intended definition, confirmed live against
+  // operations-milestone-management.sql's own internal-only customs_hold regressing to
+  // customer-visible) -- tracked separately, not closed by this migration.
+  // HUNDRED-AND-NINTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 506 files (+1). One new migration, 20260907150000, closing the audit's Ø1
+  // (remaining tenant-lookup guards) and Ø2 (customer-portal RLS lockout) findings
+  // together, since they share one root cause and one fix. Ø1: three more
+  // `findTenantBySlug` call sites still ran `supabase.from("tenants")...` against schema
+  // `app`, which PostgREST never exposes -- lib/portal/customer-ticket-guard-deps.server.ts,
+  // lib/portal/customer-portal-guard-deps.server.ts, and lib/auth/register-login-session-
+  // deps.server.ts. Ø2: 20260906090000's own resolver, app.resolve_tenant_by_slug_for_actor,
+  // cannot be reused for any of the three -- it deliberately mirrors app.tenants' own
+  // tenants_select_own_tenant RLS policy (has_active_tenant_membership(id) AND NOT actor_
+  // holds_customer_user_layer(id)), which structurally excludes every customer_user, by
+  // construction, for the two guards that admit ONLY customer_user (the exact Ø2 lockout,
+  // reached through this RPC instead of a raw table read) and is also wrong for the login-
+  // session tracker, which needs both layers since it fires from the one shared
+  // app/(public)/login/ route for every principal layer. Fix: one new resolver, app.
+  // resolve_tenant_by_slug_for_member, identical to resolve_tenant_by_slug_for_actor except
+  // it omits the customer-layer exclusion -- 20260730560000's own migration already proved,
+  // in a disposable database, that a customer_user principal satisfies has_active_tenant_
+  // membership on its own (it is the tenant-admin guard's own additional "AND NOT actor_
+  // holds_customer_user_layer" line that excludes them, not has_active_tenant_membership
+  // itself). Plus its public.* Option-2 wrapper with an identical grant set (service_role,
+  // authenticated only), mirroring 20260906090000 exactly. All three TS call sites' pure-
+  // logic interfaces (customer-ticket-guard.ts, customer-portal-guard.ts, register-login-
+  // session.ts) and their real deps.server.ts wirings were updated to thread the caller's
+  // authUserId through to the new RPC; no db-test file changed since scripts/db-tests/
+  // public-api-wrapper-regression.sql's own three assertions are catalog-derived (every
+  // externally-callable app.* function, not a hardcoded list), so the new function and its
+  // wrapper are verified by the existing, unmodified test automatically.
+  // HUNDRED-AND-TENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 507 files (+1). One new migration, 20260907160000, closing the audit's F3
+  // finding: all 13 finance list functions carried a literal `limit 200` with no cursor,
+  // offset or date parameter -- 101 other list/search RPCs in this schema already take a
+  // p_cursor/p_after parameter (app.list_attendance_correction_requests's own p_after_id
+  // uuid keyset idiom); finance alone did not, so a tenant issuing ~200 invoices/journals/
+  // receipts reached the ceiling within weeks with no path to the rest. Fix, applied
+  // identically to all 13 (app.list_finance_ar_open_items/ap_open_items/invoices/journals/
+  // receipts/settlements/bank_accounts/bank_transactions/vendor_bills/period_locks/
+  // reconciliation_runs/subledger_batches/journal_corrections): added p_limit integer
+  // default 200/p_after_id uuid default null (DROP + CREATE, not CREATE OR REPLACE --
+  // Postgres does not allow adding parameters to an existing function signature, the same
+  // reason 20260730100000/20260730130000 dropped+recreated app.lookup_public_shipment_
+  // tracking to widen its own signature); each fetches limit + 1 rows so the TS query layer
+  // can trim and detect truncation the same way server/queries/bounded-list.ts#toBoundedList
+  // already does for direct-table reads; each function's own anchor-row lookup is
+  // deliberately scoped `and tenant_id = p_tenant_id`, which app.list_attendance_correction_
+  // requests's own precedent does not do -- closes a narrow cross-tenant sort-key oracle a
+  // foreign p_after_id could otherwise open, caught by this migration's own review rather
+  // than copied uncritically from precedent. Plus all 13 functions' public.* Option-2
+  // wrappers, widened identically with the same two trailing parameters and an unchanged
+  // grant set. Deeply tested for both distinct sort-order shapes (ascending due_date+id tie-
+  // break for AR open items, descending created_at+id tie-break for reconciliation runs) in
+  // a new db-test file, scripts/db-tests/finance-list-cursor-pagination.sql -- full multi-row
+  // cursor walk visiting every seeded row exactly once in order, one page past the end
+  // returning zero rows, the limit+1 over-fetch arithmetic, the cross-tenant anchor-scoping
+  // hardening, and old-shape-call backward compatibility. The remaining 11 functions share
+  // the identical two code shapes (verified by direct code review) and are exercised without
+  // error by their own existing, unmodified db-test files' calls (this migration's new
+  // trailing parameters are optional, so no existing call site needed to change) -- a
+  // dedicated cursor-walk regression for each of those 11 was not added in this bounded
+  // change. All 13 corresponding server/queries/*.ts wrapper functions gained the SAME
+  // optional, additive limit/afterId input fields (return type and default behavior
+  // unchanged for every existing caller); no page.tsx UI wiring ("Load more" controls) was
+  // added in this bounded change -- the audit's own F3 paragraph is about the RPC signature
+  // defect specifically, and its separately-stated "only 10 of 238 tenant pages offer any
+  // pagination control at all" finding is independent, repo-wide, and out of this item's
+  // scope.
+  // AMENDED same-pass: the migration initially omitted the standing per-migration
+  // convention (ERR-2026-004/PLT-118) of an explicit `revoke execute on all functions in
+  // schema app from public` after each DROP+CREATE -- unlike CREATE OR REPLACE, DROP+
+  // CREATE resets a function's privileges to Postgres's own implicit PUBLIC-execute
+  // default, re-opening exactly the class of gap PLT-118 closed repository-wide. Caught
+  // live by scripts/db-tests/finance-accounts-payable.sql's own pre-existing "anon holds
+  // zero EXECUTE" assertion failing against the recreated app.list_finance_ap_open_items
+  // during this same pass's db:test run -- fixed by adding the revoke statement once per
+  // recreated function (13 total), matching the file-end blanket-revoke convention every
+  // other multi-function migration in this repository already uses.
+  // AMENDED same-pass, a SECOND and separate defect: all 13 app.* functions were
+  // recreated plain `language plpgsql stable`, copied from their own 2026-07-29 creation
+  // migrations -- but 20260810900000_harden_finance_authority_chain_tierc_completeness.sql
+  // had already widened every one of them (among ~20 other list_finance_* functions,
+  // confirmed by direct inspection, not assumed) to `security definer` with `set
+  // search_path to 'app', 'pg_temp'`, which is the CURRENT, authoritative shape a
+  // migration-built database actually has. Recreating from the pre-hardening shape
+  // silently REVERTED that hardening -- exactly the app.<name>/public.<name> security-
+  // mode drift class 20260826010000's own header comment documents as an RLS-bypass-by-
+  // wrapper risk. Caught live by scripts/db-tests/public-api-wrapper-regression.sql's own
+  // pre-existing exhaustive `prosecdef` parity assertion failing against all 13 recreated
+  // functions during this same pass's own re-run (after the ERR-2026-004 fix above) --
+  // fixed by adding `security definer` + `set search_path = app, pg_temp` to each of the
+  // 13 (body/filter/sort logic otherwise byte-identical, verified line by line against
+  // 20260810900000's own current text, the migration's real source of truth here, not the
+  // 2026-07-29 creation migrations this backlog item's own header otherwise describes).
+  // HUNDRED-AND-ELEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 508 files (+1). One new migration, 20260907170000, closing the audit's F5
+  // finding: the shipment-order list and dispatch board (server/queries/shipment-order.ts#
+  // listShipmentOrders, basic-dispatch.ts#listDispatchReadyQueue) each run `.select("*",
+  // { count: "exact" }).range(from, to)` with no supporting index for their own ORDER BY
+  // column -- app.shipment_orders carries 9 indexes, none leading with `created_at` (only
+  // `(tenant_id, updated_at desc, id desc)`, added for a different query) and none at all
+  // for `planned_pickup_at`, forcing a full scan-and-sort of every tenant row on both the
+  // count pass and the data pass, every page load. The dispatch board compounds this:
+  // app.dispatch_ready_queue is `select so.*, r.is_ready, r.blockers from app.shipment_
+  // orders so cross join lateral app.evaluate_dispatch_readiness(so.id) as r where so.
+  // status = 'assigned' and <can_access_record>` -- a ~40-line SECURITY DEFINER function
+  // invoked once per matching row on BOTH passes (Postgres cannot prove the lateral output
+  // is unused just because count(*) doesn't reference it). Two fixes: (1) two new additive
+  // covering indexes, mirroring 20260801050000's own shipment_orders_tenant_updated_id_idx
+  // shape exactly -- shipment_orders_tenant_created_at_id_idx (tenant_id, created_at desc,
+  // id desc) for the shipment-order list, and a PARTIAL shipment_orders_tenant_assigned_
+  // pickup_id_idx (tenant_id, planned_pickup_at nulls last, id) where status = 'assigned'
+  // for the dispatch board, scoped to exactly the row set app.dispatch_ready_queue's own
+  // WHERE clause reads. (2) listDispatchReadyQueue now takes its exact count as a SEPARATE,
+  // plain HEAD request against app.shipment_orders directly (tenant_id + status='assigned'),
+  // never touching the view or the lateral join for the count pass -- provably equivalent,
+  // not approximated: app.shipment_orders' own RLS policy (shipment_orders_select_scoped)
+  // is the IDENTICAL predicate the view's own WHERE clause uses, and neither the view's
+  // WHERE clause nor the row count depends on r.is_ready/r.blockers at all. Live-proven in
+  // a new assertion appended to scripts/db-tests/operations-basic-dispatch.sql: a plain
+  // base-table count and a count through the view, taken under the SAME real, RLS-scoped
+  // authenticated session, are asserted equal (not merely reasoned about). Net effect: the
+  // readiness function now runs exactly pageSize times per dispatch-board page load, not
+  // pageSize + totalCount. listShipmentOrders keeps its existing single count:exact query
+  // as-is (no LATERAL join to make asymmetric there) -- only the missing index was the gap.
+  // These two screens are 2 of 10 files across the codebase sharing the count:exact shape
+  // (the audit's own count) -- a wholesale redesign of all ten, or of the numbered-jump-to-
+  // page components/tables/pagination.tsx UI they all feed (which genuinely needs an exact
+  // total to render page-number links), is out of this bounded item's scope; this migration
+  // closes exactly the two screens the audit itself named and reproduced.
+  // HUNDRED-AND-TWELFTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 509 files (+1). One new migration, 20260907180000, closing the audit's A3
+  // finding: publishing a role version silently revokes it from everyone already holding
+  // it. `app.role_assignments.role_version_id` binds an assignment to one SPECIFIC version,
+  // never the role in general, and `app.evaluate_permission` requires that version's own
+  // `status = 'published'` -- its own header comment already conceded this exact defect as
+  // a "disclosed, bounded limitation... not an oversight." `app.publish_role_version`
+  // archives the prior published version but never touched `app.role_assignments` at all,
+  // so every real holder lost every permission the role granted the moment anyone
+  // republished a new version of the SAME role. Fix: `app.publish_role_version` now
+  // migrates every ACTIVE assignment still bound to the version it is about to archive
+  // onto the version it is publishing, in the same transaction as the publish itself --
+  // safe as a plain UPDATE (can never violate `role_assignments_active_unique`: nobody
+  // could hold an active assignment on the version being published before this function
+  // runs, since `app.assign_role` requires `status = 'published'` to assign at all, and
+  // that version was still a draft until the status flip a few lines above the new
+  // UPDATE). A new `role_lifecycle_history` event, `version_migrated`, is recorded once per
+  // migrated assignment (mirroring `assigned`/`revoked`'s own per-row convention), added to
+  // `role_lifecycle_history_event_type_check`. Deliberately narrow, matching the audit's
+  // own A3 finding exactly -- this does not touch any OTHER "published version" binding
+  // pattern elsewhere in the repository (automation rules, workflow definitions, approval
+  // definitions); the evaluator's own comment already disclosed "no auto-reassignment...
+  // anywhere in this repository" as a repository-wide posture, and this migration
+  // deliberately closes it for role_assignments/role_versions only, the one the audit named
+  // and reproduced. `CREATE OR REPLACE FUNCTION` (unchanged signature -- no DROP + CREATE,
+  // no public.* wrapper touch needed) -- confirmed via the same F3-taught check this time
+  // (grepping for a later ALTER FUNCTION/CREATE OR REPLACE touching this function's own
+  // security mode) that `app.publish_role_version` was never widened to SECURITY DEFINER or
+  // given a pinned search_path by any later migration, so there was nothing to preserve.
+  // HUNDRED-AND-THIRTEENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A, NEW-1): 510 files (+1) -- new migration
+  // 20260907190000_fix_job_claim_complete_audit_actor_mismatch_new1.sql. `app.claim_next_job`
+  // and `app.complete_job` both lack any real actor-identity parameter of their own (only
+  // `p_worker_id text` / `p_actor_label text`) yet both passed `v_job.requested_by_auth_
+  // user_id` (the job's ORIGINAL requester) as `app.capture_audit_event`'s identity-asserted
+  // `p_actor_auth_user_id`. `capture_audit_event`'s IAE-037 fix defaults
+  // `p_support_access_grant_id` from `app.current_support_session(p_tenant_id, p_actor_auth_
+  // user_id)`, whose first statement is `assert_actor_is_session_identity(p_actor_auth_user_
+  // id)` -- so under a genuine (non-null) session identity that is NOT the job's original
+  // requester, this raised `actor_identity_mismatch` unconditionally, before either
+  // function's own caller's job-type-specific authority guard was ever reached (self-found
+  // while first writing the HUNDRED-AND-TENTH/A3-era D2 regression test in scripts/db-tests/
+  // advanced-tms-route-load-planning.sql). Masked in production because the only real caller
+  // is the job supervisor's service-role client (null session identity, exempted). Fixed by
+  // passing `auth.uid()` (read defensively, begin/exception, mirroring `app.assert_actor_is_
+  // session_identity`'s own idiom) as the identity-asserted actor instead, preserving the
+  // original requester as event metadata rather than discarding it. `CREATE OR REPLACE
+  // FUNCTION` for both -- unchanged signatures, no DROP + CREATE; neither function was ever
+  // touched by any later migration (confirmed via the same case-insensitive
+  // ALTER/CREATE-OR-REPLACE grep), so no security-mode hardening to preserve.
+  // HUNDRED-AND-FOURTEENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A, E2-seed): 511 files (+1) -- new migration
+  // 20260907200000_seed_milestone_codes_baseline_e2_seed.sql. `app.milestone_codes` (OPS-173)
+  // shipped with zero seeded rows on a fresh install -- a live, reproducible dead-end dropdown
+  // in `ingest-milestone-event-form.tsx`. A prior attempt (recorded in the backlog's own
+  // execution log) was reverted after silently regressing `operations-milestone-management.
+  // sql`'s own internal-only `customs_hold` expectation, because `app.register_milestone_code`
+  // is idempotent-first-wins per `code` and the seed had guessed a conflicting value. This
+  // attempt is built from a full audit of all 33 real `register_milestone_code` call sites
+  // across all 11 db-test files that use this registry, grouped by code: two REAL,
+  // independent cross-file disagreements were found (`delivery_arrival` and `delivered`, each
+  // with two files genuinely expecting different affects_eta/is_terminal values for the same
+  // code) and deliberately excluded from the seed; every other code was confirmed
+  // byte-for-byte identical across every one of its own real call sites and is now seeded via
+  // a plain `insert` (mirroring `20260729090000_create_finance_tax_baseline.sql`'s own
+  // `app.finance_tax_codes` platform-catalog seed precedent) -- `pickup_arrival`,
+  // `pickup_departure`, `picked_up`, `departed_origin`, `in_transit`, `customs_hold`,
+  // `out_for_delivery`, `delivery_departure`. Full `pnpm run db:test` re-run end to end after
+  // this migration: `ALL PASSED`, including every one of the 11 db-test files that touch this
+  // registry -- confirming the seed changes nothing any of them already observed.
+  // HUNDRED-AND-FIFTEENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A, D1 partial): 512 files (+1) -- new migration
+  // 20260907210000_require_real_aal2_session_mfa_step_up_iss_d1.sql. `app.verify_mfa_step_up_
+  // challenge` accepted no OTP/factor/assertion at all -- the constrained principal satisfied
+  // it itself, exactly as the audit found. The function's OWN creation (20260807100000)
+  // already disclosed real TOTP crypto as Supabase Auth's own external infrastructure, never
+  // fabricated in Postgres -- that boundary is correct and unchanged. The real, narrower gap:
+  // nothing confirmed a real Supabase-side MFA check ever happened before this function
+  // recorded "verified" -- it is granted directly to `authenticated`, reachable from the
+  // app's real API surface with zero real second factor. Fixed by requiring the CALLING
+  // session itself to already be authenticated at AAL2 (`auth.jwt() ->> 'aal' = 'aal2'`,
+  // Supabase's own claim, stamped only after a real second factor is verified by GoTrue) --
+  // gated on `auth.uid() is not null` (mirroring `app.assert_actor_is_session_identity`'s own
+  // idiom) after confirming, via a full audit of the ~30 real call sites across the 12
+  // scripts/db-tests/*.sql files that depend on this function as a precondition, that every
+  // single one calls it with a null session identity already -- zero existing test changes
+  // needed anywhere; confirmed by a full `pnpm run db:test` re-run, `ALL PASSED`. Both
+  // `auth.uid()`/`auth.jwt()` reads are defensive (`begin`/`exception`) -- live-caught while
+  // writing this fix's own db-test regression, the identical class of leaked-empty-string-GUC
+  // bug `20260907190000`'s own header already documents in detail, this time because calling
+  // `auth.uid()` bare a second time (rather than relying solely on the one call already safely
+  // wrapped inside `assert_actor_is_session_identity`) crashed on that exact leaked state.
+  // `CREATE OR REPLACE FUNCTION` -- unchanged signature, no `DROP + CREATE`; confirmed via the
+  // F3-taught check that this function was never touched by any later migration. Partial, not
+  // DONE: enabling a real TOTP/phone provider (`supabase/config.toml`) and building the
+  // client-side `challengeAndVerify()` UI flow remain open, the same disclosed operator/
+  // product boundary A5's own remediation left open for its own INFRA half.
+  // HUNDRED-AND-SIXTEENTH PASS (2026-09-08, user-directed extension of CG-AUDIT-2026-09-02
+  // A6/D4): 513 files (+1) -- new migration
+  // 20260908000000_create_platform_integration_secrets.sql. The user asked for a
+  // VirusTotal API key (to give A6's own malware-scan gap a real scanner) to be
+  // configurable from the Supreme Admin UI, generalized so any FUTURE platform-level
+  // (not tenant-owned) API key is added the same way rather than as an environment
+  // variable. Every existing secret-bearing table in this repository is tenant-scoped;
+  // this adds the missing "platform itself holds the credential" shape -- app.
+  // platform_integration_secrets, app.set_platform_integration_secret/app.
+  // get_platform_integration_secret/app.list_platform_integration_secrets -- reusing
+  // the EXISTING app._encrypt_integration_secret/_decrypt_integration_secret mechanism
+  // (20260826050000) rather than inventing a second one, and mirroring app.
+  // platform_scheduled_task_definitions (20260902020000) as the established
+  // "platform-wide, no tenant_id, Supreme-Admin-only" shape. Every write/read still
+  // depends on CG-AUDIT-2026-09-02 D4's own disclosed, still-open gap (the app.
+  // integration_secrets_encryption_key GUC is never set outside db-test fixtures) --
+  // this migration does not close D4, it fails closed through it with a clear error.
+  // Live-caught and fixed during this migration's own authoring: ISS-2026-309's exact
+  // regression class -- `revoke execute on function public.X(...) from public` does
+  // NOT revoke the direct anon/authenticated/service_role grants Supabase's own ALTER
+  // DEFAULT PRIVILEGES rule gives every new public.* function at CREATE time (only
+  // `scripts/db-tests/lib/setup-disposable-db.sh`'s own mirror of that rule, added for
+  // exactly this class of bug, caught it locally) -- fixed by revoking from all three
+  // named roles plus PUBLIC explicitly, per 20260830200000's own established
+  // correction, before every one of the 3 new public.* wrappers here.
+  // `scripts/db-tests/public-api-wrapper-regression.sql` re-verified exhaustively
+  // green after the fix. Full `pnpm run db:test` re-run: `ALL PASSED`.
+  // HUNDRED-AND-SEVENTEENTH PASS (2026-09-08, user-directed A6/D4 extension, part 2
+  // of 2): 514 files (+1) -- new migration
+  // 20260908010000_close_a6_storage_bucket_and_malware_scan_job_type.sql. Closes the
+  // structural half of CG-AUDIT-2026-09-02 A6 ("Uploading a file stores no file, and
+  // the scan gate deadlocks flows that are otherwise fully wired"): (1) a real,
+  // private `tenant-documents` Storage bucket (`insert into storage.buckets`,
+  // `public = false`), RLS asserted explicitly on `storage.objects` rather than
+  // relied on implicitly; (2) a new `malware_scan` job_type, widened on BOTH sources
+  // of truth ATW-031 (20260730410000) established -- the app.jobs CHECK constraint
+  // and `app.generic_job_types()` (CREATE OR REPLACE, unchanged signature, no new
+  // public.* wrapper needed) -- together with their TypeScript mirrors
+  // (GENERIC_JOB_TYPES, IMPORT_EXPORT_JOB_TYPES) and the two db-test drift-gate
+  // literals (scripts/db-tests/background-job.sql), so nothing drifts silently the
+  // way ATW-031's own history already once caught. A new sixth external-handoff
+  // worker, scripts/jobs/malware-scan-worker.ts, wired into
+  // scripts/jobs/supervisor.ts's own ALL_LANES (picked up automatically by the A5
+  // cron route with no route change), claims malware_scan jobs and calls
+  // lib/malware-scan/process-malware-scan-job.server.ts -- the first real caller
+  // anywhere in this repository of app.record_file_scan_result. That function
+  // downloads the uploaded bytes from Storage, reads a VirusTotal API key via
+  // app.get_platform_integration_secret (part 1 of this extension,
+  // 20260908000000), and calls lib/malware-scan/scan-file-with-virustotal.server.ts
+  // -- a real, bounded (timeout + a few poll attempts, never blocking indefinitely)
+  // outbound multipart file-upload HTTP client, the first one anywhere in this
+  // repository (every prior outbound fetch here sends JSON). One real flow is wired
+  // end to end in this same commit: vendor compliance document submission/renewal
+  // (app/(tenant)/[tenantSlug]/procurement/compliance/vendors/actions.ts) now
+  // stores real bytes via `.storage.from().upload()` (compensating with a soft
+  // app.request_file_deletion on a storage failure) and enqueues the scan job with
+  // the real uploader as its actor. Deliberately bounded, matching this
+  // checkpoint's own backlog entry (CG-AUDIT-2026-09-02-REMEDIATION-BACKLOG.md, row
+  // A6): the audit's other two named deadlocked flows (ticket-reply attachments,
+  // shipment document checklists) are not wired here -- the pattern this commit
+  // establishes now exists for them to follow without re-deriving it. `pnpm run
+  // db:test` re-run: `ALL PASSED`, including a new
+  // scripts/db-tests/tenant-documents-storage-malware-scan.sql proving the bucket
+  // exists/is private/RLS-enabled and a real enqueue -> claim -> record_file_scan_
+  // result -> complete cycle moves a real file off `pending`, plus a real
+  // TypeScript unit-test suite for the VirusTotal adapter (a local loopback HTTP
+  // server, not a mocked fetch) and the job processor.
+  // HUNDRED-AND-EIGHTEENTH PASS (2026-09-08, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 515 files (+1) -- new migration
+  // 20260908020000_close_o1_query_layer_cluster0_batch1_crm_core.sql. Closes the first
+  // batch (8 of 32 tables) of Ø1-query-layer cluster 0 (CRM/commercial), the highest-
+  // severity item the Ø1 recon (CG-AUDIT-2026-09-02-O1-QUERY-LAYER-RECON.json) left
+  // DEFERRED_LARGE: every server/queries/*.ts `.from()` call against an `app.*` table has
+  // never worked in production, since supabase/config.toml only exposes public/
+  // graphql_public to PostgREST and `app` is a completely separate, invisible schema --
+  // this is a live, currently-broken read path on real pages
+  // (/commercial/accounts, /contacts, /contracts, /costing-requests), not an
+  // architectural nitpick. Fixed via the same Option-2 wrapper pattern (a new app.*
+  // SECURITY DEFINER function per read, plus a thin public.* pass-through with an
+  // identical grant set) already established for the 4 guard-deps files this session
+  // closed earlier (Ø1/Ø2). 15 new app.*/public.* function pairs across
+  // app.accounts/app.account_conversions/app.contacts/app.activities/
+  // app.customer_contracts/app.customer_contract_price_components_directory/
+  // app.costing_requests/app.costing_request_components. Every function asserts
+  // RULE A (app.assert_actor_is_session_identity as the first executable statement,
+  // ATW-031/032 precedent) and reproduces the CURRENT (not original) RLS predicate for
+  // its table, including RULE B (20260730560000's customer_user-layer exclusion) on
+  // app.accounts/app.customer_contracts/app.customer_contract_price_components_directory
+  // -- both caught live by an adversarial design-verify-fix pipeline before this file was
+  // ever applied to a database, not assumed. Two further genuine defects were caught only
+  // by this pass's own db-test (scripts/db-tests/o1-query-layer-cluster0-batch1.sql, new
+  // file, see dbTestSetSha256 below): app.list_contacts and app.get_contact_by_id had
+  // both reintroduced normalized_email/normalized_phone/duplicate_fingerprint into their
+  // return shape (a PII-correlation leak the recon's own instructions explicitly
+  // excluded) -- fixed directly in this migration before commit, never worked around.
+  // All 4 affected TS query files (server/queries/account.ts, contact.ts, contract.ts,
+  // costing.ts) and every real call site (11 page.tsx files) switched from `.from()` to
+  // `.rpc()` in the same commit, per this migration's own embedded TS INTEGRATION notes.
+  // Full Tier A gate suite re-run clean before this digest was changed: typecheck, lint
+  // (0 errors), the 5,992-test unit suite, a full `pnpm run db:test` (ALL PASSED,
+  // 515 migrations / 259 db-test files), git:check-paths, security:check, and `next build`.
+  // HUNDRED-AND-NINETEENTH PASS (2026-09-09, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 516 files (+1) -- new migration
+  // 20260909000000_close_o1_query_layer_cluster0_batch2_pipeline_margin_opportunity.sql.
+  // Closes cluster 0 batch 2 of ~4 (opportunity/margin/sales-pipeline core reads, 9 of the
+  // remaining 24 tables): app.margin_rule_versions, app.margin_calculations_directory,
+  // app.opportunities_directory, app.opportunity_stage_history, app.sales_plans,
+  // app.sales_targets, app.forecast_snapshots, app.pipeline_categories,
+  // app.win_loss_reasons -- each behind the same, now-established Option-2 wrapper pattern
+  // (app.* SECURITY DEFINER + public.* pass-through with an identical grant set) and the
+  // same RULE A/B/C discipline batch 1 established. 12 new app.*/public.* function pairs,
+  // each drafted via the same adversarial Design->Verify->Fix pipeline: 8 of 9 tables
+  // passed independent re-verification against the live repo on the first draft; one
+  // (app.opportunities_directory) had a documentation/audit-trail-integrity defect caught
+  // and fixed before commit (a false "never replaced" RULE C claim in its own header
+  // comment -- the actual authority predicate it copied forward was unaffected and
+  // remained correct). This pass's own db-test (scripts/db-tests/
+  // o1-query-layer-cluster0-batch2.sql) additionally caught and corrected a genuine
+  // misunderstanding in the test itself, not the migration: app.has_active_tenant_
+  // membership's own current body (20260907110000) already ORs in app.is_supreme_admin
+  // internally, so a global Supreme Admin transitively passes every function gated by it
+  // (including app.pipeline_categories/app.win_loss_reasons, whose own predicates carry no
+  // SEPARATE is_supreme_admin() clause) -- both the test's assertions and two migration
+  // header comments that had claimed "no supreme-admin bypass" were corrected to describe
+  // this transitive behavior accurately, live-verified rather than assumed. All 3 affected
+  // TS query files (server/queries/margin.ts, opportunity.ts, pipeline.ts) and every real
+  // call site (8 page.tsx files) switched from `.from()` to `.rpc()` in this same commit.
+  // Full Tier A gate suite re-run clean before this digest was changed: typecheck, lint
+  // (0 errors), the 5,992-test unit suite (including a fixed check-rls-initplan.ts false
+  // positive -- this migration's own header prose happened to contain the literal
+  // case-insensitive substring "alter policy" followed by a bare `auth.uid()`/
+  // `app.is_supreme_admin(p_auth_user_id)`-shaped mention within the same comment-on-
+  // function string, which that guard's naive "up to the next semicolon" statement-span
+  // heuristic misread as a live policy clause -- reworded, not suppressed, and reverified
+  // 0 findings), a full `pnpm run db:test` (ALL PASSED, 516 migrations / 260 db-test
+  // files), git:check-paths, security:check, and `next build`.
+  // HUNDRED-AND-TWENTIETH PASS (2026-09-09, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 517 files (+1) -- new migration
+  // 20260909010000_close_o1_query_layer_cluster0_batch3_costing_credit_approval.sql.
+  // Closes cluster 0 batch 3 of ~4 (costing-response/credit/approval-inbox reads, 5 of the
+  // remaining 15 tables): app.costing_responses_directory (list_costing_responses_for_
+  // request), app.costing_response_components_directory (list_costing_response_
+  // components -- COM:View-cost-lacking callers get zero rows for every line item, an
+  // all-or-nothing mask, never a masked-but-visible row), app.credit_profiles_directory
+  // (list_credit_profiles, get_credit_profile_for_account, get_credit_profile_by_id),
+  // app.credit_profile_overrides (list_credit_profile_overrides), and a single shared
+  // app.approval_requests entity-ref lookup (get_approval_requests_entity_refs, taking
+  // p_ids uuid[]) used by both the credit-profile and quotation approval inboxes --
+  // avoiding two near-identical single-purpose functions for the same underlying table.
+  // 7 new app.*/public.* function pairs, each drafted via the same adversarial
+  // Design->Verify->Fix pipeline established in batches 1-2: this batch's own db-test
+  // (scripts/db-tests/o1-query-layer-cluster0-batch3.sql) passed completely on the first
+  // write, with zero issues found across all 5 tables in the independent verify stage --
+  // notably cleaner than either prior batch. All 3 affected TS query files (server/
+  // queries/costing.ts, credit.ts, quotation-approval.ts) and every real call site (3
+  // page.tsx files) switched from `.from()` to `.rpc()` in this same commit; quotation-
+  // approval.ts's own `QuotationApprovalQueryClient` type is left carrying both `"from"`
+  // and `"rpc"` since its sibling `listQuotationApprovalRuleVersions` still legitimately
+  // reads app.quotation_approval_rules directly (an out-of-scope table for this batch).
+  // This pass again proactively reworded migration-comment prose that would otherwise
+  // have tripped check-rls-initplan.ts's known "alter policy"/bare-auth-call false-
+  // positive class (established in the HUNDRED-AND-NINETEENTH PASS note below) before
+  // writing the db-test, and reverified 0 findings. Full Tier A gate suite re-run clean
+  // before this digest was changed: typecheck, lint (0 errors), the 5,992-test unit
+  // suite, a full `pnpm run db:test` (ALL PASSED, 517 migrations / 261 db-test files),
+  // git:check-paths, security:check, check-rls-initplan.ts, and `next build`.
+  // HUNDRED-AND-TWENTY-FIRST PASS (2026-09-09, user-directed "lanjut sampe siap launching"
+  // extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 518 files (+1) -- new migration
+  // 20260909020000_close_o1_query_layer_cluster0_batch4_leads_prospects_quotation_
+  // directory.sql. Closes cluster 0 batch 4 of ~4 (6 of the remaining 10 tables):
+  // app.leads (list_leads, get_lead_by_id), app.prospects (list_prospects,
+  // get_prospect_by_id), app.quotations_directory (get_quotation_by_id,
+  // list_quotation_versions, list_quotations_for_opportunity,
+  // list_quotations_for_tenant), app.quotation_lines_directory
+  // (list_quotation_lines), app.quotation_approval_rules
+  // (list_quotation_approval_rule_versions), app.quotation_acceptance_tokens
+  // (list_quotation_acceptance_tokens). 11 new app.*/public.* Option-2 wrapper
+  // function pairs via the same adversarial Design->Verify->Fix pipeline batches
+  // 1-3 established (RULE A/B/C baked into every draft and every independent
+  // verify pass). The Workflow tool's own subagent-spawning path failed twice in a
+  // row with a permission-handler schema-validation bug during this batch's design
+  // stage (a session/harness-level defect, not a code issue -- confirmed by testing
+  // that the plain Agent tool worked fine in the same session); the batch was
+  // completed instead via 6 parallel design agents plus 6 independent verify agents
+  // launched directly through the Agent tool, following the identical RULE A/B/C
+  // discipline the Workflow pipeline itself encodes. Two real issues were found and
+  // fixed during the independent verify pass, before this migration was ever
+  // applied to any database: (1) app.prospects' first draft returned all 26
+  // physical columns including normalized_legal_name/normalized_tax_id/
+  // duplicate_fingerprint/disqualified_at/archived_at -- none of which is part of
+  // the real ProspectSchema/parseProspect contract; fixed to exclude all five,
+  // matching the "return exactly what the TS contract consumes" discipline batch
+  // 1's app.contacts and this same batch's own app.leads already established
+  // (app.leads keeps its own duplicate_fingerprint only because LeadSchema
+  // explicitly requires it; ProspectSchema has no such field). (2)
+  // app.quotations_directory had a documentation-only miscount (header prose
+  // claimed 39 current columns; independently recounting the live view's own
+  // SELECT list found 40) -- the actual reproduced column lists in every function
+  // body and RETURNS TABLE clause were already correct throughout; corrected for
+  // accuracy. The other 4 tables (app.leads, app.quotation_lines_directory,
+  // app.quotation_approval_rules, app.quotation_acceptance_tokens) passed
+  // independent adversarial re-verification with zero issues found. This pass's
+  // own db-test (scripts/db-tests/o1-query-layer-cluster0-batch4.sql) passed
+  // completely on the first full run against a real disposable database -- no
+  // defect surfaced by testing that the design/verify pipeline had missed. Two
+  // residual RULE-A-regression findings surfaced during design (out of scope for
+  // this read-only batch, logged in the backlog doc): app.add_quotation_line/
+  // app.remove_quotation_line and app.assign_lead/app.convert_lead_to_prospect all
+  // currently lack the assert_actor_is_session_identity call in their latest
+  // bodies. All 5 affected TS query files (server/queries/lead.ts, prospect.ts,
+  // quotation.ts, quotation-approval.ts, quotation-acceptance.ts) and every real
+  // call site (9 page.tsx files) switched from `.from()` to `.rpc()` in this same
+  // commit. Full Tier A gate suite re-run clean before this digest was changed:
+  // typecheck, lint (0 errors), the 5,993-test unit suite, check-rls-initplan.ts (0
+  // findings), a full `pnpm run db:test` (ALL PASSED, 518 migrations / 262 db-test
+  // files), git:check-paths, security:check, and `next build`.
+  // HUNDRED-AND-TWENTY-SECOND PASS (2026-09-09, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 519 files (+1) --
+  // new migration 20260909030000_close_o1_query_layer_cluster0_batch5_vendor_rate_
+  // directories.sql. Closes cluster 0 batch 5, the LAST batch -- all 32/32 tables
+  // are now fully DONE: app.vendor_rate_versions_directory
+  // (list_rate_versions_for_master_record, get_rate_version_by_id,
+  // list_pending_rate_versions, list_procurement_linked_vendor_rate_versions,
+  // list_vendor_rate_versions_for_vendor), app.v_active_vendor_rates
+  // (list_active_vendor_rates, a NEW function rather than reusing
+  // app.search_vendor_rates -- that RPC requires a dynamically tenant-configured
+  // COM:View permission not guaranteed for every actively-membered staff role, and
+  // has different ordering/default-limit behavior), app.rate_selections_directory
+  // (list_rate_selections_for_request), and app.vendor_rate_tiers_directory
+  // (list_vendor_rate_tiers). 8 new app.*/public.* Option-2 wrapper function pairs
+  // via the same adversarial Design->Verify->Fix pipeline batches 1-4 established
+  // (RULE A/B/C baked into every draft and every independent verify pass), again
+  // completed via parallel Agent-tool design/verify calls rather than the Workflow
+  // tool (whose subagent-spawning path remained broken this session). Two
+  // comment-only issues were found and fixed during the independent verify pass,
+  // before this migration was ever applied to any database: (1)
+  // app.vendor_rate_versions_directory's header comment justified keeping
+  // list_procurement_linked_vendor_rate_versions/list_vendor_rate_versions_for_
+  // vendor as separate functions with a factually false claim ("not nested/subset
+  // forms of each other" -- vendor_master_id = value DOES imply vendor_master_id
+  // IS NOT NULL under SQL three-valued logic); corrected to state the true
+  // reasoning (this codebase's own convention of preferring distinct,
+  // self-documenting single-purpose RPCs over one function whose row set pivots on
+  // an optional parameter) while keeping the actual decision (5 separate
+  // functions) unchanged -- no SQL logic in any of the 8 functions needed
+  // correction beyond this one comment. (2) A third occurrence of the established
+  // check-rls-initplan.ts "ALTER POLICY"/bare-auth-call false-positive class, this
+  // time in app.list_rate_selections_for_request's own comment-on-function string
+  // ("no later ALTER POLICY exists on this policy" plus bare auth.uid() mentions);
+  // reworded, not suppressed, and reverified 0 findings. This batch's own db-test
+  // (scripts/db-tests/o1-query-layer-cluster0-batch5.sql) passed completely on the
+  // first full run against a real disposable database. Both affected TS query
+  // files (server/queries/rate.ts, procurement-rate.ts) and every real call site
+  // (5 page.tsx files) switched from `.from()` to `.rpc()` in this same commit.
+  // Full Tier A gate suite re-run clean before this digest was changed: typecheck,
+  // lint (0 errors), the 5,993-test unit suite, check-rls-initplan.ts (0
+  // findings), a full `pnpm run db:test` (ALL PASSED, 519 migrations / 263
+  // db-test files), git:check-paths, security:check, and `next build`.
+  // HUNDRED-AND-TWENTY-THIRD PASS (2026-09-10, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 520 files (+1)
+  // -- new migration 20260910000000_close_o1_query_layer_cluster1_batch1_
+  // finance_reads.sql. Opens cluster 1 (finance) and closes it completely in
+  // this single batch -- all 8 of cluster 1's call sites across 6 tables/views:
+  // app.shipment_actual_costs_directory (get_shipment_actual_cost),
+  // app.billing_readiness_evaluations (get_current_billing_readiness_evaluation,
+  // list_billing_readiness_evaluations -- kept as two separate functions,
+  // matching the existing TS layer's own two-function shape),
+  // app.billing_readiness_handoffs (list_billing_readiness_handoffs),
+  // app.finance_currencies (list_finance_currencies), app.finance_rounding_modes
+  // (list_finance_rounding_modes), app.finance_period_close_checklist_items
+  // (list_finance_period_checklist_items), and app.job_profitability_directory
+  // (get_job_profitability_directory). 8 new app.*/public.* Option-2 wrapper
+  // function pairs via the same adversarial Design->Verify->Fix pipeline cluster
+  // 0's batches established (RULE A/B/C baked into every draft and every
+  // independent verify pass), completed via parallel Agent-tool design/verify
+  // calls (the Workflow tool's own subagent-spawning path remained broken this
+  // session). Notable design decision, independently re-verified: app.list_
+  // finance_currencies/app.list_finance_rounding_modes are declared SECURITY
+  // INVOKER (the unmarked default), not SECURITY DEFINER like every other
+  // function in this remediation series -- both tables carry a bare `using
+  // (true)` SELECT policy for role authenticated plus a direct table-level
+  // grant, matching the established live precedent for this exact
+  // "global reference table, zero actor param" shape (app.list_api_versions/
+  // app.list_webhook_event_types). The independent verify pass confirmed this
+  // decision against the real table grants (not merely the precedent
+  // functions' own declarations) and proved it under a real authenticated-role
+  // session in the db-test, before this migration was ever applied to any
+  // database. One citation-only defect was found and fixed during verify: a
+  // precedent citation for app.list_webhook_event_types pointed at the
+  // migration that creates the underlying TABLE, not the one that declares the
+  // function itself. Two disclosed, out-of-scope findings from a different
+  // table/cluster were surfaced and recorded, not fixed: a dangling forward
+  // citation to app.list_finance_currencies in
+  // 20260830140000_create_incident_communication.sql (now retroactively true),
+  // and a genuinely broken app.list_incident_communication_audiences pair
+  // (invoker mode against a table with RLS-enabled-zero-policy and no table
+  // grant to authenticated -- a live permission-denied bug on a different
+  // table, flagged for whoever owns that read path). This pass also reworded
+  // one header-comment citation of `app.evaluate_permission(..., 'OPS', 'View
+  // cost')` (a pre-existing Operations-only call, quoted here only for RULE C
+  // citation, not new enforcement) to avoid tripping
+  // scripts/data-classification/check-registry.test.ts's own quoted-literal
+  // scan of every "finance"-named migration file for the FIN action "View
+  // cost" -- the same reword-not-suppress discipline this series already
+  // applies to check-rls-initplan.ts's comment-prose false positives, applied
+  // here to a different, sibling static-analysis guard. All 6 affected TS
+  // query files (server/queries/actual-cost.ts, billing-readiness.ts,
+  // currency-exchange-rate.ts, finance-config.ts, fiscal-period.ts,
+  // job-profitability.ts) and every real page.tsx call site (4 files) switched
+  // from `.from()` to `.rpc()` in this same commit; listFinanceCurrencies'
+  // own page.tsx call site needed no change (its signature is unchanged, zero
+  // actor param). Full Tier A gate suite re-run clean: typecheck, lint (0
+  // errors), the 5,993-test unit suite, check-rls-initplan.ts (0 findings), a
+  // full `pnpm run db:test` (ALL PASSED, 520 migrations / 264 db-test files),
+  // git:check-paths, security:check, and a real `next build`. Cluster 1
+  // (finance, 6 tables / 8 call sites) is now fully DONE. Clusters 2-7 (96 more
+  // call sites across identity/dispatch/tracking/documents/analytics/misc)
+  // remain open.
+  // HUNDRED-AND-TWENTY-FOURTH PASS (2026-09-10, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 521 files (+1) --
+  // new migration 20260910010000_close_o1_query_layer_cluster2_batch1_identity_
+  // access.sql. Opens cluster 2 (identity/HRIS access) and closes its first batch
+  // completely: all 10 call sites across 5 tables/views --
+  // app.tenant_user_identities (list_identity_tenant_links), app.users
+  // (list_tenant_users), app.users_directory (list_user_directory_email_
+  // projections, list_portal_users, list_user_directory -- 3 separate call sites
+  // onto the same view, matching the existing TS layer's own 3-caller shape),
+  // app.permissions (list_permissions_for_module), and app.roles
+  // (list_tenant_roles). 7 new app.*/public.* Option-2 wrapper function pairs via
+  // the same adversarial Design->Verify->Fix pipeline established in clusters 0-1
+  // (RULE A/B/C baked into every draft and every independent verify pass), again
+  // completed via parallel Agent-tool design/verify calls rather than the Workflow
+  // tool (whose subagent-spawning path remained broken this session).
+  // **Real, previously-latent security drift found and closed by the independent
+  // verify pass, before this migration was ever applied to any database**:
+  // app.users_directory's own WHERE clause had never been patched with the
+  // customer_user-layer exclusion its sibling table app.users received in an
+  // earlier hardening pass -- a customer_user-layer principal would have been
+  // able to see internal staff directory rows (including the email-masking
+  // decision) through all 3 of this view's new RPCs. Fixed by adding
+  // `and not app.actor_holds_customer_user_layer(u.tenant_id,
+  // p_actor_auth_user_id)` to all 3 functions' WHERE clauses -- the CURRENT,
+  // most-hardened predicate (RULE B), not the view's own stale one, since this
+  // read path was never reachable in production (app schema not exposed to
+  // PostgREST) and so has no live behavior to preserve.
+  // **Two genuinely novel design categories, resolved through evidence-based
+  // research and independently re-derived at verify, not assumed**: (1)
+  // app.permissions had NEVER had any grant beyond service_role (repo-wide grep
+  // confirmed zero create-policy/grant-to-authenticated ever existed) --
+  // exposing it to authenticated for the first time is a genuine widening
+  // decision, not a reproduction of existing RLS. Resolved by requiring an
+  // active app.principal_memberships row for the caller (reusing the exact
+  // "does this identity hold any real standing" primitive app.
+  // resolve_access_context's own unscoped-request branch already relies on) --
+  // closing the gap where a revoked/never-onboarded identity could otherwise
+  // retain a live JWT with zero current standing (app.revoke_auth_identity only
+  // flips app.tenant_user_identities.status, it never bans the underlying
+  // auth.users row). (2) app.list_identity_tenant_links' self-lookup-only design
+  // (single p_actor_auth_user_id parameter, no separate subject parameter) was
+  // confirmed via (a) zero production callers found by repo-wide grep, (b) the
+  // function's own doc-comment framing, (c) app.tenant_user_identities' own
+  // current RLS predicate having no auth_user_id axis at all (ruling out a
+  // built-in admin/support envelope), and (d) direct precedent from the
+  // app.get_self_employee/app.get_my_employee_profile self-service function
+  // family -- independently re-verified against app.resolve_access_context's own
+  // real login-time resolver, which uses the identical bare
+  // `auth_user_id = p_auth_user_id` row filter shape for this exact table.
+  // **Full-suite regression caught and fixed by `pnpm run db:test` itself, not
+  // by design/verify**: scripts/db-tests/rbac-enforcement.sql's ATW-032 SECURITY
+  // DEFINER authority-surface sweep flagged both app.list_identity_tenant_links
+  // and app.list_permissions_for_module as granted to authenticated with no
+  // authority check its closure query could detect. Both are genuinely
+  // correct-by-design (re-verified independently, not merely asserted): the
+  // former is the identical "raw self-row-identity equality shape"
+  // app.get_self_employee/app.is_ticket_queue_member/app.
+  // accept_customer_portal_invite already document and are exempted for; the
+  // latter carries a real, load-bearing standing gate (the active
+  // app.principal_memberships check above) that is simply inlined as a direct
+  // `exists` rather than expressed through one of the sweep's own named keyword
+  // primitives, so the closure does not credit it automatically. Both added to
+  // rbac-enforcement.sql's own v_expected reviewed-and-justified list with full
+  // written reasons, matching this file's own established escape-hatch
+  // convention -- no gate weakened, no check removed.
+  // 2 minor comment-only defects were found and fixed during the independent
+  // verify pass, before this migration was ever applied: (1) app.
+  // list_permissions_for_module's own draft omitted the RULE A guard and the
+  // active-standing filter entirely (added during verify, see the widening
+  // decision above); (2) a scratchpad path typo caused 2 of 4 design drafts to
+  // be written to the wrong directory -- caught while locating the files for
+  // verify, no content was lost.
+  // Batch's own db-test (scripts/db-tests/o1-query-layer-cluster2-batch1.sql)
+  // passed on the third full run -- two fixture-setup gaps (a self-escalation
+  // rejection from having an identity grant a protected-permission role to
+  // itself, and a wrong role-count assertion that forgot a second,
+  // masking-setup role also counts) were fixed first, neither a defect in any
+  // of the 7 new functions themselves.
+  // All 5 affected TS query files (server/queries/auth-identity.ts,
+  // user-lifecycle.ts, portal-users.ts, field-access.ts, role-permission.ts)
+  // and every real call site (auth-identity.ts/user-lifecycle.ts/field-access.ts/
+  // role-permission.ts have none in production; portal-users.ts's one real
+  // caller, app/(tenant)/[tenantSlug]/admin/users/page.tsx, switched to pass the
+  // new actorAuthUserId argument) switched from `.from()` to `.rpc()` in this
+  // same commit. Full Tier A gate suite re-run clean: `typecheck`, `lint` (0
+  // errors), the unit test suite, `check-rls-initplan.ts` (0 findings), a full
+  // `pnpm run db:test` (`ALL PASSED`, 521 migrations / 265 db-test files),
+  // `git:check-paths`, `security:check`, and a real `next build`.
+  // **Cluster 2 batch 1 (identity/HRIS access, 5 tables, 10 call sites) is now
+  // fully `DONE`.** Clusters 3-7 (86 more call sites across dispatch/tracking/
+  // documents/analytics/misc) remain open.
+  // HUNDRED-AND-TWENTY-FIFTH PASS (2026-09-11, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 522 files (+1) --
+  // new migration 20260911000000_close_o1_query_layer_cluster3_batch1_dispatch_job_
+  // order_views.sql. Opens cluster 3 (operations-tms-core) and closes its first
+  // batch: all 7 call sites across 4 tables/views -- app.shipment_orders (count
+  // only) + app.dispatch_ready_queue (view) in server/queries/basic-dispatch.ts,
+  // app.dispatch_board_queue (view) in dispatch-board.ts, app.job_orders_directory
+  // (view, 3 call sites) in job-order.ts, and app.job_order_handoffs_directory
+  // (view, 2 call sites) in job-order-lineage.ts. 9 new app.*/public.* Option-2
+  // wrapper function pairs via the same adversarial Design->Verify->Fix pipeline
+  // clusters 0-2 established (RULE A/B/C baked into every draft and every
+  // independent verify pass), completed via parallel Agent-tool design/verify
+  // calls (the Workflow tool's own subagent-spawning path remained broken this
+  // session).
+  // **Real cross-tenant-leak risk found and fixed by the independent verify
+  // pass, before this migration was ever applied to any database**: app.
+  // get_job_order_for_handoff and app.get_job_order_handoff_for_quotation both
+  // originally used a silent `order by created_at desc limit 1` fallback for a
+  // hypothetical (schema-legal but application-unreachable today) multi-row
+  // match on a non-bare-unique lookup column (source_handoff_id /
+  // quotation_id, each only part of a composite unique constraint). Since such
+  // a match would mean two rows disagreeing about which TENANT a
+  // handoff/quotation belongs to, silently picking "the newest" risked handing
+  // a caller a different tenant's data -- not merely a nondeterministic pick.
+  // Both functions now COUNT matches and RAISE `ambiguous_context`
+  // (`check_violation`) instead, matching `.maybeSingle()`'s own
+  // throw-on-conflict contract and this codebase's established count-then-raise
+  // idiom (app.resolve_access_context, PLT-108). The db-test's own adversarial
+  // fixture (a raw, service_role-bypass insert producing a genuine duplicate
+  // row) confirmed this RAISE actually fires against a real database, on two
+  // independent fresh-database runs.
+  // Notable design decision, independently re-verified: app.list_dispatch_
+  // ready_queue/app.list_dispatch_board keep their exact count as a SEPARATE,
+  // lateral-free function (app.count_dispatch_ready_shipment_orders/app.count_
+  // dispatch_board_shipment_orders) rather than the `count(*) over()` single-
+  // query shape app.list_portal_users established -- both underlying views
+  // cross-join the ~40-line app.evaluate_dispatch_readiness per row, so a
+  // window-function count would reintroduce the exact O(N) lateral-evaluation
+  // cost CG-AUDIT-2026-09-02 F5 (20260907170000) already eliminated for this
+  // same screen; this migration extends that same fix to app.dispatch_board_
+  // queue for the first time (never itself named by F5, but sharing the
+  // identical LATERAL join, confirmed by reading the view body directly, not
+  // merely trusting its own header's "RLS-scoped identically" claim).
+  // Two minor documentation-accuracy defects were found and fixed during
+  // verify (no SQL logic changed): a RULE B citation undercount (two files ->
+  // three, one of them prose-only) and an off-by-one in the dispatch_board_
+  // queue projection-column count (10 -> 11) in a header comment.
+  // This batch's own db-test (scripts/db-tests/o1-query-layer-cluster3-
+  // batch1.sql) passed cleanly on two independent fresh-database runs (no
+  // fixture-setup defect indicated any bug in the migration's own function
+  // logic -- three minor fixture issues, e.g. a nonexistent `min(uuid)`
+  // aggregate and a unique-constraint collision needing two distinct driver
+  // master_records, were fixed in the test file only).
+  // All 4 affected TS query files (server/queries/basic-dispatch.ts, dispatch-
+  // board.ts, job-order.ts, job-order-lineage.ts) and every real call site (7
+  // page.tsx files: operations/dispatch, operations/dispatch-board,
+  // operations/job-orders, operations/job-orders/[jobOrderId],
+  // operations/job-orders/convert, operations/shipment-orders/create,
+  // commercial/quotations/[quotationId]) switched from `.from()` to `.rpc()`
+  // in this same commit. Full Tier A gate suite re-run clean: `typecheck`,
+  // `lint` (0 errors), the 6,000-test unit suite, `check-rls-initplan.ts` (0
+  // findings), a full `pnpm run db:test` (`ALL PASSED`, 522 migrations / 266
+  // db-test files), `git:check-paths`, `security:check`, and a real `next
+  // build`. Cluster 3 (operations-tms-core, 4/20 tables, 7/28 call sites) has
+  // its first batch DONE; 21 more call sites across dispatch remaining tables
+  // (milestone/leg-tracking/multi-leg/route-planning/shipment-order/mode-
+  // baseline/capacity/exception-escalation) plus clusters 4-7 (58 more call
+  // sites across telematics-tracking/procurement-document/platform-
+  // intelligence-reports/page-level-direct-reads) remain open.
+  // HUNDRED-AND-TWENTY-SIXTH PASS (2026-09-11, user-directed "lanjut sampe siap
+  // launching" extension of CG-AUDIT-2026-09-02 Ø1-query-layer): 523 files (+1) --
+  // new migration 20260911010000_close_o1_query_layer_cluster3_batch2_milestone_
+  // leg_tracking_multileg.sql. Continues cluster 3 (operations-tms-core) with its
+  // second batch: 6 call sites across 6 tables -- app.milestone_codes
+  // (list_milestone_codes) in server/queries/milestone-management.ts, app.
+  // shipment_leg_tracking_policies (get_shipment_leg_tracking_policy) and app.
+  // shipment_leg_tracking_sessions (get_current_shipment_leg_tracking_session)
+  // in mile-orchestration.ts, and app.shipment_legs (list_shipment_legs), app.
+  // shipment_leg_cargo_allocations (get_shipment_leg_cargo_allocation), app.
+  // shipment_leg_custody_events (list_shipment_leg_custody_events) in
+  // multi-leg-shipment.ts. 6 new app.*/public.* Option-2 wrapper function pairs
+  // via the same adversarial Design->Verify->Fix pipeline clusters 0-2 and
+  // cluster 3 batch 1 established (RULE A/B/C baked into every draft), again
+  // completed via parallel Agent-tool design/verify calls rather than the
+  // Workflow tool (whose subagent-spawning path remained broken this session).
+  // Two independent verify agents hit a session-wide rate limit mid-run this
+  // pass; rather than wait idle, the verify work for both drafts was completed
+  // directly (same rigor: independent case-insensitive repo-wide greps against
+  // primary sources for every RULE A/B/C claim, re-deriving rather than trusting
+  // either draft's own citations) once the rate limit reset.
+  // **Notable design decision, independently re-verified**: this migration
+  // deliberately uses TWO DIFFERENT security postures for its 6 functions,
+  // both correct for their own table's real authority shape. app.list_
+  // milestone_codes (a genuinely non-tenant-scoped, `using (true)`-to-
+  // authenticated reference table, mirroring cluster 1 batch 1's app.list_
+  // finance_currencies precedent) and app.get_shipment_leg_tracking_policy/
+  // app.get_current_shipment_leg_tracking_session (mirroring this exact table
+  // family's own pre-existing, already-live sibling read, app.get_shipment_
+  // leg_tracking_sessions) are all SECURITY INVOKER with NO actor parameter,
+  // relying entirely on the calling session's own real RLS -- independently
+  // confirmed safe against `service_role`'s own BYPASSRLS: `service_role`
+  // already holds a direct SELECT grant on all 3 tables, independent of these
+  // new functions, so no new capability is created, and for a genuine
+  // `authenticated` caller INVOKER is the MOST faithful reproduction of the
+  // original (never-reachable) RLS-scoped read, with no separate "claimed
+  // actor" decoupled from session identity for RULE A to protect against --
+  // unlike cluster 3 batch 1's dispatch functions, which take an EXPLICIT
+  // actor parameter specifically because `service_role` calls those ON BEHALF
+  // OF an arbitrary end user with no session identity of its own. app.list_
+  // shipment_legs/app.get_shipment_leg_cargo_allocation/app.list_shipment_leg_
+  // custody_events, by contrast, ARE SECURITY DEFINER + explicit p_actor_
+  // auth_user_id (the dominant convention), since their own RLS varies
+  // per-shipment-order and an INVOKER function would leak unfiltered rows to a
+  // `service_role` caller under BYPASSRLS -- exactly cluster 3 batch 1's own
+  // already-identified failure mode.
+  // A domain investigation (not a defect fix) determined `listShipmentLegs`'
+  // own "non-cancelled-first" TS comment describes neither an exclusion nor a
+  // same-slot reordering rule (a cancelled leg permanently reserves its own
+  // sequence_no under a plain, non-partial unique constraint, making a
+  // same-slot replacement schema-impossible) -- the new function reproduces
+  // the original `.from()` call byte-for-byte (every leg, including
+  // cancelled ones, in plain ascending sequence_no order). Two pre-existing,
+  // out-of-scope gaps were disclosed, not fixed: app.get_shipment_leg_stops
+  // (SECURITY INVOKER, no actor param) is called from inside a SECURITY
+  // DEFINER public wrapper with no table in this family carrying FORCE ROW
+  // LEVEL SECURITY, a plausible already-shipped RLS-bypass gap; and app.
+  // add_shipment_leg's own pre-flight duplicate-sequence check tests
+  // `leg_status <> 'cancelled'` against a base unique constraint that carries
+  // no such carve-out.
+  // Full Tier A gate suite re-run clean: `typecheck`, `lint` (0 errors), the
+  // 6,008-test unit suite, `check-rls-initplan.ts` (0 findings), a full
+  // `pnpm run db:test` (`ALL PASSED`, 523 migrations / 267 db-test files),
+  // `git:check-paths`, `security:check`, and a real `next build`. Cluster 3
+  // batch 2 (6 tables / 6 call sites) is DONE; cluster 3's remaining 10 tables
+  // (15 call sites: route-load-planning's 6 tables/8 call sites, shipment
+  // orders/3, shipment mode profiles/1, vehicle capacity reservations/2,
+  // exceptions directory/1) plus clusters 4-7 (58 more call sites) remain
+  // open.
+  // HUNDRED-AND-TWENTY-SEVENTH PASS (2026-09-11, corrective): 524 files (+1) --
+  // new migration 20260911020000_fix_o1_cluster3_batch2_composite_return_null_
+  // bug.sql. CORRECTS a real defect the HUNDRED-AND-TWENTY-SIXTH PASS itself
+  // introduced, found by this same "lanjut sampe siap launching" effort's own
+  // adversarial verify pass for the very next batch (cluster 3 batch 3), before
+  // that batch's own migration was ever written. `app.get_shipment_leg_tracking_
+  // policy` and `app.get_current_shipment_leg_tracking_session` (both
+  // app.*/public.* pairs, 4 functions total,
+  // 20260911010000_close_o1_query_layer_cluster3_batch2_milestone_leg_tracking_
+  // multileg.sql) were declared `returns app.<table>` (a bare, non-SETOF
+  // composite return), on the premise that "a non-SETOF SQL function's
+  // underlying query returning zero rows yields a NULL result." That premise is
+  // WRONG -- empirically verified against a live Postgres 16 instance (both by
+  // the discovering verify agent and independently re-confirmed here before
+  // touching anything): a non-SETOF SQL function whose body query matches zero
+  // rows returns exactly ONE row with every column NULL, not zero rows. Against
+  // the TS layer's own `row ? parse(row) : null` unwrap (`Array.isArray(data) ?
+  // data[0] : data`), that all-NULL object is truthy, so both functions would
+  // have THROWN AN UNCAUGHT ZodError for the ordinary, expected "no
+  // policy/session defined yet" case -- a genuine, previously-undetected
+  // functional regression in already-pushed code (commit 075a0eb), worse than
+  // the `.maybeSingle()` -> null behavior it replaced.
+  // An initial attempt fixed this by editing the already-committed
+  // 20260911010000 migration file in place, reasoning that since it had never
+  // been applied to any real/hosted database (only disposable local test
+  // databases), doing so was safe. That attempt was ITSELF corrected before
+  // being committed: `pnpm run git:check-paths` (scripts/git/check-protected-
+  // paths.ts) is a machine-enforced, no-exceptions gate that flags ANY edit to
+  // an already-committed migration file, independent of whether a real database
+  // has consumed it -- AGENTS.md states this rule as a bright line ("Never edit
+  // an applied migration; add a new migration") specifically to remove this
+  // exact kind of case-by-case judgment call, not merely to protect real,
+  // already-deployed environments. The in-place edit was reverted
+  // (`git checkout HEAD --`) and this migration authored instead as a genuine
+  // new file. Since Postgres's `CREATE OR REPLACE FUNCTION` does not allow
+  // changing a function's return type, this new migration DROPs and recreates
+  // all 4 declarations (`returns setof app.<table>` instead of `returns
+  // app.<table>`), with every function body, RULE A/B/C authority reasoning,
+  // and grant otherwise byte-for-byte identical to the original. `returns
+  // setof` correctly yields zero rows on a miss. No TS code change was needed:
+  // the existing `Array.isArray(data) ? data[0] : data` unwrap in
+  // server/queries/mile-orchestration.ts already handles a SETOF-returning
+  // function's empty-array result correctly. Independently re-verified after
+  // the fix: applied this new migration to a fresh disposable database on top
+  // of the full existing migration set (clean apply, 0 SQL errors, DROP
+  // FUNCTION/CREATE FUNCTION/COMMENT/REVOKE/GRANT in the expected sequence),
+  // empirically confirmed `select count(*) from
+  // app.get_shipment_leg_tracking_policy(<nonexistent-uuid>)` and its 3 sibling
+  // declarations (app.*/public.* x 2 functions) all now return 0 rows (was 1,
+  // all-NULL), and re-ran cluster 3 batch 2's own full db-test
+  // (o1-query-layer-cluster3-batch2.sql) against the corrected schema -- ALL
+  // PASSED, no other assertion affected (dbTestSetSha256 unchanged, no db-test
+  // file was itself modified). Full Tier A gate suite re-run clean: typecheck,
+  // `check-rls-initplan.ts` (0 findings), `git:check-paths` (now clean -- no
+  // forbidden paths touched), `security:check`, a full `pnpm run db:test`, and
+  // a real `next build`. No other function in the entire Ø1-query-layer
+  // remediation series (clusters 0-3 batch 2, repo-wide grepped for the
+  // identical `returns app\.[a-z_]+$` bare-composite-return pattern) carries
+  // this same defect -- every other single-row lookup in this series uses
+  // `returns table (...)` (implicitly SETOF-safe) instead, confirmed by a
+  // dedicated grep sweep before moving on.
+  // HUNDRED-AND-TWENTY-EIGHTH PASS (2026-09-11, cluster 3 batch 3): 525 files
+  // (+1) -- new migration
+  // 20260911030000_close_o1_query_layer_cluster3_batch3_route_planning.sql.
+  // Closes the LAST 8 broken `.from()` call sites in
+  // server/queries/route-load-planning.ts (ATW-224, CG-S10-ATW-005): 8 new
+  // app.*/public.* Option-2 wrapper pairs (16 functions) against
+  // app.route_planning_scenarios / app.route_planning_constraints /
+  // app.route_planning_candidate_plans / app.route_planning_score_components /
+  // app.route_planning_selected_plans / app.route_planning_replan_events (6
+  // tables), assembled from two independently designed and independently
+  // verified scratchpad drafts (confirmed to share no function-name collisions
+  // and to target 6 distinct tables between them before assembly). All 8
+  // functions are SECURITY INVOKER with ZERO actor parameter, independently
+  // re-derived by BOTH drafts against this exact table family's own two
+  // already-live sibling reads in the same migration (app.get_route_planning_
+  // stops / app.get_canonical_position_for_planning) -- the decisive test in
+  // both cases was tracing every real call site's actual Supabase client
+  // construction (all use createSupabaseServerClient(), none use
+  // createSupabaseServiceRoleClient() to claim a decoupled actor), not merely
+  // an appeal to a shared security mode.
+  // This batch independently caught, and fixed BEFORE this migration was ever
+  // written or committed, the identical non-SETOF bare-composite-return defect
+  // class the HUNDRED-AND-TWENTY-SEVENTH PASS corrected in already-pushed
+  // code: (1) app.get_route_planning_scenario was found and fixed by its own
+  // draft's own adversarial verify pass; (2) app.get_current_route_planning_
+  // selection's identical defect was MISSED by its own draft's verify pass
+  // despite the sibling draft's verify catching the analogous case in the same
+  // batch -- caught during final cross-draft review before assembly, citing
+  // 20260911020000's own corrective migration as precedent in the fix's own
+  // comment. Both 0-or-1-row lookups (bounded respectively by the table's own
+  // primary key and by a partial unique index on (scenario_id) WHERE
+  // is_current) are declared `returns setof app.<table>`. Because both defects
+  // were fixed before this migration's first commit, no corrective follow-up
+  // migration was needed for this batch (unlike batch 2's own history).
+  // server/queries/route-load-planning.ts: all 8 functions converted from
+  // `.from()` to `.rpc()`, all 8 signatures unchanged (non-breaking) -- the
+  // client type `RouteLoadPlanningQueryTableClient` stays `Pick<SupabaseClient,
+  // "from" | "rpc">` (unlike cluster 3 batch 2's file-wide narrowing) because
+  // the file's other 4 functions (scenarios/constraints/candidate-plans reads
+  // already closed by THIS SAME migration, plus the 2 pre-existing RPC-backed
+  // reads) share the file; a repo-wide grep confirmed the one real call site
+  // (app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/
+  // route-planning/page.tsx, all 6 of its call sites) needed no changes beyond
+  // the internal client-method swap, and that listRoutePlanningSelections/
+  // listRoutePlanningReplanEvents have zero current callers anywhere in the
+  // app. server/queries/route-load-planning.test.ts: existing
+  // listRoutePlanningScenarios block converted from `.from()` to `.rpc()`
+  // mocking; 7 new describe blocks added for the other 7 functions (none had
+  // any prior coverage), all using the fake-`.rpc()`-client pattern already
+  // established by this file's own listRoutePlanningStops/
+  // getCanonicalPositionForPlanning blocks.
+  // Full Tier A gate suite run clean: typecheck, lint (0 errors), the
+  // 6,017-test unit suite (14 new tests for this file), `check-rls-
+  // initplan.ts` (0 findings -- this migration adds no RLS policy), a full
+  // `pnpm run db:test` (`ALL PASSED`, 525 migrations / 268 db-test files,
+  // including the new o1-query-layer-cluster3-batch3.sql: owner/shared-org-
+  // unit/denied-member/cross-tenant/Supreme-Admin visibility across all 8
+  // functions, both 0-or-1-row getters proven to return a genuinely empty
+  // result rather than a row of nulls on their respective miss case, ordering
+  // fidelity for all 3 ordered functions proven against deliberately
+  // out-of-order fixture inserts, the replan-events column-semantics
+  // derivation proven directly, anon denial on all 16 functions, and a
+  // service_role BYPASSRLS smoke check), `git:check-paths` (clean, 4 files
+  // checked), `security:check`, and a real `next build`.
+  // **Cluster 3 (`operations-tms-core`) is now FULLY `DONE`: all 20 tables, all
+  // 28 call sites closed** (batches 1-3). Remaining across the whole
+  // Ø1-query-layer effort: clusters 4-7 (58 call sites across telematics-
+  // tracking/procurement-document/platform-intelligence-reports/page-level-
+  // direct-reads) -- next up under the same "lanjut sampe siap launching"
+  // mandate.
+  // HUNDRED-AND-TWENTY-NINTH PASS (2026-09-11, cluster 3 batch 4, the FINAL
+  // batch of cluster 3): 526 files (+1) -- new migration
+  // 20260911040000_close_o1_query_layer_cluster3_batch4_shipment_order_capacity_exceptions.sql.
+  // Closes the LAST 7 broken `.from()` call sites in cluster 3
+  // (operations-tms-core): server/queries/shipment-order.ts (3 call sites),
+  // shipment-mode-baseline.ts (1), capacity-utilization.ts (2), and
+  // exception-escalation.ts (1). 7 new app.*/public.* Option-2 wrapper pairs
+  // (14 functions), assembled from two independently designed and
+  // independently verified scratchpad drafts (confirmed to share no
+  // function-name collisions and to target 4 distinct relations between them
+  // before assembly), covering 3 DISTINCT authority shapes:
+  //   * app.shipment_orders / app.shipment_mode_profiles: the standard
+  //     app.can_access_record(auth.uid(), tenant_id, owner_user_id,
+  //     org_unit_ids, null) predicate, directly for shipment_orders and via a
+  //     one-hop exists-join for shipment_mode_profiles.
+  //   * app.vehicle_capacity_reservations: a DIFFERENT, tenant-membership
+  //     predicate -- (app.has_active_tenant_membership(tenant_id) AND NOT
+  //     app.actor_holds_customer_user_layer(tenant_id)) OR
+  //     app.is_supreme_admin() -- independently re-verified via a fresh RULE
+  //     B grep (the original CREATE POLICY superseded by a later ALTER
+  //     POLICY), not conflated with the can_access_record shape used
+  //     elsewhere.
+  //   * app.exceptions_directory: a VIEW whose own row-visibility WHERE
+  //     clause is a plain, self-contained can_access_record(auth.uid(), ...)
+  //     predicate plus app.has_view_exception_cost-gated column masking --
+  //     safe under SECURITY INVOKER specifically because the predicate is
+  //     keyed on auth.uid() (a per-request GUC) rather than delegated to
+  //     base-table RLS pass-through, independently distinguished from the
+  //     app.users_directory/PLT-114 defect this same codebase already
+  //     documented (20260716113048_create_audit_trail.sql) for a view that
+  //     DID have that unsafe shape.
+  // All 7 functions are SECURITY INVOKER with ZERO actor parameter --
+  // independently re-derived via this series' own decisive test (every real
+  // call site of all 7 TS functions uses createSupabaseServerClient() only,
+  // or a hand-rolled test fake for the 3 functions with zero current
+  // production callers; none uses createSupabaseServiceRoleClient() to claim
+  // a decoupled actor). app.get_shipment_order and app.get_shipment_mode_profile
+  // (both 0-or-1-row lookups, bounded by a primary key and a unique
+  // constraint respectively) are declared `returns setof app.<table>`, never
+  // a bare composite -- the standing defect-class check, now applied
+  // cleanly on the first attempt (no corrective follow-up needed).
+  // app.list_shipment_orders is a new server-paginated function (mirroring
+  // app.list_portal_users' own established `count(*) over()` idiom exactly,
+  // not the two-function count/list split cluster 3 batch 1 used for its own
+  // lateral-join dispatch views, since this query has no lateral join and no
+  // per-row function call) -- disclosed one inherited, non-novel
+  // characteristic: an out-of-range page reports total_count 0 rather than
+  // the true total, matching server/queries/portal-users.ts:80's own
+  // already-shipped handling of the identical case.
+  // A real, pre-existing data-completeness defect was found and documented
+  // (not fixed, out of this batch's wrapper-only scope): app.exceptions_directory's
+  // own view body was never widened to project the 4 provenance columns
+  // (source_class/source_confidence_score/source_freshness_status/
+  // source_signal_id) added to app.operational_exceptions at ATW-228 --
+  // every row read through the view always reports these 4 fields as null,
+  // even when the underlying table has real values; does not break parsing
+  // (the Zod schema treats them as nullable, not optional).
+  // All 4 TS query files converted from `.from()` to `.rpc()` with unchanged
+  // (non-breaking) call signatures; 6 real call sites across 4 page.tsx files
+  // needed no changes beyond the internal client-method swap.
+  // shipment-mode-baseline.ts's and exception-escalation.ts's client types
+  // were narrowed to `Pick<SupabaseClient, "rpc">` (both files' only
+  // .from()-backed function converts here, leaving no other .from() call in
+  // either file); shipment-order.ts's and capacity-utilization.ts's wider
+  // `"from" | "rpc"` types are left unchanged per this series' own
+  // established convention (narrowing deferred to whoever next touches
+  // those files, since each already carries other RPC-only functions).
+  // Full Tier A gate suite run clean: `typecheck`, `lint` (0 errors), the
+  // 6,017-test unit suite (4 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking, no net new test count change), `check-rls-initplan.ts`
+  // (0 findings -- this migration adds no RLS policy), a full `pnpm run
+  // db:test` (`ALL PASSED`, 526 migrations / 269 db-test files, including
+  // the new `o1-query-layer-cluster3-batch4.sql`: a full owner/shared-org-unit/
+  // denied-member/cross-tenant/Supreme-Admin visibility matrix across all 3
+  // authority shapes, both 0-or-1-row getters' genuinely-empty-on-miss proof,
+  // full pagination coverage for list_shipment_orders (page 1/page 2/
+  // out-of-range/page_size clamp) with a consistent total_count, the
+  // tenant-membership shape's own customer-layer-exclusion proof via a real
+  // customer_user-layer principal, and the cost-masking proof for
+  // list_shipment_exceptions -- an owner holding OPS:View cost sees real
+  // sensitive fields, a shared-org-unit viewer lacking that permission sees
+  // them nulled with sensitive_masked=true despite full row-level access, and
+  // a Supreme Admin sees real values via evaluate_permission's own
+  // supreme_admin_exception branch with zero explicit grant), `git:check-paths`
+  // (clean, 10 files checked), `security:check`, and a real `next build`.
+  // **Cluster 3 (`operations-tms-core`) is now FULLY, FINALLY `DONE`: all 20
+  // tables, all 28 call sites closed** (batches 1-4). Remaining across the
+  // whole Ø1-query-layer effort: clusters 4-7 (58 call sites across
+  // telematics-tracking/procurement-document/platform-intelligence-reports/
+  // page-level-direct-reads) -- next up under the same "lanjut sampe siap
+  // launching" mandate.
+  // HUNDRED-AND-THIRTIETH PASS (2026-09-13, cluster 4/telematics-tracking
+  // batches 1-2, the FULL cluster): 528 files (+2) -- two new migrations,
+  // 20260911050000_close_o1_query_layer_cluster4_batch1_fleet_driver_device.sql
+  // and 20260911060000_close_o1_query_layer_cluster4_batch2_tracking_security.sql.
+  // Closes all 12 broken `.from()` call sites in cluster 4: server/queries/
+  // fleet-driver-device.ts (7 call sites, one file, batch 1) and
+  // driver-mobile-tracking.ts (1) / gps-device-installation.ts (2) /
+  // tracking-source-policy.ts (1) / public-tracking.ts (1) (5 call sites
+  // across 4 files, batch 2). 12 new app.*/public.* Option-2 wrapper pairs
+  // (24 functions), assembled from two independently designed and
+  // independently verified scratchpad drafts, one per batch.
+  // Batch 1 (7 functions over app.vehicle_operational_profiles/driver_
+  // operational_profiles/gps_devices/sim_cards/device_vehicle_assignments/
+  // provider_vehicle_mappings/vehicle_tracking_source_priorities): all
+  // SECURITY INVOKER, zero actor parameter, sharing one tenant-membership RLS
+  // predicate -- (app.has_active_tenant_membership(tenant_id) AND NOT
+  // app.actor_holds_customer_user_layer(tenant_id)) OR app.is_supreme_admin()
+  // -- the same shape cluster 3 batch 4's own app.vehicle_capacity_
+  // reservations functions already established as INVOKER-safe. A genuine
+  // KEY FINDING corrected a plausible-but-wrong first-pass assumption: 3 of
+  // the 7 tables (device_vehicle_assignments/provider_vehicle_mappings/
+  // vehicle_tracking_source_priorities) are filtered in their own RPC call by
+  // device_id/vehicle_master_id, not tenant_id -- independently re-derived
+  // from each table's own `create table`/`create policy` statements that this
+  // is NOT a join-derived authority chain: all 3 carry their own, physically
+  // independent tenant_id column, and their RLS predicate is a plain check on
+  // that column, with no EXISTS/join to app.gps_devices or
+  // app.master_records anywhere in any of their 14 policy statements.
+  // Batch 2 (5 functions over app.driver_mobile_tracking_sessions/gps_device_
+  // installations/tenant_tracking_source_policies/shipment_tracking_tokens)
+  // spans 3 distinct authority shapes: 2 SECURITY DEFINER functions
+  // (app.get_driver_mobile_tracking_session, app.get_active_shipment_
+  // tracking_token) taking an explicit p_actor_auth_user_id + RULE A guard,
+  // required because ISS-2026-232 already revoked authenticated's table-level
+  // SELECT on both underlying tables in favor of an explicit column-level
+  // grant excluding token_hash -- both new functions use `returns table
+  // (...)` with the same explicit safe-column list their original .from()
+  // calls used, never `returns setof app.<table>` (which would leak
+  // token_hash back into the composite); and 3 SECURITY INVOKER functions
+  // (app.list_gps_device_installations, app.get_gps_device_installation_for_
+  // assignment, app.get_tenant_tracking_source_policy) over 2 tables never
+  // touched by ISS-2026-232, sharing the same tenant-membership predicate as
+  // batch 1. An adversarial verify pass surfaced and corrected the batch
+  // brief's own overstated mechanism for why DEFINER was required (Postgres
+  // grants SELECT per-column, not only per-table, so a same-column-list
+  // INVOKER function would in fact pass the privilege check today) --
+  // DEFINER was retained anyway for two independent, still-valid reasons
+  // (drift protection against a future bare-grant regression re-opening the
+  // exact gap ISS-2026-232 closed, and consistency with this table family's
+  // own write-side DEFINER precedent), with the corrected reasoning
+  // documented rather than the overstated claim repeated uncritically.
+  // Both 0-or-1-row lookups outside the DEFINER pair
+  // (app.get_gps_device_installation_for_assignment, app.get_tenant_
+  // tracking_source_policy) are declared `returns setof app.<table>`, never a
+  // bare composite -- the standing defect-class check, applied cleanly with
+  // no corrective follow-up needed in either batch.
+  // All 5 TS query files converted from `.from()` to `.rpc()`.
+  // fleet-driver-device.ts's and gps-device-installation.ts's client types
+  // were narrowed to `Pick<SupabaseClient, "rpc">` (each file's entire
+  // `.from()`-backed surface converts in this pass); driver-mobile-tracking.ts,
+  // tracking-source-policy.ts, and public-tracking.ts already carried `"rpc"`
+  // in their client types and are left unchanged per this series' own
+  // established convention. Two genuinely NEW, disclosed breaking parameters
+  // were added (RULE A, batch 2 only): `getDriverMobileTrackingSession` and
+  // `getActiveShipmentTrackingToken` both gained an `actorAuthUserId`
+  // parameter -- the former has zero real production callers today (only a
+  // unit test), the latter has exactly one real call site
+  // (app/(tenant)/[tenantSlug]/operations/shipment-orders/[shipmentOrderId]/
+  // page.tsx:258), updated to pass the page's own already-in-scope
+  // `access.authUserId`, already threaded into every one of that page's ~12
+  // sibling query calls.
+  // A real, independently-caught db-test bug was found and fixed during this
+  // pass's own verification, not merely accepted from the drafting agent's
+  // self-report: cluster 4 batch 1's own db-test file initially resolved
+  // several fixture-row ids via subqueries filtered ONLY by an enum-shaped
+  // column (`source_type`/`provider_code`/a free-text `reason` string) with
+  // no scoping to the specific vehicle_master_id/device_id under test --
+  // this passed cleanly when the file was run standalone (the only rows of
+  // that shape in an otherwise-empty disposable database) but failed with a
+  // genuine `more than one row returned by a subquery` error the first time
+  // it ran inside the FULL `pnpm run db:test` suite, where other db-test
+  // files' own fixtures share one database and can carry rows with the same
+  // enum value on a different vehicle/device. Fixed by adding the missing
+  // `vehicle_master_id`/`device_id` scope to every one of the 8 affected
+  // subqueries (both the tenant-member and Supreme Admin test sessions) --
+  // re-verified with a full `pnpm run db:test` run afterward, ALL PASSED.
+  // This is a new failure mode for this series (prior batches' db-test files
+  // happened not to trigger it) and is flagged here as a standing lesson:
+  // a db-test file passing in isolation is NOT sufficient evidence it is
+  // correct under the shared-database full-suite run -- the full suite must
+  // be run before considering a batch's db-test file verified, not merely the
+  // standalone `psql -f` invocation used during iteration.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors),
+  // the 6,022-test unit suite (5 test files converted from `.from()`-mocking
+  // to `.rpc()`-mocking, 2 new describe blocks added for fleet-driver-device.ts's
+  // previously-untested functions), `check-rls-initplan.ts` (0 findings --
+  // neither migration adds an RLS policy), a full `pnpm run db:test` (`ALL
+  // PASSED`, 528 migrations / 271 db-test files, including both new cluster-4
+  // db-test files: a full owner/customer-user-layer/cross-tenant/Supreme-Admin
+  // visibility matrix across all 12 functions and both authority shapes, the
+  // RULE A forged-actor-rejection proof for both SECURITY DEFINER functions
+  // -- a session authenticated as one actor claiming a different actor's
+  // identity is genuinely rejected via `actor_identity_mismatch` before any
+  // lookup runs -- explicit `to_jsonb(row) ? 'token_hash'` proofs that
+  // neither DEFINER function's own response shape ever carries the sensitive
+  // column, genuinely-empty-on-miss proofs for every 0-or-1-row lookup, and
+  // ordering-fidelity proofs against fixture rows deliberately inserted out
+  // of order), `git:check-paths` (clean, 15 files checked), `security:check`,
+  // and a real `next build`.
+  // **Cluster 4 (`telematics-tracking`) is now FULLY `DONE`: all 12 call
+  // sites closed** (batches 1-2). Remaining across the whole Ø1-query-layer
+  // effort: clusters 5-7 (procurement-document/platform-intelligence-reports/
+  // page-level-direct-reads) -- next up under the same "lanjut sampe siap
+  // launching" mandate.
+  // HUNDRED-AND-THIRTY-FIRST PASS (2026-09-13, cluster 5/procurement-document, the
+  // FULL cluster in one migration): 529 files (+1) -- new migration
+  // 20260913000000_close_o1_query_layer_cluster5_procurement_document.sql. Closes 4
+  // of this cluster's 5 broken `.from()` call sites: server/queries/procurement-
+  // approval.ts:49 (listProcurementApprovalPolicyVersions), server/queries/
+  // procurement-dashboard.ts:110 (listActiveProcurementMetricDefinitions),
+  // server/queries/document-requirement.ts:77 (listDocumentRequirementDefinitions),
+  // server/queries/document.ts:94 (listDocumentTypes). 4 new app.*/public.* Option-2
+  // wrapper pairs (8 functions) across 4 relations, spanning 2 authority shapes: 2
+  // SECURITY DEFINER functions (list_procurement_approval_policy_versions,
+  // list_document_requirement_definitions) taking an explicit p_tenant_id +
+  // p_actor_auth_user_id, RULE A-guarded, reproducing each table's own CURRENT
+  // tenant-membership RLS predicate and RAISING insufficient_authority on total
+  // denial (mirroring app.list_quotation_approval_rule_versions' own established
+  // precedent, cluster 0 batch 4) rather than a silent empty list; and 2 SECURITY
+  // INVOKER, zero-actor-param functions (list_active_procurement_metric_definitions,
+  // list_document_types) over tables with either no RLS at all (a plain
+  // `grant select ... to authenticated, service_role`) or a genuinely open
+  // `using (true)` policy, mirroring app.list_milestone_codes' own established
+  // precedent (cluster 3 batch 2).
+  // The fifth call site (procurement-approval.ts:136, listProcurementApprovalInbox
+  // ForActor) needed NO new SQL: an adversarial re-check of the recon manifest's own
+  // NEEDS_NEW_FUNCTION classification for this call site found it stale --
+  // app.get_approval_requests_entity_refs(uuid[], uuid), shipped by cluster 0 batch
+  // 3 for the byte-for-byte identical read shape on the same table, already covers
+  // it (confirmed via a fresh RULE C grep: still that function's own only body).
+  // This is a pure TS-side swap (`.from("approval_requests")` -> the existing RPC),
+  // not a new function -- the recon was run before cluster 0 batch 3 existed and
+  // could not have known.
+  // A second genuine, independently-caught defect was found and fixed during this
+  // pass's own db-test verification (documented in full on dbTestSetSha256 below):
+  // app.procurement_metric_definitions is a platform-wide shared table that
+  // scripts/db-tests/procurement-vendor-dashboard-reports.sql already asserts an
+  // EXACT count of is_current rows against (11) -- an early draft of this pass's own
+  // db-test file committed 2 new is_current=true fixture rows into that same shared
+  // table, which broke that sibling assertion the moment the full `pnpm run db:test`
+  // suite ran (not the standalone file). Fixed by wrapping that one test block in an
+  // explicit `begin ... rollback` instead of committing its fixture rows -- a NEW
+  // shape of the cross-file fixture-collision defect class cluster 4 batch 1 first
+  // identified (there it was an underscoped subquery in this file; here it is an
+  // exact-count assertion in ANOTHER file), reinforcing that same pass's own
+  // standing lesson: the full `pnpm run db:test` suite must always be run before
+  // considering a batch's db-test file verified, never the standalone `psql -f`
+  // invocation alone.
+  // All 4 TS query files converted from `.from()` to `.rpc()`; the fifth
+  // (procurement-approval.ts) converts its one remaining `.from()` call site too
+  // (the entity-refs swap above), so ProcurementApprovalQueryClient,
+  // ProcurementDashboardQueryClient, and DocumentRequirementQueryClient all narrow
+  // from `Pick<SupabaseClient, "from" | "rpc">` to `Pick<SupabaseClient, "rpc">` --
+  // each file's own only "from" usage(s) converted here. document.ts's own
+  // DocumentTypeLookupClient (a hand-written interface, not a SupabaseClient pick)
+  // changes from a `from()`-shaped interface to an `rpc()`-shaped one. One
+  // disclosed, non-breaking-in-practice signature change: listProcurementApproval
+  // PolicyVersions gains a required actorAuthUserId parameter -- its one real call
+  // site (app/(tenant)/[tenantSlug]/procurement/approvals/page.tsx:36) already had
+  // access.authUserId in scope (passed to the inbox call on the line above).
+  // listDocumentRequirementDefinitions' input gains a required actorAuthUserId field
+  // -- zero real production callers today (only a unit test), a safe addition.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the
+  // 6,023-test unit suite (5 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking; procurement-dashboard.test.ts's now-dead `recordingFromClient`
+  // helper removed, not left unused), `check-rls-initplan.ts` (0 findings -- this
+  // migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 529
+  // migrations / 272 db-test files, including the new cluster-5 db-test file: a full
+  // member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix on both
+  // DEFINER functions including the insufficient_authority-raises-on-denial proof,
+  // the RULE A forged-actor-rejection proof for both, and existence-based (never
+  // exact-count) proofs for both INVOKER functions' filter/ordering/exclusion
+  // behavior against the shared platform-wide tables), `git:check-paths` (clean, 11
+  // files checked), `security:check`, and a real `next build`.
+  // **Cluster 5 (`procurement-document`) is now FULLY `DONE`: all 5 call sites
+  // closed** in one migration. Remaining across the whole Ø1-query-layer effort:
+  // clusters 6-7 (platform-intelligence-reports/page-level-direct-reads) -- next up
+  // under the same "lanjut sampe siap launching" mandate.
+  // HUNDRED-AND-THIRTY-SECOND PASS (2026-09-13, cluster 6/platform-intelligence-
+  // reports batch 1 of N): 530 files (+1) -- new migration 20260913010000_close_
+  // o1_query_layer_cluster6_batch1_analytics_automation.sql. Closes 9 of this
+  // cluster's 30 broken `.from()` call sites across server/queries/analytics.ts (3)
+  // and server/queries/automation-rule.ts (6). 9 new app.*/public.* Option-2 wrapper
+  // pairs (18 functions), ALL SECURITY INVOKER, zero actor parameter -- every real
+  // call site of all 9 TS functions uses `createSupabaseServerClient()` only. Three
+  // grant/RLS shapes: (1) app.analytics_view_registry, no RLS, full-row grant --
+  // `select *` safe; (2) app.analytics_refresh_runs, no RLS but COLUMN-restricted
+  // (ISS-2026-174) -- an adversarial correction of the recon manifest's own stale
+  // "zero grant" claim, which missed a later harden migration
+  // (20260827030000_harden_analytics_refresh_runs_grant.sql) that re-granted a
+  // narrower 8-column list; both new functions select exactly those 8 columns and
+  // cast row_count_before/triggered_by_auth_user_id/triggered_by_label to null
+  // (confirmed zero UI regression: none of the 3 is rendered anywhere in
+  // app/**/*.tsx); (3) app.automation_rules/app.automation_rule_versions/
+  // app.automation_rule_executions/app.approval_requests/app.approval_request_steps,
+  // RLS-scoped tenant-membership (the first 3 with NO explicit `OR is_supreme_
+  // admin()` disjunct at the policy level -- verified live in this pass's own
+  // db-test that app.has_active_tenant_membership's own current body already admits
+  // a Supreme Admin internally, so the policy-level omission is not a functional
+  // gap); app.approval_requests is additionally COLUMN-restricted (ended_reason
+  // excluded since 20260731210000, Finding 5 CRITICAL) -- the new function selects
+  // the same explicit 15-column list server/queries/automation-rule.ts's own
+  // pre-existing TS code already used. Every 0-or-1-row lookup declared `returns
+  // setof app.<table>`, never a bare composite.
+  // Full Tier A gate suite verified clean: `typecheck` (zero signature changes --
+  // every one of the 9 TS functions kept its exact original call shape), `lint` (0
+  // errors), the 6,023-test unit suite (2 test files converted from `.from()`-
+  // mocking to `.rpc()`-mocking), `check-rls-initplan.ts` (0 findings -- this
+  // migration adds no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 530
+  // migrations / 273 db-test files, including the new cluster-6-batch-1 db-test
+  // file: a full member/customer-user-layer/cross-tenant/Supreme-Admin visibility
+  // matrix across both RLS shapes -- including live proof that has_active_tenant_
+  // membership's own internal Supreme Admin branch, not a policy-level disjunct,
+  // is what admits the Supreme Admin on 3 of the 5 RLS-scoped tables -- ordering-
+  // fidelity proofs against fixture rows deliberately inserted out of order, and
+  // explicit proof that a REAL, non-null ended_reason/row_count_before/triggered_
+  // by_auth_user_id/triggered_by_label written directly to fixture rows all come
+  // back genuinely null through the new functions), `git:check-paths` (clean, 6
+  // files checked), `security:check`, and a real `next build`.
+  // Remaining in cluster 6: 21 call sites across server/queries/integration-hub.ts
+  // (4), server/queries/third-party-provider-adapter.ts (1), server/queries/
+  // report.ts (5), server/queries/saved-report-view.ts (1), server/queries/
+  // scheduled-report.ts (4), server/queries/supreme-tenants.ts (1), server/queries/
+  // tenant-dashboard.ts (5) -- next up under the same "lanjut sampe siap launching"
+  // mandate. Plus cluster 7 (16 call sites) after that.
+  // HUNDRED-AND-THIRTY-THIRD PASS (2026-09-13, cluster 6/platform-intelligence-
+  // reports batch 2 of N): 531 files (+1) -- new migration 20260913020000_close_
+  // o1_query_layer_cluster6_batch2_integration_hub.sql. Closes 5 more of this
+  // cluster's remaining broken `.from()` call sites across server/queries/
+  // integration-hub.ts (4: listIntegrationAdapters, listIntegrationConnections,
+  // getIntegrationConnectionById, listIntegrationHealthChecks) and server/queries/
+  // third-party-provider-adapter.ts (1: getThirdPartyProviderConnection) -- 14/30
+  // cumulative for the cluster. 5 new app.*/public.* Option-2 wrapper pairs (10
+  // functions), ALL SECURITY INVOKER, zero actor parameter. Three grant/RLS shapes:
+  // (1) app.integration_adapters -- no RLS, full-row grant; (2) app.integration_
+  // connections/app.integration_health_checks -- RLS-scoped tenant-membership, NO
+  // explicit OR is_supreme_admin() disjunct at the policy level (the SAME shape
+  // cluster 6 batch 1's own app.automation_rules family used) -- re-verified LIVE
+  // in this batch's own db-test, not merely assumed to carry over from batch 1,
+  // that has_active_tenant_membership's own internal Supreme Admin branch still
+  // admits a zero-membership Supreme Admin; (3) app.third_party_provider_
+  // connections -- RLS-scoped with an explicit OR is_supreme_admin() disjunct,
+  // PLUS a live schema-evolution wrinkle independently traced rather than assumed
+  // from the recon's own 14-column citation: the table's original `webhook_secret_
+  // value` column was later DROPPED entirely and replaced by a new `webhook_
+  // secret_value_encrypted bytea` column that appears in NO grant statement
+  // whatsoever -- the new function selects all 15 of the table's current visible
+  // columns (to structurally satisfy `returns setof <table>`) and explicitly casts
+  // the ungranted 15th to null, proven live against a real, non-null bytea value
+  // deliberately written to the fixture row. Every 0-or-1-row lookup declared
+  // `returns setof app.<table>`, never a bare composite. Zero disclosed breaking
+  // parameter changes -- every function kept its exact original TS call shape.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the
+  // 6,023-test unit suite (2 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking), `check-rls-initplan.ts` (0 findings -- this migration adds
+  // no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 531 migrations / 274
+  // db-test files, including the new cluster-6-batch-2 db-test file: a full
+  // member/customer-user-layer/cross-tenant/Supreme-Admin visibility matrix across
+  // all 3 shapes, ordering-fidelity proofs against fixture rows deliberately
+  // inserted out of order, and an explicit null-cast proof for webhook_secret_
+  // value_encrypted), `git:check-paths` (clean, 6 files checked), `security:check`,
+  // and a real `next build`.
+  // Remaining in cluster 6: 16 call sites across server/queries/report.ts (5),
+  // server/queries/saved-report-view.ts (1), server/queries/scheduled-report.ts (4),
+  // server/queries/supreme-tenants.ts (1), server/queries/tenant-dashboard.ts (5) --
+  // next up under the same "lanjut sampe siap launching" mandate. Plus cluster 7
+  // (16 call sites) after that.
+  // HUNDRED-AND-THIRTY-FOURTH PASS (2026-09-13, cluster 6/platform-intelligence-
+  // reports batch 3 of N): 532 files (+1) -- new migration 20260913030000_close_
+  // o1_query_layer_cluster6_batch3_reports.sql. Closes 6 more of this cluster's
+  // remaining broken `.from()` call sites across server/queries/report.ts (5:
+  // listActiveReportTypes, getReportTypeByCode, listReportRuns,
+  // listReportRunsForType, listReportTypeVersions) and server/queries/
+  // saved-report-view.ts (1: getSavedReportViewById) -- 20/30 cumulative for the
+  // cluster. 5 new app.*/public.* Option-2 wrapper pairs (10 functions), ALL
+  // SECURITY INVOKER, zero actor parameter. listReportRuns/listReportRunsForType
+  // deliberately share ONE new function (app.list_report_runs, a nullable
+  // p_report_type_code parameter) rather than two near-duplicates, a disclosed
+  // implementation choice.
+  // Three grant/RLS shapes: (1) app.report_types/app.report_type_versions -- no
+  // RLS, full-row grant, platform-wide; (2) app.report_runs -- RLS-scoped
+  // tenant-membership WITH an explicit OR is_supreme_admin() disjunct; (3) app.
+  // saved_report_views -- a genuinely 3-branch predicate (supreme-admin bypass,
+  // owner-row-plus-membership, or tenant-shared-row-plus-membership), whose
+  // CURRENT text was traced through a DROP-AND-RECREATE (not an ALTER), a
+  // different RULE B mechanism than every other finding in this series so far
+  // (20260810500000_harden_own_row_rls_membership_gap.sql:83-92). The new function
+  // relies ENTIRELY on live RLS (never re-implementing the 3-branch logic in its
+  // own SQL body) -- proven live with a SECOND real tenant member who is NOT the
+  // view owner, who must see a tenant-shared view but be denied a private one,
+  // the exact distinction a hand-rolled reproduction could get subtly wrong.
+  // A real, independently-caught db-test bug was found and fixed during this
+  // pass's own verification: an early draft's fixture inserted a new app.
+  // report_types row (o1c6b3_retired) with no matching app.report_type_versions
+  // row, which broke scripts/db-tests/reporting-engine.sql's own pre-existing
+  // assertion that every report_types row has a backfilled version 1 -- tracing
+  // the CURRENT app.register_report_type body (20260802010000:182-183) confirmed
+  // this is a real, enforced production invariant ("every report type ... always
+  // has a real version history from the moment it exists"), not merely another
+  // file's own arbitrary assumption -- fixed by adding the missing version row,
+  // matching what the real registration function would always do. Re-verified
+  // with a full `pnpm run db:test` run afterward, ALL PASSED. A third instance of
+  // this series' own standing cross-file-collision lesson, in a third distinct
+  // shape (cluster 4 batch 1: underscoped subquery in this file; cluster 5:
+  // exact-count assertion in another file; here: a cross-table invariant enforced
+  // by another file's own assertion) -- restated once more: the full `pnpm run
+  // db:test` suite, never a standalone `psql -f` invocation, is the only real
+  // verification for a shared-database db-test file.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors), the
+  // 6,023-test unit suite (2 test files converted from `.from()`-mocking to
+  // `.rpc()`-mocking), `check-rls-initplan.ts` (0 findings -- this migration adds
+  // no RLS policy), a full `pnpm run db:test` (`ALL PASSED`, 532 migrations / 275
+  // db-test files, including the new cluster-6-batch-3 db-test file: existence
+  // proofs for the platform-wide tables, the get-by-code-vs-list-active
+  // distinction, the p_report_type_code filter narrowing correctly, and the full
+  // 3-branch saved_report_views visibility matrix with a genuine non-owner
+  // tenant member persona), `git:check-paths` (clean, 6 files checked),
+  // `security:check`, and a real `next build`.
+  // HUNDRED-AND-THIRTY-FIFTH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 533 files (+1) -- new migration 20260913040000_close_o1_query_layer_
+  // cluster6_batch4_scheduled_reports_dashboards.sql. Closes the LAST 10 call
+  // sites of cluster 6 (platform-intelligence-reports): server/queries/
+  // scheduled-report.ts (4: listScheduledReports, getScheduledReportById,
+  // listScheduledReportRecipients, listScheduledReportRuns), server/queries/
+  // supreme-tenants.ts (1: listSupremeTenants), server/queries/tenant-dashboard.ts
+  // (5: listTenantDashboards, getTenantDashboardById, listTenantDashboardVersions,
+  // getTenantDashboardVersionById, listDashboardWidgets). 10 new app.*/public.*
+  // Option-2 wrapper pairs (20 functions), ALL SECURITY INVOKER with ZERO actor
+  // parameter -- every real call site of all 10 TS functions uses
+  // createSupabaseServerClient() only.
+  // Two RLS shapes. SHAPE 1 (6 tables: scheduled_reports/scheduled_report_
+  // recipients/scheduled_report_runs/tenant_dashboards/tenant_dashboard_versions/
+  // tenant_dashboard_widgets): a tenant-membership predicate WITH an explicit OR
+  // is_supreme_admin() disjunct, RULE B re-verified live (fresh grep of both
+  // `create policy` and any later `alter policy` for all 6 -- exactly one hit
+  // each, no later alter). SHAPE 2 (app.list_supreme_tenants over app.tenants):
+  // NO explicit is_supreme_admin() disjunct at the policy level
+  // (tenants_select_own_tenant's CURRENT text, re-verified live post its own
+  // 20260730560000 alter policy: `has_active_tenant_membership(id) AND NOT
+  // actor_holds_customer_user_layer(id)`) -- this migration's own recon flagged
+  // this one function for "extra scrutiny" and suggested a more cautious
+  // SECURITY DEFINER design with an in-function is_supreme_admin() check;
+  // independently re-derived (and confirmed via this query file's own
+  // pre-existing module-header comment) that SECURITY INVOKER with zero actor
+  // param is correct and sufficient, since app.has_active_tenant_membership's
+  // own current body already returns true for ANY tenant_id whenever the caller
+  // is a Supreme Admin -- a disclosed, deliberate departure from the recon's own
+  // more cautious suggestion, documented at length in the migration's own header.
+  // Every 0-or-1-row lookup declared `returns setof app.<table>`, never a bare
+  // composite -- the standing defect-class check this series has run on every
+  // batch since it first surfaced. RULE A does not apply to any of the 10
+  // functions in this batch: none takes an actor parameter.
+  // This is the FINAL batch of cluster 6: cluster 6 (platform-intelligence-
+  // reports) is now FULLY DONE, all 30 call sites closed.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the unit test suite (3 test files converted from
+  // `.from()`-mocking to `.rpc()`-mocking: scheduled-report.test.ts,
+  // supreme-tenants.test.ts, tenant-dashboard.test.ts -- 20/20 tests passing),
+  // `git:check-paths` (clean), `security:check` (clean), and a full `pnpm run
+  // db:test` (`ALL PASSED`, 533 migrations / 276 db-test files, including the
+  // new cluster-6-batch-4 db-test file: ordering-fidelity proofs against
+  // fixture rows deliberately inserted out of order for all 9 SHAPE 1 functions,
+  // a full 5-persona (owner/non-owner-member/customer_user-layer/cross-tenant/
+  // Supreme-Admin-with-zero-membership) visibility matrix across both the
+  // scheduled-report and tenant-dashboard families including the TWO-LEVEL
+  // EXISTS join for tenant_dashboard_widgets, and a dynamic (never hardcoded)
+  // pagination proof for app.list_supreme_tenants that computes its own expected
+  // page count from a live raw count rather than assuming how many of the
+  // shared full-suite database's 267+ other tenant-provisioning db-test files
+  // happen to be present -- plus a genuine non-Supreme-caller-sees-only-their-
+  // own-tenant proof, the one assertion SHAPE 2 actually needs).
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // db-test authoring: app.scheduled_report_runs carries a NOT NULL
+  // `occurrence_at` column (added by 20260802060000_harden_intelligence_batch1_
+  // tier_c_review_fixes.sql, unique on (scheduled_report_id, occurrence_at)) not
+  // present in the table's own original CREATE TABLE -- a RULE C staleness catch
+  // against this series' own fixture INSERT (never against the migration's own
+  // `select *` function bodies, which already pass any such column through
+  // transparently); fixed by adding occurrence_at to the fixture INSERT, then
+  // re-verified with a full `pnpm run db:test` run, ALL PASSED.
+  // Cluster 6 (platform-intelligence-reports, 30/30 call sites) is now FULLY
+  // DONE. Remaining: cluster 7 (16 call sites), not yet started -- next up under
+  // the same "lanjut sampe siap launching" mandate.
+  // HUNDRED-AND-THIRTY-SIXTH PASS (2026-09-14, same ruling as migrationSetSha256
+  // above): 534 files (+1) -- new migration 20260913050000_close_o1_query_layer_
+  // cluster7_page_level_direct_reads.sql. Closes cluster 7 (page-level-direct-
+  // reads), the LAST cluster of the entire Ø1-query-layer defect: all 10 broken
+  // `.from()` reads embedded DIRECTLY in Server Component page.tsx files (not
+  // server/queries/*.ts, unlike every prior cluster) across 6 files --
+  // hris/employees/[masterRecordId]/page.tsx (2: files, org_units),
+  // hris/positions/[positionId]/page.tsx (2: org_units, employee_position_
+  // assignments), hris/positions/bulk-reassign/page.tsx (1: org_units),
+  // hris/positions/page.tsx (1: org_units), hris/recruitment/applications/
+  // [applicationId]/page.tsx (1: job_offers), operations/warehouses/
+  // [warehouseId]/locations/page.tsx (1: warehouse_locations), procurement/
+  // approvals/[stepId]/page.tsx (2: approval_request_steps, approval_requests).
+  // 7 new app.*/public.* Option-2 wrapper pairs (14 functions) -- the 5
+  // org_units call sites (functionally identical flat picker lists) share ONE
+  // new function per the recon's own explicit suggestion.
+  // Grant/RLS shapes, independently re-derived per function: app.list_files_for_
+  // record (SECURITY DEFINER, mirrors app.list_files_for_tenant's per-row
+  // app.authorize_file_access composition exactly); app.list_org_units
+  // (SECURITY INVOKER, RLS excludes customer_user-layer, domain-agnostic);
+  // app.list_position_incumbents (SECURITY DEFINER, HRS:View + app.has_view_
+  // personal_data masking, mirrors the CURRENT post-lineage-column-fix bodies of
+  // app.get_employee_current_assignment/app.get_employee_position_assignment_
+  // history exactly, including projecting the table's own full CURRENT
+  // 24-column shape); app.get_job_offer_for_application (SECURITY INVOKER --
+  // DELIBERATE DEPARTURE from the recon's own suggested DEFINER-plus-
+  // can_view_job_offer design, since app.job_offers' own RLS is STRICTLY
+  // BROADER than can_view_job_offer's HRS:View-first branch); app.get_warehouse_
+  // location (SECURITY DEFINER, mirrors app.get_warehouse_location_
+  // deactivation_impact's own OPS:View + can_access_record chain exactly);
+  // app.get_approval_request_step (SECURITY INVOKER, full-row grant, the same
+  // already-proven-safe EXISTS-join RLS shape app.list_approval_request_steps
+  // established in cluster 6 batch 1); app.get_approval_request_by_id
+  // (SECURITY INVOKER -- DELIBERATE DEPARTURE from the recon's own suggested
+  // DEFINER-plus-check_approval_request_authority design, since that helper was
+  // ALREADY independently found stale by cluster 0 batch 3 relative to the
+  // table's own CURRENT RLS predicate; column-restricted grant, ended_reason
+  // cast to null in its correct 13th-of-16 position).
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the unit test suite (6 query modules extended with
+  // new function coverage: document.ts/document.test.ts, org-hierarchy.ts/
+  // org-hierarchy.test.ts, position.ts/position.test.ts, recruitment.ts/
+  // recruitment.test.ts, bin-racking.ts/bin-racking.test.ts, approval.ts/
+  // approval.test.ts -- 6,046 tests passing), `git:check-paths` (clean),
+  // `security:check` (clean), a full `pnpm run db:test` (`ALL PASSED`, 534
+  // migrations / 277 db-test files, including the new cluster-7 db-test file: a
+  // 5-persona sweep -- HRS:View+OPS:View staff, a plain member with no special
+  // role, a customer_user-layer principal, a zero-membership Supreme Admin, and
+  // a cross-tenant actor -- across all 7 new functions, a genuine masking proof
+  // for both app.list_position_incumbents (reason_note/decided_reason nulled
+  // for an HRS:View-only holder, unmasked for Supreme Admin) and app.get_
+  // approval_request_by_id (ended_reason nulled despite a real non-null value
+  // written to the fixture row)), and a real `next build`. A transient,
+  // date-rollover-triggered failure in the PRE-EXISTING, unrelated
+  // commercial-dashboard.sql (its own "due_today" activity bucket, sensitive to
+  // current_date at the exact moment db:test ran across a midnight boundary)
+  // was independently reproduced on the pre-cluster-7 commit too, confirming it
+  // was never caused by this batch's own changes, before re-running the full
+  // suite to a clean ALL PASSED.
+  // **The entire CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters,
+  // 0 through 7, every `.from()`/direct-table read against an `app.*` table
+  // across server/queries/*.ts AND page.tsx files) is now FULLY DONE.**
+  // HUNDRED-AND-THIRTY-SEVENTH PASS (2026-09-14, same ruling as migrationSetSha256
+  // above): 535 files (+1) -- new migration
+  // 20260914010000_add_role_permission_management_read_rpcs.sql. Audit
+  // remediation A2 (docs/audit/2026-09-02-independent-launch-readiness-audit.md
+  // finding A2, "createRole/assignRole/revokeRoleAssignment have no caller"):
+  // PLT-111's role/permission mutation RPCs already existed as real, tested,
+  // service_role-only backend capability with zero callers anywhere in the
+  // product -- this pass builds the first UI caller (app/(tenant)/[tenantSlug]/
+  // admin/roles/) and, discovering along the way that the read side had no
+  // way to see its own results again after a page reload, adds the 4 missing
+  // read RPCs that make it a real (not write-only) management screen.
+  // app.list_role_versions / app.list_role_assignments_for_role: SECURITY
+  // INVOKER, NO actor parameter -- app.role_versions and app.role_assignments
+  // both already carry a live RLS policy and an authenticated table grant
+  // (20260716105512_create_rls_tenant_policies.sql, most recently altered by
+  // 20260730560000_harden_customer_user_layer_default_deny.sql -- verified as
+  // the CURRENT, not original, predicate before writing this migration), so
+  // these functions rely entirely on the caller's own session via that live
+  // policy, the same choice this series already made for app.list_org_units/
+  // app.get_job_offer_for_application/app.get_approval_request_by_id
+  // (cluster 7, HUNDRED-AND-THIRTY-SIXTH PASS).
+  // app.list_role_version_permissions: SECURITY DEFINER, RULE A guard present.
+  // app.role_version_permissions had `alter table ... enable row level
+  // security` run (20260716103445) but repo-wide grep confirms ZERO policy and
+  // ZERO authenticated grant were ever added for it -- RLS-enabled-with-no-
+  // policy is default-deny for every role but the table owner, so SECURITY
+  // INVOKER would return zero rows for every real caller regardless of
+  // authority. Authority predicate manually reproduces role_versions_select_
+  // own_tenant's own current predicate (the same shape app.list_permissions_
+  // for_module already established for the sibling ungranted table app.
+  // permissions, cluster 2).
+  // app.list_active_tenant_users_for_role_assignment: SECURITY DEFINER, RULE A
+  // guard present. Added because app.role_assignments.auth_user_id references
+  // auth.users(id) directly -- a genuinely different value from app.users.id
+  // (a separate surrogate key, 20260716102620_create_users.sql:17-19) -- and
+  // server/queries/portal-users.ts's own PortalUser never projects
+  // auth_user_id (app.list_portal_users' own returns table has no such
+  // column). Extending that already-shipped, already-db-tested function's
+  // return shape would need a drop+create of a function this repository's own
+  // O1 remediation already verified, for a need only this one new form has; a
+  // small, single-purpose function is the narrower, lower-risk change,
+  // matching this schema's own dominant pattern of one RPC per real UI need.
+  // Same authority predicate as app.list_portal_users, independently
+  // re-derived from its own current body (20260910010000) rather than
+  // assumed. No email projected -- this list exists to pick a person to
+  // assign a role to, not to view PII.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the unit test suite (role-permission.ts extended
+  // with 4 new functions plus a toRolePermissionLookupClient/
+  // toRolePermissionRpcClient/toTenantRpcClient/toUserLifecycleRpcClient
+  // adapter each, role-permission.test.ts extended to match -- all passing),
+  // `git:check-paths` (clean), `security:check` (clean), a full `pnpm run
+  // db:test` (`ALL PASSED`, 535 migrations / 277 db-test files, extending the
+  // existing scripts/db-tests/role-permission.sql with a 4-actor sweep --
+  // active tenant member, a customer_user-layer principal, a cross-tenant
+  // actor, and a genuine RULE A actor-identity-spoofing rejection proof --
+  // across all 4 new functions, an archived-version-permissions-remain-
+  // readable proof, and a revoked-assignment-still-visible proof), and a real
+  // `next build`.
+  // This pass also builds app/(supreme)/supreme/tenants/ (provisionTenant
+  // caller, closing the other half of finding A2 -- a tenant could not be
+  // created through the UI at all) and app/(tenant)/[tenantSlug]/admin/users/
+  // (inviteUser caller plus the missing supabase.auth.admin.inviteUserByEmail
+  // wrapper, since inviteUser only links an ALREADY-EXISTING Supabase Auth
+  // identity and nothing anywhere created one), and closes audit finding A1
+  // (docs/audit/2026-09-02-independent-launch-readiness-audit.md: "no route
+  // exists from any one staff module into any other") with a new shared
+  // components/domain/tenant-portal-nav.tsx cross-module switcher wired into
+  // all 16 tenant-internal module layouts plus a new tenant Home landing page
+  // at app/(tenant)/[tenantSlug]/page.tsx -- no schema change for either, not
+  // reflected in these two digests.
+  // A real, independently-caught bug was found during this pass's own full
+  // `pnpm run db:test` run: scripts/db-tests/public-api-wrapper-regression.sql's
+  // own exhaustive "no public.* wrapper grants a role its app.* counterpart
+  // does not" check failed for BOTH app.list_role_versions and app.list_role_
+  // assignments_for_role -- their public.* wrappers correctly revoked the
+  // implicit default PUBLIC execute grant before re-granting only to
+  // authenticated/service_role, but the app.* originals never had that same
+  // `revoke execute ... from public` statement (present on the other two new
+  // functions in this same migration, and on every INVOKER precedent this
+  // pass's own header cites), so app.list_role_versions/app.list_role_
+  // assignments_for_role remained callable by anyone via the implicit PUBLIC
+  // grant every newly-created SQL function gets by default. Fixed by adding
+  // the missing revoke to both; re-verified with a second full `pnpm run
+  // db:test`, ALL PASSED.
+  migrationSetSha256: "e0a9178d924ef30febb0e85ebcd9655a7e3aee53ced08a08069b1f6335da95c0",
+  // HUNDRED-AND-SIXTIETH PASS: CG-AUDIT-2026-09-02 E3 (bounded core, piece 1
+  // of 2), "No UoM on stock; free-text locations; warehouse billing has no
+  // invoice FK". One new migration (20260918040000_e3_uom_normalization_
+  // inventory_balance.sql, 558 files, +1). A dedicated research pass found
+  // "no UoM on stock" overstated -- a real, governed UOM registry (app.uoms/
+  // app.uom_conversions/app.convert_uom_quantity, ATW-011A) and app.item_
+  // masters.base_uom_code already existed -- but a real, live, reachable bug
+  // survived inside that framing: app.post_inventory_movement validated a
+  // posted line's uom_code is a registered ACTIVE code but never converted
+  // it to the item's own base_uom_code before on_hand arithmetic, and app.
+  // inventory_balances carries no uom_code dimension of its own -- two
+  // movements against the identical balance row posted in different UOMs
+  // were summed raw (5 DOZ + 50 PCS read back as on_hand=55, not the true
+  // 110 PCS). Reachable today via 20260831260000's own inventory_opening_
+  // balance_import adapter, which passes the file's raw, user-chosen
+  // uom_code straight through after only checking it is registered/active,
+  // never that it matches the item's own base unit. Fixed by converting via
+  // app.convert_uom_quantity before any on_hand arithmetic -- a no-op for
+  // the common already-base-unit case (confirmed the fix changes zero
+  // observable behavior for every existing caller), and a genuine cross-
+  // category mismatch now fails closed with the already-established uom_
+  // conversion_not_registered rather than corrupting the balance. app.
+  // inventory_movement_lines' own signed_quantity/uom_code stay the as-
+  // posted record, unchanged. "Free-text locations" was confirmed FALSE for
+  // warehouse locations (already a structured, FK-enforced table) -- the
+  // genuine free-text gap is app.shipment_orders.origin/.destination, a
+  // separate TMS-side finding, out of this WMS-scoped piece. Still open:
+  // E3 piece 2, app.warehouse_billing_handoffs has no invoice_id/FK to app.
+  // finance_invoices despite a fully shipped, reachable billing lifecycle
+  // reaching a terminal reconciled state with nowhere to go -- confirmed
+  // real and bounded, not yet closed.
+  // History: ec5e66e655131efa2d61ff3389c521074f37c0cab44cd536f38ca6c98eb26aaf
+  // (557 files, HUNDRED-AND-FIFTY-NINTH PASS).
+  //
+  // HUNDRED-AND-FIFTY-NINTH PASS: CG-AUDIT-2026-09-02 A2b (customer-portal-
+  // sign-in half, bounded core). One new migration (20260918030000_a2b_
+  // customer_portal_sign_in_entry_points.sql, 557 files, +1). A dedicated
+  // research pass found the vendor-principal-layer half of A2b is a real,
+  // deliberately ratified PRODUCT deferral (ADR-0022/PRC-267/ADR-0025 Part
+  // A -- vendor API keys are data-scoped, never actor-scoped, by design) --
+  // stays DEFERRED_LARGE, untouched. The customer-portal-sign-in half was
+  // stale, not accurate: CPL-300 already shipped app.grant_initial_
+  // customer_portal_account_admin (staff bootstrap) and app.accept_customer_
+  // portal_invite (invitee accept) with real, tested RPCs and typed mutation
+  // wrappers, but zero UI callers anywhere in this repository. A deeper,
+  // previously-undisclosed gap the research surfaced: no RPC let an invited-
+  // but-not-yet-accepted identity ever discover its own pending membership
+  // id/version to accept it (app.get_customer_portal_scope_context/app.
+  // resolve_customer_account_scope both deliberately exclude a status=
+  // invited row; app.list_customer_portal_account_memberships is account_
+  // admin-only). New RPC app.list_my_pending_customer_portal_invites (self-
+  // identity-checked only, the one deliberate pre-layer-grant exception)
+  // closes it. Staff UI on commercial/accounts/[accountId]/page.tsx (a new
+  // "Customer portal access" panel); invitee UI on customer-portal/page.tsx's
+  // own forbidden branch (a new "Accept invite" panel). Deliberately left
+  // out of this bounded core: app/(tenant)/[tenantSlug]/page.tsx's own post-
+  // login landing behavior for a customer_user identity (entangled with app.
+  // resolve_access_context's own load-bearing, 15+-consumer semantics, not a
+  // safely bounded addition alongside this fix).
+  // History: 76f76c1164a3346b9cc55fad3cd29d332918fe7d5b4dd9cc2a804e101d37c5e8
+  // (556 files, HUNDRED-AND-FIFTY-EIGHTH PASS).
+  //
+  // HUNDRED-AND-FIFTY-EIGHTH PASS: CG-AUDIT-2026-09-02 B4 (bounded core), "Multi-
+  // currency postings summed as raw numbers, no FX/base-amount columns". One new
+  // migration (20260918020000_b4_ar_ap_exposure_currency_fix.sql, 556 files, +1).
+  // A dedicated research pass found a real, live, shipped cross-currency blend
+  // bug, not a theoretical schema gap: app.get_finance_ar_exposure_summary/app.
+  // get_finance_ap_exposure_summary (confirmed via a case-insensitive search
+  // this time, after E6's own earlier miss) summed open_amount with NO currency
+  // filter at all, feeding the real "credit exposure" figure a Finance user sees
+  // today in the accounts-receivable/accounts-payable work-queue UI. This was
+  // structurally common, not a corner case -- app.finance_accounts.currency_
+  // restriction remains unenforced at posting time (confirmed by B2a's own
+  // research, re-confirmed here), so any multi-currency tenant posts to the same
+  // tenant-wide AR/AP control account regardless of currency. The "no FX/base-
+  // amount columns" half of the finding did NOT require inventing new FX
+  // machinery or redesigning finance_journal_lines as the backlog's own "schema
+  // redesign" phrase implied -- app.resolve_finance_exchange_rate (FIN-194,
+  // no authority check of its own) already provides real, governed, versioned,
+  // date-effective rate resolution, already proven and exercised by app.
+  // resolve_operations_fx_conversion (job profitability) and the loyalty-
+  // liability consolidated rollup, both of which already established the
+  // "convert what you can, mark rate_unavailable rather than fabricate" pattern
+  // this fix mirrors exactly. Fix: both functions widen from a single blended
+  // jsonb object to a real setof table, one row per currency actually posted
+  // (never blended, the same discipline B2a's own trial balance already
+  // established), each row also carrying a base-currency-converted figure via
+  // the tenant's own resolved app.resolve_tenant_locale default_currency --
+  // honestly null with fx_status=rate_unavailable when no rate covers now(),
+  // never fabricated. Disclosed behavior change: zero open items now returns
+  // zero rows (no real currency to anchor a zero row to), versus the old
+  // always-one-object shape -- the TS contract/query/UI layer (server/
+  // contracts+queries/accounts-{receivable,payable}, the two finance work-queue
+  // forms) was updated to match. Public.* wrappers required DROP + CREATE (a
+  // return-type change from jsonb to table, which CREATE OR REPLACE FUNCTION
+  // cannot do), mirroring 20260907160000's own established pattern for exactly
+  // this class of change. Still correctly deferred: retroactive FX/base-amount
+  // persistence on finance_journal_lines itself (the original, genuinely larger
+  // "schema redesign" reading), currency_restriction enforcement at posting
+  // time (related, separate, not yet scoped), and true consolidated multi-
+  // currency financial statements (already deferred under B2's own open half).
+  // B4 is PARTIAL, not DONE -- this closes the one live bug plus the one
+  // bounded reporting improvement the research pass found, not the whole
+  // finding. History:
+  // 7984255cd3b0d95d965c7ad59e4901dd55df0f5188325cc48e563add8e4eccf8 (555
+  // files, HUNDRED-AND-FIFTY-SEVENTH PASS).
+  // HUNDRED-AND-FIFTY-SEVENTH PASS: CG-AUDIT-2026-09-02 E6 (webhook half),
+  // "Outbound webhooks have no publisher. app.queue_webhook_delivery is
+  // referenced by 0 other database functions and nothing outside its own
+  // module." One new migration
+  // (20260918010000_e6_wire_webhook_delivery_triggers.sql, 555 files, +1).
+  // A dedicated research pass found the schema (app.webhook_endpoints/
+  // subscriptions/deliveries/delivery_attempts, HMAC-SHA256 signing, SSRF
+  // guarding at both registration and dispatch time), the real outbound
+  // HTTP worker (lib/webhooks/process-webhook-delivery-job.server.ts), its
+  // job-type registration, its wiring into the production supervisor loop
+  // (scripts/jobs/supervisor.ts's own "webhook-delivery" lane), and a
+  // reachable tenant admin UI (admin/api-keys) all already existed and were
+  // already tested -- the literal finding was accurate on exactly one
+  // narrow point: nothing ever called app.queue_webhook_delivery from a
+  // real business event. Closed by adding one app._enqueue_webhook_delivery
+  // call to each of the three event types IAE-012's own seed data already
+  // anticipated (shipment.status_changed, ticket.created, invoice.issued),
+  // at their natural, already-existing, already-tested trigger points
+  // (app.transition_shipment_order, app._create_ticket, app.
+  // issue_finance_invoice) -- no new subsystem, no schema change.
+  // app._enqueue_webhook_delivery is a new internal, authority-check-free
+  // decision/fan-out core (mirrors CG-AUDIT-2026-09-02 B7's own app.
+  // _evaluate_customer_credit precedent) extracted from app.queue_webhook_
+  // delivery, which becomes a thin wrapper (check app.check_webhook_
+  // trigger_authority, then delegate) -- avoids transitively imposing that
+  // authority check's own "active tenant membership" requirement onto a
+  // customer-channel ticket's own already-correct, already-different
+  // authority model.
+  // Self-caught regression during authoring, fixed before commit: a first
+  // draft of app.transition_shipment_order's own replacement body was
+  // sourced from an outdated migration
+  // (20260730390000_harden_platform_operations_finance_idempotency_target_
+  // mismatch.sql) found via a grep pattern that missed two later
+  // uppercase-`CREATE OR REPLACE FUNCTION` hardening migrations
+  // (20260730520000, the ATW-032/ISS-2026-034 swallowed-lost-update fix,
+  // and 20260902201000, the ISS-2026-146 tenant-membership fold-in) --
+  // caught by re-deriving the call sites from a case-insensitive search and
+  // byte-for-byte diffing all three replaced functions against their true
+  // latest live bodies before this migration was ever committed. History:
+  // c2518d68d76053eaae0ba6c10a3058a3b52265d57af4749ce01224479dc43194 (554
+  // files, HUNDRED-AND-FIFTY-SIXTH PASS).
+  // HUNDRED-AND-FIFTY-SIXTH PASS: CG-AUDIT-2026-09-02 B2a (general ledger
+  // trial balance). One new migration
+  // (20260918000000_b2a_finance_trial_balance.sql, 554 files, +1): adds
+  // app.get_finance_trial_balance (+ its public.* wrapper) -- the one
+  // aggregating GL read (finance_accounts joined against posted,
+  // dated-eligible finance_journal_lines/finance_journals) the audit's own
+  // finding said did not exist anywhere. A dedicated research pass found
+  // the original "weeks of report-building effort" DEFERRED_LARGE estimate
+  // accurate for P&L/balance sheet/year-end close, but not for a trial
+  // balance -- every hard part (double-entry enforcement, chart-of-accounts
+  // typing, fiscal periods, the wrapper convention, even a working
+  // precedent for the exact summation math in app.get_finance_cash_position)
+  // already existed; this was assembly, not invention. History:
+  // f96a78c8f5f1d91773a6077337c99ef7ce7453375201de6f63f8b8ac1f5da579 (553
+  // files, HUNDRED-AND-FIFTY-FIFTH PASS).
+  // HUNDRED-AND-FIFTY-FIFTH PASS: CG-AUDIT-2026-09-02 B7 (second half),
+  // "Invoicing keyed off a hand-copied UUID; no credit control" -- the
+  // worklist-UI half was fixed earlier this session
+  // (20260915010000_create_list_billable_readiness_handoffs.sql), whose own
+  // header explicitly named app.check_customer_credit/credit control as "a
+  // separate, larger, deliberately excluded piece of work, untouched here."
+  // This pass closes it. New migration
+  // 20260917090000_b7_credit_control_ar_exposure_and_job_order_handoff_gate.sql
+  // confirmed live (never assumed) that app.check_customer_credit (COM-157)
+  // was NOT a stub -- it already read a real app.credit_profiles/app.credit_
+  // profile_overrides row and persisted every outcome to app.credit_check_
+  // snapshots -- but had two real gaps: (1) it never consulted actual AR
+  // exposure, only the static approved limit, so a customer already at their
+  // limit from prior unpaid invoices could still be approved for a
+  // brand-new request that alone sat under the limit; (2) it was dead-gated
+  // code -- reachable only through its own manual "Check eligibility"
+  // widget, never from any order-acceptance path, confirmed by checking
+  // every real candidate (app.prepare_job_order_handoff/app.confirm_job_
+  // order/app.create_shipment_order_from_job/app.confirm_shipment_order --
+  // none called any credit check).
+  // Fix 1: check_customer_credit now sums app.finance_ar_open_items.
+  // open_amount (FIN-196, status <> paid, same currency) and adds it to the
+  // requested amount before comparing against the effective limit -- reading
+  // the base table directly rather than app.get_finance_ar_exposure_summary
+  // (which hard-gates on FIN:View and would force a permission regression
+  // onto every credit check).
+  // Fix 2: app.prepare_job_order_handoff -- the correct singular acceptance-
+  // moment gate point, per check_customer_credit's own "the one
+  // deterministic, reproducible pre-conversion check" framing -- now
+  // evaluates credit for the converted account and the quotation's own real
+  // total, raising credit_blocked for an affirmative credit-control decision
+  // already in force (blocked_limit/blocked_hold/blocked_not_active/blocked_
+  // currency_mismatch), deliberately NOT for blocked_no_profile (credit
+  // profiles are opt-in in this product, never mandatory -- confirmed live
+  // that scripts/db-tests/commercial-job-order-lineage.sql's own existing
+  // happy-path tests never set one up at all, so hard-blocking on
+  // blocked_no_profile would have retroactively made a credit profile
+  // mandatory before ANY job order could ever be accepted for ANY account,
+  // a far larger undisclosed product-shape change than the audit asked for).
+  // A real, load-bearing design correction happened mid-pass: a first draft
+  // had prepare_job_order_handoff call the PUBLIC check_customer_credit
+  // directly (itself COM:View-gated), reasoning "every COM:Edit role already
+  // holds COM:View." That untested assumption broke live: a full `pnpm run
+  // db:test` pass (this repository's own 60+ existing prepare_job_order_
+  // handoff callers, not just this slice's own two files) failed on
+  // scripts/db-tests/customer-booking-requests.sql, whose staff role holds
+  // COM:Edit but not COM:View. Fixed by extracting the decision core into a
+  // new internal app._evaluate_customer_credit (no authority check of its
+  // own, always unmasked -- masking is the caller's concern), which the
+  // public app.check_customer_credit now delegates to (adding COM:View +
+  // masking) and app.prepare_job_order_handoff calls directly (already
+  // gated on COM:Edit, no second transitive check) -- re-verified clean via
+  // a second full db:test pass afterward.
+  // scripts/db-tests/commercial-job-order-lineage.sql's own existing
+  // happy-path assertion needed a real update (not a weakened test): the
+  // payload's own "credit" field, previously always null for an account
+  // that had never been checked, is now genuinely populated with a real
+  // blocked_no_profile snapshot, since prepare_job_order_handoff performs a
+  // real check on every call -- the assertion now expects that real value.
+  // server/mutations/job-order-lineage.ts gained the "credit_blocked" error
+  // code plus a new unit test. Full Tier A gates verified clean: typecheck,
+  // lint (0 errors), the full unit test suite (6149/6149; the one
+  // check-release-freeze self-test failure this same pass produces is
+  // resolved by this very comment/digest update), db:test (`ALL PASSED`
+  // across all 280+ files, including the two extended fixtures and the one
+  // that initially broke), git:check-paths, security:check, and a real
+  // `next build`.
+  // History: 612bd8a59232f940ab9fa607520e8b98c056358fa5687a5fba87adc43fb6b5a1
+  // (552 files, HUNDRED-AND-FIFTY-FOURTH PASS).
+  // HUNDRED-AND-FIFTY-FOURTH PASS: CG-AUDIT-2026-09-02 A6, ePOD evidence signed
+  // download -- the 4th and final of the audit's own named deadlocked
+  // upload/download flows (vendor compliance, shipment document checklist,
+  // ticket-reply attachments were already fixed; ePOD's own upload side was
+  // fixed by an earlier pass this session -- this pass closes its download
+  // side, and with it A6 entirely). New migration
+  // 20260917080000_a6_epod_evidence_signed_download.sql does two things:
+  // (1) registers 'epod'/'document:epod' as real app.document_types/
+  // app.config_types catalogue rows -- confirmed live via repo-wide grep
+  // that NO real (non-db-test) migration had ever done this, only 10+
+  // scripts/db-tests/*.sql fixtures independently, each against its own
+  // disposable database; a genuinely fresh tenant's first ePOD evidence
+  // upload would have failed immediately with document_type_not_configured
+  // in spite of app.set_epod_evidence/app.initiate_file_upload both being
+  // fully wired and fully tested. Mirrors
+  // 20260914060000_register_gps_device_installation_document_type.sql's own
+  // shape verbatim (that migration's own comment explicitly name-drops
+  // 'epod'/'pod' as a same-shaped example still outstanding at the time it
+  // was written). (2) adds app.authorize_epod_evidence_file_access (a
+  // narrowly-scoped sibling of app.authorize_shipment_document_evidence_
+  // file_access/app.authorize_ticket_attachment_evidence_file_access) and
+  // app.access_epod_evidence_for_download, parameterized by p_file_id (the
+  // ticket-attachment precedent's own shape, since app.epod_captures has
+  // both a single signature_file_id and a photo_file_ids array -- a
+  // capture-id-parameterized RPC would still need a second parameter
+  // picking which file). Gated on app.evaluate_permission(..., 'OPS',
+  // 'Download') plus app.can_access_record against the parent shipment
+  // order's own owner_user_id/lead_record_scope_org_unit_ids -- the SAME
+  // record-scope bar the shipment document checklist's own sibling RPC
+  // already uses, since ePOD evidence has no narrower record-scope concept
+  // of its own. ISS-2026-146-safe from birth: the initial not-found branch
+  // folds app.has_active_tenant_membership in, so a zero-relationship
+  // cross-tenant probe against a real file_id never sees this tenant's real
+  // tenant_id interpolated into a later insufficient_authority message.
+  // Plus matching public.* wrappers for both new functions, identical
+  // security mode and the standard service_role-only grant set (RGL-394
+  // Option-2).
+  // server/mutations/epod-capture-review.ts gained
+  // getEpodEvidenceSignedDownloadUrl (mirrors getShipmentDocumentChecklist
+  // ItemSignedDownloadUrl/getTicketAttachmentSignedDownloadUrl exactly:
+  // calls the RPC first, only mints a real Storage signed URL once
+  // accessResult='granted', storage_path/bucketId never leave the
+  // function), plus two new classified error codes
+  // (epod_evidence_file_not_found/epod_evidence_file_not_linked) and 4 new
+  // unit tests. server/contracts/epod-capture-review/epod-capture-review.ts
+  // gained the matching EpodEvidenceDownloadSource/EpodEvidenceSignedDownload
+  // schema pair. app/(tenant)/[tenantSlug]/operations/shipment-orders/
+  // [shipmentOrderId]/actions.ts (already on eslint.config.js's
+  // serviceRoleImportGuard ignores list -- no eslint.config.js edit needed)
+  // gained downloadEpodEvidenceAction; epod-panel.tsx now renders a "Get
+  // signature/photo download link" control per evidence file on every
+  // capture version in history (not just the latest), mirroring
+  // DocumentChecklistPanel's own "Get download link" form exactly.
+  // Full Tier A gate suite verified clean: `typecheck`, targeted + full
+  // `lint` (0 errors, only pre-existing warnings), the unit test suite
+  // (+4 new tests for getEpodEvidenceSignedDownloadUrl, 6149/6149 pass),
+  // `db:test` (`ALL PASSED` -- no new db-test file needed, since every
+  // existing epod-capture-review/customer-epod/operations-* db-test
+  // fixture that registers 'epod' itself continues to do so unaffected by
+  // this migration's own idempotent `on conflict (code) do nothing`),
+  // `git:check-paths` (clean, 8 files checked), `security:check` (clean),
+  // and a real `next build`.
+  // A6 ("No Storage bucket/policies; uploads never store bytes; malware-scan
+  // status never advances, deadlocking 3+ flows") is now DONE: all 4 real
+  // evidence flows have real upload+scan AND real signed download. Out of
+  // A6's own scope, tracked separately under D4: every scan still fails
+  // closed until an operator configures the encryption key and a real
+  // VirusTotal API key.
+  // History: d0530ebaf1e15fc801292b52302dc28e56ed0161ca76adffece49ec552c705d0
+  // (551 files, HUNDRED-AND-FIFTY-THIRD PASS).
+  // HUNDRED-AND-FIFTY-THIRD PASS: CG-AUDIT-2026-09-02 A4, inventory_opening_balance_import
+  // (the twelfth and FINAL of 12 import schemas -- A4 is now fully closed).
+  // New migration
+  // 20260917070000_register_inventory_opening_balance_import_source_document_type.sql
+  // registers a dedicated, OPS-owned inventory_opening_balance_import_source
+  // DOCUMENT TYPE -- the SAME situation the two immediately preceding passes
+  // (leave_opening_balance_import, payroll_loan_cutover_import) hit: the
+  // import_export SCHEMA registration was already real
+  // (20260831260000_create_inventory_and_leave_opening_balance_import_adapters.sql
+  // -- the SAME migration that also registers leave_opening_balance_import's
+  // own schema kind), but no document type for the raw source file had
+  // ever been registered anywhere; scripts/db-tests/master-data-import.sql's
+  // own bootstrap instead reuses the generic, COM-owned
+  // master_data_import_source document type. Following the same reasoning
+  // as the 151st/152nd passes, this migration registers a dedicated type
+  // rather than reusing the generic one.
+  // server/mutations/inventory-ledger.ts (5 existing WMS mutation wrappers
+  // -- post/reserve/release/consume/reverse -- but ZERO for
+  // validate_inventory_opening_balance_import_row/
+  // commit_inventory_opening_balance_import_job) gained both as a
+  // from-scratch addition, reusing the generic PLT-131 parsers directly.
+  // app.commit_inventory_opening_balance_import_job composes the same
+  // authority stack commit_payroll_loan_cutover_import_job/
+  // commit_leave_opening_balance_import_job compose: BOTH
+  // app.is_support_grant_authority (Supreme Admin or tenant_admin) AND
+  // OPS:Import (additive, never either-or), plus a conditional MFA step-up
+  // and IP-allowlist gate. The importer also needs genuine record scope
+  // over each row's own warehouse -- app.post_inventory_movement checks
+  // app.can_access_record against the warehouse's own company org unit,
+  // invisible in this RPC's own guard list since it lives inside the
+  // primitive itself. Duplicate handling mirrors finance_opening_balance_
+  // import's/leave_opening_balance_import's/payroll_loan_cutover_import's
+  // own idempotency-key-derived-from-staging-row-id convention -- a
+  // corrected re-upload posts a brand-new, additive stock movement rather
+  // than correcting a wrong one. No bespoke write path: every valid row
+  // calls app.post_inventory_movement, the SAME primitive every other WMS
+  // write composes.
+  // No warehouse/inventory-management admin page exists anywhere in this
+  // codebase yet (confirmed by repo-wide search, mirroring item_import's
+  // own identical situation) -- this page is standalone and unlinked,
+  // mirroring finance/config/page.tsx's own precedent.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  // only pre-existing warnings; two new server-only files added to
+  // `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  // test suite (+6 for `validateInventoryOpeningBalanceImportRow`/
+  // `commitInventoryOpeningBalanceImportJob`), `db:test` (`ALL PASSED` --
+  // no new db-test file needed, since `scripts/db-tests/master-data-
+  // import.sql`'s own existing fixture already fully covers both RPCs'
+  // real behavior), `git:check-paths` (clean, 8 files checked),
+  // `security:check` (clean), and a real `next build` (confirms the new
+  // `/[tenantSlug]/operations/imports/inventory-opening-balance` route).
+  // A4 ("No import UI over 12 working import schemas") is now DONE: all 12
+  // import schemas have a real, complete UI end to end.
+  // History: 8a8497f2551367ca69bf64a36cf672c04e5d822483283a08001d2ef952e59a31
+  // (550 files, HUNDRED-AND-FIFTY-SECOND PASS).
+  // HUNDRED-AND-FIFTY-SECOND PASS: CG-AUDIT-2026-09-02 A4, payroll_loan_cutover_import
+  // (the eleventh of 12 import schemas). New migration
+  // 20260917060000_register_payroll_loan_cutover_import_source_document_type.sql
+  // registers a dedicated, HRS-owned payroll_loan_cutover_import_source
+  // DOCUMENT TYPE -- the SAME situation the immediately preceding
+  // HUNDRED-AND-FIFTY-FIRST PASS (leave_opening_balance_import) hit: the
+  // import_export SCHEMA registration was already real
+  // (20260901010000_create_payroll_loan_cutover_import_adapter.sql), but no
+  // document type for the raw source file had ever been registered
+  // anywhere; scripts/db-tests/hris-payroll.sql's own bootstrap instead
+  // reuses the generic, COM-owned master_data_import_source document type.
+  // Following the same reasoning as the 151st pass, this migration
+  // registers a dedicated type rather than reusing the generic one --
+  // payroll loan balances are personal debt/financial obligation data tied
+  // to an individual employee, at least as sensitive as leave balances.
+  // server/mutations/payroll.ts (20+ existing payroll mutation wrappers,
+  // but ZERO for validate_payroll_loan_cutover_import_row/
+  // commit_payroll_loan_cutover_import_job) gained both as a from-scratch
+  // addition, reusing the generic PLT-131 parsers directly -- this file's
+  // own pre-existing convention (plain TS object inputs, no Zod, an
+  // internally-derived error `code`) was kept for the OTHER 20+ functions,
+  // but the two new import wrappers instead follow the cross-slice A4
+  // convention (Zod-validated CommitPayrollLoanCutoverImportJobInputSchema
+  // in the shared import-export.ts contracts file) for consistency with
+  // every other A4 slice's own commit-input shape.
+  // app.commit_payroll_loan_cutover_import_job composes the richest
+  // authority stack of any A4 import schema so far: app.is_support_grant_
+  // authority (Supreme Admin or tenant_admin) AND HRS:Import AND
+  // HRS:Approve (additive, never either-or) -- HRS:Approve is required
+  // because app.issue_payroll_loan itself demands it of every caller
+  // issuing a loan, and bulk import is not exempt. Plus the same
+  // conditional MFA step-up and IP-allowlist gates leave_opening_balance_
+  // import/attendance_device_import/timesheet_import carry. Duplicate
+  // handling mirrors finance_opening_balance_import's/leave_opening_
+  // balance_import's own idempotency-key-derived-from-staging-row-id
+  // convention (backed by a partial unique index on app.payroll_loans this
+  // time, not an append-only ledger check) -- a corrected re-upload creates
+  // a brand-new loan rather than correcting a wrong one. No bespoke write
+  // path: every valid row calls app.issue_payroll_loan, the SAME primitive
+  // the manual "Issue Loan" form uses, with p_is_opening_balance=true.
+  // The host page (hris/payroll/payroll-admin-panel.tsx) already had its
+  // own internal header (unlike attendance/overtime-timesheet/leave's prior
+  // "no header at all" state) -- this pass threaded a new tenantSlug prop
+  // through and added the import link inside that existing header, rather
+  // than adding a redundant second header.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  // only pre-existing warnings; two new server-only files added to
+  // `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  // test suite (+6 for `validatePayrollLoanCutoverImportRow`/
+  // `commitPayrollLoanCutoverImportJob`), `db:test` (`ALL PASSED` -- no new
+  // db-test file needed, since `scripts/db-tests/hris-payroll.sql`'s own
+  // existing fixture already fully covers both RPCs' real behavior,
+  // including the ISS-2026-278 MFA step-up regression), `git:check-paths`
+  // (clean, 10 files checked), `security:check` (clean), and a real `next
+  // build` (confirms the new `/[tenantSlug]/hris/imports/payroll-loans`
+  // route).
+  // History: ca3087ff6026e373163feadc9827c84baae16c29735d1b6d431443e67692acaa
+  // (549 files, HUNDRED-AND-FIFTY-FIRST PASS).
+  // HUNDRED-AND-FIFTY-FIRST PASS: CG-AUDIT-2026-09-02 A4, leave_opening_balance_import
+  // (the tenth of 12 import schemas). New migration
+  // 20260917050000_register_leave_opening_balance_import_source_document_type.sql
+  // registers a dedicated, HRS-owned leave_opening_balance_import_source
+  // DOCUMENT TYPE -- unlike item_import/attendance_device_import/
+  // timesheet_import (already fully catalogued before their own slices), no
+  // migration and no db-test fixture anywhere had ever registered a document
+  // type for this schema's raw source file at all;
+  // scripts/db-tests/hris-leave-permit-business-trip.sql's own bootstrap
+  // instead reuses the generic, COM-owned master_data_import_source document
+  // type this session's own HUNDRED-AND-FIFTIETH PASS registered. Rather than
+  // reuse that generic type for a genuinely HRS-owned, employee-linked
+  // opening-balance cutover file, this migration mirrors
+  // timesheet_import_source's/attendance_device_import_source's own
+  // one-document-type-per-schema precedent instead.
+  // server/mutations/leave.ts (20+ existing overtime/leave mutation
+  // wrappers, but ZERO for validate_leave_opening_balance_import_row/
+  // commit_leave_opening_balance_import_job) gained both as a from-scratch
+  // addition, reusing the generic PLT-131 parsers directly.
+  // app.commit_leave_opening_balance_import_job composes the richest
+  // authority stack of any A4 import schema so far: BOTH
+  // app.is_support_grant_authority (Supreme Admin or tenant_admin) AND
+  // HRS:Import (additive, never either-or), plus the same conditional MFA
+  // step-up and IP-allowlist gates attendance_device_import/timesheet_import
+  // carry. Duplicate handling follows finance_opening_balance_import's own
+  // convention, not attendance/timesheet's "not a master record" shape: the
+  // idempotency key is derived from the staging row's own id (never the
+  // file), so re-running the SAME job is a safe no-op, but
+  // app.leave_balance_ledger is append-only -- a corrected re-upload posts a
+  // brand-new entry on top of a wrong one rather than overwriting it. The
+  // wizard's own copy surfaces this as a one-time cutover action, not a
+  // routine batch import, and documents that correcting a mistake requires
+  // the separate app.adjust_leave_balance path outside this wizard entirely.
+  // Full Tier A gate suite verified clean: `typecheck`, `lint` (0 errors,
+  // only pre-existing warnings; two new server-only files added to
+  // `eslint.config.js`'s `serviceRoleImportGuard` ignores list), the unit
+  // test suite (+6 for `validateLeaveOpeningBalanceImportRow`/
+  // `commitLeaveOpeningBalanceImportJob`), `db:test` (`ALL PASSED` -- no new
+  // db-test file needed, since `scripts/db-tests/hris-leave-permit-business-
+  // trip.sql`'s own existing ISS-2026-303 fixture already fully covers both
+  // RPCs' real behavior), `git:check-paths` (clean, 9 files checked),
+  // `security:check` (clean), and a real `next build` (confirms the new
+  // `/[tenantSlug]/hris/imports/leave-opening-balance` route).
+  // History: e1b912c83b0af0bebaf24e8266396d292501b40a9a46fad9b1b368656b19aa60
+  // (548 files, HUNDRED-AND-FIFTIETH PASS).
+  // HUNDRED-AND-FIFTIETH PASS: CG-AUDIT-2026-09-02 A4, customer_import (the
+  // fifth of 12 import schemas). New migration
+  // 20260917040000_register_master_data_import_source_document_type.sql
+  // registers the master_data_import_source DOCUMENT TYPE (only ever
+  // registered by scripts/db-tests/master-data-import.sql's own fixture,
+  // never a real migration -- the same gap repeated a fourth time,
+  // mirroring 20260917020000/20260917030000's own fix verbatim). This
+  // document type is SHARED between customer_import and item_import
+  // (both registered together by
+  // 20260830120000_create_customer_and_item_import_adapters.sql), so this
+  // migration incidentally clears the way for a future item_import UI
+  // slice too -- additive/idempotent, so that slice will find it already
+  // registered and need no migration of its own for it.
+  // server/mutations/account.ts had ZERO wrapper for
+  // validate_customer_import_row/commit_customer_import_job at all (a
+  // from-scratch build, the same shape as vendor_import's own slice, not a
+  // small parity patch like vendor_rate_import's) -- both new functions
+  // reuse the generic PLT-131 parsers directly. app.commit_customer_import_job
+  // is create-or-link (a duplicate-fingerprint match resolves to the
+  // existing account and is counted as linked, never blocked, unless that
+  // account is under legal hold -- import_blocked_legal_hold, ISS-2026-277),
+  // a genuinely different shape from vendor_import's own flag-for-review
+  // duplicate sweep, both documented in the wizard's own copy.
+  // History: d318b8f40decdc22344f35555f6bb7d0d722123236bd7be1cc00c66970454021
+  // (547 files, HUNDRED-AND-FORTY-NINTH PASS).
+  // HUNDRED-AND-FORTY-NINTH PASS: CG-AUDIT-2026-09-02 A4, vendor_rate_import
+  // (the fourth of 12 import schemas). New migration
+  // 20260917030000_register_vendor_rate_import_source_document_type.sql
+  // registers the vendor_rate_import_source DOCUMENT TYPE (only ever
+  // registered by scripts/db-tests/procurement-vendor-rate-tiers.sql's own
+  // fixture, never a real migration -- the same gap repeated a third time,
+  // mirroring 20260917020000's own vendor_import fix verbatim) -- the
+  // import_export:vendor_rate_import SCHEMA registration itself was already
+  // real (20260730620000_extend_commercial_vendor_rate_for_procurement.sql).
+  // Unlike vendor_import, server/mutations/procurement-rate.ts already had
+  // a complete validateVendorRateImportRow/commitVendorRateImportJob
+  // wrapper -- this pass only closed two small parity gaps in it (commit
+  // never passed the RPC's own p_client_ip param, added at
+  // 20260902200000_harden_tenant_id_disclosure_commercial.sql; the
+  // error-code allowlist was missing ip_not_allowed/mfa_step_up_required),
+  // the exact class of fix employee_import's own scoping found in
+  // server/mutations/employee.ts. No db-test file changed this pass
+  // (dbTestSetSha256 unchanged) -- the underlying RPCs were already fully
+  // covered by procurement-vendor-rate-tiers.sql's own fixture; this pass
+  // only adds the TS-side wrapper patch (unit-tested in
+  // procurement-rate.test.ts) and the UI trio
+  // (procurement/imports/vendor-rates/{actions.ts,page.tsx,
+  // vendor-rate-import-forms.tsx}), both new surface area with no
+  // independent database behavior to regress.
+  // History: f5c0eed07102830e5f7e61b5e4fb721d9942d98b4f5ce071297d9b2213c36424
+  // (546 files, HUNDRED-AND-FORTY-EIGHTH PASS).
+  // HUNDRED-AND-FORTY-EIGHTH PASS: CG-AUDIT-2026-09-02 A4, vendor_import (the
+  // third of 12 import schemas, after finance_opening_balance_import and
+  // employee_import). New migration
+  // 20260917020000_register_vendor_import_source_document_type.sql registers
+  // the vendor_import_source DOCUMENT TYPE (only ever registered by
+  // scripts/db-tests/procurement-vendor-registration.sql's own fixture,
+  // never a real migration -- the exact finance_opening_balance_source gap,
+  // confirmed via repo-wide grep before writing this migration) -- the
+  // import_export:vendor_import SCHEMA registration itself was already real
+  // (20260830100000_create_vendor_import_adapter.sql). No db-test file
+  // changed this pass (dbTestSetSha256 unchanged) -- the underlying
+  // app.validate_vendor_import_row/app.commit_vendor_import_job RPCs were
+  // already fully covered by procurement-vendor-registration.sql's own
+  // fixture; this pass only adds the TS-side wrapper
+  // (validateVendorImportRow/commitVendorImportJob in
+  // server/mutations/vendor-profile.ts, unit-tested in
+  // vendor-profile.test.ts) and the UI trio
+  // (procurement/imports/vendors/{actions.ts,page.tsx,
+  // vendor-import-forms.tsx}), both new surface area with no independent
+  // database behavior to regress. Also fixes an incidentally-discovered gap
+  // in server/mutations/finance-opening-balance-import.ts (found while
+  // reading its own file as this slice's template): its error-code
+  // allowlist was missing import_export_wrong_schema, a real prefix
+  // app.commit_finance_opening_balance_import_job's own same-schema guard
+  // (20260830130000:698) raises -- added there too, with a matching new
+  // unit test.
+  // History: 86774c9bdd692c3d63b7edc8d738d0de9efc52b90833e208005646800478f034
+  // (545 files, HUNDRED-AND-FORTY-SEVENTH PASS).
+  // HUNDRED-AND-FORTY-SEVENTH PASS: CG-AUDIT-2026-09-02 B6a (scoped off B6,
+  // "Cost and cash never reach the ledger on their own" -- a dedicated recon
+  // pass found the audit's own literal claims true but overstated: 3 of 4
+  // AR/AP allocation-reversal paths already post to the GL correctly (forward
+  // AR, forward AP, and reversed AP since 20260826030000/RGL-BLK-009, pre-
+  // audit); only reversed AR (app.request_finance_receipt_deallocation) was
+  // a genuine open gap, with an exact, already-shipped precedent to mirror).
+  // New migration 20260917010000_fix_finance_receipt_deallocation_gl_
+  // reversal.sql re-creates app.request_finance_receipt_deallocation to post
+  // a real reversing GL journal (app.finance_journal_corrections, correction_
+  // type='reversal', posted via app.create_and_post_finance_system_journal
+  // with lock_scope='ar') before calling the existing app.reverse_finance_ar_
+  // allocation, closing the exact mirror-image of RGL-BLK-009 on the AR side.
+  // One real wrinkle the AP precedent did not have to solve: app.allocate_
+  // finance_receipt posts ONE subledger batch/GL journal per ALLOCATE CALL
+  // (which can cover several AR open items at once), while this function
+  // reverses exactly ONE allocation row at a time -- reversing the shared
+  // journal in full (the AP function's own technique, correct there because
+  // one settlement always owns exactly one journal) would misstate every
+  // OTHER still-applied allocation from the same batch. Fixed by flipping the
+  // original journal's own 2 lines (landing on the exact same accounts, never
+  // re-resolving a posting-map key) but substituting this one allocation's
+  // own amount for each line's amount, and deliberately leaving the original
+  // subledger batch's own status at 'posted' (never 'reversed') since other
+  // allocations from it may still stand -- the correction journal itself is
+  // the GL's actual source of truth. Every other line of the function's own
+  // body (authority gate, IP allowlist, reason validation, the existing
+  // reverse_finance_ar_allocation call, the allocation/receipt updates, the
+  // closing audit event) is byte-for-byte unchanged from the live definition.
+  // New db-test section in scripts/db-tests/finance-receipt-allocation.sql
+  // reuses the file's own existing "governed deallocation" fixture, which
+  // already (coincidentally) exercises the exact "one batch, two allocations,
+  // reverse only one" scenario needed to prove the fix: after reversing the
+  // 300,000-of-1,300,000 allocation, asserts the original batch stays
+  // 'posted' (the still-applied 1,000,000 allocation is unaffected), a posted
+  // finance_journal_corrections row links to the original batch's own
+  // journal, the new reversal journal is balanced at exactly 300,000 (never
+  // 1,300,000), and its 2 lines land on the exact same 2 accounts as the
+  // original with direction flipped. Full `pnpm run db:test`, ALL PASSED
+  // (including finance-settlement.sql/finance-reversal-adjustment.sql/
+  // finance-subledger.sql/finance-journal.sql re-run for the shared function
+  // chain, unaffected).
+  // History: 6be207c7a54967232c008f739ed7d32a56e77bf05e361a7112429d67cbc2fc9a
+  // (544 files, HUNDRED-AND-FORTY-SIXTH PASS).
+  // HUNDRED-AND-FORTY-SIXTH PASS: CG-AUDIT-2026-09-02 B7 (worklist half only
+  // -- "Invoicing is driven by a hand-copied UUID... Finance has no
+  // billable-jobs worklist"; the second half, app.check_customer_credit/
+  // credit control, is separate, larger, deliberately excluded work,
+  // untouched here). app.billing_readiness_handoffs is append-only with no
+  // status column, and the only existing read, app.list_billing_readiness_
+  // handoffs, is scoped to one job order -- exactly the id Finance does not
+  // have without already knowing which job order to look up, so it cannot
+  // serve as a tenant-wide worklist. New migration 20260915010000_create_
+  // list_billable_readiness_handoffs.sql adds app.list_billable_readiness_
+  // handoffs: every handoff with no live (non-void) app.finance_invoices row
+  // yet, joined to app.job_orders/app.accounts for job_number/customer name,
+  // amount/currency reusing app.prepare_finance_invoice_from_readiness's own
+  // exact revenue-snapshot arithmetic (subtotalAmount - discountAmount) so
+  // the worklist never shows a number preparing the invoice would not
+  // actually charge, masked behind app.has_view_selling_price mirroring
+  // app.list_job_orders' own precedent, FIN:View-gated like app.
+  // list_finance_invoices/app.get_finance_invoice. `billingReadinessHandoffId`
+  // on `prepareFinanceInvoiceFromReadinessAction` is now a bound positional
+  // arg (the worklist's own per-row form), not a hand-typed FormData field --
+  // the free-text input is gone from invoice-forms.tsx. 544 tracked
+  // migration files (543 -> 544). Verified this new wrapper's own revoke
+  // statement explicitly names anon/authenticated/service_role (not just
+  // "from public") BEFORE running db:test this time, learning directly from
+  // the HUNDRED-AND-FORTY-FIFTH PASS's own anon-widening slip -- confirmed
+  // clean via has_function_privilege against a live disposable database.
+  // Re-verified with a full `pnpm run db:test`, ALL PASSED.
+  // History: 9a289b45078fa8853d5a8796555fe20b3cc2ac46b4d168efca0f30f91d56f2e7
+  // (543 files, HUNDRED-AND-FORTY-FIFTH PASS).
+  // HUNDRED-AND-FORTY-FIFTH PASS: CG-AUDIT-2026-09-02 A4 ("No import UI over
+  // 12 working import schemas"), narrowed to one schema
+  // (finance_opening_balance_import) after a research pass confirmed A4 was
+  // over-classified DEFERRED_LARGE the same way A1/A2/A3b/E5 were. Two new
+  // migrations: 20260914080000_register_finance_opening_balance_source_
+  // document_type.sql (the exact E5 pattern -- app.register_document_type(
+  // 'finance_opening_balance_source', ...) was called only by scripts/
+  // db-tests/finance-subledger.sql:903, never a real migration, so every real
+  // tenant's first source-file upload would fail document_type_not_configured;
+  // the import_export SCHEMA registration itself, a different catalogue,
+  // was already real via 20260830130000's own lines 495-501) and
+  // 20260914090000_create_import_export_job_detail_read_rpcs.sql
+  // (app.list_import_staging_rows -- app.preview_import_job only returns 4
+  // aggregate counts, never which row failed or why -- and
+  // app.get_import_export_job -- app.jobs' own documented direct-table RLS
+  // for authenticated is real but unreachable through PostgREST, "app is not
+  // exposed to it" and no public.jobs view exists). Both new functions
+  // mirror app.preview_import_job's own authority/SECURITY DEFINER shape
+  // exactly. 543 tracked migration files (541 -> 543). Re-verified with a
+  // full `pnpm run db:test`, ALL PASSED (after fixing a genuine anon-EXECUTE-
+  // widening bug this pass introduced and caught via that same run: both new
+  // public.* wrappers' revoke statements only said `from public`, not `from
+  // anon, authenticated, service_role, public` -- the exact ISS-2026-309
+  // defect class, this time in a migration written after that historical
+  // bulk-fix migration and therefore not covered by it).
+  // History: c2185515d281ab0fc8735e7c9dd8ed02a2399e1bf19cdf4538a0aa013adefbef
+  // (541 files, HUNDRED-AND-FORTY-FOURTH PASS).
+  // HUNDRED-AND-FORTY-FOURTH PASS: CG-AUDIT-2026-09-02 A7, invoice PDF, the
+  // fourth printable document after surat jalan/POD/purchase order. Only
+  // list_finance_invoices/get_finance_invoice_lines existed before -- no
+  // single-invoice-by-id HEADER read, confirmed by repo-wide grep and by
+  // server/queries/invoice.ts wrapping exactly those two RPCs. New migration
+  // 20260914070000_create_get_finance_invoice.sql adds app.get_finance_invoice,
+  // mirroring app.get_finance_invoice_lines' own CURRENT hardened shape
+  // byte-for-byte (SECURITY DEFINER, FIN:View gate via app.check_finance_
+  // invoice_authority, the ISS-2026-146 not-found-folds-membership fix
+  // already applied to that sibling). No cost-masking concept exists for
+  // invoices (unlike purchase orders' PRC:View-cost split) -- every column
+  // returns unmasked to any FIN:View holder. A basic single-currency PDF
+  // deliberately does not touch B3 (credit notes)/B4 (multi-currency,
+  // DEFERRED_LARGE): finance_invoices.currency is schema-constrained to one
+  // 3-letter code per row, so there is nothing to decide. 541 tracked
+  // migration files (540 -> 541). Re-verified with a full `pnpm run
+  // db:test`, ALL PASSED.
+  // History: 48f48ed157986318ebe5caf8e1854fa12bffe16e08b72c1c4c78c8154c1e32e7
+  // (540 files, HUNDRED-AND-FORTY-THIRD PASS).
+  // HUNDRED-AND-FORTY-THIRD PASS: CG-AUDIT-2026-09-02 E5 ("Telematics: device
+  // can never reach `installed`, blocked by A6"). app.record_gps_device_
+  // installation (ATW-226B) and its own db-test already fully build and
+  // exercise the evidenced-installation RPC -- the real blocker was that NO
+  // real migration ever registered the 'gps_device_installation' document
+  // type (app.document_types/app.config_types), only six different db-test
+  // fixtures' own throwaway app.register_document_type calls did, confirmed
+  // via a repo-wide grep before writing this migration. Every real tenant's
+  // first upload attempt would have failed document_type_not_configured
+  // immediately, before ever reaching its own per-tenant publish step. New
+  // migration 20260914060000_register_gps_device_installation_document_
+  // type.sql mirrors 20260901020000's own loyalty-reward-terms precedent
+  // exactly: two additive, idempotent catalogue inserts, code/name/
+  // owner_primitive_code ('DOC') matching every one of those six db-test
+  // fixtures' own identical call byte-for-byte. No new RPC. 540 tracked
+  // migration files (539 -> 540). Re-verified with a full `pnpm run
+  // db:test`, ALL PASSED.
+  // History: ebfd10ca535e62f410d58a76d036e56676eee0f3e5ee97a9cd00833b4dc03622
+  // (539 files, HUNDRED-AND-FORTY-SECOND PASS).
+  // HUNDRED-AND-FORTY-SECOND PASS: CG-AUDIT-2026-09-02 A6, signed download for
+  // ticket-reply attachments -- upload+scan for this record type was already
+  // wired (20260914030000), so an attachment posted to a reply is real,
+  // malware-scanned bytes; there was simply no way to ever fetch it back out
+  // (ticket-detail-panel.tsx did not even render an attachment's filename).
+  // New migration 20260914050000_a6_ticket_attachment_signed_download.sql
+  // adds app.authorize_ticket_attachment_evidence_file_access (a narrowly-
+  // scoped sibling of the vendor-compliance/shipment-checklist pair) and
+  // app.access_ticket_attachment_evidence_for_download (service_role only).
+  // Unlike those two siblings, this record type had no unused permission-
+  // action seam to reach for -- reuses app.can_access_ticket (the SAME
+  // staff-or-requester-or-watcher baseline every ticket read RPC already
+  // applies) plus the linked ticket_messages row's own visibility (public vs.
+  // internal-staff-only, the SAME predicate app.list_ticket_messages/app.
+  // list_customer_ticket_messages already filter by) and a helpdesk-channel
+  // Supreme-Admin-only hard block mirroring app.list_ticket_messages -- no new
+  // authority concept introduced. 539 tracked migration files (538 -> 539).
+  // Re-verified with a full `pnpm run db:test`, ALL PASSED.
+  // History: 5a4fd4e59e8ec1a0e6e0e99256c87515331266aef7a529fc6f4b6681b84a680a
+  // (538 files, HUNDRED-AND-FORTY-FIRST PASS).
+  // HUNDRED-AND-FORTY-FIRST PASS: CG-AUDIT-2026-09-02 A6, signed download for
+  // shipment document checklist evidence -- upload+scan for this record type was
+  // already wired (an earlier this-session pass), so evidence a reviewer
+  // approves/rejects is real, malware-scanned bytes; there was simply no way to
+  // ever fetch those bytes back out again. New migration
+  // 20260914040000_a6_shipment_document_checklist_signed_download.sql adds
+  // app.authorize_shipment_document_evidence_file_access (a narrowly-scoped
+  // sibling of app.authorize_vendor_evidence_file_access -- identical
+  // malware-scan/deleted/classification gates, record-scope deliberately
+  // omitted since the caller already independently verifies it) plus
+  // app.access_shipment_document_checklist_item_evidence_for_download
+  // (service_role only, gated on the brand-new-to-real-use OPS:Download
+  // permission action code -- seeded since 20260716103445, never once checked by
+  // any RPC until now -- and the same app.can_access_record scope
+  // app.link_document_to_checklist_item/app.review_document_checklist_item
+  // already use), plus both functions' required public.* PostgREST wrappers.
+  // One deliberate improvement over its own two pre-existing sibling functions
+  // (both UNCHANGED -- Part C, no applied migration edited): this new function
+  // folds the has_active_tenant_membership check into its own initial not-found
+  // branch instead of raising evaluate_permission's tenant_id-interpolating
+  // insufficient_authority first, so it does not reintroduce the ISS-2026-146
+  // tenant-id-disclosure defect class into brand-new code; disclosed in the
+  // migration's own header, not backported into the two older functions
+  // (out of scope). 538 tracked migration files (537 -> 538). Re-verified with a
+  // full `pnpm run db:test`, ALL PASSED (a first attempt caught its own bug --
+  // the new app.authorize_shipment_document_evidence_file_access function was
+  // granted EXECUTE to service_role but its matching public.* wrapper was
+  // initially omitted; scripts/db-tests/public-api-wrapper-regression.sql's own
+  // exhaustive, catalog-derived check caught it immediately -- fixed by adding
+  // the wrapper, matching app.authorize_vendor_evidence_file_access's own
+  // invoker-mode security shape exactly, then re-verified clean).
+  // History: 48041aced0d42d465f35d8fe9ee56fc16bf31171a6db822baae35bc6d095987e
+  // (537 files, HUNDRED-AND-FORTIETH PASS).
+  // History: d625e847caecd16d1e81d87c5aaa017a3a5f5b6468129f45ee3c44e18fc57312
+  // (536 files, HUNDRED-AND-THIRTY-NINTH PASS).
+  // History: 0e46d035276715480a4bf95f1b40d3ffdc2038eea7b6bd383192416d903b07e2
+  // (535 files, HUNDRED-AND-THIRTY-SEVENTH PASS).
+  // History: 298c7f9bf1977c728e5a83d9f8b3522b2325b8f0ccf6c9e10355c44af32e58d3
+  // (535 files, HUNDRED-AND-THIRTY-SEVENTH PASS, pre-fix -- superseded before
+  // ever landing, see the note immediately above).
+  // History: c5fd2bde0aad57ca615f1936c762f6265f56d00f8c8884379a146635cf19f376
+  // (534 files, HUNDRED-AND-THIRTY-SIXTH PASS).
+  // History: 2a5424306416032ff0adb5566a5d482d3e05400df4cb06263f15ca80698d7404
+  // (533 files, HUNDRED-AND-THIRTY-FIFTH PASS).
+  // History: 66e7aa429f477a4d667f002f6e11271a0fc63d371423cdcdd5f67d709b916470
+  // (532 files, HUNDRED-AND-THIRTY-FOURTH PASS).
+  // History: c7dc83b91381284f9fd45b6839d67bcc5acf11f58ee141a981269a6f5374f54b
+  // (531 files, HUNDRED-AND-THIRTY-THIRD PASS).
+  // History: 82cc00b3525a7f113be9afbe9fa7e688f27243107b4a451fe021ae20b4b4100a
+  // (530 files, HUNDRED-AND-THIRTY-SECOND PASS).
+  // History: 27a9f9b97442831d21e82f7bc3ad5c8f6dfc953b91b1511f4667ed0bedf1f3ef
+  // (529 files, HUNDRED-AND-THIRTY-FIRST PASS).
+  // History: 6d5d054b2b20701115c899434d9487d17eef07afa7d92ac629f3f9f130134716
+  // (528 files, HUNDRED-AND-THIRTIETH PASS).
+  // History: e9f38e1d4161d4927e29ed30859600d35c230a702ea7ddec00aed8e9f44f6c77
+  // (527 files, HUNDRED-AND-TWENTY-NINTH PASS).
+  // History: 9bad708c944fa6a348e0b57f82274d0c1941d984002ceebe0d69cb934d2f3ed2
+  // (525 files, HUNDRED-AND-TWENTY-EIGHTH PASS).
+  // History: 8d0657c0003b1d025e233c6e63edf7326104286f2cc8b360dcab882db1ab7231
+  // (524 files, HUNDRED-AND-TWENTY-SEVENTH PASS).
+  // History: c0ada24912c2a318d4e597a9df330701722ab48da3d8bbb268c8feb3f7d2630c
+  // (523 files, HUNDRED-AND-TWENTY-SIXTH PASS).
+  // History: 00a24141eff134e525ec386b70590a0362e2a1e602d0b8ebe0229d7aa17ed051
+  // (522 files, HUNDRED-AND-TWENTY-FIFTH PASS).
+  // History: 44c43e891da151da3b12b9ff3ffa2e168d4418e15518abc7d9a074f63dc7ba4c
+  // (521 files, HUNDRED-AND-TWENTY-FOURTH PASS).
+  // History: a03ac483e76c44c7c23a31a33bd7ad7f08d236d9710bfc5b657f796a36f49e12
+  // (520 files, HUNDRED-AND-TWENTY-THIRD PASS).
+  // History: 08804b3a9424603612e59207bd28f3872381503b899d6530c228650a35a64127
+  // (519 files, HUNDRED-AND-TWENTY-SECOND PASS).
+  // History: 9b225ba6030a7bf4d82369b48e21ed732de32111c92e1d372307b05eb76c480d
+  // (518 files, HUNDRED-AND-TWENTY-FIRST PASS).
+  // History: fe289e21bf5e6a0bec67e9e81155dec3b17586a9467a8d301c5166141bec3995
+  // (517 files, HUNDRED-AND-TWENTIETH PASS).
+  // History: 61119938892522671dec527c7f4a474bed49aaf50f76e3e46c30776a15762167
+  // (516 files, HUNDRED-AND-NINETEENTH PASS).
+  // History: c4812e14488d0730a6a105798a6491ce672b21dc2ea3be6f2e657f475a913807
+  // (515 files, HUNDRED-AND-EIGHTEENTH PASS).
+  // History: db524d7f5447f005c191fe338d340a54bf92869e767a00febea684421a756936
+  // (514 files, HUNDRED-AND-SEVENTEENTH PASS).
+  // History: 77c43404839fe193cac0febdd2bab03e3298a74d64c29f18505b5ed06ed04c87
+  // (513 files, HUNDRED-AND-SIXTEENTH PASS).
+  // History: 41f13cc719246dcc27c2c1462e923fe86340d6fbbddedb5f6901c924ee729abf
+  // (512 files, HUNDRED-AND-FIFTEENTH PASS).
+  // History: 1b57197248d04de881757dc9af9b6b4875e9cdc52adeb8008e034a1e499b90aa
+  // (511 files, HUNDRED-AND-FOURTEENTH PASS).
+  // History: 097e81c3be29d3477ec76107ad1f137895a15b7c7df9f14fd5f15e198d74587f
+  // (510 files, HUNDRED-AND-THIRTEENTH PASS).
+  // History: a182a76409dc6e5ddbe6fd8fa3c1f55496a5eca9ef784ce483a4f4b3c7f86c57
+  // (509 files, HUNDRED-AND-TWELFTH PASS).
+  // History: 2983672fb1e79e945912c7ec5f027745c41bd94050419c141aaf8de83295ba55
+  // (508 files, HUNDRED-AND-ELEVENTH PASS).
+  // History: c62a545dc710bb9485577327a7c7f2e8295d5007e1c62286847d6e43f41d88da
+  // (507 files, HUNDRED-AND-TENTH PASS).
+  // History: ebf2014640553ddc87d687c8c04e96696fcc6b394e5ba2f980ba408c995fd612
+  // (507 files -- same HUNDRED-AND-TENTH PASS, superseded same-pass by the security-
+  // definer/search_path fix above before this backlog item was ever considered closed).
+  // History: 000e1423c9fe992a9b768a2098b13f45cc87ecac9df3172b386585afc7e8b6df
+  // (506 files, HUNDRED-AND-NINTH PASS).
+  // History: a7287556fa485208595d75b5a9a08b421a7245419ff826daf92ddbb832a5dafa
+  // (505 files, HUNDRED-AND-EIGHTH PASS).
+  // History: 4b6d270110ecb08b88a57d729aa97aaafd8f1159d99e4fa5d3abb6a76828909a
+  // (504 files, HUNDRED-AND-SEVENTH PASS).
+  // History: 1fca1ec22b42d6b1b9a115c610fd28bf160a5c110beb68beadeeda9d6ba4de97
+  // (503 files, HUNDRED-AND-SIXTH PASS).
+  // History: b877952bce57e2bab4020a039c75b489e6363910b7904597dd6d040df18b0d98
+  // (502 files, HUNDRED-AND-FIFTH PASS).
+  // History: 7468be3a8ab6fb61957df4060cfe033fd86f8db6d4524e759df76100b733969b
+  // (501 files, HUNDRED-AND-FOURTH PASS).
+  // History: df0c466d4fded333fd6fd2edcb1230f33189d0d6e22e9eac35d52f8632bf4b16
+  // (500 files, HUNDRED-AND-THIRD PASS).
+  // History: 4bee16e4efda9c078b90af67c5a9877f5563c112c85c93e9dac4a37f3e472e99
+  // (498 files, HUNDRED-AND-SECOND PASS).
   // History: 58f6ffb411bb3213be951b6f081f0d6cf0be83bcf27e46d93455bfd0a04bc032
   // (497 files, ISS-2026-311's cargogrid.net reserved-hostname guard).
   // History: 4d064ccc938fcbf43cddcee5165b43b08f89a556ab4b70dc3eb3c9dea62907ff
@@ -4263,7 +6734,1058 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // failed with one attempt spent and a future backoff while the good job in the same batch still
   // completes; an enqueued external-handoff job comes through untouched with zero attempts; the
   // batch ceiling holds; a drained queue returns empty; and the worker is service_role-only).
-  dbTestSetSha256: "f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480",
+  // HUNDRED-AND-THIRD PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027 Part
+  // A -- see docs/build-log/remediation/CG-AUDIT-2026-09-02-REMEDIATION-BACKLOG.md): 251 files
+  // (+1). One new file, tenant-admin-guard-postgrest-schema-exposure.sql (Ø1: membership
+  // resolution, anti-enumeration collapse, customer_user-layer exclusion, actor-identity-
+  // mismatch rejection, anon-grant denial for the new resolve_tenant_by_slug_for_actor RPC).
+  // Two existing files extended, count unchanged (B1): finance-invoice.sql and
+  // finance-period-lock.sql each now run their real issue/lock call under `set local role
+  // authenticated` rather than the connecting superuser -- the only way this suite would have
+  // caught issue_finance_invoice/lock_finance_period's SECURITY INVOKER defect, since every
+  // other call in both files ran privileged and never exercised the table-grant boundary that
+  // was actually broken.
+  // HUNDRED-AND-FOURTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 251 files, unchanged in count -- one extended (advanced-tms-route-load-
+  // planning.sql: a structural regression proving app.run_next_route_planning_job's
+  // cross-tenant guard call now appears before its own exception-catching block rather than
+  // inside it, plus a positive-path check that a genuine authenticated session which IS the
+  // job's own requester and an active tenant member still runs the job successfully end to
+  // end -- the guard's relocation did not break the legitimate case).
+  // HUNDRED-AND-FIFTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 252 files (+1). One new file, suspended-user-access-revocation.sql (D3b: before
+  // suspend access resolves normally; after suspend resolve_access_context/has_active_tenant_
+  // membership fail closed and a real RLS-gated read under the suspended user's own session
+  // returns zero rows; reactivating restores access; an identity with no app.users row at all
+  // is unaffected). Two existing files extended: hris-employee-master.sql's own suspend
+  // regression now asserts has_active_tenant_membership=false (was, incorrectly per the
+  // audit, asserting true) while has_active_identity_link stays true and
+  // get_my_employee_profile still returns the row (self-service preserved); rbac-
+  // enforcement.sql's ISS-2026-072 defense-in-depth assertions updated from
+  // reason=not_active_platform_user to reason=not_active_tenant_member for a raw suspended/
+  // revoked app.users row, since app.has_active_tenant_membership's own first gate inside
+  // evaluate_permission now denies it earlier -- still correctly denied either way, no
+  // application code pattern-matches on either specific reason string (confirmed by
+  // repository-wide grep).
+  // HUNDRED-AND-SIXTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 253 files (+1). One new file, finance-company-org-unit-scope.sql (B8): a direct
+  // unit test of app.assert_finance_company_org_unit (no-ops on null, accepts a real
+  // own-tenant company org unit, rejects a cross-tenant company_id, rejects a same-tenant
+  // non-company org unit, rejects a nonexistent id) plus end-to-end integration proof
+  // through two of the fifteen affected RPCs (app.create_finance_journal_draft, app.
+  // create_finance_bank_account) -- cross-tenant/wrong-type rejection, authority still
+  // checked before the new company check, and the legitimate own-tenant/null-company paths
+  // still succeed.
+  // HUNDRED-AND-SEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 254 files (+1). One new file, finance-invoice-withholding-tax.sql (B5): a
+  // self-contained tenant/job-order fixture (finance-invoice.sql's own job order already
+  // carries an issued invoice, and only one invoice per job order may ever be issued) --
+  // proves app.calculate_finance_tax discloses taxType=withholding for PPH23; a
+  // withholding-taxed invoice's tax_amount stays 0 and total_amount is unaffected while
+  // withholding_tax_amount carries the withheld magnitude; issuing posts the AR open item
+  // and AR-control debit net of the withheld amount plus a DEBIT (never a credit) to the
+  // tax rule's own governed recoverable account, with the GL journal still balancing
+  // exactly at the subtotal; a second withholding rule (PPH21) with no rule-level
+  // recoverable_account_id configured is proven correct at prepare-time (the
+  // withholding_tax_receivable_default posting-map fallback); and PPN (vat, not
+  // withholding) is proven completely unaffected by this fix.
+  // HUNDRED-AND-EIGHTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 254 files, unchanged in count -- two extended (E2). operations-resource-
+  // assignment.sql gained a real two-process concurrent race regression: two DIFFERENT
+  // shipment orders on the SAME job order race app.assign_resource for the SAME brand-new
+  // vendor at the same instant -- exactly one reaches an active assignment (proven via a
+  // real database query, never the racing processes' own stdout), the other is denied
+  // assignment_conflict, never a raw unique_violation; its own audit-trail count assertion
+  // bumped 6 -> 7 for the race winner's own event. advanced-tms-shipment-tracking-health-
+  // writer.sql's own fixture, which deliberately bypassed app.assign_resource via a raw
+  // insert to give two shipments the SAME active vehicle assignment (to exercise app.
+  // arbitrate_and_project_vehicle_position's defensive multi-row loop against a state the
+  // RPC itself already blocked but a future path "might" someday produce), was updated
+  // once E2's own new database-level constraint made that exact state permanently
+  // unconstructible: shipment F now gets its own, separate, real vehicle assignment, with
+  // the shared-fan-out/degraded/stale-precedence assertions all adapted to two
+  // independently-tracked vehicles instead of one shared one.
+  // HUNDRED-AND-TENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 255 files (+1). New file scripts/db-tests/finance-list-cursor-pagination.sql
+  // proves F3's fix (20260907160000) deeply for both distinct sort-order shapes the 13
+  // widened finance list functions use: app.list_finance_ar_open_items (ascending due_date,
+  // id tie-break) and app.list_finance_reconciliation_runs (descending created_at, id tie-
+  // break), each with 5 rows sharing an identical sort-key value to force every row through
+  // the id tie-break. Asserts: a full cursor walk visits all 5 rows exactly once in the
+  // documented order; one page past the end returns zero rows, not an error or a repeat; the
+  // limit+1 over-fetch arithmetic is exact; a cross-tenant p_after_id (a real row id from a
+  // DIFFERENT tenant the same actor also holds FIN:View on) is silently ignored rather than
+  // leaking that other tenant's own sort-key value into this tenant's predicate; and the old,
+  // un-widened 5/4-positional-argument call shape still returns the full un-paginated set.
+  // The remaining 11 widened functions were not given their own dedicated cursor-walk file in
+  // this bounded change -- they share the identical two code shapes just proven, verified by
+  // direct code review, and are exercised without error by their own existing, unmodified
+  // db-test files (finance-accounts-payable.sql, finance-invoice.sql, finance-journal.sql,
+  // finance-receipt-allocation.sql, finance-settlement.sql, finance-cash-bank.sql,
+  // finance-vendor-bill.sql, finance-period-lock.sql, finance-subledger.sql,
+  // finance-reversal-adjustment.sql), whose own pre-existing calls pass unaffected through
+  // the new optional trailing parameters.
+  // HUNDRED-AND-ELEVENTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 255 files, unchanged in count -- one extended (F5). scripts/db-tests/operations-
+  // basic-dispatch.sql gained a new assertion, appended right after its own existing "app.
+  // dispatch_ready_queue: lists exactly the four assigned fixtures" block, reusing that
+  // block's own already-seeded tenant/fixtures rather than building new ones: under the SAME
+  // real, RLS-scoped authenticated session, a plain count(*) against app.shipment_orders
+  // (tenant_id + status = 'assigned') is asserted equal to a count(*) through app.
+  // dispatch_ready_queue for the same tenant -- the live proof that server/queries/
+  // basic-dispatch.ts#listDispatchReadyQueue's new split (an exact count taken directly
+  // against the base table, bypassing the view's own per-row SECURITY DEFINER lateral join
+  // entirely) can never disagree with what the view itself would report, not merely reasoned
+  // about from the two predicates' text. Deliberately asserts "at least 4", not "exactly 4" --
+  // this tenant also carries other Shipment Orders driven to 'assigned' by later fixtures
+  // further down the same file (dispatch_shipment_order/bulk_dispatch tests); the only
+  // property this assertion needs is that the two counts never disagree, at any fixture
+  // population, not a specific count.
+  // HUNDRED-AND-TWELFTH PASS (2026-09-07, CG-AUDIT-2026-09-02 backlog remediation, ADR-0027
+  // Part A): 255 files, unchanged in count -- one extended (A3). scripts/db-tests/role-
+  // permission.sql gained a new assertion, appended at the end of the file (after "defense
+  // in depth"): republishing a role's second version migrates an active assignment bound to
+  // the first (now-archived) version onto the second, app.evaluate_permission keeps
+  // granting the same permission the identity already held (proving the fix end to end, not
+  // just the row-level bookkeeping), and exactly one role_lifecycle_history version_migrated
+  // event is recorded, scoped to that one assignment. A second sub-case proves the negative:
+  // republishing a role NOBODY has ever been assigned to fabricates zero version_migrated
+  // events. Reuses the file's own already-seeded tenant/actors; a brand-new role is created
+  // for each sub-case rather than touching the file's own pre-existing "Finance Approver"
+  // role, whose own version history earlier tests already assert against.
+  // AMENDED same-pass, a SECOND db-test file: scripts/db-tests/rbac-enforcement.sql had its
+  // own pre-existing "a stale assignment (still active, but pointing at a now-archived,
+  // superseded role version) fails closed -- PLT-112 §23's 'stale permission fails closed'"
+  // block, which encoded the audit-confirmed A3 bug itself as this test's own intended
+  // contract (publishing a new role version was EXPECTED to deny the existing holder).
+  // Caught live by re-running `pnpm run db:test` after the migration above (never assumed
+  // fixed): `assertion failed: expected the stale assignment to deny (reason=no_granting_
+  // role), got allowed=t reason=role_grant`. Rewrote the block to assert the CORRECTED
+  // contract instead -- republishing migrates the still-active assignment onto the new
+  // version, so `evaluate_permission` keeps returning `allowed=true` with `reason=
+  // role_grant` and `role_version_id` pointing at the newly published version (the row
+  // itself, same `id`, rebound in place, not replaced) -- and removed the old block's own
+  // now-meaningless "re-assigning restores access" recovery step (nothing was ever lost to
+  // recover from). Re-verified the entire 1600+-line file end to end, not just the touched
+  // block: multiple much-later blocks (HRT-295's own "grantee still holds active FIN:Approve
+  // ... unaffected by every test above" baseline foremost among them) depend on this
+  // identity's assignment surviving in an active, granting state all the way through the
+  // file, and all passed unmodified against the corrected behavior.
+  // HUNDRED-AND-THIRTEENTH PASS (2026-09-07, NEW-1): 255 files, unchanged in count -- two
+  // extended. scripts/db-tests/background-job.sql gained a new regression block after its
+  // own "app.complete_job" block: requester enqueues, teammate (a genuinely different,
+  // genuinely active member of the SAME tenant, never the job's own original requester)
+  // claims and completes it under a real session identity (auth.uid() set via request.jwt.
+  // claims, no role switch needed since neither function is granted to `authenticated`
+  // directly) -- proves no actor_identity_mismatch is raised, and that both the resulting
+  // claim_next_job/complete_job app.audit_logs rows attribute actor_auth_user_id to the
+  // CALLING teammate while preserving the original requester as `requested_by_auth_user_id`
+  // metadata; also proves enqueue_job's own audit row is unaffected. Live-discovered while
+  // writing this test and fixed in the SAME migration (20260907190000): a custom/placeholder
+  // GUC like request.jwt.claims set via SET LOCAL outside an explicit transaction block does
+  // not revert to unset once the block ends, it reverts to an empty string (not valid JSON)
+  // -- harmless for every PRE-EXISTING use in this file (nothing downstream ever read the
+  // GUC without first overwriting it), but a real hazard now that claim_next_job/complete_job
+  // read it for the first time; the migration reads auth.uid() defensively (begin/exception)
+  // so a leaked '' degrades to a null actor rather than crashing, and this test also resets
+  // to a valid empty JSON object afterward as belt-and-suspenders hygiene.
+  // scripts/db-tests/advanced-tms-route-load-planning.sql's own pre-existing D2 regression
+  // comment (which had disclosed this exact NEW-1 limitation as blocking a real end-to-end
+  // cross-session exercise of that guard) was corrected to reflect that NEW-1 is now fixed --
+  // no new assertion added there, since a genuine cross-TENANT proof would need a second
+  // tenant this file has never otherwise needed, and scripts/db-tests/background-job.sql's
+  // own new regression above already proves the general (cross-user, same-tenant) case.
+  // HUNDRED-AND-FIFTEENTH PASS (2026-09-07, D1 partial): 255 files, unchanged in count -- two
+  // extended, no new file. `scripts/db-tests/fixtures/auth-schema-stub.sql` gained `auth.
+  // jwt()` (real Supabase reference implementation, same `request.jwt.claims` GUC `auth.uid()`/
+  // `auth.role()` already read) so `app.verify_mfa_step_up_challenge`'s new real-AAL2-session
+  // requirement can be exercised. `scripts/db-tests/enterprise-mfa-session-controls.sql`
+  // gained a new regression block after its own "wrong actor rejected, correct actor
+  // verifies" block: a genuine session with no `aal` claim at all, and one with an explicit
+  // `"aal": "aal1"`, both now correctly rejected with `mfa_step_up_requires_real_aal2_session`
+  // (proving the challenge stays 'pending', not silently consumed by either rejected
+  // attempt); a genuine session carrying `"aal": "aal2"` still succeeds; a null-session
+  // (service-role-equivalent) caller is unaffected, matching every one of the ~30 other real
+  // call sites across the other 11 db-test files that depend on this function as a
+  // precondition and never simulate a session at all -- confirmed unaffected by a full
+  // `pnpm run db:test` re-run, not merely by this one assertion.
+  // HUNDRED-AND-SIXTEENTH PASS (2026-09-08, user-directed extension of A6/D4): 256
+  // files (+1) -- new file scripts/db-tests/platform-integration-secrets.sql. Proves,
+  // against a real disposable database: fails closed with encryption_key_not_
+  // configured when the GUC is unset; Supreme-Admin-only for both set and list (an
+  // identity with no principal membership at all is rejected); invalid key shape and
+  // empty value both rejected; a real round-trip through pgcrypto encryption; rotation
+  // upserts in place (never a second row) and preserves the prior description when a
+  // rotation passes a null one; an unconfigured key decrypts to null, never raises;
+  // the list RPC's own RETURNS TABLE shape structurally has no value column at all;
+  // and (ISS-2026-309's own regression class) anon holds zero EXECUTE on any of the 3
+  // new functions across BOTH app.* and their public.* wrappers.
+  // HUNDRED-AND-SEVENTEENTH PASS (2026-09-08, user-directed A6/D4 extension, part 2
+  // of 2): 258 files (+2) -- new fixture scripts/db-tests/fixtures/storage-schema-
+  // stub.sql (a minimal storage.buckets/storage.objects stub, mirroring auth-schema-
+  // stub.sql's own rationale: no Supabase-managed `storage` schema exists in a bare
+  // disposable Postgres) and new file scripts/db-tests/tenant-documents-storage-
+  // malware-scan.sql, proving against a real disposable database: the tenant-
+  // documents bucket exists/is private/storage.objects RLS is enabled; a real
+  // enqueue -> claim -> app.record_file_scan_result -> complete cycle moves a real
+  // app.files row from 'pending' to 'clean' for job_type=malware_scan (the exact
+  // deadlock A6 named, closed for real -- not merely a list-equality assertion,
+  // which scripts/db-tests/background-job.sql's own ATW-031 drift gate already
+  // covers generically); document_scan_already_resolved still refuses a different
+  // re-resolution; and an infected verdict quarantines even the file's own uploader
+  // via app.authorize_file_access.
+  // HUNDRED-AND-EIGHTEENTH PASS (2026-09-08, same ruling as migrationSetSha256 above):
+  // 259 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch1.sql.
+  // Proves, against a real disposable database, every one of the 15 new function pairs
+  // this pass's migration adds: real data returned for a tenant member; RULE A genuinely
+  // rejects a claimed actor that does not match the real session identity (via an
+  // explicit `request.jwt.claims` GUC inside a real transaction, not merely a denied-
+  // for-the-wrong-reason false positive); RULE B excludes a customer_user-layer
+  // principal from app.accounts/app.customer_contracts/
+  // app.customer_contract_price_components_directory even though it independently
+  // satisfies tenant membership; cross-tenant denial; and (via an
+  // information_schema.parameters introspection of the function's own OUT parameters,
+  // not merely a sample row) that app.list_contacts/app.get_contact_by_id never return
+  // normalized_email/normalized_phone/duplicate_fingerprint -- the exact PII-correlation
+  // leak this test caught live in the first drafted version of both functions. Mutation
+  // fixtures for tables with no direct create path in this batch (app.customer_contracts,
+  // app.leads/app.prospects/app.opportunities/app.costing_requests) are seeded via direct
+  // insert rather than through their own pre-existing, already-tested mutation RPCs
+  // (app.create_customer_contract_draft, app.create_opportunity, app.request_costing),
+  // mirroring this same file's own app.accounts fixture -- those RPCs require a full
+  // accepted+converted quotation or lead-qualification chain this test does not otherwise
+  // need, and are already exercised end-to-end by commercial-customer-contract-
+  // pricing.sql / commercial-opportunity-management.sql / commercial-costing-request-
+  // workflow.sql.
+  // HUNDRED-AND-NINETEENTH PASS (2026-09-09, same ruling as migrationSetSha256 above):
+  // 260 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch2.sql.
+  // Proves, against a real disposable database, every one of the 12 new function pairs
+  // this pass's migration adds: real data for a tenant member/record owner; RULE A
+  // genuinely rejects a claimed actor that does not match the real session identity;
+  // RULE B excludes a customer_user-layer principal from app.margin_rule_versions/
+  // app.pipeline_categories/app.win_loss_reasons; a global Supreme Admin with ZERO tenant
+  // membership genuinely bypasses app.margin_rule_versions (an explicit "OR
+  // is_supreme_admin()" in its own predicate) AND app.pipeline_categories/
+  // app.win_loss_reasons (transitively, via app.has_active_tenant_membership's own current
+  // body) but does NOT bypass any can_access_record-gated function (whose own body
+  // requires has_active_tenant_membership unconditionally, even for a supreme admin) --
+  // this last distinction was caught live by the test itself, not assumed, and corrected
+  // (see migrationSetSha256's own note above); field-masking for
+  // app.margin_calculations_directory (cost/sell) and app.opportunities_directory
+  // (probability/value_amount/value_currency) confirmed via cost_masked/sell_masked/
+  // value_masked flags on real rows; and cross-tenant denial throughout (zero rows or a
+  // raised exception, matching each function's own documented not-found/denied contract).
+  // Fixture rows for tables with no lightweight create path (app.margin_calculations,
+  // requiring a real app.rate_selections row) are seeded via a real is_adhoc=true rate
+  // selection rather than a full vendor-rate-version chain, and via direct insert for
+  // app.opportunities/app.sales_plans/app.sales_targets/app.forecast_snapshots -- mirroring
+  // batch 1's own established "seed the row directly, prove the new READ path" scope
+  // boundary against these tables' own already-tested mutation RPCs.
+  // HUNDRED-AND-TWENTIETH PASS (2026-09-09, same ruling as migrationSetSha256 above): 261
+  // files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch3.sql. Proves,
+  // against a real disposable database, every one of the 7 new function pairs this pass's
+  // migration adds: real data for a tenant member/record owner; RULE A genuinely rejects a
+  // claimed actor that does not match the real session identity; RULE B's authority
+  // predicates match each table's current (latest ALTER POLICY) RLS predicate;
+  // COM:View-cost-lacking callers get cost_masked=true (list_costing_responses_for_
+  // request) and zero rows for every component (list_costing_response_components -- the
+  // all-or-nothing mask, confirmed distinct from column-level masking); credit-profile
+  // amount masking confirmed via amount_masked flags on real rows; cross-tenant denial and
+  // the not-found/denied zero-rows-vs-raise contract confirmed per function, matching each
+  // one's documented posture; and get_approval_requests_entity_refs confirmed shared
+  // correctly between the credit-profile and quotation approval inboxes with per-request
+  // authority enforced (a request this actor cannot access is silently excluded, not
+  // raised). Fixture rows for app.rate_selections/app.config_objects/app.config_versions
+  // (needed for app.margin_calculations and app.approval_requests without a full vendor-
+  // rate-version or approval-engine setup chain) are seeded via direct insert, mirroring
+  // batches 1-2's own established "seed the row directly, prove the new READ path" scope
+  // boundary. Also confirmed against public-api-wrapper-regression.sql (no cross-file
+  // grant-parity or RULE A/B/C regression from any of this batch's 7 new function pairs).
+  // HUNDRED-AND-TWENTY-FIRST PASS (2026-09-09, same ruling as migrationSetSha256 above):
+  // 262 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-batch4.sql. Proves,
+  // against a real disposable database, every one of the 11 new function pairs this pass's
+  // migration adds: real data for a tenant member/record owner (app.leads,
+  // app.prospects, all 4 app.quotations_directory functions, app.quotation_lines_
+  // directory, app.quotation_approval_rules, app.quotation_acceptance_tokens); RULE A
+  // genuinely rejects a claimed actor that does not match the real session identity
+  // (checked against app.list_leads); app.prospects' deliberate column exclusion
+  // (normalized_legal_name/normalized_tax_id/duplicate_fingerprint/disqualified_at/
+  // archived_at never returned) confirmed via information_schema.parameters on the
+  // function's own OUT parameters, not a sample-row check; app.quotations_directory/
+  // app.quotation_lines_directory's sell_masked/cost_masked confirmed true for a member
+  // lacking COM:View selling price/cost; app.quotation_acceptance_tokens' token_hash
+  // exclusion confirmed the same way (a hard, security-critical check); app.quotation_
+  // approval_rules' RULE B excludes the customer_user layer and a Supreme Admin with
+  // zero tenant membership bypasses via the explicit OR is_supreme_admin() branch, while
+  // a genuine non-member raises; and cross-tenant denial throughout every one of the 11
+  // functions. This batch's db-test passed completely on the first full run -- no defect
+  // surfaced by testing that the design/verify pipeline had missed (the Agent-tool-based
+  // design/verify substitute for this batch, used after the Workflow tool's subagent path
+  // failed twice with a permission-handler bug, itself caught and fixed the app.prospects
+  // column-exclusion and app.quotations_directory documentation-count defects before this
+  // db-test was ever written -- see migrationSetSha256's own note above).
+  // HUNDRED-AND-TWENTY-SECOND PASS (2026-09-09, same ruling as migrationSetSha256
+  // above): 263 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster0-
+  // batch5.sql. Proves, against a real disposable database, every one of the 8 new
+  // function pairs this pass's migration adds (the LAST batch of cluster 0's 32
+  // tables): real data for a tenant member/record owner across all 5
+  // app.vendor_rate_versions_directory functions, app.list_active_vendor_rates,
+  // app.list_rate_selections_for_request, and app.list_vendor_rate_tiers; RULE A
+  // genuinely rejects a claimed actor that does not match the real session
+  // identity (checked against app.list_rate_versions_for_master_record); RULE B
+  // excludes a customer_user-layer principal throughout; a global Supreme Admin
+  // with ZERO tenant membership bypasses every function, including
+  // list_active_vendor_rates (its own explicit is_supreme_admin() branch); a
+  // genuine non-member is denied via the RAISE posture for
+  // list_active_vendor_rates (matching app.list_accounts/app.list_credit_
+  // profiles' "list for one named tenant" convention) and via zero rows for every
+  // record-scoped function (get_rate_version_by_id,
+  // list_rate_versions_for_master_record, all vendor_rate_versions_directory
+  // functions, list_rate_selections_for_request, list_vendor_rate_tiers); cost
+  // masking confirmed via cost_masked flags on real rows for both
+  // app.rate_selections_directory and app.vendor_rate_tiers_directory; and
+  // cross-tenant denial throughout all 8 functions. This batch's db-test passed
+  // completely on the first full run against a real disposable database -- no
+  // defect surfaced by testing that the design/verify pipeline had missed (the
+  // Agent-tool-based design/verify pipeline itself caught and fixed the
+  // vendor_rate_versions_directory header-comment defect and the
+  // check-rls-initplan.ts false positive before this db-test was ever written --
+  // see migrationSetSha256's own note above). Also confirmed against
+  // public-api-wrapper-regression.sql (no cross-file grant-parity or RULE A/B/C
+  // regression from any of this batch's 8 new function pairs). Cluster 0
+  // (CRM/commercial, 32 tables) of the CG-AUDIT-2026-09-02 Ø1-query-layer
+  // remediation is now FULLY DONE; clusters 1-7 (104 remaining call sites across
+  // finance/identity/dispatch/tracking/documents/analytics/misc) remain open.
+  // HUNDRED-AND-TWENTY-THIRD PASS (2026-09-10, same ruling as migrationSetSha256
+  // above): 264 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster1-
+  // batch1.sql. Proves, against a real disposable database, every one of the 8
+  // new function pairs this pass's migration adds (the FIRST and, in this same
+  // pass, LAST batch of cluster 1's 6 tables): real data for the fixture-row
+  // owner and a shared-org-unit viewer; OPS:View cost/OPS:View margin masking
+  // confirmed via cost_masked/margin_masked flags AND real vs. null amounts on
+  // both app.get_shipment_actual_cost and app.get_job_profitability_directory
+  // (ownership alone is proven insufficient -- the owner without the
+  // permission sees a masked row, a non-owning shared-org-unit viewer WITH the
+  // permission sees the real amounts); a global Supreme Admin with ZERO tenant
+  // membership bypasses every can_access_record-gated function; RULE A
+  // genuinely rejects a claimed actor that does not match the real session
+  // identity (checked against app.get_shipment_actual_cost); RULE B is
+  // enforced by app.list_finance_period_checklist_items (a customer_user-layer
+  // principal in the SAME tenant sees zero items, a plain org_user member sees
+  // both, a zero-membership Supreme Admin bypasses); app.billing_readiness_
+  // evaluations' deliberate overridden_by_auth_user_id exclusion confirmed via
+  // a to_jsonb key check on a real, actually-overridden fixture row (not a
+  // static read of the migration's own column list); app.list_finance_
+  // currencies/app.list_finance_rounding_modes proven to genuinely return rows
+  // under a real `authenticated`-role session (proving the SECURITY INVOKER
+  // design decision is correct in practice, not merely asserted); the
+  // app.finance_period_close_checklist_items fixture itself is seeded via the
+  // real, already-tested app.generate_finance_fiscal_calendar mutation RPC
+  // (through a real published finance_close_policy config), not a direct
+  // insert, mirroring this series' own "seed via an already-tested mutation
+  // RPC where one exists" convention; and cross-tenant denial throughout all 8
+  // functions. This batch's db-test passed on the second full run (the first
+  // run surfaced two real fixture-setup gaps, both fixed before any function
+  // logic was ever in question: a missing NOT NULL duplicate_fingerprint
+  // column on the fixture's own app.accounts insert, and a missing tenant_admin
+  // layer grant needed only to publish the finance_close_policy config/
+  // generate the fiscal calendar, per app.check_config_object_authority's own
+  // real requirement -- neither was a defect in any of the 8 new functions
+  // themselves). Also confirmed against public-api-wrapper-regression.sql (no
+  // cross-file grant-parity or RULE A/B/C regression from any of this batch's
+  // 8 new function pairs). Cluster 1 (finance, 6 tables / 8 call sites) of the
+  // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY DONE; clusters
+  // 2-7 (96 remaining call sites across identity/dispatch/tracking/documents/
+  // analytics/misc) remain open.
+  // HUNDRED-AND-TWENTY-FOURTH PASS (2026-09-10, same ruling as migrationSetSha256
+  // above): 265 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster2-
+  // batch1.sql, plus scripts/db-tests/rbac-enforcement.sql widened (2 new
+  // v_expected entries, no test logic weakened -- see migrationSetSha256's own
+  // note above). Proves, against a real disposable database, every one of the 7
+  // new function pairs this pass's migration adds (cluster 2's first batch):
+  // self-lookup aggregation across multiple tenants for
+  // app.list_identity_tenant_links (any status, cross-tenant by design since it
+  // is genuinely self-scoped); RULE A genuinely rejects a forged actor
+  // (app.list_identity_tenant_links); the RAISE-vs-silent-zero-rows distinction
+  // holds throughout (app.list_tenant_users RAISEs insufficient_authority for
+  // zero standing in the named tenant, matching the established "list for one
+  // named tenant" convention, while every record/child-collection-scoped
+  // function -- the 3 app.users_directory callers, app.list_tenant_roles --
+  // returns zero rows silently for the identical denied-access case); email
+  // masking toggle proven via real HRS:View personal data grant/revoke, not a
+  // static read of the migration's own column list; the customer_user-layer
+  // exclusion fix (see migrationSetSha256's own note on the app.users_directory
+  // drift) proven to actually exclude a real customer_user-layer fixture row
+  // across all 3 affected functions; the app.permissions active-standing gate
+  // proven both ways (an active app.principal_memberships row admits, zero
+  // standing anywhere denies via zero rows); a global Supreme Admin with ZERO
+  // tenant membership bypasses throughout; and cross-tenant denial confirmed for
+  // every one of the 7 functions. This batch's db-test passed on the third full
+  // run -- the first two runs surfaced two real fixture-setup gaps (a
+  // self-escalation rejection from having an identity grant itself a
+  // protected-permission role, fixed by using a separate granting actor; and a
+  // role-count assertion that forgot the masking-setup "PII Viewer" role also
+  // counts alongside the intentionally-created "Ops Coordinator" role), neither
+  // a defect in any of the 7 new functions themselves. Also confirmed against
+  // public-api-wrapper-regression.sql (no cross-file grant-parity or RULE A/B/C
+  // regression from any of this batch's 7 new function pairs) and against
+  // rbac-enforcement.sql's own widened ATW-032 sweep (the 2 new v_expected
+  // entries, independently re-verified as genuinely correct-by-design -- see
+  // migrationSetSha256's own note above -- not a weakened check). Cluster 2
+  // batch 1 (identity/HRIS access, 5 tables / 10 call sites) of the
+  // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY DONE; clusters
+  // 3-7 (86 remaining call sites across dispatch/tracking/documents/analytics/
+  // misc) remain open.
+  // HUNDRED-AND-TWENTY-FIFTH PASS (2026-09-11, same ruling as migrationSetSha256
+  // above): 266 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster3-
+  // batch1.sql. Proves, against a real disposable database, every one of the 9
+  // new function pairs this pass's migration adds: dispatch ready-queue/board
+  // count+list for an owner and a shared-org-unit viewer, with correct
+  // is_ready/blockers cross-checked against a live app.evaluate_dispatch_
+  // readiness call and honest coalesce-to-default board tracking columns for a
+  // shipment with no app.shipment_tracking_health row; a tenant member with no
+  // owner/org-unit/customer-account relationship gets zero rows/a zero count
+  // from every function, never an exception; cross-tenant denial and a
+  // zero-membership Supreme Admin bypass hold throughout; page_size=1
+  // pagination is exact over 2 matching rows; RULE A rejects a forged actor
+  // (spot-checked on 2 of 4 dispatch functions, 2 of 5 job-order functions);
+  // job order/handoff masking toggles correctly on real COM:View selling
+  // price/COM:View cost role grants (owner lacking both -> masked, a
+  // shared-org-unit viewer holding both -> unmasked); list_job_orders'
+  // pagination has an exact total_count; list_job_order_handoffs' p_limit
+  // clamp does not break normal use; and -- the single most safety-critical
+  // assertion in this batch -- app.get_job_order_for_handoff and app.get_job_
+  // order_handoff_for_quotation both genuinely RAISE an exception whose
+  // message contains `ambiguous_context` once a second, duplicate row is
+  // inserted via a raw service_role-bypass insert (the exact scenario the
+  // independent verify pass's own fix targets), confirmed on two independent
+  // fresh-database runs -- while an ordinary single-tenant actor querying the
+  // same key still resolves to exactly one row, unaffected. Also confirmed
+  // schema-privilege defense in depth (anon holds zero EXECUTE across both
+  // app.*/public.* schemas; authenticated/service_role grant parity
+  // spot-checked on 3 of 9 function pairs). Cluster 3 (operations-tms-core)
+  // batch 1 (4 tables / 7 call sites) of the CG-AUDIT-2026-09-02 Ø1-query-layer
+  // remediation is DONE; 21 more call sites remain in this cluster's other 16
+  // tables, plus 58 more across clusters 4-7.
+  // HUNDRED-AND-TWENTY-SIXTH PASS (2026-09-11, same ruling as migrationSetSha256
+  // above): 267 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster3-
+  // batch2.sql. Proves, against a real disposable database, every one of the 6
+  // new function pairs this pass's migration adds. For the SECURITY INVOKER
+  // functions (get_shipment_leg_tracking_policy/get_current_shipment_leg_
+  // tracking_session): the authority test genuinely forces a real session
+  // identity (`set local role authenticated; set local request.jwt.claims`),
+  // never merely an actor-parameter substitute, since these two functions take
+  // no actor parameter at all -- confirmed for owner, shared-org-unit member,
+  // denied same-tenant member, cross-tenant member, and a zero-membership
+  // Supreme Admin, plus the current-session-only filter (2 session rows, one
+  // is_current=true/false, proving the filter genuinely narrows). For app.list_
+  // milestone_codes: confirmed against an independently-computed order-by-name
+  // reference, and that anon is genuinely rejected (`insufficient_privilege`)
+  // while authenticated succeeds. For the SECURITY DEFINER functions (list_
+  // shipment_legs/get_shipment_leg_cargo_allocation/list_shipment_leg_custody_
+  // events): a cancelled second leg proves unfiltered inclusion in correct
+  // sequence order; a cargo allocation seeded on only one of two legs proves
+  // NULL-not-error for the unallocated leg; 2 custody events with different
+  // sequence_no prove oldest-first ordering; RULE A genuinely rejects a forged
+  // actor under a real forced session identity on all 3 functions; and
+  // owner/denied/cross-tenant/Supreme-Admin visibility holds throughout. Also
+  // confirmed schema-privilege defense in depth (anon holds zero EXECUTE
+  // across all 12 functions in both schemas; grant parity spot-checked on 3 of
+  // 6 pairs). One fixture issue (a nonexistent created_by column on the
+  // append-only app.shipment_leg_custody_events table, should have been
+  // recorded_by) was fixed in the test file only -- no defect in the
+  // migration's own function logic. Cluster 3 batch 2 (6 tables / 6 call
+  // sites) of the CG-AUDIT-2026-09-02 Ø1-query-layer remediation is DONE;
+  // cluster 3's remaining 10 tables (15 call sites) plus clusters 4-7 (58 more
+  // call sites) remain open.
+  // HUNDRED-AND-TWENTY-EIGHTH PASS (2026-09-11, same ruling as
+  // migrationSetSha256 above): 268 files (+1) -- new file scripts/db-tests/
+  // o1-query-layer-cluster3-batch3.sql. Proves, against a real disposable
+  // database, every one of the 8 new SECURITY INVOKER, zero-actor-param
+  // functions this pass's migration adds, all authority tests genuinely
+  // forcing a real session identity (`set local role authenticated; set local
+  // request.jwt.claims`), never an actor-parameter substitute: owner,
+  // shared-org-unit member (same org unit, not the owner), denied same-tenant
+  // member (no owner/org-unit/customer-account relationship), cross-tenant
+  // member, and a zero-membership Supreme Admin (via app.can_access_record's
+  // own is_supreme_admin branch) all see exactly the rows RLS should let them
+  // see, spot-checked and full-checked across the 8 functions' 1/2/3-hop RLS
+  // join depths. Both 0-or-1-row getters (get_route_planning_scenario,
+  // get_current_route_planning_selection) are proven to return a GENUINELY
+  // EMPTY result on their miss case -- `count(*) = 0` AND `exists(select 1
+  // from fn(...))` false -- never one row of all-NULL columns, the exact
+  // defect class the HUNDRED-AND-TWENTY-SEVENTH PASS corrected elsewhere.
+  // Ordering fidelity for all 3 ordered functions (list_route_planning_
+  // scenarios: created_at desc; list_route_planning_candidate_plans: plan_rank
+  // asc; list_route_planning_selections: selected_at desc) is proven against
+  // fixture rows deliberately inserted OUT of that order, with no ORDER BY
+  // added at the call site, so the assertion genuinely exercises the function
+  // body's own ORDER BY. The route_planning_replan_events column-semantics
+  // derivation (filters on scenario_id, the freshly created replan target, not
+  // previous_scenario_id, the old scenario) is proven directly: the same
+  // fixture row resolves under scenario_id and returns zero rows under
+  // previous_scenario_id. Also confirmed schema-privilege defense in depth:
+  // anon holds zero EXECUTE across all 16 new functions in either schema (a
+  // real call attempt against every one of the 8 public.* wrappers, not
+  // merely an information_schema read), authenticated/service_role grant
+  // parity spot-checked on 3 of 8 function pairs, and a service_role
+  // (BYPASSRLS) smoke check on 2 of 8 functions confirms it can read via the
+  // function too. **Cluster 3 (operations-tms-core) of the CG-AUDIT-2026-09-02
+  // Ø1-query-layer remediation is now FULLY DONE: all 20 tables, all 28 call
+  // sites** (batches 1-3). Remaining across the whole effort: clusters 4-7 (58
+  // call sites).
+  // HUNDRED-AND-TWENTY-NINTH PASS (2026-09-11, same ruling as
+  // migrationSetSha256 above): 269 files (+1) -- new file scripts/db-tests/
+  // o1-query-layer-cluster3-batch4.sql. Proves, against a real disposable
+  // database, all 7 new SECURITY INVOKER, zero-actor-param functions across
+  // all 3 distinct authority shapes in this batch: the standard
+  // can_access_record shape (shipment_orders/shipment_mode_profiles), the
+  // tenant-membership shape (vehicle_capacity_reservations -- a real
+  // customer_user-layer principal is built and proven denied despite an
+  // active tenant membership, proving the customer-layer exclusion genuinely
+  // fires, not merely asserted), and the view-based can_access_record +
+  // cost-masking shape (exceptions_directory -- an owner holding OPS:View
+  // cost sees real sensitive fields, a shared-org-unit viewer lacking that
+  // permission sees the same row with all 4 sensitive fields nulled and
+  // sensitive_masked=true, and a Supreme Admin sees real values via
+  // evaluate_permission's own supreme_admin_exception branch with zero
+  // explicit grant -- row-level access and field-level masking proven as
+  // genuinely independent checks). Both 0-or-1-row getters
+  // (get_shipment_order, get_shipment_mode_profile) are proven to return a
+  // GENUINELY EMPTY result on their miss case, never a row of nulls.
+  // list_shipment_orders' full pagination contract is proven end to end:
+  // page 1 and page 2 partition a 3+-row fixture correctly in `created_at
+  // desc, id desc` order with a consistent total_count on every row, an
+  // out-of-range page returns zero rows, and an oversized page_size request
+  // is clamped. Ordering fidelity is proven against fixture rows
+  // deliberately inserted out of order for every ordered function. Also
+  // confirmed schema-privilege defense in depth: anon holds zero EXECUTE
+  // across all 14 new functions in either schema (real call attempts against
+  // every public.* wrapper, not merely an information_schema read), grant
+  // parity spot-checked across all 3 authority families, and a service_role
+  // BYPASSRLS smoke check on the 3 real-table-backed functions (deliberately
+  // excluding list_shipment_exceptions from that specific check, with an
+  // inline comment explaining why: its view's row-visibility WHERE clause is
+  // keyed on auth.uid(), which is null under a claims-free service_role
+  // session, so BYPASSRLS would not help it there -- a real, disclosed
+  // limitation of that one function's own authority shape, not a gap in this
+  // test file's own coverage). **Cluster 3 (operations-tms-core) of the
+  // CG-AUDIT-2026-09-02 Ø1-query-layer remediation is now FULLY, FINALLY
+  // DONE: all 20 tables, all 28 call sites** (batches 1-4). Remaining across
+  // the whole effort: clusters 4-7 (58 call sites).
+  // HUNDRED-AND-THIRTIETH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 271 files (+2) -- new files scripts/db-tests/o1-query-layer-
+  // cluster4-batch1.sql and o1-query-layer-cluster4-batch2.sql, closing out
+  // cluster 4 (telematics-tracking) in full. Batch 1 proves, against a real
+  // disposable database, all 7 SECURITY INVOKER zero-actor-param functions
+  // sharing the tenant-membership predicate, including the 3 functions whose
+  // own KEY FINDING (documented on migrationSetSha256 above) established
+  // their authority column as an independent, non-join-derived tenant_id on
+  // the row itself: owner, tenant member, denied cross-tenant member, and a
+  // zero-membership Supreme Admin all see exactly the rows RLS should allow,
+  // spot-checked across all 7 functions. Batch 2 proves all 5 functions
+  // across both DEFINER and INVOKER shapes: the RULE A forged-actor-rejection
+  // proof on both SECURITY DEFINER functions (a session authenticated as one
+  // actor, explicitly claiming a different actor's auth_user_id, is rejected
+  // with `actor_identity_mismatch` before any row lookup executes -- proven
+  // under a real forced session identity, never a mocked check), an explicit
+  // `to_jsonb(row) ? 'token_hash'` absence proof on both DEFINER functions'
+  // own response shape (the exact column ISS-2026-232 revoked table-level
+  // SELECT on), and genuinely-empty-on-miss + ordering-fidelity proofs for
+  // every 0-or-1-row and ordered function across both batches. A real,
+  // independently-caught bug in cluster 4 batch 1's own db-test file was
+  // found and fixed during this pass's verification (not merely accepted
+  // from the drafting agent's self-report): 8 fixture-lookup subqueries were
+  // scoped only by an enum-shaped or free-text column
+  // (source_type/provider_code/reason) with no vehicle_master_id/device_id
+  // scope, which passed when the file ran standalone against an
+  // otherwise-empty disposable database but failed with a genuine `more than
+  // one row returned by a subquery` error the first time it ran inside the
+  // FULL `pnpm run db:test` suite, where every db-test file's fixtures
+  // coexist in one shared database and another file's row can carry the same
+  // enum value on a different vehicle/device. Fixed by adding the missing
+  // scope to all 8 subqueries (both the tenant-member and Supreme Admin test
+  // sessions); re-verified with a full `pnpm run db:test` run afterward, ALL
+  // PASSED. This is now a standing lesson for the whole Ø1-query-layer
+  // effort, applied going forward: a db-test file passing in isolation is
+  // NOT sufficient evidence it is correct under the shared-database
+  // full-suite run -- the full suite must be run, not merely the standalone
+  // `psql -f` invocation used during iteration, before considering any
+  // batch's db-test file verified. **Cluster 4 (telematics-tracking) db-test
+  // coverage is now FULLY DONE: all 12 functions across both batches**.
+  // Remaining across the whole effort: clusters 5-7 (46 call sites).
+  // HUNDRED-AND-THIRTY-FIRST PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 272 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster5-
+  // procurement-document.sql. Proves, against a real disposable database, all 4 new
+  // function pairs (8 functions) across both authority shapes: the DEFINER +
+  // explicit-actor shape (list_procurement_approval_policy_versions, list_document_
+  // requirement_definitions) -- a real active tenant member sees the real fixture
+  // rows in the documented order, a customer_user-layer principal and a cross-tenant
+  // admin both genuinely RAISE insufficient_authority (never a silent empty list,
+  // the deliberate behavior this pass's migration chose), and a Supreme Admin with
+  // zero membership still sees every row via the explicit bypass -- plus the RULE A
+  // forged-actor-rejection proof for both, under a real forced session identity; and
+  // the INVOKER, zero-actor-param shape (list_active_procurement_metric_definitions,
+  // list_document_types) -- proven entirely through existence checks against
+  // uniquely-named fixture rows and known always-seeded platform codes, NEVER an
+  // exact `count(*)`, because both target tables are platform-wide and shared with
+  // every other db-test file in the full suite.
+  // A real, independently-caught defect was found and fixed during this pass's own
+  // verification, not merely accepted from a first draft: an early version of this
+  // file committed 2 new is_current=true rows into app.procurement_metric_
+  // definitions to test the is_current/status filter, which broke scripts/db-tests/
+  // procurement-vendor-dashboard-reports.sql's own pre-existing `expected exactly 11
+  // current metric definitions, got 14` assertion the moment the FULL `pnpm run
+  // db:test` suite ran (the standalone single-file run never surfaces this, since it
+  // never runs that other file in the same database) -- a genuinely new shape of the
+  // cross-file fixture-collision defect class cluster 4 batch 1 first identified for
+  // this series (there, an underscoped subquery inside the SAME file; here, an
+  // exact-count assertion inside a DIFFERENT file entirely). Fixed by wrapping that
+  // one test block's fixture inserts and assertions in an explicit `begin ...
+  // rollback` instead of letting them commit -- the block still proves the exclusion
+  // behavior fully (it reads its own uncommitted fixture rows before rolling them
+  // back), but leaves app.procurement_metric_definitions exactly as every other
+  // db-test file in the suite expects it, in any run order. Re-verified with a full
+  // `pnpm run db:test` run afterward, ALL PASSED (both this file and the previously-
+  // broken sibling). This is now the second entry in what this series treats as a
+  // standing lesson, restated here for emphasis: the full `pnpm run db:test` suite,
+  // never a standalone `psql -f` invocation, is the only real verification for a
+  // shared-database db-test file -- and the collision can run in EITHER direction
+  // (this file's own fixtures breaking a sibling's assertion, not only a sibling's
+  // fixtures breaking this file's own).
+  // HUNDRED-AND-THIRTY-SECOND PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 273 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch1.sql. Proves, against a real disposable database, all 9 new function
+  // pairs (18 functions) across the batch's 3 grant/RLS shapes: a plain-authenticated
+  // existence proof for the no-RLS, full-row-grant app.analytics_view_registry; an
+  // explicit null-cast proof for app.analytics_refresh_runs -- a REAL, non-null
+  // row_count_before/triggered_by_auth_user_id/triggered_by_label is written
+  // directly to the fixture rows, and both new functions are proven to return them
+  // as genuinely null anyway (never the real values), plus ordering fidelity
+  // (started_at desc) against rows inserted out of order; and a full member/
+  // customer-user-layer/cross-tenant/Supreme-Admin visibility matrix on the 5
+  // RLS-scoped tables -- critically, LIVE proof (not merely cited) that app.
+  // automation_rules/app.automation_rule_versions/app.automation_rule_executions
+  // admit a Supreme Admin with ZERO explicit tenant membership despite carrying no
+  // policy-level `OR is_supreme_admin()` disjunct, because app.has_active_tenant_
+  // membership's own current body already covers it internally; app.approval_
+  // requests/app.approval_request_steps show the same 4-persona outcome via a
+  // different policy shape (an explicit disjunct); and an explicit null-cast proof
+  // for app.get_latest_automation_rule_publish_approval_request -- a real, non-null,
+  // deliberately sensitive ended_reason is written to the fixture row and proven to
+  // come back null. Ordering-fidelity proofs (version_number desc, executed_at desc,
+  // step_order asc) against fixture rows deliberately inserted out of order for
+  // every list function.
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // verification: an early version of this file resolved automation_rule_versions
+  // fixture rows via a subquery filtered only by `version_number` with no
+  // `automation_rule_id` scope, which passed standalone but failed with `more than
+  // one row returned by a subquery` the first time it ran inside the FULL `pnpm run
+  // db:test` suite (scripts/db-tests/automation-rule-engine.sql, the pre-existing
+  // sibling test for this exact table, also creates version_number=1/2 rows for its
+  // own rules). This is the SAME cross-file fixture-collision defect class cluster 4
+  // batch 1 first identified for this series, in its original shape (an underscoped
+  // subquery in this file, not an exact-count assertion elsewhere as cluster 5's own
+  // instance was) -- fixed by adding the missing `automation_rule_id = v_rule_id`
+  // scope to all 4 affected subqueries; re-verified with a full `pnpm run db:test`
+  // run afterward, ALL PASSED. Restates, for the third time in this series, the same
+  // standing lesson: the full suite, never a standalone `psql -f` invocation, is the
+  // only real verification for a shared-database db-test file.
+  // HUNDRED-AND-THIRTY-THIRD PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 274 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch2.sql. Proves, against a real disposable database, all 5 new function
+  // pairs (10 functions) across the batch's 3 grant/RLS shapes: an existence proof
+  // for the no-RLS, full-row-grant app.integration_adapters (never an exact count,
+  // since this platform-wide table is shared with other db-test files in the full
+  // suite); a full member/customer-user-layer/cross-tenant/Supreme-Admin visibility
+  // matrix on app.integration_connections/app.integration_health_checks --
+  // including a fresh, independent LIVE re-proof (not assumed to carry over from
+  // cluster 6 batch 1) that a Supreme Admin with ZERO explicit tenant membership
+  // is still admitted despite these tables' own policies carrying no
+  // policy-level `OR is_supreme_admin()` disjunct -- plus ordering-fidelity proofs
+  // (updated_at desc, checked_at desc) against fixture rows deliberately inserted
+  // out of order; and the same 4-persona matrix on app.third_party_provider_
+  // connections via its own explicit policy-level disjunct, PLUS an explicit
+  // null-cast proof for webhook_secret_value_encrypted -- a real, non-null bytea
+  // value is written directly to the fixture row and proven to come back null
+  // through the new function regardless.
+  // HUNDRED-AND-THIRTY-FOURTH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 275 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch3.sql. Proves, against a real disposable database, all 5 new function
+  // pairs (10 functions): existence proofs for the platform-wide app.report_types/
+  // app.report_type_versions (never an exact count); the get-by-code-vs-
+  // list-active distinction (a retired fixture type excluded from the active
+  // list but still resolving by code); app.list_report_runs' own optional
+  // p_report_type_code filter narrowing correctly against 2 distinct fixture
+  // types, plus the standard member/customer-user-layer/cross-tenant/
+  // Supreme-Admin matrix; ordering-fidelity proofs (version_number desc,
+  // requested_at desc) against fixture rows deliberately inserted out of order;
+  // and the batch's most important proof, app.get_saved_report_view_by_id's own
+  // 3-branch predicate exercised with a SECOND real tenant member who is NOT the
+  // view's owner -- proven to see a tenant-shared view but be genuinely DENIED a
+  // private one, the exact distinction a hand-rolled reproduction of this
+  // predicate could get subtly wrong.
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // verification: an early draft's fixture inserted a new app.report_types row
+  // with no matching app.report_type_versions row, which broke
+  // scripts/db-tests/reporting-engine.sql's own pre-existing assertion that every
+  // report_types row has a backfilled version 1 -- a real, currently-enforced
+  // production invariant (app.register_report_type's own current body always
+  // creates a matching version-1 row), not merely another file's own arbitrary
+  // assumption. Fixed by adding the missing version row; re-verified with a full
+  // `pnpm run db:test` run afterward, ALL PASSED. A third instance, in a third
+  // distinct shape, of this series' own standing cross-file-collision lesson.
+  // HUNDRED-AND-THIRTY-FIFTH PASS (2026-09-13, same ruling as migrationSetSha256
+  // above): 276 files (+1) -- new file scripts/db-tests/o1-query-layer-cluster6-
+  // batch4.sql, the FINAL batch of cluster 6. Proves, against a real disposable
+  // database, all 10 new function pairs (20 functions): ordering-fidelity proofs
+  // (updated_at desc, created_at asc, started_at desc, version_number desc,
+  // display_order asc) against fixture rows deliberately inserted out of order
+  // for all 9 SHAPE 1 functions; a full 5-persona visibility matrix (owner, a
+  // real non-owner tenant member proving tenant-wide not owner-scoped
+  // visibility, a customer_user-layer principal with real active membership
+  // denied despite membership, a cross-tenant admin denied, a Supreme Admin with
+  // ZERO membership admitted via the explicit policy-level disjunct) across both
+  // the scheduled-report family (including the EXISTS-join recipients/runs
+  // tables) and the tenant-dashboard family (including the TWO-LEVEL EXISTS join
+  // for tenant_dashboard_widgets); and a dynamic pagination proof for
+  // app.list_supreme_tenants that computes its own expected page count from a
+  // live raw count under the Supreme Admin's own session rather than assuming a
+  // fixed global tenant total (267+ other db-test files each provision their own
+  // tenants in the shared full-suite database), plus a genuine
+  // non-Supreme-caller-sees-only-their-own-tenant proof for a real member and a
+  // real cross-tenant admin, and a genuine zero-visibility proof for a
+  // customer_user-layer principal.
+  // A real, independently-caught bug was found and fixed during this pass's own
+  // fixture authoring: an early draft's app.scheduled_report_runs INSERT omitted
+  // the table's own NOT NULL `occurrence_at` column (added by a later migration,
+  // 20260802060000_harden_intelligence_batch1_tier_c_review_fixes.sql, not
+  // present in the table's original CREATE TABLE) -- caught immediately by the
+  // insert's own NOT NULL violation, fixed by adding occurrence_at to the
+  // fixture INSERT; re-verified with a full `pnpm run db:test` run afterward,
+  // ALL PASSED.
+  // Cluster 6 (platform-intelligence-reports, 30/30 call sites) is now FULLY
+  // DONE. Remaining: cluster 7 (16 call sites), not yet started.
+  // HUNDRED-AND-THIRTY-SIXTH PASS (2026-09-14, same ruling as migrationSetSha256
+  // above): 277 files (+1) -- new file scripts/db-tests/o1-query-layer-
+  // cluster7.sql, the LAST cluster of the entire Ø1-query-layer remediation.
+  // Proves, against a real disposable database, all 7 new function pairs (14
+  // functions) across page-level-direct-reads. Fixture setup deliberately
+  // bypasses every domain's own heavier creation RPCs (app.create_employee_
+  // draft, app.create_job_vacancy_draft, app.request_approval, etc.) via direct
+  // INSERT wherever a table has no trivial creation helper -- the same
+  // established technique this series already used for app.approval_requests/
+  // app.config_versions (cluster 0 batch 3) -- since these functions are being
+  // tested for their own read-side authority/masking behavior, not the
+  // mutation business rules that would normally produce these rows. A
+  // 5-persona sweep (HRS:View+OPS:View staff via a real role assignment, a
+  // plain member with no special role, a customer_user-layer principal, a
+  // zero-membership Supreme Admin, and a cross-tenant actor in a second
+  // tenant) across all 7 functions; a genuine masking proof for app.list_
+  // position_incumbents (reason_note/decided_reason nulled for the HRS:View-
+  // only persona despite real non-null values written to the fixture row,
+  // unmasked for Supreme Admin via app.has_view_personal_data's own
+  // is_supreme_admin bypass) and for app.get_approval_request_by_id
+  // (ended_reason nulled despite a real non-null value written); ordering/
+  // not-found/nonexistent-id genuinely-empty proofs throughout; the standard
+  // anon-denial/service_role-smoke/schema-privilege-grant-count sections. A
+  // real, independently-caught bug was found and fixed during this pass's own
+  // fixture authoring: an early draft used location_type='zone' for a
+  // warehouse_locations fixture row, which is not one of the 6 values
+  // warehouse_locations_location_type_check actually permits (rack/shelf/
+  // floor/staging/dock/bin) -- caught immediately by the insert's own CHECK
+  // violation, fixed by using 'floor'. A second, unrelated finding during this
+  // pass's own full-suite verification: a transient failure in the
+  // PRE-EXISTING, unrelated commercial-dashboard.sql (its own "due_today"
+  // activity-bucket assertion, sensitive to current_date at the exact moment
+  // db:test happened to run across a real midnight boundary, 2026-09-13 into
+  // 2026-09-14) was independently reproduced by stashing every one of this
+  // pass's own changes and re-running the full suite against the unmodified
+  // prior commit -- confirming the failure was never caused by this batch,
+  // before restoring the stash and re-running to a clean ALL PASSED.
+  // **Cluster 7 (page-level-direct-reads, 10/10 call sites) is now FULLY DONE.
+  // The entire CG-AUDIT-2026-09-02 O1-query-layer remediation (all 8 clusters)
+  // is now FULLY DONE.**
+  // HUNDRED-AND-THIRTY-SEVENTH PASS (2026-09-14, same ruling as
+  // migrationSetSha256 above): 277 files (unchanged count) -- an EXISTING file,
+  // scripts/db-tests/role-permission.sql, widened with a new section covering
+  // the 4 new read RPCs 20260914010000 adds (see migrationSetSha256's own note
+  // above for the full derivation). Reuses this file's own established tenant
+  // (`acmerole`) and personas (301 roleadmin, 302 regular) rather than
+  // building a fresh fixture, adding two more (303 a customer_user-layer
+  // principal via app.grant_principal_membership, 304 a member of the
+  // existing cross-tenant `gizmorole`) and a fresh role ("A2 Read RPC Role")
+  // to keep the new assertions traceable against a clean, single-purpose
+  // state rather than the many prior mutations already run against "Finance
+  // Approver" earlier in this same file.
+  dbTestSetSha256: "5a4e73b44d38136d88e26ed09406dd264e8885bdbab2c2e26f5a8be4e283c286",
+  // HUNDRED-AND-SIXTIETH PASS: same CG-AUDIT-2026-09-02 E3 piece-1 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), one EXISTING file gained real new coverage:
+  // scripts/db-tests/advanced-tms-inventory-ledger.sql, a new test block
+  // proving app.post_inventory_movement's own cross-UOM conversion end to
+  // end -- a fresh item posted 100 PCS (base unit, a no-op conversion),
+  // then a second movement posted in DOZ (2 DOZ = 24 PCS via the seeded
+  // app.uom_conversions row) proves the balance reads 124, not the pre-fix
+  // 102; the movement line's own as-posted signed_quantity/uom_code (2/DOZ)
+  // is proven unchanged; a cross-category UOM (KG against a PCS item) is
+  // proven to fail closed with uom_conversion_not_registered without
+  // mutating the balance. The full db:test suite (every other caller of
+  // this shared posting primitive, the opening-balance-import adapter's own
+  // master-data-import.sql included) confirmed ALL PASSED with zero
+  // regressions.
+  // History: f6333c25c845d16afedd57c35b0ba678f1a4be7a553ebd0f1c01521b780c0c76
+  // (279 files, HUNDRED-AND-FIFTY-NINTH PASS).
+  //
+  // HUNDRED-AND-FIFTY-NINTH PASS: same CG-AUDIT-2026-09-02 A2b slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), two EXISTING files gained real new coverage:
+  // scripts/db-tests/customer-portal-scope.sql (a new test block proving
+  // app.list_my_pending_customer_portal_invites' own substantive behavior --
+  // returns the exact pending row for the invited identity, excludes an
+  // already-active membership, cross-tenant isolation, a genuinely
+  // unrelated identity gets a real empty array -- plus the identical
+  // actor-identity-mismatch impersonation-rejection assertion its 4 CPL-300
+  // read-RPC siblings already carry, and an extended raw-grant defense-in-
+  // depth check from 8 to 9 functions) and scripts/db-tests/rbac-
+  // enforcement.sql (the new function added to the ATW-032 SECURITY DEFINER
+  // authority-surface sweep's own reviewed-and-justified list, with a
+  // written reason mirroring app.accept_customer_portal_invite's own
+  // identical raw self-row-identity-equality justification immediately
+  // above it, plus the CPL-300 Tier C Finding-1 named-list check widened to
+  // require it calls app.assert_actor_is_session_identity directly, not
+  // merely transitively).
+  // History: eaacedbb94b75b933e96c46982f92e504f524d32eb99f92434d48abd027fa9b0
+  // (279 files, HUNDRED-AND-FIFTY-EIGHTH PASS).
+  //
+  // HUNDRED-AND-FIFTY-EIGHTH PASS: same CG-AUDIT-2026-09-02 B4 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), two EXISTING fixtures gained real new coverage:
+  // scripts/db-tests/finance-accounts-receivable.sql and finance-accounts-
+  // payable.sql each got their own existing exposure-summary assertion
+  // updated to the new per-currency-row shape, plus a new test block proving
+  // real multi-currency grouping end to end -- a second open item posted in
+  // an unrated currency yields a genuinely separate row with fx_status=
+  // rate_unavailable and a null base figure (never fabricated); publishing
+  // and approving a real USD->IDR exchange rate then makes the existing USD
+  // row convert for real at the exact published rate, never an approximation.
+  // History: 942d63ba9d2fc2c7f819302a4fdce68f1589ae5dffa7a50297409b3ec9b65b06
+  // (279 files, HUNDRED-AND-FIFTY-SEVENTH PASS).
+  // HUNDRED-AND-FIFTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 E6 slice as
+  // migrationSetSha256's own note immediately above -- one new db-test file
+  // (scripts/db-tests/webhook-business-event-triggers.sql, 279 files, +1):
+  // proves a real ticket creation (both helpdesk and customer channel),
+  // invoice issuance, and shipment status transition each genuinely enqueue
+  // a real app.webhook_deliveries row with a payload matching the real
+  // mutated entity; that a customer-channel ticket fires the event without
+  // being blocked by a second, unrelated authority check (this migration's
+  // own central design claim); that a shipment order transitioning twice
+  // fires two distinct deliveries, never deduped against each other; cross-
+  // tenant isolation; a tenant with zero registered endpoints incurs no
+  // error (safe no-op, zero deliveries); and that app.queue_webhook_
+  // delivery's own public authority gate (its existing callers) is
+  // unaffected by the refactor. History:
+  // bef1eb92a914b834db62c72d54330c42234401df5ad5dd7433824100b3a7f126 (278
+  // files, HUNDRED-AND-FIFTY-SIXTH PASS).
+  // HUNDRED-AND-FIFTY-SIXTH PASS: same CG-AUDIT-2026-09-02 B2a slice as
+  // migrationSetSha256's own note immediately above -- one new db-test file
+  // (scripts/db-tests/finance-trial-balance.sql, 278 files, +1): proves the
+  // FIN:View authority gate, cross-tenant isolation, that only posted
+  // journals on/before p_as_of_date count (a draft-only journal and a
+  // future-dated posted journal are each excluded), that an account touched
+  // by more than one journal currency yields one row per currency rather
+  // than a blended sum, that a zero-activity account still appears at 0/0,
+  // and that company scoping mirrors app.list_finance_accounts' own
+  // established `company_id is not distinct from p_company_id` semantics.
+  // History: 20b567dec4705f5d4fc9e4efc8e1f1321825c856c4a985910d8c49266e11d227
+  // (277 files, HUNDRED-AND-FIFTY-FIFTH PASS).
+  // HUNDRED-AND-FIFTY-FIFTH PASS: same CG-AUDIT-2026-09-02 B7 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (277 files unchanged), but two existing fixtures gained real new
+  // coverage: scripts/db-tests/commercial-credit-commercial-control.sql now
+  // proves check_customer_credit's own real AR-exposure logic (a real,
+  // open app.finance_ar_open_items row moves an otherwise-allow decision to
+  // blocked_limit, additively, not "any AR at all blocks everything") and
+  // app.prepare_job_order_handoff's own new credit_blocked gate (a real,
+  // first-ever handoff attempt for an over-limit account raises, creating
+  // no app.job_order_handoffs row); scripts/db-tests/commercial-job-order-
+  // lineage.sql had one existing assertion genuinely updated (not weakened)
+  // to expect the payload's own "credit" field to carry a real
+  // blocked_no_profile snapshot instead of null, since prepare_job_order_
+  // handoff now performs a real check on every call.
+  // History: 4a915df77274d94f292469409eb205d0585e9897246a12721fa2ddbedc57a5dd
+  // (277 files, HUNDRED-AND-FORTY-SEVENTH PASS).
+  // HUNDRED-AND-FORTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 B6a slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/finance-receipt-allocation.sql (no new file, 277 files
+  // unchanged) with new assertions inside its own existing "governed
+  // deallocation" section: the original receipt-allocation batch stays
+  // 'posted' after a partial reversal, a posted finance_journal_corrections
+  // row links to it, the new reversal journal is balanced at exactly the
+  // reversed allocation's own amount (never the whole batch total), and its
+  // lines land on the same 2 accounts as the original with direction
+  // flipped. Full `pnpm run db:test`, ALL PASSED.
+  // History: 1c467db02e81e9c424823e55b971988e0b964f1c14f51d6ae36a47bca6fbdfaf
+  // (277 files, HUNDRED-AND-FORTY-SIXTH PASS).
+  // HUNDRED-AND-FORTY-SIXTH PASS: same CG-AUDIT-2026-09-02 B7 slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/finance-invoice.sql (no new file, 277 files unchanged)
+  // with a new section covering app.list_billable_readiness_handoffs:
+  // FIN:View-gated (Plain User A and cross-tenant Finance Manager B both
+  // denied insufficient_authority), excludes a handoff with a live issued
+  // invoice, includes a handoff whose only invoice was discarded (voided)
+  // and a genuinely fresh never-invoiced handoff, and masks amount behind
+  // COM:View selling price for Finance Manager A (who lacks it) while Rep A
+  // (who holds it) sees the real 15,000,000 IDR amount, real job_number, and
+  // real customer_legal_name. Also added to the file's own existing
+  // schema-privilege anon-EXECUTE-zero sweep. Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 79d691b78ecd5e12dcd81e0d16f29322b1e528058d15507219238c2fd595542e
+  // (277 files, HUNDRED-AND-FORTY-FIFTH PASS).
+  // HUNDRED-AND-FORTY-FIFTH PASS: same CG-AUDIT-2026-09-02 A4 slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/import-export.sql (no new file, 277 files unchanged)
+  // with a new section covering app.get_import_export_job/app.
+  // list_import_staging_rows: authority-gated identically to the existing
+  // app.preview_import_job test right above it (a mere teammate and another
+  // tenant's admin both denied, a nonexistent job id raises
+  // import_export_job_not_found, the requester and the tenant_admin/support-
+  // authority both succeed), returns the real job row (tenant_id/
+  // total_rows/valid_row_count/invalid_row_count/payload all verified) and
+  // the real 4 staged rows ordered by row_number with the correct 3-valid/
+  // 1-invalid breakdown and the still-invalid row's own error message.
+  // scripts/db-tests/finance-subledger.sql's own pre-existing end-to-end
+  // opening-balance import test (its own throwaway register_document_type
+  // call, now redundant with but not conflicting with the new real
+  // migration) re-verified unaffected. Full `pnpm run db:test`, ALL PASSED.
+  // History: 667c43fe1e5d370dcc3b2b8d6b65addb248494679fc8650be9f29070e18708df
+  // (277 files, HUNDRED-AND-FORTY-FOURTH PASS).
+  // HUNDRED-AND-FORTY-FOURTH PASS: same CG-AUDIT-2026-09-02 A7 invoice-PDF
+  // slice as migrationSetSha256's own note immediately above -- extends the
+  // existing scripts/db-tests/finance-invoice.sql (no new file, 277 files
+  // unchanged) with a new section covering app.get_finance_invoice:
+  // FIN:View-gated (Plain User A denied insufficient_authority), returns the
+  // real unmasked row for Finance Manager A (id/invoice_number/total_amount
+  // verified), and folds both a cross-tenant stranger (Finance Manager B)
+  // and a genuinely nonexistent invoice id into the identical
+  // finance_invoice_not_found. Also added to the file's own existing
+  // schema-privilege anon-EXECUTE-zero sweep. Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 90b779127fe49187420ed722cf48d06b9575d8ce298613c95e57341493f3c35e
+  // (277 files, HUNDRED-AND-FORTY-THIRD PASS).
+  // HUNDRED-AND-FORTY-THIRD PASS: same CG-AUDIT-2026-09-02 E5 slice as
+  // migrationSetSha256's own note immediately above -- extends the existing
+  // scripts/db-tests/advanced-tms-device-installation-evidence.sql (no new
+  // file, 277 files unchanged) with a regression proof that the migration's
+  // own idempotent gps_device_installation/document:gps_device_installation
+  // catalogue insert agrees byte-for-byte with this fixture's own
+  // independent app.register_document_type call (and is a genuine no-op
+  // against whichever writer ran first). Full `pnpm run db:test`, ALL
+  // PASSED.
+  // History: 00caebe52c3ffe1ead32a7162ff4d4a965c34fc0c353bffe02723d863f55e8e1
+  // (277 files, HUNDRED-AND-FORTY-SECOND PASS).
+  // HUNDRED-AND-FORTY-SECOND PASS: same CG-AUDIT-2026-09-02 A6 ticket-attachment
+  // signed-download slice as migrationSetSha256's own note immediately above --
+  // extends the existing scripts/db-tests/ticketing-internal.sql with a new
+  // top-level section 18 (no new file, 277 files unchanged): a requester and
+  // staff both granted a real storage_path/bucket_id/original_filename for a
+  // public-visibility message's attachment; the requester denied (folded into
+  // ticket_attachment_not_found) for an internal-only staff note's attachment,
+  // staff still granted; a bystander denied, then granted once a real watcher
+  // (but still denied for the internal-only attachment); a cross-tenant
+  // identity denied; an orphan file (staged, scanned clean, never attached to
+  // any message) refused with the distinct ticket_attachment_not_linked; the
+  // malware-scan gate underneath still denies-not-raises an infected file with
+  // storage_path/bucket_id nulled; a real app.file_access_logs audit-trail
+  // count proof; and schema-privilege guards (anon/authenticated hold zero
+  // EXECUTE on either new function or its public.* wrapper). Full `pnpm run
+  // db:test`, ALL PASSED.
+  // History: eaf809b9336aa8698e4e5fda56864fca197be5ff1ca202d6c4c269670c8251f9
+  // (277 files, HUNDRED-AND-FORTY-FIRST PASS).
+  // HUNDRED-AND-FORTY-FIRST PASS: same CG-AUDIT-2026-09-02 A6 shipment-document-
+  // checklist signed-download slice as migrationSetSha256's own note immediately
+  // above -- extends the existing scripts/db-tests/operations-document-
+  // requirement.sql (no new file, 277 files unchanged) with a new top-level
+  // section covering app.access_shipment_document_checklist_item_evidence_for_
+  // download: insufficient_authority before OPS:Download is granted (via a real
+  // role-version publish, not a raw grant) and after it is denied to a
+  // view-only actor, the granted path's real storage_path/bucket_id/
+  // original_filename, an ISS-2026-146-shaped document_checklist_item_not_found
+  // for a zero-membership cross-tenant actor, denied-not-raised with
+  // storage_path/bucket_id nulled once the file is marked infected,
+  // document_checklist_no_linked_file for a freshly-pinned never-linked item,
+  // an app.file_access_logs audit-trail proof, and schema-privilege guards
+  // (anon/authenticated hold zero EXECUTE on either new function or its
+  // public.* wrapper). Full `pnpm run db:test`, ALL PASSED.
+  // History: d8dac300bf8bbc595f646c067fa8f4b8941325acc8fe3577e32e982b0910b09f
+  // (277 files, HUNDRED-AND-FORTIETH PASS).
+  // History: 3829633f02208768f9f6952f76d4270f788dbe5a7f2b657394baca36a1786503
+  // (277 files, HUNDRED-AND-THIRTY-NINTH PASS).
+  // History: e625fc8c358aeba378a90281d55d52778f980663dc0b0d5925a18d3c507dc6fb
+  // (277 files, HUNDRED-AND-THIRTY-SEVENTH PASS).
+  // History: 3e7fb02dcd68bf883434043e1243f908ccef6106efb53adb049ee54f621c2fa2
+  // (277 files, HUNDRED-AND-THIRTY-SIXTH PASS).
+  // History: c4c2a6d0e31e51d2f09b104039347b53c6ddd114c5a1eccb4f6784727b05757d
+  // (276 files, HUNDRED-AND-THIRTY-FIFTH PASS).
+  // History: 9c3fffab23ebed2ff7089549dde1cdc811ca478a6372bc7ab76e6e654dd072fc
+  // (275 files, HUNDRED-AND-THIRTY-FOURTH PASS).
+  // History: 9c3f143bab47f9bda68819b09514d2891e653b99f83e589493b1fde46cb6737f
+  // (274 files, HUNDRED-AND-THIRTY-THIRD PASS).
+  // History: 79f8f6eafe85eead27379bb4464ebc86a37ea9d2b16591c856a62a8fbdb32ddb
+  // (273 files, HUNDRED-AND-THIRTY-SECOND PASS).
+  // History: fe7a7aa3660bc0031036d3068429c40f66712288a37ebb0d610e5c7ed487ce15
+  // (272 files, HUNDRED-AND-THIRTY-FIRST PASS).
+  // History: 6511bc0e3b1053aa6ab8e51abc3bf76fd385d0faefd3730a6667bad831ccfdb6
+  // (271 files, HUNDRED-AND-THIRTIETH PASS).
+  // History: 2a9f56452658005ac1632c17fefacdd2862b0e1b7ee9a0807a2c4795a76dc023
+  // (269 files, HUNDRED-AND-TWENTY-NINTH PASS).
+  // History: 712197db6e6c80f96000f8c7f51cf44ad76c7c4cdb1cabfa774b080c52df9b15
+  // (268 files, HUNDRED-AND-TWENTY-EIGHTH PASS).
+  // History: 1a22232c00325d80ca4834666eed87e13326d4ac5bf55e9d071417a89d9379a1
+  // (267 files, HUNDRED-AND-TWENTY-SIXTH PASS).
+  // History: 2614ff5ce2fd973d6bdfb343e703e07466be278488f061a7ef4e44b1b0ddad99
+  // (266 files, HUNDRED-AND-TWENTY-FIFTH PASS).
+  // History: f136ff5d6b8ebfd9afc1af1679038b7b26210a9ad021f5775ca13919c5d71b97
+  // (265 files, HUNDRED-AND-TWENTY-FOURTH PASS).
+  // History: 49fa584c817a1f3ceb75dbf6a1c0ed6456b360119de8264de9ea30a1910f2473
+  // (264 files, HUNDRED-AND-TWENTY-THIRD PASS).
+  // History: 1d46b64cca8d7ae135515ca910f651f385daa111f31912502ce6c6f5edb9374e
+  // (263 files, HUNDRED-AND-TWENTY-SECOND PASS).
+  // History: 38188accb3c759278a82ef49b68ea43e693396b833619f322e9936c7cf6400e5
+  // (262 files, HUNDRED-AND-TWENTY-FIRST PASS).
+  // History: 168c7f2166bfd81642019a55f3003d2bc4adfeabb10b304a458b1fb7acd07391
+  // (261 files, HUNDRED-AND-TWENTIETH PASS).
+  // History: 13ffa858b00fddb16b39c12f3e4f60becef9b09c17c2f6812d925a4a13574600
+  // (260 files, HUNDRED-AND-NINETEENTH PASS).
+  // History: aab4daf2d27cf92ec2b2dad47be04d587771695de95fa6a8526da301324c49a0
+  // (259 files, HUNDRED-AND-EIGHTEENTH PASS).
+  // History: 422d3401dc38f86407617b132c88adeaa5b907ca20eeb8ec7e14b5fceeb9c751
+  // (258 files, HUNDRED-AND-SEVENTEENTH PASS).
+  // History: 7de55b831acd07bff9feaa49a63f88763ccde4c381c963d36c1d216b288bee41
+  // (256 files, HUNDRED-AND-SIXTEENTH PASS).
+  // History: 2551fef57e3f647928c1e9560aadbf78f00f80e1ebcc031270eec2e41b45d7e6
+  // (255 files, HUNDRED-AND-FIFTEENTH PASS).
+  // History: 378f7312ee3075106e9eed85317cb55b88e4dd275fd5d524fcef1e23d26d03d7
+  // (255 files, HUNDRED-AND-THIRTEENTH PASS).
+  // History: d4301843e34f91c750b1c1dfa7cc32592a3c0c6be5f1206b99090edf4e4062d2
+  // (255 files, HUNDRED-AND-TWELFTH PASS).
+  // History: bd8065108cc1d0728e119c1aadea92af9ab29f097da63570549e9906b6ecc2ff
+  // (255 files, HUNDRED-AND-ELEVENTH PASS).
+  // History: 05a737f2f3ea2a5773d6d3f79d76670afed3725997193fb9ea8c844242e64293
+  // (255 files, HUNDRED-AND-TENTH PASS).
+  // History: d11d8a12a24ed61c87ba6b85773006fb2acef160d02b703cc6595ea7ca8db413
+  // (254 files -- last changed at HUNDRED-AND-SEVENTH PASS, carried forward unchanged
+  // through HUNDRED-AND-EIGHTH and HUNDRED-AND-NINTH since neither touched a db-test file).
+  // History: ab205db0c68005dd859ec5457654a6242355b0f795f9da11eb30f824cdd572a4
+  // (253 files, HUNDRED-AND-SIXTH PASS).
+  // History: 05f62dc12cfc2f21e731a155beb53a393b27ac097714c5c307353a0868c268d9
+  // (252 files, HUNDRED-AND-FIFTH PASS).
+  // History: 407d6499ecc6d8fabe744d129958086b33221ae3e5470a5769dd3edcfe7d0c69
+  // (251 files, HUNDRED-AND-FOURTH PASS).
+  // History: f403db07eb42a65b9c54b70de2b80b4d71fbbf3ec13470595bf2633f9d6a16f9
+  // (251 files, HUNDRED-AND-THIRD PASS).
+  // History: f7a7c79414d44114a50c4d82179bf22daaa6bbae236e27c2da8ed87f08f89480
+  // (250 files, HUNDRED-AND-SECOND PASS).
   // History: 9ca8a134673c439931ef4d376b42c04e7a98fb83cefdac3e8175fd9fcd03ffbc
   // (250 files, ISS-2026-311's reserved-hostname assertions).
   // History: a5878f102a570613a93841c439ebf859a3b37c760ff8cc34aec678f73c0399c6
@@ -4332,7 +7854,34 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // (original freeze value, unchanged since RGL-392, first amended 2026-09-02
   // (fifty-fifth pass) by the browserslist@<4.28.7 pnpm.overrides fix. See the
   // class-level doc comment above and RGL-415.md.
-  lockfileSha256: "39bf980f84a6775a0e8d4448820772659cfa2612dfc885720f025b4460052b02",
+  // HUNDRED-AND-THIRTY-EIGHTH PASS, lockfileSha256 only: audit
+  // remediation A7 (docs/audit/2026-09-02-independent-launch-readiness-audit.md
+  // finding A7, "package.json carries no PDF/print/document library... no
+  // invoice, faktur pajak, delivery order, surat jalan, packing list, POD or
+  // purchase order can be produced") adds `@react-pdf/renderer` (a genuinely
+  // new runtime dependency, `pnpm add`, 53 resolved packages) -- the first
+  // printable document, surat jalan (delivery note), per the audit's own §6
+  // dependency-ordered remediation step 4 ("the printable document set, surat
+  // jalan first"). Pure JS (pdfkit-based), no headless-browser/native-binary
+  // dependency, chosen specifically because the production deployment target
+  // is Vercel serverless (verified: this repository's own `vercel.json`) --
+  // `@playwright/test`, this repository's only other browser-adjacent
+  // dependency, is a devDependency for `test:e2e` only, never meant to ship to
+  // a serverless function. Verified genuinely renders a real PDF (not merely
+  // typechecks): a standalone `renderToBuffer` smoke test against the new
+  // `SuratJalanDocument` component produced a real buffer whose first 5 bytes
+  // are the literal `%PDF-` magic bytes, run outside this repository's own
+  // test suite (`node --experimental-strip-types` cannot load a `.tsx` file's
+  // JSX at all -- confirmed live, ERR_UNKNOWN_FILE_EXTENSION -- so this file's
+  // own pure, JSX-free logic (`toLabeledValues`) was split into a sibling
+  // `.ts` file specifically so it could gain real unit coverage without that
+  // limitation; the smoke test itself used the TypeScript compiler directly
+  // to pre-transpile the `.tsx` file, since Next.js's own SWC pipeline
+  // already proved it compiles cleanly via a full `next build`).
+  lockfileSha256: "f19d44037ec573040252479d4999849615e7590d1c0e725e916d537a78879a89",
+  // History: 39bf980f84a6775a0e8d4448820772659cfa2612dfc885720f025b4460052b02
+  // (RGL-392's original freeze value, unchanged until this pass -- see the
+  // fifty-fifth-pass note immediately above for its own full history).
 };
 
 export type DriftKind = "MIGRATION_SET" | "DB_TEST_SET" | "LOCKFILE";

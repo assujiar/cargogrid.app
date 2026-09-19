@@ -133,6 +133,13 @@ export async function getEmployeePositionAssignmentHistory(client: PositionQuery
   return rows(data).map(parseEmployeePositionAssignment);
 }
 
+/** The active incumbents (current holders) of one position -- O1 remediation, cluster 7, replacing a broken direct .from("employee_position_assignments") read embedded in hris/positions/[positionId]/page.tsx. */
+export async function listPositionIncumbents(client: PositionQueryClient, positionId: string, actorAuthUserId: string): Promise<EmployeePositionAssignment[]> {
+  const { data, error } = await client.rpc("list_position_incumbents", { p_position_id: positionId, p_actor_auth_user_id: actorAuthUserId });
+  if (error) throw new PositionQueryError(error.message);
+  return rows(data).map(parseEmployeePositionAssignment);
+}
+
 /** Self-only, identity-match-gated (never requires HRS:View) -- returns an empty array (never throws) when the caller has no linked employee profile. */
 export async function getMyEmployeePositionAssignmentHistory(client: PositionQueryClient, tenantId: string, actorAuthUserId: string): Promise<EmployeePositionAssignment[]> {
   const { data, error } = await client.rpc("get_my_employee_position_assignment_history", { p_tenant_id: tenantId, p_actor_auth_user_id: actorAuthUserId });

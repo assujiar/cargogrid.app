@@ -55,6 +55,16 @@ import {
   type CreateOvertimePolicyVersionInput,
   type PublishOvertimePolicyVersionInput,
 } from "../contracts/overtime-timesheet/overtime-timesheet.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitTimesheetImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitTimesheetImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 import { resolveRequestClientIp } from "../../lib/security/client-ip.ts";
 
 export type OvertimeTimesheetMutationRpcClient = Pick<SupabaseClient, "rpc">;
@@ -103,6 +113,14 @@ export const OVERTIME_TIMESHEET_KNOWN_MUTATION_ERROR_CODES = [
   "import_export_job_not_committable",
   "import_export_job_not_fully_validated",
   "import_export_job_has_invalid_rows",
+  // CG-AUDIT-2026-09-02 A4 (timesheet_import UI slice): app.commit_timesheet_import_job's
+  // latest redefinition (20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql)
+  // composes app.check_import_export_job_authority (job_actor_unauthorized),
+  // app.assert_current_step_up_authorization, and app.assert_ip_allowed -- the same
+  // authority stack as commit_attendance_device_import_job in the same migration.
+  "job_actor_unauthorized",
+  "mfa_step_up_required",
+  "ip_not_allowed",
 ] as const;
 
 export type KnownOvertimeTimesheetMutationErrorCode = (typeof OVERTIME_TIMESHEET_KNOWN_MUTATION_ERROR_CODES)[number];
@@ -543,4 +561,39 @@ export async function publishOvertimePolicyVersion(client: OvertimeTimesheetMuta
   const row = firstRow(data);
   if (!row) throw new OvertimeTimesheetMutationError("mutation_failed", "publish_overtime_policy_version returned no row");
   return row;
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, eighth import schema) ---
+// app.validate_timesheet_import_row returns app.import_staging_rows and
+// app.commit_timesheet_import_job returns app.jobs -- the SAME composite
+// types the generic PLT-131 app.validate_staging_row/app.commit_import_job
+// return, so both reuse the generic parsers directly, mirroring
+// server/mutations/attendance.ts's own precedent.
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (employee_number, work_date, entry_minutes, job_number, shipment_number, notes), work_date must be a real ISO-8601 date, entry_minutes must be a positive integer, employee_number must resolve to an existing employee in this tenant, and job_number/shipment_number (if present) must each resolve to a real job order / shipment order. */
+export async function validateTimesheetImportRow(client: OvertimeTimesheetMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_timesheet_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) throw new OvertimeTimesheetMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new OvertimeTimesheetMutationError("mutation_failed", "validate_timesheet_import_row returned no row");
+  return parseImportStagingRow(data as Record<string, unknown>);
+}
+
+/** Requires HRS:Import, gated by the same authority stack commit_attendance_device_import_job uses: tenant membership, then HRS:Import, then a conditional MFA step-up (a strict no-op unless the tenant opted (HRS, Import) into its own additional_high_risk_actions), then a conditional IP allowlist check. Calls app._create_timesheet_entry per valid row -- the SAME engine the manual timesheet-entry path uses, with source='import', never a bespoke import-only write path. No duplicate-detection convention beyond a plain idempotent skip of an already-committed staging row (source_import_staging_row_id already bound on an app.timesheet_entries row) -- timesheet entries are not master records with a create-or-link concept. */
+export async function commitTimesheetImportJob(client: OvertimeTimesheetMutationRpcClient, input: CommitTimesheetImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitTimesheetImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_timesheet_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  if (error) throw new OvertimeTimesheetMutationError(classifyError(error.message), error.message);
+  if (!data || typeof data !== "object") throw new OvertimeTimesheetMutationError("mutation_failed", "commit_timesheet_import_job returned no row");
+  return parseImportExportJob(data as Record<string, unknown>);
 }

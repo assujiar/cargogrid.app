@@ -4,6 +4,8 @@ import { createSupabaseServerClient } from "../../../../../../lib/supabase/serve
 import { getAccountById, listSubsidiaryAccounts, AccountQueryError } from "../../../../../../server/queries/account.ts";
 import { getCreditProfileForAccount, getCreditProfileApprovalOverview } from "../../../../../../server/queries/credit.ts";
 import { CreditPanel } from "./credit-panel.tsx";
+import { CustomerPortalAccessPanel } from "./customer-portal-access-panel.tsx";
+import { grantInitialCustomerPortalAccountAdminAction } from "./customer-portal-actions.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
 /**
@@ -24,7 +26,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
 
   let account;
   try {
-    account = await getAccountById(supabase, accountId);
+    account = await getAccountById(supabase, accountId, access.authUserId);
   } catch (error) {
     if (!(error instanceof AccountQueryError)) {
       throw error;
@@ -45,11 +47,11 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   // any tenant size and cheaper besides; this was always the right shape, and the cap is what
   // made that obvious.
   const [parent, subsidiaries] = await Promise.all([
-    account.parentAccountId ? getAccountById(supabase, account.parentAccountId) : Promise.resolve(null),
-    listSubsidiaryAccounts(supabase, account.id),
+    account.parentAccountId ? getAccountById(supabase, account.parentAccountId, access.authUserId) : Promise.resolve(null),
+    listSubsidiaryAccounts(supabase, account.id, access.authUserId),
   ]);
 
-  const creditProfile = await getCreditProfileForAccount(supabase, account.id);
+  const creditProfile = await getCreditProfileForAccount(supabase, account.id, access.authUserId);
   const creditApprovalOverview = creditProfile ? await getCreditProfileApprovalOverview(supabase, creditProfile, access.authUserId) : null;
 
   return (
@@ -84,6 +86,8 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
       </dl>
 
       <CreditPanel tenantSlug={tenantSlug} accountId={account.id} profile={creditProfile} overview={creditApprovalOverview} />
+
+      <CustomerPortalAccessPanel grantAction={grantInitialCustomerPortalAccountAdminAction.bind(null, tenantSlug, account.id)} />
 
       {subsidiaries.length > 0 ? (
         <div className="rounded-md border border-neutral-200 p-4">

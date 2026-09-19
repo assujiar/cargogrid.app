@@ -58,7 +58,7 @@ export default async function CommercialLeadsPage({
   let result: ListLeadsResult | null = null;
   let loadFailed = false;
   try {
-    result = await listLeads(supabase, { tenantId: access.tenant.id, page });
+    result = await listLeads(supabase, { tenantId: access.tenant.id, actorAuthUserId: access.authUserId, page });
   } catch (error) {
     if (!(error instanceof LeadQueryError)) {
       throw error;

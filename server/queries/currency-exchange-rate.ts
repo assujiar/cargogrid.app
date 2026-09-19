@@ -19,7 +19,7 @@ import {
 } from "../contracts/currency-exchange-rate/currency-exchange-rate.ts";
 
 export type CurrencyExchangeRateQueryRpcClient = Pick<SupabaseClient, "rpc">;
-export type FinanceCurrencyTableClient = Pick<SupabaseClient, "from">;
+export type FinanceCurrencyTableClient = Pick<SupabaseClient, "rpc">;
 
 export class CurrencyExchangeRateQueryError extends Error {
   constructor(message: string) {
@@ -28,13 +28,13 @@ export class CurrencyExchangeRateQueryError extends Error {
   }
 }
 
-/** Direct RLS-scoped read of the governed currency registry (app.finance_currencies carries a broad `to authenticated using (true)` SELECT policy, no RPC needed). */
+/** The full governed currency registry, code ascending -- app.list_finance_currencies is a zero-actor-param SECURITY INVOKER function (app.finance_currencies carries a broad `to authenticated using (true)` SELECT policy plus a direct table grant, so the real calling role already has everything it needs). */
 export async function listFinanceCurrencies(client: FinanceCurrencyTableClient): Promise<FinanceCurrency[]> {
-  const { data, error } = await client.from("finance_currencies").select("*").order("code", { ascending: true });
+  const { data, error } = await client.rpc("list_finance_currencies");
   if (error) {
     throw new CurrencyExchangeRateQueryError(error.message);
   }
-  return (data ?? []).map((row) => parseFinanceCurrency(row as Record<string, unknown>));
+  return (data ?? []).map((row: Record<string, unknown>) => parseFinanceCurrency(row));
 }
 
 /** Bounded, authority-gated list read, ordered effective_from desc. */

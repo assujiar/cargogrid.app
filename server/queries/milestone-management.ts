@@ -18,7 +18,7 @@ import {
 } from "../contracts/milestone-management/milestone-management.ts";
 
 export type MilestoneManagementQueryRpcClient = Pick<SupabaseClient, "rpc">;
-export type MilestoneManagementQueryTableClient = Pick<SupabaseClient, "from">;
+export type MilestoneManagementQueryTableClient = Pick<SupabaseClient, "rpc">;
 
 export class MilestoneManagementQueryError extends Error {
   constructor(message: string) {
@@ -27,9 +27,9 @@ export class MilestoneManagementQueryError extends Error {
   }
 }
 
-/** The full, platform-wide registered milestone code catalogue -- RLS-scoped select to authenticated (reference data, true for every row), no RPC needed. */
+/** The full, platform-wide registered milestone code catalogue -- zero-actor-param, SECURITY INVOKER RPC over a bare `using (true)`-to-authenticated reference table (app.list_milestone_codes, CG-AUDIT-2026-09-02 O1 cluster 3 batch 2) -- the app schema is not exposed to PostgREST, so a direct app.milestone_codes read never worked. */
 export async function listMilestoneCodes(client: MilestoneManagementQueryTableClient): Promise<MilestoneCode[]> {
-  const { data, error } = await client.from("milestone_codes").select("*").order("name");
+  const { data, error } = await client.rpc("list_milestone_codes");
   if (error) {
     throw new MilestoneManagementQueryError(error.message);
   }

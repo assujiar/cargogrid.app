@@ -57,9 +57,27 @@ describe("getFinanceArOpenItemActivity", () => {
 });
 
 describe("getFinanceArExposureSummary", () => {
-  test("parses an exposure summary result", async () => {
-    const client = fakeRpcClient({ data: { totalOpen: 1000, openCount: 1, overdueOpen: 0, overdueCount: 0 }, error: null });
+  test("parses a real per-currency exposure summary result (CG-AUDIT-2026-09-02 B4, never a blended cross-currency sum)", async () => {
+    const client = fakeRpcClient({
+      data: [
+        { currency: "USD", total_open: 1000, open_count: 1, overdue_open: 0, overdue_count: 0, base_currency: "IDR", base_total_open: 15700000, base_overdue_open: 0, fx_status: "converted" },
+        { currency: "EUR", total_open: 200, open_count: 1, overdue_open: 0, overdue_count: 0, base_currency: "IDR", base_total_open: null, base_overdue_open: null, fx_status: "rate_unavailable" },
+      ],
+      error: null,
+    });
     const summary = await getFinanceArExposureSummary(client, { tenantId: TENANT_ID, customerAccountId: CUSTOMER_ID, actorAuthUserId: ACTOR_ID });
-    assert.equal(summary.totalOpen, 1000);
+    assert.equal(summary.length, 2);
+    assert.equal(summary[0]?.currency, "USD");
+    assert.equal(summary[0]?.totalOpen, 1000);
+    assert.equal(summary[0]?.fxStatus, "converted");
+    assert.equal(summary[1]?.currency, "EUR");
+    assert.equal(summary[1]?.baseTotalOpen, null);
+    assert.equal(summary[1]?.fxStatus, "rate_unavailable");
+  });
+
+  test("returns an empty array for a customer with zero open items, never a fabricated zero row", async () => {
+    const client = fakeRpcClient({ data: [], error: null });
+    const summary = await getFinanceArExposureSummary(client, { tenantId: TENANT_ID, customerAccountId: CUSTOMER_ID, actorAuthUserId: ACTOR_ID });
+    assert.deepEqual(summary, []);
   });
 });

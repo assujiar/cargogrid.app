@@ -35,8 +35,8 @@ export default async function CommercialRatesPage({ params }: { params: Promise<
   let loadFailed = false;
   try {
     [activeRates, pendingRates] = await Promise.all([
-      listActiveVendorRates(supabase, access.tenant.id),
-      listPendingRateVersions(supabase, access.tenant.id),
+      listActiveVendorRates(supabase, access.tenant.id, access.authUserId),
+      listPendingRateVersions(supabase, access.tenant.id, access.authUserId),
     ]);
   } catch (error) {
     if (!(error instanceof RateQueryError)) {

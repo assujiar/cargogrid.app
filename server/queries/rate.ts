@@ -14,7 +14,7 @@ import {
   type RateSelection,
 } from "../contracts/rate/rate.ts";
 
-export type RateQueryTableClient = Pick<SupabaseClient, "from">;
+export type RateQueryTableClient = Pick<SupabaseClient, "from" | "rpc">;
 
 export class RateQueryError extends Error {
   constructor(message: string) {
@@ -24,12 +24,11 @@ export class RateQueryError extends Error {
 }
 
 /** Every rate version under one master record (any approval_status), most recently created first -- app.vendor_rate_versions_directory is the read path, never the base table directly. */
-export async function listRateVersionsForMasterRecord(client: RateQueryTableClient, masterRecordId: string): Promise<RateVersion[]> {
-  const { data, error } = await client
-    .from("vendor_rate_versions_directory")
-    .select("*")
-    .eq("master_record_id", masterRecordId)
-    .order("created_at", { ascending: false });
+export async function listRateVersionsForMasterRecord(client: RateQueryTableClient, masterRecordId: string, actorAuthUserId: string): Promise<RateVersion[]> {
+  const { data, error } = await client.rpc("list_rate_versions_for_master_record", {
+    p_master_record_id: masterRecordId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new RateQueryError(error.message);
   }
@@ -37,25 +36,27 @@ export async function listRateVersionsForMasterRecord(client: RateQueryTableClie
 }
 
 /** A single rate version by id (any approval_status) -- returns null (never an error) when RLS/no-match yields zero rows. */
-export async function getRateVersionById(client: RateQueryTableClient, rateVersionId: string): Promise<RateVersion | null> {
-  const { data, error } = await client.from("vendor_rate_versions_directory").select("*").eq("rate_version_id", rateVersionId).maybeSingle();
+export async function getRateVersionById(client: RateQueryTableClient, rateVersionId: string, actorAuthUserId: string): Promise<RateVersion | null> {
+  const { data, error } = await client.rpc("get_rate_version_by_id", {
+    p_rate_version_id: rateVersionId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new RateQueryError(error.message);
   }
-  if (!data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
     return null;
   }
-  return parseRateVersion(data as Record<string, unknown>);
+  return parseRateVersion(row as Record<string, unknown>);
 }
 
 /** Every rate version awaiting approval for one tenant -- for a tenant_admin's own review queue. */
-export async function listPendingRateVersions(client: RateQueryTableClient, tenantId: string): Promise<RateVersion[]> {
-  const { data, error } = await client
-    .from("vendor_rate_versions_directory")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("approval_status", "pending_approval")
-    .order("created_at", { ascending: false });
+export async function listPendingRateVersions(client: RateQueryTableClient, tenantId: string, actorAuthUserId: string): Promise<RateVersion[]> {
+  const { data, error } = await client.rpc("list_pending_rate_versions", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new RateQueryError(error.message);
   }
@@ -63,12 +64,11 @@ export async function listPendingRateVersions(client: RateQueryTableClient, tena
 }
 
 /** Approved, currently-effective rate versions for one tenant -- the same set app.search_vendor_rates queries, useful for a simple unfiltered browse. */
-export async function listActiveVendorRates(client: RateQueryTableClient, tenantId: string): Promise<RateVersion[]> {
-  const { data, error } = await client
-    .from("v_active_vendor_rates")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("vendor_code", { ascending: true });
+export async function listActiveVendorRates(client: RateQueryTableClient, tenantId: string, actorAuthUserId: string): Promise<RateVersion[]> {
+  const { data, error } = await client.rpc("list_active_vendor_rates", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new RateQueryError(error.message);
   }
@@ -76,12 +76,11 @@ export async function listActiveVendorRates(client: RateQueryTableClient, tenant
 }
 
 /** Field-masked rate selections for one costing request, most recently created first -- reads through app.rate_selections_directory, never the base table directly. */
-export async function listRateSelectionsForRequest(client: RateQueryTableClient, costingRequestId: string): Promise<RateSelection[]> {
-  const { data, error } = await client
-    .from("rate_selections_directory")
-    .select("*")
-    .eq("costing_request_id", costingRequestId)
-    .order("created_at", { ascending: false });
+export async function listRateSelectionsForRequest(client: RateQueryTableClient, costingRequestId: string, actorAuthUserId: string): Promise<RateSelection[]> {
+  const { data, error } = await client.rpc("list_rate_selections_for_request", {
+    p_costing_request_id: costingRequestId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new RateQueryError(error.message);
   }

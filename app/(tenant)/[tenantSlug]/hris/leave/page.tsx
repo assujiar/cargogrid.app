@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveHrisAccessForRequest } from "../../../../../lib/portal/resolve-hris-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listLeaveRequests, listLeaveApprovalInboxForActor, LeaveQueryError } from "../../../../../server/queries/leave.ts";
@@ -40,6 +41,12 @@ export default async function LeaveAdminPage({ params }: { params: Promise<{ ten
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-xl font-semibold text-neutral-900">Leave</h1>
+        <Link href={`/${tenantSlug}/hris/imports/leave-opening-balance`} className="text-sm text-primary underline">
+          Load opening balances from CSV
+        </Link>
+      </div>
       <LeaveAdminPanel
         requests={requests}
         inbox={inbox}

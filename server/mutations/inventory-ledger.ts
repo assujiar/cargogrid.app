@@ -23,6 +23,16 @@ import {
   type InventoryMovement,
   type InventoryReservation,
 } from "../contracts/inventory-ledger/inventory-ledger.ts";
+import {
+  ValidateStagingRowInputSchema,
+  CommitInventoryOpeningBalanceImportJobInputSchema,
+  parseImportStagingRow,
+  parseImportExportJob,
+  type ValidateStagingRowInput,
+  type CommitInventoryOpeningBalanceImportJobInput,
+  type ImportStagingRow,
+  type ImportExportJob,
+} from "../contracts/import-export/import-export.ts";
 
 export type InventoryLedgerMutationRpcClient = Pick<SupabaseClient, "rpc">;
 
@@ -53,6 +63,22 @@ export const INVENTORY_LEDGER_KNOWN_MUTATION_ERROR_CODES = [
   "movement_not_found",
   "invalid_reversal",
   "already_reversed",
+  // CG-AUDIT-2026-09-02 A4 (inventory_opening_balance_import UI slice, twelfth and
+  // final import schema): app.commit_inventory_opening_balance_import_job's latest
+  // redefinition (20260903122000_harden_tenant_id_disclosure_hris_payroll_import_commit.sql)
+  // composes app.check_import_export_job_authority (job_actor_unauthorized),
+  // app.assert_current_step_up_authorization, and app.assert_ip_allowed -- the same
+  // authority stack commit_payroll_loan_cutover_import_job composes, plus the generic
+  // import_export_* prefixes app.commit_import_job/app.validate_staging_row raise.
+  "import_export_job_not_found",
+  "import_export_wrong_schema",
+  "import_export_job_not_committable",
+  "import_export_job_not_fully_validated",
+  "import_export_job_has_invalid_rows",
+  "job_actor_unauthorized",
+  "mfa_step_up_required",
+  "ip_not_allowed",
+  "import_row_no_longer_resolvable",
 ] as const;
 type KnownInventoryLedgerMutationErrorCode = (typeof INVENTORY_LEDGER_KNOWN_MUTATION_ERROR_CODES)[number];
 export type InventoryLedgerMutationErrorCode = KnownInventoryLedgerMutationErrorCode | "mutation_failed" | "invalid_response";
@@ -209,4 +235,47 @@ export async function reverseInventoryMovement(client: InventoryLedgerMutationRp
     throw new InventoryLedgerMutationError(classifyError(error.message), error.message);
   }
   return parseMovementResponse(data, "reverse_inventory_movement");
+}
+
+// --- Staged import (CG-AUDIT-2026-09-02 A4, twelfth and final import schema) ---
+// app.validate_inventory_opening_balance_import_row returns app.import_staging_rows
+// and app.commit_inventory_opening_balance_import_job returns app.jobs -- the SAME
+// composite types the generic PLT-131 app.validate_staging_row/app.commit_import_job
+// return, so both reuse the generic parsers directly, mirroring
+// server/mutations/payroll.ts's own precedent.
+
+/** Calls app.validate_staging_row UNCHANGED first, then adds formula/spreadsheet-injection rejection (warehouse_code, location_code, item_code, owner_account_tax_id, uom_code, lot_number, serial_number, status), warehouse_code/location_code/owner_account_tax_id/item_code/uom_code must each resolve within this tenant, quantity must be a strictly positive numeric ("on the shelf at cutover" -- never zero or negative), status must be one of on_hand/held/damaged/expired, and expiry_date if present must be a real date. */
+export async function validateInventoryOpeningBalanceImportRow(client: InventoryLedgerMutationRpcClient, input: ValidateStagingRowInput): Promise<ImportStagingRow> {
+  const parsed = ValidateStagingRowInputSchema.parse(input);
+  const { data, error } = await client.rpc("validate_inventory_opening_balance_import_row", {
+    p_staging_row_id: parsed.stagingRowId,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+  });
+  if (error) {
+    throw new InventoryLedgerMutationError(classifyError(error.message), error.message);
+  }
+  if (!data || typeof data !== "object") {
+    throw new InventoryLedgerMutationError("invalid_response", "validate_inventory_opening_balance_import_row returned no row");
+  }
+  return parseImportStagingRow(data as Record<string, unknown>);
+}
+
+/** Requires BOTH app.is_support_grant_authority (Supreme Admin or tenant_admin) AND OPS:Import (additive, never either-or), plus a conditional MFA step-up and a conditional IP allowlist check, identical in shape to commit_payroll_loan_cutover_import_job. The importer ALSO needs genuine record scope over each row's own warehouse -- app.post_inventory_movement checks app.can_access_record against the warehouse's company org unit, invisible in this RPC's own guard list since it lives inside the primitive itself. Calls app.post_inventory_movement per valid row with movement_type='opening_balance' -- the SAME primitive every other WMS write composes, never a bespoke insert into app.inventory_movements/app.inventory_balances. An already-committed staging row (idempotency key derived from the staging row's own id) is skipped as a plain idempotent replay, never a duplicate movement; warehouse/owner-account/item/location are re-resolved at commit time, and one that went inactive between validate and commit fails closed with import_row_no_longer_resolvable rather than silently proceeding. This import can never correct a wrong opening balance by re-running: a genuinely new row posts a new, additive movement, never an overwrite -- correcting a mistake requires app.reverse_inventory_movement outside this wizard entirely. */
+export async function commitInventoryOpeningBalanceImportJob(client: InventoryLedgerMutationRpcClient, input: CommitInventoryOpeningBalanceImportJobInput): Promise<ImportExportJob> {
+  const parsed = CommitInventoryOpeningBalanceImportJobInputSchema.parse(input);
+  const { data, error } = await client.rpc("commit_inventory_opening_balance_import_job", {
+    p_job_id: parsed.jobId,
+    p_allow_partial: parsed.allowPartial,
+    p_actor_auth_user_id: parsed.actorAuthUserId,
+    p_actor_label: parsed.actorLabel,
+    p_client_ip: parsed.clientIp,
+  });
+  if (error) {
+    throw new InventoryLedgerMutationError(classifyError(error.message), error.message);
+  }
+  if (!data || typeof data !== "object") {
+    throw new InventoryLedgerMutationError("invalid_response", "commit_inventory_opening_balance_import_job returned no row");
+  }
+  return parseImportExportJob(data as Record<string, unknown>);
 }

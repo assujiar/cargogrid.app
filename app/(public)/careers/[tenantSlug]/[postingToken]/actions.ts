@@ -10,8 +10,8 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { headers } from "next/headers";
 import { cookies } from "next/headers";
+import { resolveRequestClientIp } from "../../../../../lib/security/client-ip.ts";
 import { createSupabaseServiceRoleClient } from "../../../../../lib/supabase/service-role.ts";
 import { submitPublicJobApplication } from "../../../../../server/mutations/recruitment.ts";
 import type { PublicSubmitResult } from "../../../../../server/contracts/recruitment/recruitment.ts";
@@ -39,8 +39,10 @@ export async function submitPublicJobApplicationAction(postingToken: string, _pr
 
   // client_key is a sha256 hash of the caller's own best-effort IP address, never the
   // raw IP itself, mirroring app/(public)/vendor-intake/[token]/actions.ts exactly.
-  const requestHeaders = await headers();
-  const ipAddress = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  // CG-AUDIT-2026-09-02 D3: the FIRST x-forwarded-for hop is caller-controlled and a proxy
+  // only ever appends to it -- lib/security/client-ip.ts's own resolveRequestClientIp is the
+  // shared, correct resolution (x-real-ip first, else the LAST x-forwarded-for hop).
+  const ipAddress = (await resolveRequestClientIp()) ?? "unknown";
   const clientKey = createHash("sha256").update(ipAddress).digest("hex");
 
   // A stable per-browser idempotency key (a fresh cookie, not derived from any

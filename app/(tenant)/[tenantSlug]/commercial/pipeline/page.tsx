@@ -33,7 +33,7 @@ export default async function CommercialPipelinePage({ params }: { params: Promi
   try {
     [summary, plans] = await Promise.all([
       getPipelineSummary(supabase, { tenantId: access.tenant.id }),
-      listSalesPlans(supabase, access.tenant.id),
+      listSalesPlans(supabase, access.tenant.id, access.authUserId),
     ]);
   } catch (error) {
     if (!(error instanceof PipelineQueryError)) {

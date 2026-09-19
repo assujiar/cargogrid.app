@@ -57,33 +57,32 @@ const VALID_EXECUTION_ROW = {
   executed_at: "2026-08-21T00:00:00.000Z",
 };
 
-function fakeTableClient(response: { data: unknown; error: { message: string } | null }): AutomationRuleQueryClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      limit: () => chainNode(),
-      maybeSingle: () => {
-        const row = Array.isArray(response.data) ? (response.data[0] ?? null) : response.data;
-        return Promise.resolve({ data: row, error: response.error });
-      },
-      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(response).then(resolve, reject),
-    };
-  }
-  return { from: () => chainNode() } as unknown as AutomationRuleQueryClient;
+function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): {
+  client: AutomationRuleQueryClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = {
+    async rpc(fn: string, args: Record<string, unknown> = {}) {
+      calls.push({ fn, args });
+      return response;
+    },
+  } as unknown as AutomationRuleQueryClient;
+  return { client, calls };
 }
 
 describe("listAutomationRules", () => {
-  test("maps rule rows", async () => {
-    const client = fakeTableClient({ data: [VALID_RULE_ROW], error: null });
+  test("calls list_automation_rules and maps rule rows", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_RULE_ROW], error: null });
     const rules = await listAutomationRules(client, TENANT_ID);
+    assert.equal(calls[0]?.fn, "list_automation_rules");
+    assert.deepEqual(calls[0]?.args, { p_tenant_id: TENANT_ID });
     assert.equal(rules.length, 1);
     assert.equal(rules[0]?.name, "High Priority Alert");
   });
 
   test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+    const { client } = fakeRpcClient({ data: null, error: { message: "boom" } });
     await assert.rejects(
       () => listAutomationRules(client, TENANT_ID),
       (err: unknown) => err instanceof AutomationRuleQueryError,
@@ -93,31 +92,34 @@ describe("listAutomationRules", () => {
 
 describe("getAutomationRuleById", () => {
   test("returns null (never an error) when not found", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const rule = await getAutomationRuleById(client, RULE_ID);
     assert.equal(rule, null);
   });
 
   test("parses a matched row", async () => {
-    const client = fakeTableClient({ data: VALID_RULE_ROW, error: null });
+    const { client, calls } = fakeRpcClient({ data: [VALID_RULE_ROW], error: null });
     const rule = await getAutomationRuleById(client, RULE_ID);
+    assert.deepEqual(calls[0]?.args, { p_rule_id: RULE_ID });
     assert.equal(rule?.id, RULE_ID);
   });
 });
 
 describe("listAutomationRuleVersions", () => {
-  test("maps version rows, newest first", async () => {
-    const client = fakeTableClient({ data: [VALID_VERSION_ROW], error: null });
+  test("calls list_automation_rule_versions and maps version rows, newest first", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_VERSION_ROW], error: null });
     const versions = await listAutomationRuleVersions(client, RULE_ID);
+    assert.deepEqual(calls[0]?.args, { p_automation_rule_id: RULE_ID });
     assert.equal(versions.length, 1);
     assert.equal(versions[0]?.status, "draft");
   });
 });
 
 describe("listAutomationRuleExecutions", () => {
-  test("maps execution rows, newest first", async () => {
-    const client = fakeTableClient({ data: [VALID_EXECUTION_ROW], error: null });
+  test("calls list_automation_rule_executions and maps execution rows, newest first", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_EXECUTION_ROW], error: null });
     const executions = await listAutomationRuleExecutions(client, RULE_ID);
+    assert.deepEqual(calls[0]?.args, { p_automation_rule_id: RULE_ID, p_limit: 25 });
     assert.equal(executions.length, 1);
     assert.equal(executions[0]?.status, "completed");
   });
@@ -158,28 +160,27 @@ const VALID_APPROVAL_STEP_ROW = {
 
 describe("getLatestAutomationRulePublishApprovalRequest", () => {
   test("returns null (never an error) when no request has ever been opened", async () => {
-    const client = fakeTableClient({ data: null, error: null });
+    const { client } = fakeRpcClient({ data: [], error: null });
     const request = await getLatestAutomationRulePublishApprovalRequest(client, VERSION_ID);
     assert.equal(request, null);
   });
 
   test("parses a matched pending request", async () => {
-    const client = fakeTableClient({ data: VALID_APPROVAL_REQUEST_ROW, error: null });
+    const { client, calls } = fakeRpcClient({ data: [VALID_APPROVAL_REQUEST_ROW], error: null });
     const request = await getLatestAutomationRulePublishApprovalRequest(client, VERSION_ID);
+    assert.deepEqual(calls[0]?.args, { p_automation_rule_version_id: VERSION_ID });
     assert.equal(request?.status, "pending");
     assert.equal(request?.entityId, VERSION_ID);
   });
 
   // ISS-2026-237 regression: app.approval_requests.ended_reason is not granted
-  // to `authenticated` (20260731210000, Finding 5 CRITICAL) -- a real row read
-  // through this path never carries that key at all, unlike this file's other
-  // fixtures which set it explicitly. Prove the parse still succeeds (never a
-  // ZodError/AutomationRuleQueryError from a missing `ended_reason`) and that
-  // `endedReason` comes back `null`, never leaking whatever the column would
-  // have held.
-  test("parses a row with no ended_reason key at all, never throwing (ISS-2026-237)", async () => {
-    const { ended_reason: _omitted, ...rowWithoutEndedReason } = VALID_APPROVAL_REQUEST_ROW;
-    const client = fakeTableClient({ data: rowWithoutEndedReason, error: null });
+  // to `authenticated` (20260731210000, Finding 5 CRITICAL) -- app.get_latest_
+  // automation_rule_publish_approval_request's own SQL body casts it to null
+  // rather than selecting it, so every real RPC row carries `ended_reason: null`
+  // explicitly. Prove `endedReason` comes back null, never leaking whatever the
+  // column would have held.
+  test("never leaks ended_reason -- the RPC row's own null cast comes through as endedReason: null", async () => {
+    const { client } = fakeRpcClient({ data: [VALID_APPROVAL_REQUEST_ROW], error: null });
     const request = await getLatestAutomationRulePublishApprovalRequest(client, VERSION_ID);
     assert.equal(request?.status, "pending");
     assert.equal(request?.endedReason, null);
@@ -187,9 +188,10 @@ describe("getLatestAutomationRulePublishApprovalRequest", () => {
 });
 
 describe("listApprovalRequestSteps", () => {
-  test("maps step rows in step_order", async () => {
-    const client = fakeTableClient({ data: [VALID_APPROVAL_STEP_ROW], error: null });
+  test("calls list_approval_request_steps and maps step rows in step_order", async () => {
+    const { client, calls } = fakeRpcClient({ data: [VALID_APPROVAL_STEP_ROW], error: null });
     const steps = await listApprovalRequestSteps(client, "623e4567-e89b-12d3-a456-426614174000");
+    assert.deepEqual(calls[0]?.args, { p_request_id: "623e4567-e89b-12d3-a456-426614174000" });
     assert.equal(steps.length, 1);
     assert.equal(steps[0]?.status, "active");
   });

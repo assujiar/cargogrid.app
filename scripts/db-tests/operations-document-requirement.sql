@@ -449,6 +449,141 @@ begin
   end if;
 end $$;
 
+\echo '>> CG-AUDIT-2026-09-02 A6: app.access_shipment_document_checklist_item_evidence_for_download -- OPS:Download-gated (a brand-new, previously-unused permission action code), the SAME app.can_access_record record scope app.link_document_to_checklist_item/app.review_document_checklist_item already use, malware-scan gated identically to app.authorize_vendor_evidence_file_access, storage_path returned only once granted'
+do $$
+declare
+  v_shipment_a_id uuid := (select id from app.shipment_orders where idempotency_key = 'idem-docreq-a');
+  v_shipment_draft_id uuid := (select id from app.shipment_orders where idempotency_key = 'idem-docreq-draft');
+  v_item app.shipment_document_checklist_items;
+  v_item_no_file app.shipment_document_checklist_items;
+  v_downloader_role uuid;
+  v_downloader_draft app.role_versions;
+  v_result record;
+  v_msg_text text;
+begin
+  select * into v_item from app.shipment_document_checklist_items where shipment_order_id = v_shipment_a_id;
+  -- v_item.file_id is already linked+approved+clean from the upload/link/review lifecycle section above.
+
+  -- insufficient_authority: rep (OPS full otherwise) does not yet hold OPS:Download.
+  begin
+    perform app.access_shipment_document_checklist_item_evidence_for_download(v_item.id, '00000000-0000-0000-0000-000000023102', 'rep', null);
+    raise exception 'assertion failed: expected insufficient_authority before OPS:Download is granted to rep';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'insufficient_authority%' then raise exception 'assertion failed: expected insufficient_authority, got %', v_msg_text; end if;
+  end;
+
+  -- Grant OPS:Download to the existing rep role. CG-AUDIT-2026-09-02 A3's own
+  -- publish-migrates-assignments fix means rep's existing active assignment
+  -- carries forward onto the new version automatically -- no re-assign_role call.
+  select role_id into v_downloader_role from app.role_versions
+    where id = (select role_version_id from app.role_assignments where auth_user_id = '00000000-0000-0000-0000-000000023102' and status = 'active' limit 1);
+  v_downloader_draft := app.create_role_version(v_downloader_role, 'tester');
+  perform app.set_role_version_permissions(
+    v_downloader_draft.id,
+    array(select id from app.permissions where (resource_module_code = 'COM' and action in ('Create', 'Edit', 'Approve', 'View', 'View cost'))
+      or (resource_module_code = 'OPS' and action in ('Create', 'Edit', 'Assign', 'View', 'Download'))),
+    'tester'
+  );
+  perform app.publish_role_version(v_downloader_draft.id, now(), 'tester');
+
+  -- granted: rep now holds OPS:Download and is correctly org-unit-scoped to shipment_a
+  -- (already proven in the upload/link/review lifecycle section above).
+  select * into v_result from app.access_shipment_document_checklist_item_evidence_for_download(v_item.id, '00000000-0000-0000-0000-000000023102', 'rep', null);
+  if v_result.access_result <> 'granted' or v_result.storage_path is null or v_result.bucket_id <> 'tenant-documents' or v_result.original_filename is null then
+    raise exception 'assertion failed: expected a granted signed-download access with a real storage_path/bucket_id, got result=% bucket=% path=% filename=%', v_result.access_result, v_result.bucket_id, v_result.storage_path, v_result.original_filename;
+  end if;
+
+  -- insufficient_authority: viewer holds OPS:View only, never Download.
+  begin
+    perform app.access_shipment_document_checklist_item_evidence_for_download(v_item.id, '00000000-0000-0000-0000-000000023103', 'viewer', null);
+    raise exception 'assertion failed: expected insufficient_authority for a viewer lacking OPS:Download';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'insufficient_authority%' then raise exception 'assertion failed: expected insufficient_authority, got %', v_msg_text; end if;
+  end;
+
+  -- ISS-2026-146 shape: an actor with zero membership in this tenant gets the same
+  -- not-found a nonexistent checklist item id would produce, never a tenant_id-carrying
+  -- insufficient_authority -- folded into the initial not-found branch, unlike this
+  -- migration's own two pre-existing siblings (link/review), a disclosed, deliberately
+  -- out-of-scope gap in that older code (see this migration's own header comment).
+  begin
+    perform app.access_shipment_document_checklist_item_evidence_for_download(v_item.id, '00000000-0000-0000-0000-000000023105', 'gizmo-admin', null);
+    raise exception 'assertion failed: expected document_checklist_item_not_found for an actor with zero membership in this checklist item''s own tenant';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'document_checklist_item_not_found%' then raise exception 'assertion failed: expected document_checklist_item_not_found, got %', v_msg_text; end if;
+  end;
+
+  -- denied, not raised, once infected -- storage_path/bucket_id nulled out exactly like
+  -- the vendor-compliance sibling nulls its own file-identifying fields.
+  perform set_config('app.scan_correction_reason', 'db-test: simulating the disclosed RPD-022 out-of-band re-flag of an already-clean file', true);
+  update app.files set malware_scan_status = 'infected' where id = v_item.file_id;
+  select * into v_result from app.access_shipment_document_checklist_item_evidence_for_download(v_item.id, '00000000-0000-0000-0000-000000023102', 'rep', null);
+  if v_result.access_result <> 'denied' or v_result.storage_path is not null or v_result.bucket_id is not null or v_result.access_reason is null then
+    raise exception 'assertion failed: expected a denied result with nulled-out storage_path/bucket_id for infected evidence, got result=% bucket=% path=% reason=%', v_result.access_result, v_result.bucket_id, v_result.storage_path, v_result.access_reason;
+  end if;
+  update app.files set malware_scan_status = 'clean' where id = v_item.file_id;
+
+  -- document_checklist_no_linked_file: a freshly-pinned checklist item awaiting its
+  -- first upload has nothing to download yet.
+  perform app.pin_shipment_document_checklist(v_shipment_draft_id, '00000000-0000-0000-0000-000000023102', 'rep');
+  select * into v_item_no_file from app.shipment_document_checklist_items where shipment_order_id = v_shipment_draft_id;
+  begin
+    perform app.access_shipment_document_checklist_item_evidence_for_download(v_item_no_file.id, '00000000-0000-0000-0000-000000023102', 'rep', null);
+    raise exception 'assertion failed: expected document_checklist_no_linked_file for a freshly-pinned, never-linked checklist item';
+  exception
+    when others then
+      get stacked diagnostics v_msg_text = message_text;
+      if v_msg_text not like 'document_checklist_no_linked_file%' then raise exception 'assertion failed: expected document_checklist_no_linked_file, got %', v_msg_text; end if;
+  end;
+
+  -- PLT-128's own independent audit trail recorded the granted+denied attempts above.
+  if (select count(*) from app.file_access_logs where file_id = v_item.file_id and accessed_by_auth_user_id = '00000000-0000-0000-0000-000000023102' and access_type = 'signed_url_issued') < 2 then
+    raise exception 'assertion failed: expected at least 2 app.file_access_logs rows for rep''s own granted+denied signed-download attempts';
+  end if;
+
+  -- storage_path IS present in this function's own return shape (joined through
+  -- information_schema.routines rather than pattern-matching the possibly-clipped
+  -- specific_name directly -- see 20260914020000's own db-test for why).
+  if not exists (
+    select 1 from information_schema.routines r
+    join information_schema.parameters p on p.specific_schema = r.specific_schema and p.specific_name = r.specific_name
+    where r.routine_schema = 'app' and r.routine_name = 'access_shipment_document_checklist_item_evidence_for_download' and p.parameter_name = 'storage_path'
+  ) then
+    raise exception 'assertion failed: expected app.access_shipment_document_checklist_item_evidence_for_download to declare a storage_path return column';
+  end if;
+
+  -- Schema-privilege: service_role only, unlike its authenticated-grantable siblings
+  -- app.link_document_to_checklist_item/app.review_document_checklist_item.
+  declare
+    v_has_priv boolean;
+  begin
+    select has_function_privilege('anon', 'app.access_shipment_document_checklist_item_evidence_for_download(uuid, uuid, text, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'assertion failed: expected zero anon EXECUTE on app.access_shipment_document_checklist_item_evidence_for_download';
+    end if;
+    select has_function_privilege('authenticated', 'app.access_shipment_document_checklist_item_evidence_for_download(uuid, uuid, text, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'assertion failed: expected zero authenticated EXECUTE on app.access_shipment_document_checklist_item_evidence_for_download (service_role only)';
+    end if;
+    select has_function_privilege('anon', 'public.access_shipment_document_checklist_item_evidence_for_download(uuid, uuid, text, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'assertion failed: expected zero anon EXECUTE on public.access_shipment_document_checklist_item_evidence_for_download';
+    end if;
+    select has_function_privilege('authenticated', 'public.access_shipment_document_checklist_item_evidence_for_download(uuid, uuid, text, uuid)', 'execute') into v_has_priv;
+    if v_has_priv then
+      raise exception 'assertion failed: expected zero authenticated EXECUTE on public.access_shipment_document_checklist_item_evidence_for_download (the PostgREST-reachable wrapper, service_role only)';
+    end if;
+  end;
+
+  raise notice 'PASS: app.access_shipment_document_checklist_item_evidence_for_download -- OPS:Download-gated (denied before assignment, granted once assigned), same app.can_access_record record scope as link/review, ISS-2026-146-shaped not-found for a zero-membership actor, denied-not-raised with storage_path/bucket_id nulled once infected, document_checklist_no_linked_file for an unlinked item, app.file_access_logs recording under access_type=signed_url_issued, storage_path present in its own return shape, and both anon/authenticated carry zero EXECUTE on the function and its public.* wrapper';
+end $$;
+
 \echo '>> RLS: authenticated record-scope isolation on app.shipment_document_checklist_items/app.document_requirement_definitions; cross-tenant isolation; schema-privilege defense in depth (anon holds zero EXECUTE on all 7 new functions)'
 do $$
 declare

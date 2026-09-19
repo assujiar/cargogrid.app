@@ -13,7 +13,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseVendorRateTier, type VendorRateTier } from "../contracts/procurement-rate/procurement-rate.ts";
 
-export type ProcurementRateQueryTableClient = Pick<SupabaseClient, "from">;
+export type ProcurementRateQueryTableClient = Pick<SupabaseClient, "from" | "rpc">;
 
 export class ProcurementRateQueryError extends Error {
   constructor(message: string) {
@@ -23,12 +23,11 @@ export class ProcurementRateQueryError extends Error {
 }
 
 /** Every tier for one rate version, ordered -- app.vendor_rate_tiers_directory is the read path (PRC:View cost masked), never the base table directly. */
-export async function listVendorRateTiers(client: ProcurementRateQueryTableClient, rateVersionId: string): Promise<VendorRateTier[]> {
-  const { data, error } = await client
-    .from("vendor_rate_tiers_directory")
-    .select("*")
-    .eq("rate_version_id", rateVersionId)
-    .order("tier_order", { ascending: true });
+export async function listVendorRateTiers(client: ProcurementRateQueryTableClient, rateVersionId: string, actorAuthUserId: string): Promise<VendorRateTier[]> {
+  const { data, error } = await client.rpc("list_vendor_rate_tiers", {
+    p_rate_version_id: rateVersionId,
+    p_actor_auth_user_id: actorAuthUserId,
+  });
   if (error) {
     throw new ProcurementRateQueryError(error.message);
   }
@@ -47,14 +46,12 @@ export async function listVendorRateTiers(client: ProcurementRateQueryTableClien
 const PROCUREMENT_RATE_LIST_LIMIT = 200;
 
 /** Every rate version linked to ANY real Procurement vendor identity (ADR-0020), for one tenant -- the Procurement-side rate directory (COM-149's own app.v_active_vendor_rates browses all rates tenant-wide, approved-only; this is the Procurement-scoped, all-statuses equivalent). Bounded to the most recent PROCUREMENT_RATE_LIST_LIMIT rows. */
-export async function listProcurementLinkedVendorRateVersions(client: ProcurementRateQueryTableClient, tenantId: string): Promise<Record<string, unknown>[]> {
-  const { data, error } = await client
-    .from("vendor_rate_versions_directory")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .not("vendor_master_id", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(PROCUREMENT_RATE_LIST_LIMIT);
+export async function listProcurementLinkedVendorRateVersions(client: ProcurementRateQueryTableClient, tenantId: string, actorAuthUserId: string): Promise<Record<string, unknown>[]> {
+  const { data, error } = await client.rpc("list_procurement_linked_vendor_rate_versions", {
+    p_tenant_id: tenantId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: PROCUREMENT_RATE_LIST_LIMIT,
+  });
   if (error) {
     throw new ProcurementRateQueryError(error.message);
   }
@@ -66,14 +63,14 @@ export async function listVendorRateVersionsForVendor(
   client: ProcurementRateQueryTableClient,
   tenantId: string,
   vendorMasterId: string,
+  actorAuthUserId: string,
 ): Promise<Record<string, unknown>[]> {
-  const { data, error } = await client
-    .from("vendor_rate_versions_directory")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("vendor_master_id", vendorMasterId)
-    .order("created_at", { ascending: false })
-    .limit(PROCUREMENT_RATE_LIST_LIMIT);
+  const { data, error } = await client.rpc("list_vendor_rate_versions_for_vendor", {
+    p_tenant_id: tenantId,
+    p_vendor_master_id: vendorMasterId,
+    p_actor_auth_user_id: actorAuthUserId,
+    p_limit: PROCUREMENT_RATE_LIST_LIMIT,
+  });
   if (error) {
     throw new ProcurementRateQueryError(error.message);
   }

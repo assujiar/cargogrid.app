@@ -4,12 +4,13 @@
  * risk_dashboard_rows` RPCs (all SECURITY DEFINER, explicit `p_tenant_id`/
  * `p_actor_auth_user_id`, `evaluate_permission` first -- mirrors server/queries/
  * vendor-performance.ts's own "this file calls `.rpc(...)`, never `.from(...)`, on a
- * base table" convention exactly), plus the metric-definition catalogue (a plain
- * `.from()` read -- app.procurement_metric_definitions carries no RLS and no masked
- * column, mirroring server/queries/report.ts's own identical `.from("report_types")`
- * shape) and saved views (RPC, owner-scoped). Every summary RPC also carries the same
- * explicit query-budget timeout server/queries/finance-dashboard.ts (FIN-213)
- * established (RPD-014).
+ * base table" convention exactly), plus the metric-definition catalogue
+ * (`app.list_active_procurement_metric_definitions`, RPC, SECURITY INVOKER, zero
+ * actor parameter -- app.procurement_metric_definitions carries no RLS and no masked
+ * column, mirroring app.list_milestone_codes' own zero-actor-param precedent; O1
+ * remediation, cluster 5) and saved views (RPC, owner-scoped). Every summary RPC
+ * also carries the same explicit query-budget timeout server/queries/
+ * finance-dashboard.ts (FIN-213) established (RPD-014).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -41,7 +42,7 @@ import {
   type ProcurementDashboardPerformanceSummaryRow,
 } from "../contracts/procurement-dashboard/procurement-dashboard.ts";
 
-export type ProcurementDashboardQueryClient = Pick<SupabaseClient, "rpc" | "from">;
+export type ProcurementDashboardQueryClient = Pick<SupabaseClient, "rpc">;
 
 export class ProcurementDashboardQueryError extends Error {
   constructor(message: string) {
@@ -107,7 +108,7 @@ export type ProcurementDashboardWindowFilter = ProcurementDashboardScopeFilter &
 
 /** Broadly readable, non-tenant-scoped, non-sensitive platform metadata (mirrors app.report_types / listActiveReportTypes) -- never masked, never gated on a PRC permission. */
 export async function listActiveProcurementMetricDefinitions(client: ProcurementDashboardQueryClient): Promise<ProcurementMetricDefinition[]> {
-  const { data, error } = await client.from("procurement_metric_definitions").select("*").eq("is_current", true).eq("status", "active").order("metric_group", { ascending: true });
+  const { data, error } = await client.rpc("list_active_procurement_metric_definitions");
   if (error) {
     throw new ProcurementDashboardQueryError(error.message);
   }

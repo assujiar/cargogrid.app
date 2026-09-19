@@ -80,6 +80,10 @@ export const GENERIC_JOB_TYPES = [
   "loyalty_points_posting_sweep",
   // ISS-2026-129 item 2: the tenant-configured recurring benefit-issuance sweep.
   "loyalty_benefit_issuance_sweep",
+  // CG-AUDIT-2026-09-02 A6: enqueued directly by upload-time application code
+  // (never via app.dispatch_event_as_job), claimed by
+  // scripts/jobs/malware-scan-worker.ts.
+  "malware_scan",
 ] as const;
 export const GenericJobTypeSchema = z.enum(GENERIC_JOB_TYPES);
 export type GenericJobType = z.infer<typeof GenericJobTypeSchema>;

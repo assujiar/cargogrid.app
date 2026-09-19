@@ -1,5 +1,6 @@
 import { TruncationNotice } from "../../../../../components/ui/truncation-notice.tsx";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { resolveCommercialAccessForRequest } from "../../../../../lib/portal/resolve-commercial-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
 import { listAccounts, AccountQueryError } from "../../../../../server/queries/account.ts";
@@ -28,7 +29,7 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
   let truncated = false;
   let loadFailed = false;
   try {
-    const page = await listAccounts(supabase, access.tenant.id);
+    const page = await listAccounts(supabase, access.tenant.id, access.authUserId);
     accounts = page.rows;
     truncated = page.truncated;
   } catch (error) {
@@ -70,7 +71,12 @@ export default async function AccountsPage({ params }: { params: Promise<{ tenan
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-neutral-900">Accounts</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="text-xl font-semibold text-neutral-900">Accounts</h1>
+        <Link href={`/${tenantSlug}/commercial/imports/customers`} className="text-sm text-primary underline">
+          Bulk import from CSV
+        </Link>
+      </div>
 
       {loadFailed ? (
         <ErrorState description="Something went wrong loading accounts. Please try again." />

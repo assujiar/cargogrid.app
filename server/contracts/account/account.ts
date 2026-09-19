@@ -99,6 +99,12 @@ export const GetAccountConversionReadinessInputSchema = z.object({
 });
 export type GetAccountConversionReadinessInput = z.input<typeof GetAccountConversionReadinessInputSchema>;
 
+export const GetAccountConversionForQuotationInputSchema = z.object({
+  quotationId: z.string().uuid(),
+  actorAuthUserId: z.string().uuid(),
+});
+export type GetAccountConversionForQuotationInput = z.input<typeof GetAccountConversionForQuotationInputSchema>;
+
 /** targetAccountId set = the alternative "link to existing" flow (after duplicate review); null = create a brand-new account from the source snapshot. parentAccountId is independent of targetAccountId -- only meaningful on the create-new path. */
 export const ConvertQuotationToAccountInputSchema = z.object({
   quotationId: z.string().uuid(),

@@ -3,6 +3,7 @@ import { resolveHrisAccessForRequest } from "../../../../../../lib/portal/resolv
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { listEmployees, EmployeeQueryError } from "../../../../../../server/queries/employee.ts";
 import { listPositions, listPositionGrades, PositionQueryError } from "../../../../../../server/queries/position.ts";
+import { listOrgUnits, toOrgHierarchyRpcClient, OrgHierarchyQueryError } from "../../../../../../server/queries/org-hierarchy.ts";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 import { PermissionState } from "../../../../../../components/ui/permission-state.tsx";
 import { BulkReassignPanel } from "./bulk-reassign-panel.tsx";
@@ -48,9 +49,8 @@ export default async function BulkReassignPage({
       listPositions(supabase, access.tenant.id, access.authUserId, { statusFilter: "active", limit: 200 }),
       listPositionGrades(supabase, access.tenant.id, access.authUserId, { statusFilter: "active" }),
     ]);
-    const { data: orgUnitRows, error: orgUnitError } = await supabase.from("org_units").select("id, name").eq("tenant_id", access.tenant.id).eq("unit_type", "department").eq("status", "active").order("name");
-    if (orgUnitError) throw new PositionQueryError(orgUnitError.message);
-    departments = (orgUnitRows ?? []).map((row) => ({ id: String(row.id), name: String(row.name) }));
+    const orgUnits = await listOrgUnits(toOrgHierarchyRpcClient(supabase), access.tenant.id, { statusFilter: "active", unitTypeFilter: "department" });
+    departments = orgUnits.map((unit) => ({ id: unit.id, name: unit.name }));
 
     if (departmentOrgUnitId) {
       employees = await listEmployees(supabase, access.tenant.id, access.authUserId, { statusFilter: "active", departmentOrgUnitId, limit: 200 });
@@ -59,6 +59,8 @@ export default async function BulkReassignPage({
     if (error instanceof EmployeeQueryError || error instanceof PositionQueryError) {
       if (error.message.startsWith("insufficient_authority")) denied = true;
       else loadFailed = true;
+    } else if (error instanceof OrgHierarchyQueryError) {
+      loadFailed = true;
     } else {
       throw error;
     }

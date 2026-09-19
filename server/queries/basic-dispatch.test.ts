@@ -39,12 +39,13 @@ const BASE_ROW = {
   created_by: "rep",
   created_at: "2026-07-27T00:00:00.000Z",
   updated_at: "2026-07-27T00:00:00.000Z",
+  leg_network_status: null,
   is_ready: true,
   blockers: [],
 };
 
 function fakeRpcClient(response: { data: unknown; error: { message: string } | null }): BasicDispatchQueryClient {
-  return { rpc: () => Promise.resolve(response), from: () => ({}) } as unknown as BasicDispatchQueryClient;
+  return { rpc: () => Promise.resolve(response) } as unknown as BasicDispatchQueryClient;
 }
 
 describe("getDispatchReadiness", () => {
@@ -70,30 +71,34 @@ describe("getDispatchReadiness", () => {
   });
 });
 
-function fakeTableClient(
-  response: { data: unknown; error: { message: string } | null; count?: number },
-  captureRange?: (from: number, to: number) => void,
+/**
+ * CG-AUDIT-2026-09-02 O1 cluster 3 batch 1: listDispatchReadyQueue issues two separate
+ * RPC calls -- count_dispatch_ready_shipment_orders (a bare scalar) and
+ * list_dispatch_ready_queue (a row set) -- preserving F5's own count/data split intent.
+ * This mock routes by function name.
+ */
+function fakeRpcRoutedClient(
+  countResponse: { data: unknown; error: { message: string } | null },
+  dataResponse: { data: unknown; error: { message: string } | null },
+  captureArgs?: (fn: string, args: Record<string, unknown>) => void,
 ): BasicDispatchQueryClient {
-  function chainNode(): unknown {
-    return {
-      select: () => chainNode(),
-      eq: () => chainNode(),
-      order: () => chainNode(),
-      range: (from: number, to: number) => {
-        captureRange?.(from, to);
-        return Promise.resolve(response);
-      },
-    };
-  }
-  return { from: () => chainNode(), rpc: () => Promise.resolve(response) } as unknown as BasicDispatchQueryClient;
+  return {
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      captureArgs?.(fn, args);
+      return Promise.resolve(fn === "count_dispatch_ready_shipment_orders" ? countResponse : dataResponse);
+    },
+  } as unknown as BasicDispatchQueryClient;
 }
 
 describe("listDispatchReadyQueue", () => {
-  test("bounds the query to one 50-row default page and maps every row", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [BASE_ROW], error: null, count: 1 }, (from, to) => ranges.push([from, to]));
-    const result = await listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 });
-    assert.deepEqual(ranges[0], [0, 49]);
+  test("passes the default page/pageSize through and maps every row", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcRoutedClient({ data: 1, error: null }, { data: [BASE_ROW], error: null }, (fn, args) => calls.push({ fn, args }));
+    const result = await listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 });
+    const listCall = calls.find((c) => c.fn === "list_dispatch_ready_queue");
+    assert.equal(listCall?.args.p_page, 1);
+    assert.equal(listCall?.args.p_page_size, 50);
+    assert.equal(listCall?.args.p_actor_auth_user_id, ACTOR_ID);
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0]?.isReady, true);
     assert.equal(result.totalCount, 1);
@@ -101,17 +106,27 @@ describe("listDispatchReadyQueue", () => {
     assert.equal(result.pageSize, 50);
   });
 
-  test("advances the page offset correctly for page 2 and clamps an oversized pageSize", async () => {
-    const ranges: [number, number][] = [];
-    const client = fakeTableClient({ data: [], error: null, count: 0 }, (from, to) => ranges.push([from, to]));
-    await listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 2, pageSize: 500 });
-    assert.deepEqual(ranges[0], [100, 199]);
+  test("clamps an oversized pageSize and advances page 2's p_page", async () => {
+    const calls: { fn: string; args: Record<string, unknown> }[] = [];
+    const client = fakeRpcRoutedClient({ data: 0, error: null }, { data: [], error: null }, (fn, args) => calls.push({ fn, args }));
+    await listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 2, pageSize: 500 });
+    const listCall = calls.find((c) => c.fn === "list_dispatch_ready_queue");
+    assert.equal(listCall?.args.p_page, 2);
+    assert.equal(listCall?.args.p_page_size, 100);
   });
 
-  test("wraps a query error", async () => {
-    const client = fakeTableClient({ data: null, error: { message: "boom" } });
+  test("wraps an error from the count RPC", async () => {
+    const client = fakeRpcRoutedClient({ data: null, error: { message: "boom" } }, { data: [], error: null });
     await assert.rejects(
-      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, page: 1 }),
+      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 }),
+      (err: unknown) => err instanceof BasicDispatchQueryError,
+    );
+  });
+
+  test("wraps an error from the data RPC", async () => {
+    const client = fakeRpcRoutedClient({ data: 0, error: null }, { data: null, error: { message: "boom" } });
+    await assert.rejects(
+      () => listDispatchReadyQueue(client, { tenantId: TENANT_ID, actorAuthUserId: ACTOR_ID, page: 1 }),
       (err: unknown) => err instanceof BasicDispatchQueryError,
     );
   });

@@ -8,7 +8,7 @@ import { Input } from "../../../../../components/forms/input.tsx";
 import { Select } from "../../../../../components/forms/select.tsx";
 import { Textarea } from "../../../../../components/forms/textarea.tsx";
 import { ValidationMessage } from "../../../../../components/forms/validation-message.tsx";
-import type { CustomerTicketActionState, CustomerTicketLinkSearchActionState, CustomerTicketPortalLinkSearchActionState } from "../actions.ts";
+import type { CustomerTicketActionState, CustomerTicketLinkSearchActionState, CustomerTicketPortalLinkSearchActionState, CustomerTicketAttachmentDownloadState } from "../actions.ts";
 import type {
   CustomerTicketDetail,
   CustomerTicketMessageRow,
@@ -24,6 +24,12 @@ import type {
 import { TICKET_LINK_CUSTOMER_SAFE_ENTITY_TYPES, TICKET_LINK_RELATIONSHIPS, TICKET_PORTAL_LINK_ENTITY_TYPES } from "../../../../../server/contracts/ticketing/ticketing.ts";
 
 const INITIAL_STATE: CustomerTicketActionState = { error: null };
+const INITIAL_DOWNLOAD_STATE: CustomerTicketAttachmentDownloadState = { error: null, download: null };
+
+const ATTACHMENT_ACCESS_RESULT_TONE: Record<"granted" | "denied", "success" | "danger"> = {
+  granted: "success",
+  denied: "danger",
+};
 
 const CUSTOMER_LINK_ENTITY_TYPE_LABELS: Record<TicketLinkEntityType, string> = {
   shipment: "Shipment",
@@ -405,7 +411,13 @@ function nextCustomerActions(status: TicketStatus): readonly { toStatus: TicketS
 
 type BoundAction = (prevState: CustomerTicketActionState, formData: FormData) => Promise<CustomerTicketActionState>;
 
-function MessageBubble({ message }: { message: CustomerTicketMessageRow }) {
+function MessageBubble({
+  message,
+  downloadAction,
+}: {
+  message: CustomerTicketMessageRow;
+  downloadAction: (fileId: string) => (prevState: CustomerTicketAttachmentDownloadState, formData: FormData) => Promise<CustomerTicketAttachmentDownloadState>;
+}) {
   return (
     <li className="flex flex-col gap-1 rounded-md border border-neutral-200 p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
@@ -413,6 +425,59 @@ function MessageBubble({ message }: { message: CustomerTicketMessageRow }) {
         <span>{new Date(message.createdAt).toLocaleString()}</span>
       </div>
       <p className="whitespace-pre-wrap text-sm text-neutral-900">{message.body}</p>
+      {message.attachmentFileIds.length > 0 ? (
+        <ul className="flex flex-col gap-1">
+          {message.attachmentFileIds.map((fileId, index) => (
+            <AttachmentRow key={fileId} index={index} downloadAction={downloadAction(fileId)} />
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * CG-AUDIT-2026-09-02 A6: no read RPC in this app projects an attachment's
+ * original filename today (list_customer_ticket_messages/list_ticket_messages
+ * return attachment_file_ids only) -- see this feature's own migration
+ * header for why widening either hardened, privacy-critical function was
+ * out of scope for this slice. "Attachment N" is a placeholder for the
+ * button only; once a download link is minted, the RPC's own real
+ * original_filename appears in the link text, mirroring the staff-facing
+ * ticket-detail-panel.tsx's own established pattern exactly.
+ */
+function AttachmentRow({
+  index,
+  downloadAction,
+}: {
+  index: number;
+  downloadAction: (prevState: CustomerTicketAttachmentDownloadState, formData: FormData) => Promise<CustomerTicketAttachmentDownloadState>;
+}) {
+  const [state, formAction, pending] = useActionState(downloadAction, INITIAL_DOWNLOAD_STATE);
+  return (
+    <li className="flex flex-col gap-1">
+      <form action={formAction} className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-neutral-500">Attachment {index + 1}</span>
+        <Button type="submit" variant="secondary" loading={pending} loadingLabel="Creating link…">
+          Get download link
+        </Button>
+      </form>
+      {state.download ? (
+        state.download.accessResult === "granted" && state.download.signedUrl ? (
+          <p className="text-xs">
+            <a href={state.download.signedUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline">
+              Open {state.download.originalFilename ?? "file"}
+            </a>{" "}
+            <span className="text-neutral-500">— link expires in 5 minutes</span>
+          </p>
+        ) : (
+          <p role="status" className="flex items-center gap-2 text-xs">
+            <StatusBadge tone={ATTACHMENT_ACCESS_RESULT_TONE[state.download.accessResult]} label="access denied" />
+            {state.download.accessReason ?? "no reason recorded"}
+          </p>
+        )
+      ) : null}
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
     </li>
   );
 }
@@ -485,6 +550,7 @@ export function CustomerTicketDetailPanel({
   detail,
   messages,
   replyAction,
+  downloadAttachmentAction,
   transitionAction,
   slaStatus,
   escalationStatus,
@@ -500,6 +566,7 @@ export function CustomerTicketDetailPanel({
   detail: CustomerTicketDetail;
   messages: readonly CustomerTicketMessageRow[];
   replyAction: BoundAction;
+  downloadAttachmentAction: (fileId: string) => (prevState: CustomerTicketAttachmentDownloadState, formData: FormData) => Promise<CustomerTicketAttachmentDownloadState>;
   transitionAction: (toStatus: TicketStatus) => BoundAction;
   slaStatus: TicketSlaStatusForRequesterRow | null;
   escalationStatus: TicketEscalationStatusForRequesterRow | null;
@@ -562,7 +629,7 @@ export function CustomerTicketDetailPanel({
         <h2 className="text-sm font-semibold text-neutral-900">Conversation</h2>
         <ul className="flex flex-col gap-2">
           {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
+            <MessageBubble key={m.id} message={m} downloadAction={downloadAttachmentAction} />
           ))}
         </ul>
         {detail.status !== "cancelled" ? <ReplyForm replyAction={replyAction} /> : <p className="text-xs text-neutral-500">This ticket is cancelled and can no longer receive new messages.</p>}
