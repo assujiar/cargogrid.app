@@ -29,6 +29,20 @@ function RenameForm({ action }: { action: BoundAction }) {
   );
 }
 
+/** CG-AUDIT-2026-09-02 C1: the legal entity's own NPWP (or other jurisdiction tax ID) -- unvalidated free text, mirrors app.accounts.tax_id's own precedent. Printed as "Seller Tax ID" on the invoice/purchase-order PDFs once set here. */
+function TaxIdForm({ action, currentTaxId }: { action: BoundAction; currentTaxId: string | null }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  return (
+    <form action={formAction} className="flex items-center gap-1">
+      <Input id="newTaxId" name="newTaxId" type="text" placeholder="Tax ID (NPWP)" defaultValue={currentTaxId ?? ""} className="w-32" />
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="…">
+        Save
+      </Button>
+      {state.error ? <ValidationMessage id="tax-id-error">{state.error}</ValidationMessage> : null}
+    </form>
+  );
+}
+
 function MoveForm({ action, parentOptions }: { action: BoundAction; parentOptions: readonly OrgUnit[] }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
   return (
@@ -114,12 +128,14 @@ export function OrgHierarchyPanel({
   renameActionFor,
   moveActionFor,
   setStatusActionFor,
+  setTaxIdActionFor,
 }: {
   orgUnits: readonly OrgUnit[];
   createAction: BoundAction;
   renameActionFor: (orgUnitId: string, expectedVersion: number) => BoundAction;
   moveActionFor: (orgUnitId: string, expectedVersion: number) => BoundAction;
   setStatusActionFor: (orgUnitId: string, expectedVersion: number, nextStatus: "active" | "inactive") => BoundAction;
+  setTaxIdActionFor: (orgUnitId: string, expectedVersion: number) => BoundAction;
 }) {
   const namesById = new Map(orgUnits.map((unit) => [unit.id, unit.name]));
 
@@ -138,6 +154,7 @@ export function OrgHierarchyPanel({
                   <th className="pb-1">Type</th>
                   <th className="pb-1">Parent</th>
                   <th className="pb-1">Status</th>
+                  <th className="pb-1">Tax ID</th>
                   <th className="pb-1">Rename</th>
                   <th className="pb-1">Move</th>
                   <th className="pb-1"></th>
@@ -153,6 +170,9 @@ export function OrgHierarchyPanel({
                       <td className="py-2 pr-2">{unit.parentId ? (namesById.get(unit.parentId) ?? "—") : "—"}</td>
                       <td className="py-2 pr-2">
                         <StatusBadge tone={unit.status === "active" ? "success" : "neutral"} label={unit.status} />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <TaxIdForm action={setTaxIdActionFor(unit.id, unit.recordVersion)} currentTaxId={unit.taxId} />
                       </td>
                       <td className="py-2 pr-2">
                         <RenameForm action={renameActionFor(unit.id, unit.recordVersion)} />

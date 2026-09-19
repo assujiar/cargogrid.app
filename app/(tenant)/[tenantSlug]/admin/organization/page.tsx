@@ -5,7 +5,7 @@ import { listOrgUnitsFull, toOrgHierarchyRpcClient, OrgHierarchyQueryError } fro
 import type { OrgUnit } from "../../../../../server/contracts/org-hierarchy/org-hierarchy.ts";
 import { ErrorState } from "../../../../../components/ui/error-state.tsx";
 import { OrgHierarchyPanel } from "./org-hierarchy-panel.tsx";
-import { createOrgUnitAction, renameOrgUnitAction, moveOrgUnitAction, setOrgUnitStatusAction } from "./actions.ts";
+import { createOrgUnitAction, renameOrgUnitAction, moveOrgUnitAction, setOrgUnitStatusAction, setOrgUnitTaxIdAction } from "./actions.ts";
 
 /**
  * Org-unit master-data entry (audit remediation A2;
@@ -57,6 +57,7 @@ export default async function TenantAdminOrganizationPage({ params }: { params: 
         renameActionFor={(orgUnitId, expectedVersion) => renameOrgUnitAction.bind(null, tenantSlug, orgUnitId, expectedVersion)}
         moveActionFor={(orgUnitId, expectedVersion) => moveOrgUnitAction.bind(null, tenantSlug, orgUnitId, expectedVersion)}
         setStatusActionFor={(orgUnitId, expectedVersion, nextStatus) => setOrgUnitStatusAction.bind(null, tenantSlug, orgUnitId, expectedVersion, nextStatus)}
+        setTaxIdActionFor={(orgUnitId, expectedVersion) => setOrgUnitTaxIdAction.bind(null, tenantSlug, orgUnitId, expectedVersion)}
       />
     </div>
   );

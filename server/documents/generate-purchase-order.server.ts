@@ -18,6 +18,7 @@ import { createElement } from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getPurchaseOrder, listPurchaseOrderLines, PurchaseOrderQueryError, type PurchaseOrderQueryRpcClient } from "../queries/purchase-order.ts";
 import { getVendorProfile, listVendorAddresses, VendorProfileQueryError, type VendorProfileQueryClient } from "../queries/vendor-profile.ts";
+import { listOrgUnitsFull, toOrgHierarchyRpcClient, OrgHierarchyQueryError } from "../queries/org-hierarchy.ts";
 import { PurchaseOrderDocument, type PurchaseOrderData, type PurchaseOrderLineData } from "./purchase-order-document.tsx";
 import type { PurchaseOrder } from "../contracts/purchase-order/purchase-order.ts";
 import type { VendorAddress } from "../contracts/vendor-profile/vendor-profile.ts";
@@ -44,12 +45,30 @@ function pickVendorAddress(addresses: readonly VendorAddress[]): string | null {
   return [preferred.street, preferred.city, preferred.province, preferred.postalCode, preferred.country].filter((part) => part && part.length > 0).join(", ");
 }
 
+/**
+ * CG-AUDIT-2026-09-02 C1: the PO's own owning org unit's tax_id (app.
+ * org_units), printed as "Seller Tax ID" -- never blocks PO generation on
+ * failure (mirrors generate-invoice.server.ts's own identical helper).
+ */
+async function resolveSellerTaxId(client: PurchaseOrderGenerationClient, tenantId: string, orgUnitId: string | null): Promise<string | null> {
+  if (!orgUnitId) return null;
+  try {
+    const orgUnits = await listOrgUnitsFull(toOrgHierarchyRpcClient(client), tenantId);
+    return orgUnits.find((unit) => unit.id === orgUnitId)?.taxId ?? null;
+  } catch (error) {
+    if (error instanceof OrgHierarchyQueryError) return null;
+    throw error;
+  }
+}
+
 async function buildPurchaseOrderData(client: PurchaseOrderGenerationClient, tenantLabel: string, purchaseOrder: PurchaseOrder, lines: readonly PurchaseOrderLineData[], actorAuthUserId: string): Promise<PurchaseOrderData> {
   const vendor = await getVendorProfile(client, purchaseOrder.vendorMasterId, actorAuthUserId);
   const addresses = await listVendorAddresses(client, purchaseOrder.vendorMasterId, actorAuthUserId);
+  const sellerTaxId = await resolveSellerTaxId(client, purchaseOrder.tenantId, purchaseOrder.orgUnitId);
 
   return {
     tenantLabel,
+    sellerTaxId,
     poNumber: purchaseOrder.poNumber,
     version: purchaseOrder.version,
     printedAt: formatDate(new Date().toISOString()) ?? "",

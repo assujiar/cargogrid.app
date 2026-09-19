@@ -87,7 +87,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
 | C3 | Tax console shows 11% as "0.11%" — display bug only, calculator is correct | `CODE` | **DONE** (`57fc8fe`) | trivial, high-value |
-| C1 | No NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | compliance-domain modeling, needs a tax SME |
+| C1 | No NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all | `CODE-BIG` / `PRODUCT` | **PARTIAL** | NPWP-as-master-data-field closed -- `app.org_units.tax_id` plus a "Seller Tax ID" line on the A7 invoice/purchase-order PDFs, needing zero tax expertise (mirrors `app.accounts.tax_id`'s own already-unvalidated-free-text precedent). Faktur pajak/NSFP/e-Faktur generation stays DEFERRED_LARGE -- confirmed absent code-wide, genuinely needs a tax SME |
 | C2 | PPh 21 uncomputable — no PTKP/bracket/NPWP columns | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | same |
 
 ## A — Operability
@@ -4452,3 +4452,90 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   both digests updated -- one new migration file, zero new db-test files,
   one existing db-test file gaining real new coverage), and a real `next
   build`.
+- 2026-09-18 — C1 (bounded core) closed via a dedicated research pass, the
+  same "verify before trusting a deferred label" discipline that found
+  B7's/B2a's/E6's/B4's/A2b's/E3's own real bounded cores. The original
+  finding ("No NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at
+  all") was carried as one undivided `DEFERRED_LARGE` item ("compliance-
+  domain modeling, needs a tax SME") and turned out to bundle two very
+  different kinds of work.
+  Faktur pajak/NSFP/e-Faktur generation is confirmed absent code-wide
+  (zero hits for "faktur"/"NSFP"/"efaktur" anywhere in `server/`, `app/`,
+  `supabase/migrations/`, `scripts/` beyond comments already disclosing
+  the gap) and genuinely requires real tax-SME judgment (NSFP government-
+  allocated numbering, DJP e-Faktur export format) -- the identical class
+  C2's own PPh21 work already correctly defers, mirrored by `app.payroll_
+  components`' own "EXAMPLE FIXTURE VERSIONS ARE NOT VERIFIED RATES"
+  fixture comment. Stays `DEFERRED_LARGE`, untouched by this migration.
+  NPWP-as-a-data-field, by contrast, needed zero tax expertise -- exactly
+  as bounded as any other master-data identifier column. `app.accounts.
+  tax_id` has existed since `20260724290000_create_commercial_customer_
+  account_conversion.sql` as unvalidated free text (no format/regex
+  check), used today for every Commercial customer/vendor account and
+  already correctly printed as "Bill to Tax ID" on this session's own A7
+  invoice PDF. But the TENANT'S OWN tax ID -- the "Seller Tax ID" every
+  outgoing invoice/purchase order needs to print -- was never captured
+  anywhere: `app.tenants` (Supreme-Admin-only control plane, no tenant
+  self-service) and `app.org_units` (PLT-109, the tenant-scoped legal-
+  entity hierarchy `app.finance_invoices.company_id`/`app.purchase_
+  orders.org_unit_id` already reference) both had no npwp/tax_id column
+  at all, confirmed by a full-migration-history grep of every `ALTER` on
+  either table. The invoice PDF genuinely had a blank line where "Seller
+  Tax ID" should print -- a real, visible, currently-shipped defect,
+  independent of whether full e-Faktur compliance is ever built. `admin/
+  tax-settings/` (RPD-016) already establishes the right posture for this
+  class of gap in this same codebase: infrastructure to hold a number an
+  SME/the tenant already knows, stored as-is, no validation logic
+  invented ahead of a real requirement.
+  Closed: new migration `20260919010000_c1_npwp_org_unit_tax_id.sql` adds
+  a nullable `tax_id` column to `app.org_units` (unvalidated free text,
+  mirroring `app.accounts.tax_id`'s own precedent exactly) plus `app.
+  set_org_unit_tax_id`, mirroring `app.rename_org_unit`'s own exact shape
+  (service_role-only, no authority check in its own body -- consistent
+  with every sibling in this RPC family, whose real authority gate is
+  `lib/portal/resolve-tenant-admin-access.server.ts` at the Server Action
+  layer) -- optimistic concurrency, a new `org_unit_history` `tax_id_
+  change` event (the history table's own `event_type` CHECK widened, plus
+  new `before_tax_id`/`after_tax_id` columns). `app.list_org_units`
+  already returns `select *` (full-row, never narrowed) so the new column
+  flows through automatically with zero RPC signature change there.
+  The TS/UI blast radius: `server/contracts/org-hierarchy/org-hierarchy.
+  ts` (`taxId` field, `SetOrgUnitTaxIdInputSchema`), `server/mutations/
+  org-hierarchy.ts` (`setOrgUnitTaxId`) -- `admin/organization/` (audit
+  remediation A2's own org-unit master-data UI) gains a "Tax ID" column
+  with an inline edit form, mirroring the existing Rename column's own
+  shape exactly. `server/documents/generate-invoice.server.ts` and
+  `generate-purchase-order.server.ts` (both A7 printables that already
+  reference an org unit via `company_id`/`orgUnitId`) now resolve that
+  org unit's own `tax_id` via the already-existing, already-
+  `authenticated`-callable `app.list_org_units` and print it as "Seller
+  Tax ID" -- no new read RPC needed, reused rather than adding a narrower
+  get-by-id RPC purely for this one lookup; a missing/unresolvable org
+  unit degrades to no line at all, never blocking document generation
+  (the same "best available, never an error" posture `pickBillToAddress`/
+  `pickVendorAddress` already establish for their own differently-shaped
+  sources).
+  New db-test coverage: `scripts/db-tests/org-hierarchy.sql` gained a
+  dedicated test block proving `set_org_unit_tax_id` sets a real value,
+  records a `tax_id_change` history event in both directions (null to a
+  value, and back to null), rejects a stale `expected_version`, and fails
+  cleanly for a non-existent node. Caught on the first quick-iteration
+  run, fixed before it ever reached the full suite: `public-api-wrapper-
+  regression.sql`'s own zero-tolerance grant-set check found the new
+  `app.*` function was missing its own explicit `revoke ... from public`
+  (a fresh `CREATE FUNCTION` inherits PostgreSQL's own PUBLIC-execute
+  default; this repository's own per-migration convention since PLT-118
+  requires an explicit revoke, which this migration's first draft
+  omitted for the `app.*` side while correctly including it for the
+  `public.*` wrapper).
+  Still deferred, correctly out of this bounded core's own scope: faktur
+  pajak/NSFP/e-Faktur generation and C2's own PPh21 PTKP/bracket
+  computation, both genuinely requiring real tax-SME judgment this
+  session cannot make unilaterally. C1 is PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6167/6167,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`), `git:check-paths`, `security:check`,
+  `release:check-freeze` (HUNDRED-AND-SIXTY-FIRST PASS, both digests
+  updated -- one new migration file, zero new db-test files, one existing
+  db-test file gaining real new coverage), and a real `next build`.

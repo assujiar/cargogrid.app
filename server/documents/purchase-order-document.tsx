@@ -31,6 +31,7 @@ export interface PurchaseOrderLineData {
 
 export interface PurchaseOrderData {
   readonly tenantLabel: string;
+  readonly sellerTaxId: string | null;
   readonly poNumber: string;
   readonly version: number;
   readonly printedAt: string;
@@ -59,6 +60,7 @@ const styles = StyleSheet.create({
   page: { padding: 32, fontSize: 9, fontFamily: "Helvetica", color: "#111827" },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, borderBottom: "1pt solid #111827", paddingBottom: 8 },
   tenantLabel: { fontSize: 12, fontWeight: 700 },
+  sellerMeta: { fontSize: 9, color: "#4b5563", marginTop: 2 },
   title: { fontSize: 16, fontWeight: 700, textAlign: "right" },
   meta: { fontSize: 9, textAlign: "right", color: "#4b5563" },
   section: { marginBottom: 10 },
@@ -96,7 +98,10 @@ export function PurchaseOrderDocument({ data }: { data: PurchaseOrderData }) {
     <Document title={`Purchase Order ${data.poNumber}`}>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
-          <Text style={styles.tenantLabel}>{data.tenantLabel}</Text>
+          <View>
+            <Text style={styles.tenantLabel}>{data.tenantLabel}</Text>
+            {data.sellerTaxId ? <Text style={styles.sellerMeta}>Tax ID: {data.sellerTaxId}</Text> : null}
+          </View>
           <View>
             <Text style={styles.title}>PURCHASE ORDER</Text>
             <Text style={styles.meta}>No. {data.poNumber} (v{data.version})</Text>

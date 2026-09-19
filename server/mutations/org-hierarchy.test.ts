@@ -5,6 +5,7 @@ import {
   moveOrgUnit,
   renameOrgUnit,
   setOrgUnitStatus,
+  setOrgUnitTaxId,
   OrgHierarchyMutationError,
   type OrgHierarchyRpcClient,
 } from "./org-hierarchy.ts";
@@ -135,6 +136,36 @@ describe("setOrgUnitStatus", () => {
       (err: unknown) => {
         assert.ok(err instanceof OrgHierarchyMutationError);
         assert.equal(err.code, "mutation_failed");
+        return true;
+      },
+    );
+  });
+});
+
+describe("setOrgUnitTaxId", () => {
+  test("calls set_org_unit_tax_id with the exact snake_case params", async () => {
+    const client = fakeClient({ data: { ...ROW, tax_id: "01.234.567.8-901.000" }, error: null });
+    await setOrgUnitTaxId(client, { id: UNIT_ID, newTaxId: "01.234.567.8-901.000", expectedVersion: 1, requestedBy: "tester" });
+
+    assert.equal(client.calls[0]?.fn, "set_org_unit_tax_id");
+    assert.equal(client.calls[0]?.args.p_new_tax_id, "01.234.567.8-901.000");
+    assert.equal(client.calls[0]?.args.p_expected_version, 1);
+  });
+
+  test("passes null through to clear a previously-set tax ID", async () => {
+    const client = fakeClient({ data: { ...ROW, tax_id: null }, error: null });
+    await setOrgUnitTaxId(client, { id: UNIT_ID, newTaxId: null, expectedVersion: 1, requestedBy: "tester" });
+
+    assert.equal(client.calls[0]?.args.p_new_tax_id, null);
+  });
+
+  test("classifies a stale version into its typed error code", async () => {
+    const client = fakeClient({ data: null, error: { message: "org_unit_version_conflict: expected version 1, found 2" } });
+    await assert.rejects(
+      () => setOrgUnitTaxId(client, { id: UNIT_ID, newTaxId: "01.234.567.8-901.000", expectedVersion: 1, requestedBy: "tester" }),
+      (err: unknown) => {
+        assert.ok(err instanceof OrgHierarchyMutationError);
+        assert.equal(err.code, "org_unit_version_conflict");
         return true;
       },
     );

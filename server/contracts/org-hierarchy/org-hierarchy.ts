@@ -24,6 +24,7 @@ export const OrgUnitSchema = z.object({
   code: z.string(),
   name: z.string(),
   status: OrgUnitStatusSchema,
+  taxId: z.string().nullable(),
   path: z.array(z.string().uuid()),
   depth: z.number().int().nonnegative(),
   recordVersion: z.number().int().positive(),
@@ -67,6 +68,15 @@ export const SetOrgUnitStatusInputSchema = z.object({
 });
 export type SetOrgUnitStatusInput = z.infer<typeof SetOrgUnitStatusInputSchema>;
 
+/** CG-AUDIT-2026-09-02 C1: newTaxId is deliberately unvalidated free text -- mirrors app.accounts.tax_id's own precedent, no format/regex check invented ahead of a real requirement. null clears a previously-set tax_id. */
+export const SetOrgUnitTaxIdInputSchema = z.object({
+  id: z.string().uuid(),
+  newTaxId: z.string().nullable(),
+  expectedVersion: z.number().int().positive(),
+  requestedBy: z.string().min(1),
+});
+export type SetOrgUnitTaxIdInput = z.infer<typeof SetOrgUnitTaxIdInputSchema>;
+
 /** Maps a raw app.org_units row (snake_case) to this contract's camelCase shape. */
 export function parseOrgUnit(row: Record<string, unknown>): OrgUnit {
   return OrgUnitSchema.parse({
@@ -77,6 +87,7 @@ export function parseOrgUnit(row: Record<string, unknown>): OrgUnit {
     code: row.code,
     name: row.name,
     status: row.status,
+    taxId: row.tax_id ?? null,
     path: row.path,
     depth: row.depth,
     recordVersion: row.record_version,

@@ -20,6 +20,7 @@ import {
   moveOrgUnit,
   renameOrgUnit,
   setOrgUnitStatus,
+  setOrgUnitTaxId,
   toOrgHierarchyMutationRpcClient,
   OrgHierarchyMutationError,
 } from "../../../../../server/mutations/org-hierarchy.ts";
@@ -70,6 +71,26 @@ export async function renameOrgUnitAction(tenantSlug: string, orgUnitId: string,
     await renameOrgUnit(client, { id: orgUnitId, newName, expectedVersion, requestedBy: access.authUserId });
   } catch (error) {
     if (error instanceof OrgHierarchyMutationError) return { error: `Could not rename this org unit: ${error.message}` };
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/admin/organization`);
+  return OK;
+}
+
+/** CG-AUDIT-2026-09-02 C1: an empty submitted value clears a previously-set tax_id (null), not an empty string. */
+export async function setOrgUnitTaxIdAction(tenantSlug: string, orgUnitId: string, expectedVersion: number, _prevState: OrgUnitActionState, formData: FormData): Promise<OrgUnitActionState> {
+  const access = await requireAccess(tenantSlug);
+  if (!access) return NO_ACCESS;
+
+  const rawTaxId = String(formData.get("newTaxId") ?? "").trim();
+  const newTaxId = rawTaxId.length > 0 ? rawTaxId : null;
+
+  const client = toOrgHierarchyMutationRpcClient(createSupabaseServiceRoleClient());
+  try {
+    await setOrgUnitTaxId(client, { id: orgUnitId, newTaxId, expectedVersion, requestedBy: access.authUserId });
+  } catch (error) {
+    if (error instanceof OrgHierarchyMutationError) return { error: `Could not set this org unit's tax ID: ${error.message}` };
     throw error;
   }
 

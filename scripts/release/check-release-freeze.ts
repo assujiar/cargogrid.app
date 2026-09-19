@@ -5186,7 +5186,29 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "e0a9178d924ef30febb0e85ebcd9655a7e3aee53ced08a08069b1f6335da95c0",
+  migrationSetSha256: "05dc82d5b3681d54599d8484afcc8cfffd04242b7b216dd7646c05adf66b74fd",
+  // HUNDRED-AND-SIXTY-FIRST PASS: CG-AUDIT-2026-09-02 C1 (bounded core), "No
+  // NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all". One new
+  // migration (20260919010000_c1_npwp_org_unit_tax_id.sql, 559 files, +1). A
+  // dedicated research pass found faktur pajak/NSFP/e-Faktur generation
+  // (and C2's own PPh21 PTKP/bracket work) genuinely requires real tax-SME
+  // judgment and stays DEFERRED_LARGE, untouched -- but the "no NPWP on
+  // tenant/org unit" half needed zero tax expertise, exactly as bounded as
+  // any other master-data identifier column (app.accounts.tax_id already
+  // exists as unvalidated free text for customer/vendor accounts). app.
+  // org_units gains a nullable tax_id column (same unvalidated-free-text
+  // posture) plus app.set_org_unit_tax_id (mirrors app.rename_org_unit's
+  // exact shape -- service_role-only, optimistic concurrency, an org_unit_
+  // history 'tax_id_change' event) and an admin/organization/ UI edit form.
+  // This closes a real, currently-shipped defect: this session's own A7
+  // invoice/purchase-order PDFs already print the customer's tax ID
+  // correctly but had a blank line where "Seller Tax ID" should print --
+  // now sourced via the already-`authenticated`-callable app.list_org_units
+  // (no new read RPC needed), gracefully degrading to no line at all rather
+  // than blocking document generation when unset or unresolvable.
+  // History: e0a9178d924ef30febb0e85ebcd9655a7e3aee53ced08a08069b1f6335da95c0
+  // (558 files, HUNDRED-AND-SIXTIETH PASS).
+  //
   // HUNDRED-AND-SIXTIETH PASS: CG-AUDIT-2026-09-02 E3 (bounded core, piece 1
   // of 2), "No UoM on stock; free-text locations; warehouse billing has no
   // invoice FK". One new migration (20260918040000_e3_uom_normalization_
@@ -7518,7 +7540,22 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "5a4e73b44d38136d88e26ed09406dd264e8885bdbab2c2e26f5a8be4e283c286",
+  dbTestSetSha256: "8150cd1170c16b0cee4311adf53e2449f967489c47d335206f58c674c95a4fdd",
+  // HUNDRED-AND-SIXTY-FIRST PASS: same CG-AUDIT-2026-09-02 C1 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), one EXISTING file gained real new coverage:
+  // scripts/db-tests/org-hierarchy.sql, a new test block proving app.
+  // set_org_unit_tax_id sets a real tax_id, records a tax_id_change
+  // org_unit_history event (both directions -- null to a value, and back to
+  // null), rejects a stale expected_version, and fails cleanly for a
+  // non-existent node -- plus public-api-wrapper-regression.sql and
+  // rbac-enforcement.sql both re-run clean (the former caught a genuine
+  // grant-set mismatch on the first quick-iteration attempt -- the app.*
+  // function itself was missing its own explicit `revoke ... from public`,
+  // fixed before it ever reached the full suite).
+  // History: 5a4e73b44d38136d88e26ed09406dd264e8885bdbab2c2e26f5a8be4e283c286
+  // (279 files, HUNDRED-AND-SIXTIETH PASS).
+  //
   // HUNDRED-AND-SIXTIETH PASS: same CG-AUDIT-2026-09-02 E3 piece-1 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), one EXISTING file gained real new coverage:

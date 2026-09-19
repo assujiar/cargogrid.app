@@ -18,6 +18,7 @@ import { createElement } from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { getFinanceInvoice, getFinanceInvoiceLines, InvoiceQueryError, type InvoiceQueryRpcClient } from "../queries/invoice.ts";
 import { getAccountById, AccountQueryError, type AccountQueryClient } from "../queries/account.ts";
+import { listOrgUnitsFull, toOrgHierarchyRpcClient, OrgHierarchyQueryError } from "../queries/org-hierarchy.ts";
 import { InvoiceDocument, type InvoiceData, type InvoiceLineData } from "./invoice-document.tsx";
 import type { FinanceInvoice, FinanceInvoiceLine } from "../contracts/invoice/invoice.ts";
 
@@ -54,11 +55,31 @@ function toInvoiceLineData(line: FinanceInvoiceLine): InvoiceLineData {
   return { lineNo: line.lineNumber, lineType: line.lineType, description: line.description, amount: line.amount };
 }
 
+/**
+ * CG-AUDIT-2026-09-02 C1: the invoice's own issuing org unit's tax_id
+ * (app.org_units), printed as "Seller Tax ID" -- never blocks invoice
+ * generation on failure (a missing/unresolvable org unit degrades to null,
+ * the same "best available, never an error" posture pickBillToAddress/
+ * pickVendorAddress already establish for a differently-shaped source).
+ */
+async function resolveSellerTaxId(client: InvoiceGenerationClient, tenantId: string, companyId: string | null): Promise<string | null> {
+  if (!companyId) return null;
+  try {
+    const orgUnits = await listOrgUnitsFull(toOrgHierarchyRpcClient(client), tenantId);
+    return orgUnits.find((unit) => unit.id === companyId)?.taxId ?? null;
+  } catch (error) {
+    if (error instanceof OrgHierarchyQueryError) return null;
+    throw error;
+  }
+}
+
 async function buildInvoiceData(client: InvoiceGenerationClient, tenantLabel: string, invoice: FinanceInvoice, lines: readonly FinanceInvoiceLine[], actorAuthUserId: string): Promise<InvoiceData> {
   const account = await getAccountById(client, invoice.customerAccountId, actorAuthUserId);
+  const sellerTaxId = await resolveSellerTaxId(client, invoice.tenantId, invoice.companyId);
 
   return {
     tenantLabel,
+    sellerTaxId,
     invoiceNumber: invoice.invoiceNumber,
     printedAt: formatPrintedAt(new Date().toISOString()),
     status: invoice.status,

@@ -13,17 +13,19 @@ import {
   MoveOrgUnitInputSchema,
   RenameOrgUnitInputSchema,
   SetOrgUnitStatusInputSchema,
+  SetOrgUnitTaxIdInputSchema,
   parseOrgUnit,
   type CreateOrgUnitInput,
   type MoveOrgUnitInput,
   type OrgUnit,
   type RenameOrgUnitInput,
   type SetOrgUnitStatusInput,
+  type SetOrgUnitTaxIdInput,
 } from "../contracts/org-hierarchy/org-hierarchy.ts";
 
 export interface OrgHierarchyRpcClient {
   rpc(
-    fn: "create_org_unit" | "move_org_unit" | "rename_org_unit" | "set_org_unit_status",
+    fn: "create_org_unit" | "move_org_unit" | "rename_org_unit" | "set_org_unit_status" | "set_org_unit_tax_id",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
 }
@@ -72,7 +74,7 @@ function classifyError(message: string): OrgHierarchyMutationErrorCode {
 
 async function callAndParse(
   client: OrgHierarchyRpcClient,
-  fn: "create_org_unit" | "move_org_unit" | "rename_org_unit" | "set_org_unit_status",
+  fn: "create_org_unit" | "move_org_unit" | "rename_org_unit" | "set_org_unit_status" | "set_org_unit_tax_id",
   args: Record<string, unknown>,
 ): Promise<OrgUnit> {
   const { data, error } = await client.rpc(fn, args);
@@ -125,6 +127,16 @@ export async function setOrgUnitStatus(client: OrgHierarchyRpcClient, input: Set
     p_new_status: parsedInput.newStatus,
     p_expected_version: parsedInput.expectedVersion,
     p_reason: parsedInput.reason,
+    p_requested_by: parsedInput.requestedBy,
+  });
+}
+
+export async function setOrgUnitTaxId(client: OrgHierarchyRpcClient, input: SetOrgUnitTaxIdInput): Promise<OrgUnit> {
+  const parsedInput = SetOrgUnitTaxIdInputSchema.parse(input);
+  return callAndParse(client, "set_org_unit_tax_id", {
+    p_id: parsedInput.id,
+    p_new_tax_id: parsedInput.newTaxId,
+    p_expected_version: parsedInput.expectedVersion,
     p_requested_by: parsedInput.requestedBy,
   });
 }

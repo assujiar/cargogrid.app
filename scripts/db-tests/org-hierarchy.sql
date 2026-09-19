@@ -207,6 +207,65 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 C1: app.set_org_unit_tax_id sets a real tax_id, records a tax_id_change history event, rejects a stale expected_version, and null clears a previously-set value'
+do $$
+declare
+  v_company app.org_units;
+  v_updated app.org_units;
+  v_history_count integer;
+begin
+  select * into v_company from app.org_units where tenant_id = (select id from app.tenants where slug = 'acmeorg') and code = 'ACME-CO';
+  if v_company.tax_id is not null then
+    raise exception 'assertion failed: expected ACME-CO to have no tax_id yet, got %', v_company.tax_id;
+  end if;
+
+  v_updated := app.set_org_unit_tax_id(v_company.id, '01.234.567.8-901.000', v_company.record_version, 'tester');
+  if v_updated.tax_id <> '01.234.567.8-901.000' then
+    raise exception 'assertion failed: expected tax_id to be set, got %', v_updated.tax_id;
+  end if;
+  if v_updated.record_version <> v_company.record_version + 1 then
+    raise exception 'assertion failed: expected record_version to advance after set_org_unit_tax_id';
+  end if;
+
+  select count(*) into v_history_count from app.org_unit_history
+    where org_unit_id = v_company.id and event_type = 'tax_id_change' and before_tax_id is null and after_tax_id = '01.234.567.8-901.000';
+  if v_history_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 tax_id_change history row recording null -> the new value, got %', v_history_count;
+  end if;
+
+  -- A stale expected_version is rejected, never silently overwritten -- the
+  -- identical guard every other org_units mutation RPC already carries.
+  begin
+    perform app.set_org_unit_tax_id(v_company.id, '99.999.999.9-999.000', v_updated.record_version - 1, 'tester');
+    raise exception 'assertion failed: expected a stale expected_version to fail, but it succeeded';
+  exception
+    when check_violation then
+      null; -- expected
+  end;
+
+  -- A real, resolvable non-existent node fails cleanly.
+  begin
+    perform app.set_org_unit_tax_id('00000000-0000-0000-0000-000000000099', '01.234.567.8-901.000', 1, 'tester');
+    raise exception 'assertion failed: expected setting tax_id on a non-existent node to fail, but it succeeded';
+  exception
+    when no_data_found then
+      null; -- expected
+  end;
+
+  -- null clears a previously-set tax_id -- a deliberate, real transition, not a no-op.
+  v_updated := app.set_org_unit_tax_id(v_updated.id, null, v_updated.record_version, 'tester');
+  if v_updated.tax_id is not null then
+    raise exception 'assertion failed: expected tax_id to be cleared (null), got %', v_updated.tax_id;
+  end if;
+
+  select count(*) into v_history_count from app.org_unit_history
+    where org_unit_id = v_company.id and event_type = 'tax_id_change' and before_tax_id = '01.234.567.8-901.000' and after_tax_id is null;
+  if v_history_count <> 1 then
+    raise exception 'assertion failed: expected exactly 1 tax_id_change history row recording the clear, got %', v_history_count;
+  end if;
+end;
+$$;
+
 \echo '>> deactivation is blocked while an active child exists, and succeeds once children are deactivated first'
 do $$
 declare
