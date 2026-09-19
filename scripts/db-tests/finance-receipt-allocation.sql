@@ -292,6 +292,49 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 B3: a credit_note-type app.finance_ar_open_items row (a standing credit balance, negative original_amount) is never offered as a receipt-allocation candidate -- app.search_finance_ar_candidates_for_receipt still returns exactly the same 3 positive open items after a real credit note is posted against this customer'
+do $$
+declare
+  v_tenant_a uuid;
+  v_customer_id uuid;
+  v_receipt_id uuid;
+  v_credited_invoice_id uuid;
+  v_credit_note app.finance_credit_notes;
+  v_candidates app.finance_ar_open_items[];
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmerecva');
+  v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+  select id into v_receipt_id from app.finance_receipts where tenant_id = v_tenant_a and receipt_reference = 'BANKREF-001';
+
+  -- A fourth, freshly-minted-and-issued invoice, credited in full -- kept
+  -- separate from the three open-item fixtures above so this block's own
+  -- credit note leaves those three untouched for every later assertion in
+  -- this file (exact multi-invoice allocation, deallocation, etc).
+  v_credited_invoice_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000028502', 'financemanagera', 'iss319-receiptalloc-credited');
+  update app.finance_invoices set status = 'issued' where id = v_credited_invoice_id;
+  perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_credited_invoice_id, 'IDR', 200000, '2026-03-05'::date, '2026-04-05'::date, '00000000-0000-0000-0000-000000028502', 'financemanagera');
+
+  select * into v_credit_note from app.issue_finance_credit_note(v_tenant_a, v_credited_invoice_id, 200000, 'B3 receipt-candidate-exclusion fixture: full credit', '2026-03-06'::date, 'b3-receiptalloc-credit-1', '00000000-0000-0000-0000-000000028502', 'financemanagera');
+  if v_credit_note.amount <> 200000 or v_credit_note.ar_open_item_id is null then
+    raise exception 'assertion failed: expected a posted 200,000 credit note with a real ar_open_item_id, got amount=% ar_open_item_id=%', v_credit_note.amount, v_credit_note.ar_open_item_id;
+  end if;
+  if not exists (select 1 from app.finance_ar_open_items where id = v_credit_note.ar_open_item_id and source_document_type = 'credit_note' and original_amount = -200000 and allocated_amount = 0) then
+    raise exception 'assertion failed: expected a real credit_note-type AR open item at -200,000 with allocated_amount 0';
+  end if;
+
+  -- The new invoice item (positive, legitimately owed) is itself a real
+  -- candidate -- 3 original + this one = 4. Only the credit_note-type row
+  -- (negative, a standing credit balance) is excluded.
+  select array_agg(r) into v_candidates from app.search_finance_ar_candidates_for_receipt(v_receipt_id, '00000000-0000-0000-0000-000000028502') r;
+  if array_length(v_candidates, 1) <> 4 then
+    raise exception 'assertion failed: expected 3 original + 1 new invoice item = 4 candidates (the credit_note row excluded), found %', array_length(v_candidates, 1);
+  end if;
+  if exists (select 1 from unnest(v_candidates) c where c.id = v_credit_note.ar_open_item_id) then
+    raise exception 'assertion failed: the credit_note-type open item must never appear in receipt-allocation candidates';
+  end if;
+end;
+$$;
+
 \echo '>> exact multi-invoice allocation: 1,300,000 receipt allocates 1,000,000 + 300,000 across two open items, leaving 500,000 open item untouched and 0 unapplied; over-allocation and cross-currency/cross-customer mismatches are each rejected; a retried allocate with the same idempotency_key never double-applies'
 do $$
 declare

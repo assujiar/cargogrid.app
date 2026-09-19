@@ -5186,7 +5186,77 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "05dc82d5b3681d54599d8484afcc8cfffd04242b7b216dd7646c05adf66b74fd",
+  migrationSetSha256: "82add6f34448b134d932dcf2eb8110618857302ad502f40b107b95f1e54be671",
+  // HUNDRED-AND-SIXTY-SECOND PASS: CG-AUDIT-2026-09-02 B3 (bounded core), "No
+  // credit notes; one issued invoice per job order, hard-capped." One new
+  // migration (20260919020000_b3_finance_credit_note.sql, 560 files, +1). A
+  // dedicated research pass found this backlog item bundles two genuinely
+  // separable claims: "one issued invoice per job order, hard-capped" is
+  // confirmed accurate (a real unique partial index plus an application-
+  // level pre-check both enforce it, every issued invoice bills the job's
+  // full revenue_snapshot total) and genuine partial/milestone billing needs
+  // a real product decision this session cannot make unilaterally -- stays
+  // DEFERRED_LARGE, untouched. "No credit notes" turned out WORSE than "all-
+  // or-nothing void": there is no way to correct an issued invoice AT ALL
+  // today, not even a full void (app.discard_finance_invoice_draft only
+  // accepts draft/submitted; no app.void_finance_invoice exists anywhere;
+  // app.finance_ar_open_items structurally forbade a negative/credit row).
+  // Fix: a new app.finance_credit_notes append-only header/lineage table and
+  // app.issue_finance_credit_note (FIN:Edit-gated, idempotent, mandatory
+  // reason, a caller-supplied credit date mirroring app.issue_finance_
+  // invoice's own p_issue_date) that validates the target invoice is
+  // genuinely issued, caps cumulative credits against the invoice's own
+  // original AR amount, and posts a real, negative AR open item via the
+  // ALREADY-EXISTING app.post_finance_ar_open_item (CREATE OR REPLACE, same
+  // signature, widened for a new credit_note source type with its own
+  // negative-amount rule) -- the same "reuse the shared primitive" pattern
+  // this session's own E3 fix established. app.finance_ar_open_items' own
+  // CHECK constraints widened in step (source_document_type, the original_
+  // amount sign rule, allocated_amount pinned to exactly 0 for a credit_note
+  // row). app.search_finance_ar_candidates_for_receipt (FIN-198) narrowed
+  // (CREATE OR REPLACE, same signature) to exclude a credit_note row from
+  // receipt-allocation candidates -- a standing credit balance is never a
+  // sensible receipt-allocation target. Deliberately, disclosedly out of
+  // scope: a GL journal entry reversing revenue/tax for the credited amount
+  // (mirrors this exact module's own already-disclosed "carries no GL
+  // journal line -- FIN-202/203's own scope" boundary) and any "apply this
+  // credit to a future invoice" allocation flow -- the credit stands as an
+  // independent, real reduction to the customer's aggregate AR exposure
+  // (already correctly reflected by B4's own generalized exposure-summary
+  // aggregation with zero further change needed there).
+  // Two real, independently-caught bugs during this pass's own db-test
+  // verification, both fixed before ever reaching the full suite: (1) the
+  // first draft never widened app.validate_finance_open_item_source (ISS-
+  // 2026-319) for the new credit_note source type -- that guard's own
+  // deliberate else-branch (present specifically so a CHECK-constraint
+  // widening without a matching lineage rule fails loudly instead of
+  // silently reopening a fabricated-source-id gap) caught it on the very
+  // first quick-iteration run; fixed by adding a credit_note branch
+  // resolving against app.finance_credit_notes. (2) app.issue_finance_
+  // credit_note originally posted with current_date instead of a caller-
+  // supplied credit date -- caught the moment the db-test ran against a
+  // fiscal calendar that does not cover today's real wall-clock date;
+  // fixed by adding an explicit p_credit_date parameter, mirroring app.
+  // issue_finance_invoice's own p_issue_date exactly. A related third
+  // finding in the same pass: this migration's own CREATE OR REPLACE of
+  // app.search_finance_ar_candidates_for_receipt initially omitted the
+  // pre-existing SECURITY DEFINER/search_path/has_active_tenant_membership
+  // check the live function already carried -- CREATE OR REPLACE does not
+  // preserve those unless restated, so the omission silently downgraded it
+  // to SECURITY INVOKER, caught by public-api-wrapper-regression.sql's own
+  // definer/invoker-mismatch assertion before this ever shipped.
+  // Full Tier A gate suite verified clean after all three fixes:
+  // `typecheck`, the unit test suite (two new files, server/contracts/
+  // finance-credit-note/finance-credit-note.test.ts and server/mutations/
+  // finance-credit-note.test.ts, plus every pre-existing test still
+  // passing), a full `pnpm run db:test` (`ALL PASSED`, 560 migrations / 279
+  // db-test files -- critical here since two SHARED primitives were
+  // widened, post_finance_ar_open_item and search_finance_ar_candidates_
+  // for_receipt, and every existing caller of both stayed unaffected),
+  // `git:check-paths`, `security:check`, and a real `next build`.
+  // History: 05dc82d5b3681d54599d8484afcc8cfffd04242b7b216dd7646c05adf66b74fd
+  // (559 files, HUNDRED-AND-SIXTY-FIRST PASS).
+  //
   // HUNDRED-AND-SIXTY-FIRST PASS: CG-AUDIT-2026-09-02 C1 (bounded core), "No
   // NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all". One new
   // migration (20260919010000_c1_npwp_org_unit_tax_id.sql, 559 files, +1). A
@@ -7540,7 +7610,27 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "8150cd1170c16b0cee4311adf53e2449f967489c47d335206f58c674c95a4fdd",
+  dbTestSetSha256: "db75e052d4f378df173108d89642f3d959f5b6f80ae32d703962c67b93f39642",
+  // HUNDRED-AND-SIXTY-SECOND PASS: same CG-AUDIT-2026-09-02 B3 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), two EXISTING files gained real new coverage:
+  // scripts/db-tests/finance-accounts-receivable.sql (a new block proving
+  // app.issue_finance_credit_note posts a real, negative AR open item
+  // against an already-issued invoice, caps cumulative credits at the
+  // invoice's own original AR amount, rejects a not-yet-issued invoice, an
+  // empty reason, a null credit date, and a caller with no FIN:Edit, and is
+  // idempotent on its own key) and scripts/db-tests/finance-receipt-
+  // allocation.sql (a new block proving a credit_note-type AR open item is
+  // never offered as a receipt-allocation candidate, while a genuinely
+  // separate positive invoice item posted in the same block correctly still
+  // is). Both public-api-wrapper-regression.sql's own definer/invoker-
+  // mismatch assertion and the ISS-2026-319 lineage-guard block in
+  // finance-accounts-receivable.sql caught real bugs on the first quick-
+  // iteration attempt (see migrationSetSha256's own note above) -- fixed
+  // before this ever reached the full suite, which then ran ALL PASSED.
+  // History: 8150cd1170c16b0cee4311adf53e2449f967489c47d335206f58c674c95a4fdd
+  // (279 files, HUNDRED-AND-SIXTY-FIRST PASS).
+  //
   // HUNDRED-AND-SIXTY-FIRST PASS: same CG-AUDIT-2026-09-02 C1 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), one EXISTING file gained real new coverage:

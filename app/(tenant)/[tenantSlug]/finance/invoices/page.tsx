@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { notFound } from "next/navigation";
 import { resolveFinanceAccessForRequest } from "../../../../../lib/portal/resolve-finance-access.server.ts";
 import { createSupabaseServerClient } from "../../../../../lib/supabase/server.ts";
@@ -15,6 +16,7 @@ import {
   discardFinanceInvoiceDraftAction,
   approveFinanceInvoiceAction,
   issueFinanceInvoiceAction,
+  issueFinanceCreditNoteAction,
 } from "./actions.ts";
 import {
   PrepareFinanceInvoiceFromReadinessForm,
@@ -22,6 +24,7 @@ import {
   DiscardFinanceInvoiceDraftForm,
   ApproveFinanceInvoiceForm,
   IssueFinanceInvoiceForm,
+  IssueFinanceCreditNoteForm,
 } from "./invoice-forms.tsx";
 
 /**
@@ -115,6 +118,12 @@ export default async function InvoicesPage({ params }: { params: Promise<{ tenan
         }
         if (invoice.status === "approved") {
           return <IssueFinanceInvoiceForm action={issueFinanceInvoiceAction.bind(null, tenantSlug, invoice.id, invoice.recordVersion)} />;
+        }
+        if (invoice.status === "issued") {
+          // CG-AUDIT-2026-09-02 B3: a fresh idempotency key per page render --
+          // a double-click/network retry of this SAME rendered form reuses it
+          // (never double-posts), a fresh page load gets a new one.
+          return <IssueFinanceCreditNoteForm action={issueFinanceCreditNoteAction.bind(null, tenantSlug, invoice.id, randomUUID())} />;
         }
         return "—";
       },

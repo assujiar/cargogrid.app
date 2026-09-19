@@ -18,6 +18,7 @@ import {
   issueFinanceInvoice,
   InvoiceMutationError,
 } from "../../../../../server/mutations/invoice.ts";
+import { issueFinanceCreditNote, FinanceCreditNoteMutationError } from "../../../../../server/mutations/finance-credit-note.ts";
 
 export interface FinanceInvoiceFormState {
   readonly error: string | null;
@@ -173,6 +174,48 @@ export async function issueFinanceInvoiceAction(
   } catch (error) {
     if (error instanceof InvoiceMutationError) {
       return { error: `Could not issue invoice: ${error.message}` };
+    }
+    throw error;
+  }
+
+  revalidatePath(`/${tenantSlug}/finance/invoices`);
+  return { error: null };
+}
+
+/** CG-AUDIT-2026-09-02 B3: idempotencyKey is a bound positional arg generated once per page render (the same pattern this repository's own customer-portal-users page already established), so a double-click/network retry of the SAME form submission never posts a second AR reduction; a fresh page load gets a fresh key. */
+export async function issueFinanceCreditNoteAction(
+  tenantSlug: string,
+  invoiceId: string,
+  idempotencyKey: string,
+  _prevState: FinanceInvoiceFormState,
+  formData: FormData,
+): Promise<FinanceInvoiceFormState> {
+  const access = await resolveFinanceAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Finance workspace." };
+  }
+
+  const amountRaw = String(formData.get("amount") ?? "").trim();
+  const amount = Number(amountRaw);
+  const reason = String(formData.get("reason") ?? "").trim();
+  const creditDate = String(formData.get("creditDate") ?? "").trim();
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Enter a positive credit amount." };
+  }
+  if (!reason) {
+    return { error: "A reason is required to issue a credit note." };
+  }
+  if (!creditDate) {
+    return { error: "A credit date is required." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    await issueFinanceCreditNote(supabase, { tenantId: access.tenant.id, invoiceId, amount, reason, creditDate, idempotencyKey, actorAuthUserId: access.authUserId, actorLabel: access.authUserId });
+  } catch (error) {
+    if (error instanceof FinanceCreditNoteMutationError) {
+      return { error: `Could not issue credit note: ${error.message}` };
     }
     throw error;
   }

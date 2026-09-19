@@ -512,6 +512,110 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 B3: app.issue_finance_credit_note posts a real, negative AR open item against an already-issued invoice; caps cumulative credits at the invoice''s own original AR amount; rejects a not-yet-issued invoice, an empty reason and a caller with no FIN:Edit; is idempotent on its own key, never double-posting'
+do $$
+declare
+  v_tenant_a uuid;
+  v_customer_id uuid;
+  v_invoice_id uuid;
+  v_draft_invoice_id uuid;
+  v_credit_note app.finance_credit_notes;
+  v_replay app.finance_credit_notes;
+  v_ar_item app.finance_ar_open_items;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeara');
+  v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+
+  -- A minimal, real, issued invoice with its own real AR open item -- a
+  -- direct fixture shortcut (mirrors pg_temp.iss319_mint_invoice's own
+  -- disclosed "direct INSERT... out of scope for this capability's own
+  -- test" convention): the invoice lifecycle RPC itself is FIN-197's own
+  -- test scope (scripts/db-tests/finance-invoice.sql), not this file's.
+  v_invoice_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-b3-credit-note');
+  update app.finance_invoices set status = 'issued' where id = v_invoice_id;
+  perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_invoice_id, 'USD', 1000, '2026-03-15'::date, '2026-04-14'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  -- A not-yet-issued (draft) invoice is rejected -- a credit note only
+  -- corrects an issued invoice, never a draft.
+  v_draft_invoice_id := pg_temp.iss319_mint_invoice(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-b3-draft-invoice');
+  begin
+    perform app.issue_finance_credit_note(v_tenant_a, v_draft_invoice_id, 100, 'test: should be rejected', '2026-03-20'::date, 'iss-b3-reject-draft', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_credit_note_invoice_not_issued -- the target invoice is still draft';
+  exception
+    when others then
+      if sqlerrm not like 'finance_credit_note_invoice_not_issued%' then raise; end if;
+  end;
+
+  -- A real credit note posts a real, negative AR open item.
+  select * into v_credit_note from app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 300, 'billing correction: overcharged freight', '2026-03-20'::date, 'iss-b3-credit-1', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  if v_credit_note.amount <> 300 or v_credit_note.invoice_id <> v_invoice_id or v_credit_note.ar_open_item_id is null then
+    raise exception 'assertion failed: expected a real credit note (amount=300, linked invoice and AR item), got %', v_credit_note;
+  end if;
+
+  select * into v_ar_item from app.finance_ar_open_items where id = v_credit_note.ar_open_item_id;
+  if v_ar_item.source_document_type <> 'credit_note' or v_ar_item.original_amount <> -300 or v_ar_item.allocated_amount <> 0 then
+    raise exception 'assertion failed: expected a real, negative (-300) credit_note AR open item with allocated_amount pinned at 0, got %', v_ar_item;
+  end if;
+
+  -- Idempotent replay -- the same key returns the SAME credit note, never
+  -- posting a second AR reduction.
+  select * into v_replay from app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 300, 'billing correction: overcharged freight', '2026-03-20'::date, 'iss-b3-credit-1', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  if v_replay.id <> v_credit_note.id then
+    raise exception 'assertion failed: expected the idempotent replay to return the identical credit note, not re-post';
+  end if;
+  if (select count(*) from app.finance_ar_open_items where source_document_type = 'credit_note' and source_document_id = v_credit_note.id) <> 1 then
+    raise exception 'assertion failed: expected exactly 1 AR open item for this credit note after the idempotent replay, never 2';
+  end if;
+
+  -- Cumulative credits on the SAME invoice may not exceed its own original
+  -- AR amount (1000) -- 300 already credited, so crediting another 800
+  -- (total 1100) must be rejected.
+  begin
+    perform app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 800, 'test: should exceed the invoice', '2026-03-20'::date, 'iss-b3-credit-exceeds', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_credit_note_exceeds_invoice -- 300 + 800 = 1100 exceeds the invoice''s own 1000 original AR amount';
+  exception
+    when others then
+      if sqlerrm not like 'finance_credit_note_exceeds_invoice%' then raise; end if;
+  end;
+
+  -- A second, smaller credit on the SAME invoice is real and allowed
+  -- (300 + 200 = 500, still within the 1000 original amount) -- a repeat
+  -- credit on an already-credited invoice is a real, legitimate case.
+  perform app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 200, 'billing correction: second adjustment', '2026-03-20'::date, 'iss-b3-credit-2', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  if (select count(*) from app.finance_credit_notes where invoice_id = v_invoice_id) <> 2 then
+    raise exception 'assertion failed: expected exactly 2 distinct credit notes against this invoice (300 + 200)';
+  end if;
+
+  -- Mandatory reason.
+  begin
+    perform app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 50, '', '2026-03-20'::date, 'iss-b3-no-reason', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_credit_note_reason_required for an empty reason';
+  exception
+    when others then
+      if sqlerrm not like 'finance_credit_note_reason_required%' then raise; end if;
+  end;
+
+  -- Mandatory credit date -- never silently falls back to current_date
+  -- (that was this very migration's own first bug, caught by this file's
+  -- own db-test run against a fiscal calendar that does not cover today).
+  begin
+    perform app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 50, 'test: should be rejected', null, 'iss-b3-no-credit-date', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_credit_note_credit_date_required for a null credit date';
+  exception
+    when others then
+      if sqlerrm not like 'finance_credit_note_credit_date_required%' then raise; end if;
+  end;
+
+  -- A caller with no FIN grant at all is rejected.
+  begin
+    perform app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 10, 'test: should be rejected', '2026-03-20'::date, 'iss-b3-no-authority', '00000000-0000-0000-0000-000000026504', 'plainusera');
+    raise exception 'assertion failed: expected insufficient_authority -- plainusera holds no FIN grant';
+  exception
+    when others then
+      if sqlerrm not like 'insufficient_authority%' then raise; end if;
+  end;
+end $$;
+
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new FIN-196 function (ERR-2026-004 regression guard)'
 do $$
 declare
@@ -522,7 +626,7 @@ begin
     'touch_finance_ar_open_item_row', 'check_finance_ar_authority', 'post_finance_ar_open_item',
     'place_finance_ar_hold', 'release_finance_ar_hold', 'apply_finance_ar_allocation',
     'reverse_finance_ar_allocation', 'list_finance_ar_open_items', 'get_finance_ar_open_item_activity',
-    'get_finance_ar_exposure_summary'
+    'get_finance_ar_exposure_summary', 'issue_finance_credit_note'
   ]) loop
     select bool_or(has_function_privilege('anon', p.oid, 'EXECUTE'))
       into v_anon_has

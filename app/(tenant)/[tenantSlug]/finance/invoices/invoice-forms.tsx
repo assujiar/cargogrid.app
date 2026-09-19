@@ -129,3 +129,32 @@ export function IssueFinanceInvoiceForm({ action }: { action: BoundAction }) {
     </form>
   );
 }
+
+/** CG-AUDIT-2026-09-02 B3: one instance renders per already-issued invoice row -- reduces the customer's own AR balance by a real, negative open item, never editing the invoice itself. Mandatory reason, mirroring DiscardFinanceInvoiceDraftForm's own established shape but non-optional here (a credit note with no stated reason is a real audit gap, unlike an optional discard note). */
+export function IssueFinanceCreditNoteForm({ action }: { action: BoundAction }) {
+  const [state, formAction, pending] = useActionState(action, INITIAL_STATE);
+  const amountId = `credit-note-amount-${useId()}`;
+  const reasonId = `credit-note-reason-${useId()}`;
+  const creditDateId = `credit-note-date-${useId()}`;
+
+  return (
+    <form action={formAction} className="flex flex-col gap-1" noValidate>
+      <label htmlFor={amountId} className="sr-only">
+        Credit amount
+      </label>
+      <Input id={amountId} name="amount" type="number" min="0" step="0.01" placeholder="Amount" required className="w-32 text-xs" invalid={Boolean(state.error)} />
+      <label htmlFor={reasonId} className="sr-only">
+        Reason
+      </label>
+      <Input id={reasonId} name="reason" type="text" placeholder="Reason (required)" required className="w-40 text-xs" invalid={Boolean(state.error)} />
+      <label htmlFor={creditDateId} className="sr-only">
+        Credit date
+      </label>
+      <Input id={creditDateId} name="creditDate" type="date" required className="w-40 text-xs" invalid={Boolean(state.error)} />
+      {state.error ? <ValidationMessage>{state.error}</ValidationMessage> : null}
+      <Button type="submit" variant="secondary" loading={pending} loadingLabel="Issuing…">
+        Issue credit note
+      </Button>
+    </form>
+  );
+}
