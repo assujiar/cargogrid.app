@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { resolveTicketAccessForRequest } from "../../../../lib/portal/resolve-ticket-access.server.ts";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server.ts";
 import { listTicketQueues, listTicketCategories, listTickets, listMyTickets, getTicketQueueWorkload, TicketQueryError } from "../../../../server/queries/ticketing.ts";
+import { listOrgUnits, toOrgHierarchyRpcClient, OrgHierarchyQueryError } from "../../../../server/queries/org-hierarchy.ts";
 import type { TicketStatus, TicketQueueWorkloadRow } from "../../../../server/contracts/ticketing/ticketing.ts";
 import { ErrorState } from "../../../../components/ui/error-state.tsx";
 import { TicketsListPanel } from "./tickets-list-panel.tsx";
@@ -73,15 +74,15 @@ export default async function TicketsListPage({
     );
     workloadByQueue = Object.fromEntries(workloadEntries.filter((entry): entry is [string, TicketQueueWorkloadRow[]] => entry[1] !== null));
 
-    // Direct table read (RLS-scoped, same shape HRT-274's own employee detail
-    // page uses) -- no dedicated read RPC exists for the department dropdown;
-    // app.org_units' own tenant-scoped RLS SELECT policy (PLT-113) already
-    // governs this correctly.
-    const { data: orgUnitRows, error: orgUnitError } = await supabase.from("org_units").select("id, name, unit_type").eq("tenant_id", access.tenant.id).eq("status", "active");
-    if (orgUnitError) throw new TicketQueryError(orgUnitError.message);
-    orgUnits = (orgUnitRows ?? []).map((row) => ({ id: String(row.id), name: String(row.name), unitType: String(row.unit_type) }));
+    // CG-AUDIT-2026-09-02 Ø1-query-layer (missed by the cluster-7 sweep): this
+    // used to be a direct `.from("org_units")` read -- `app` is not exposed to
+    // PostgREST (supabase/config.toml), so it has never worked in production,
+    // always throwing and taking down this entire page. `listOrgUnits` is the
+    // same domain-agnostic ("any active tenant member") picker cluster-7 built
+    // for exactly this shape, already used by 5 HRIS call sites.
+    orgUnits = await listOrgUnits(toOrgHierarchyRpcClient(supabase), access.tenant.id, { statusFilter: "active" });
   } catch (error) {
-    if (!(error instanceof TicketQueryError)) throw error;
+    if (!(error instanceof TicketQueryError) && !(error instanceof OrgHierarchyQueryError)) throw error;
     loadFailed = true;
   }
 

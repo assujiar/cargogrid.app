@@ -50,7 +50,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | Ø1-tenant-admin | `tenant-admin-guard-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | `80b81ce` |
 | Ø1-remaining-guards | `customer-ticket-guard-deps.server.ts`, `register-login-session-deps.server.ts` `.from()` → RPC | `CODE` | **DONE** | (this commit) |
 | Ø1-customer-portal-guard + Ø2 | `customer-portal-guard-deps.server.ts` `.from()` → RPC, paired with a customer-layer-aware resolver that actually admits `customer_user` (the Ø2 lockout fix) | `CODE` | **DONE** | (this commit) |
-| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | **DONE** (all 8 clusters, 0 through 7, FULLY closed — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE**; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, all 4 batches, 30/30 call sites, **FULLY DONE**; cluster 7/`page-level-direct-reads`, the full cluster in one commit, 10/10 call sites, **FULLY DONE** — see below. The entire Ø1-query-layer defect (every broken `.from()`/direct-table read against an `app.*` table, across `server/queries/*.ts` AND `page.tsx` files) is now closed) | (this commit) |
+| Ø1-query-layer | Convert the remaining ~160 `.from()` reads across ~65 `server/queries/*.ts` / `app/**/*.tsx` files to RPC (existing wrapper where one exists, new `app.*`+`public.*` wrapper where none does) | `CODE-BIG` | **DONE** (all 8 clusters, 0 through 7, FULLY closed — cluster 2/`hris-identity-access` closed in full, not merely a first batch, per the recon's own 10-row cluster manifest; cluster 3/`operations-tms-core`, all 4 batches, 20 tables / 28 call sites, **FULLY DONE**; cluster 4/`telematics-tracking`, both batches, 12 call sites, **FULLY DONE**; cluster 5/`procurement-document`, 5 call sites (4 new function pairs + 1 reused function), **FULLY DONE**; cluster 6/`platform-intelligence-reports`, all 4 batches, 30/30 call sites, **FULLY DONE**; cluster 7/`page-level-direct-reads`, the full cluster in one commit, 10/10 call sites, **FULLY DONE** — see below. The entire Ø1-query-layer defect (every broken `.from()`/direct-table read against an `app.*` table, across `server/queries/*.ts` AND `page.tsx` files) is now closed. **Correction (2026-09-22):** a follow-up adversarial sweep found one real, live 11th call site the cluster-7 recon's own 10-site manifest missed — `app/(tenant)/[tenantSlug]/tickets/page.tsx`'s own direct `.from("org_units")` read, which had never worked in production and was taking down the entire internal Tickets list page for every tenant user. Fixed by wiring the same `listOrgUnits`/`toOrgHierarchyRpcClient` cluster-7 already built, reusing the existing `app.list_org_units` RPC — zero new migration, zero new RPC. Re-verified: this really was the last one, via a repository-wide grep of every `.from(` in `server/queries/*.ts` and `app/`, confirming every remaining hit is either a converted-to-RPC comment, a legitimate non-PostgREST call (`Array.from`, `Buffer.from`, Supabase Storage's own `.storage.from(bucketId)`), or this fix's own comment) | (this commit) |
 
 ## B1 — `issue_finance_invoice` / `lock_finance_period` are `SECURITY INVOKER`
 
@@ -4660,3 +4660,33 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   AND-SIXTY-SECOND PASS, both digests updated -- one new migration file,
   zero new db-test files, two existing db-test files gaining real new
   coverage), and a real `next build`.
+- 2026-09-22 — Ø1-query-layer correction closed (this commit). A dedicated
+  adversarial sweep (re-verifying "FULLY DONE" rows, not just DEFERRED_
+  LARGE ones, since the same discipline that found B3/C1's hidden cores
+  applies equally to a prior pass's own DONE claim) found one real, live
+  11th `.from()` call site the cluster-7 recon's own 10-site manifest
+  missed: `app/(tenant)/[tenantSlug]/tickets/page.tsx`'s own direct
+  `.from("org_units")` read. `app` is not exposed to PostgREST
+  (`supabase/config.toml`'s own `schemas = ["public", "graphql_public"]`,
+  `app.org_units` created only in `supabase/migrations/20260716101726_
+  create_org_units.sql`) -- this read has never worked in production, and
+  because it shares the same `try` block as every other query this page
+  makes, its guaranteed failure took down the ENTIRE internal Tickets list
+  page (HRT-286, section 15) for every tenant user, every time, rendering
+  nothing but a generic error state. A live, currently-shipped, universal
+  breakage, not a theoretical gap. Fixed by wiring the same domain-
+  agnostic `listOrgUnits`/`toOrgHierarchyRpcClient` (`server/queries/
+  org-hierarchy.ts`) cluster-7 already built and already reuses across 5
+  HRIS call sites -- zero new migration, zero new RPC (`app.list_org_units`
+  is already granted to `authenticated`). Re-verified via a repository-
+  wide grep of every `.from(` in `server/queries/*.ts` and `app/` that
+  this really was the last one: every remaining hit is a converted-to-RPC
+  comment, a legitimate non-PostgREST call (`Array.from`, `Buffer.from`,
+  Supabase Storage's own `.storage.from(bucketId)`), or this fix's own
+  comment.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6178/6178),
+  `git:check-paths`, `security:check`, and a real `next build`. No
+  migration/RPC change, so no `db:test`/`release:check-freeze` digest
+  update is needed -- `app.list_org_units` already carries its own
+  dedicated coverage in `scripts/db-tests/o1-query-layer-cluster7.sql`.
