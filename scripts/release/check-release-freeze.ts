@@ -5186,7 +5186,68 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "82add6f34448b134d932dcf2eb8110618857302ad502f40b107b95f1e54be671",
+  migrationSetSha256: "350fa15d6b05ebc506ec149c9c2ec03ff1b43aefc12371387cd77dc3d2e2e9e7",
+  // HUNDRED-AND-SIXTY-THIRD PASS: CG-AUDIT-2026-09-02 B3 correction (self-
+  // caught, not from the audit doc). One new migration
+  // (20260922010000_b3_credit_note_gl_reversal.sql, 561 files, +1). A
+  // dedicated adversarial re-sweep of already-"DONE"/"PARTIAL" backlog
+  // rows -- not only DEFERRED_LARGE ones, the exact same discipline
+  // applied to this session's own prior work -- found the HUNDRED-AND-
+  // SIXTY-SECOND PASS's own B3 migration disclosed "carries no GL journal
+  // line -- FIN-202/203's own scope" based on two table comments
+  // (app.finance_ar_open_items/app.finance_receipts) that are stale --
+  // they pre-date the FIN-202 subledger retrofit that already made EVERY
+  // other AR/AP source type (invoice, receipt_allocation, vendor_bill,
+  // settlement, opening_balance) post a real, balanced GL journal entry
+  // via the shared app.post_finance_subledger_batch primitive. credit_note
+  // was the one exception to an otherwise-universal pattern -- a live
+  // correctness bug, not an inert gap: app.get_finance_trial_balance
+  // (B2a) sums posted app.finance_journal_lines directly, so revenue and
+  // tax-payable balances stayed permanently overstated by every credited
+  // amount the moment any credit note existed, an already-shipped,
+  // already-consumed report silently wrong. No test caught it.
+  // Fixed by widening app.finance_subledger_batches_source_type_check and
+  // app.post_finance_subledger_batch (CREATE OR REPLACE, same signature)
+  // to admit credit_note (mapped to the same 'ar' period-lock scope as
+  // invoice/receipt_allocation), and app.issue_finance_credit_note (CREATE
+  // OR REPLACE, same signature -- zero TS/UI change) now builds a
+  // proportional GL reversal against the credited invoice's own already-
+  // approved app.finance_invoice_lines, mirroring app.issue_finance_
+  // invoice's own tax-line account-resolution logic with directions
+  // flipped, and posts it through the same app.post_finance_subledger_
+  // batch primitive. Exact-balance design: revenue is a derived balancing
+  // plug (never ratio-computed directly), so the batch always balances
+  // exactly despite independent per-tax-line rounding -- algebraically
+  // exact to the invoice's own subtotal_amount at a full (ratio=1) credit,
+  // zero rounding artifact, verified by this pass's own db-test coverage.
+  // Two more real, independently-caught bugs during this pass's own db-
+  // test verification, both fixed before ever reaching the full suite:
+  // (1) app.validate_finance_subledger_batch_source (ISS-2026-206) -- the
+  // sibling lineage guard to ISS-2026-319's own guard the HUNDRED-AND-
+  // SIXTY-SECOND PASS already had to fix once -- also needed a credit_note
+  // branch, caught on the very first quick-iteration run. (2) two OTHER
+  // db-test files (finance-receipt-allocation.sql, and this pass's own
+  // extension of finance-accounts-receivable.sql) call app.issue_finance_
+  // credit_note but had no revenue_default (and, for the new tax-line
+  // test, tax_payable_default) posting-map key configured for their own
+  // tenants -- every existing credit-note test in both files would have
+  // failed with finance_subledger_missing_mapping the moment this fix
+  // shipped; fixed by extending both files' own already-established FIN-
+  // 202 fixture-prerequisite pattern with the missing account(s)/keys.
+  // Deliberately unchanged: partial/milestone billing and any "apply this
+  // credit to a future invoice" allocation flow both stay DEFERRED_LARGE.
+  // B3 stays PARTIAL, not DONE.
+  // Full Tier A gates verified clean: `typecheck`, the full unit test
+  // suite (6178/6178), a full `pnpm run db:test` (`ALL PASSED`, 561
+  // migrations / 279 db-test files -- critical here since three SHARED
+  // primitives were widened: app.post_finance_subledger_batch, app.
+  // validate_finance_subledger_batch_source, and app.issue_finance_
+  // credit_note, and every existing caller of all three stayed
+  // unaffected), `git:check-paths`, `security:check`, and a real `next
+  // build`.
+  // History: 82add6f34448b134d932dcf2eb8110618857302ad502f40b107b95f1e54be671
+  // (560 files, HUNDRED-AND-SIXTY-SECOND PASS).
+  //
   // HUNDRED-AND-SIXTY-SECOND PASS: CG-AUDIT-2026-09-02 B3 (bounded core), "No
   // credit notes; one issued invoice per job order, hard-capped." One new
   // migration (20260919020000_b3_finance_credit_note.sql, 560 files, +1). A
@@ -7610,7 +7671,30 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "db75e052d4f378df173108d89642f3d959f5b6f80ae32d703962c67b93f39642",
+  dbTestSetSha256: "af9e11a70582f348de5a7a8d731ce5caf80955ea4fb1d6a0cd2a9becf5018101",
+  // HUNDRED-AND-SIXTY-THIRD PASS: same CG-AUDIT-2026-09-02 B3 correction as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), two EXISTING files gained real new coverage:
+  // scripts/db-tests/finance-accounts-receivable.sql (a new FIN-202
+  // fixture prerequisite plus a new block proving a tax-free credit note
+  // posts a real, balanced 2-line subledger batch and GL journal, that the
+  // idempotent replay never double-posts the subledger side either, and a
+  // dedicated new block proving a credit note against an invoice with a
+  // real tax line posts a PROPORTIONAL reversal -- a full credit is
+  // algebraically exact (zero rounding artifact), two partial credits both
+  // balance exactly despite independent per-line rounding, and app.get_
+  // finance_trial_balance actually reflects the reversal, closing this
+  // pass's own original gap) and scripts/db-tests/finance-receipt-
+  // allocation.sql (its own FIN-202 fixture prerequisite widened with a
+  // revenue_default account/key, needed the moment this fix shipped since
+  // that file's own pre-existing credit-note test would otherwise fail
+  // with finance_subledger_missing_mapping). Two real bugs caught on this
+  // pass's own first quick-iteration runs (see migrationSetSha256's own
+  // note above) -- fixed before this ever reached the full suite, which
+  // then ran ALL PASSED.
+  // History: db75e052d4f378df173108d89642f3d959f5b6f80ae32d703962c67b93f39642
+  // (279 files, HUNDRED-AND-SIXTY-SECOND PASS).
+  //
   // HUNDRED-AND-SIXTY-SECOND PASS: same CG-AUDIT-2026-09-02 B3 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), two EXISTING files gained real new coverage:

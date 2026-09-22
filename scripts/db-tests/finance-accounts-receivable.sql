@@ -512,6 +512,68 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 B3 correction fixture prerequisite: a published finance_posting_map so app.issue_finance_credit_note''s own new subledger effect (GL reversal) can resolve real accounts'
+do $$
+declare
+  v_tenant_a uuid;
+  v_account app.finance_accounts;
+  v_pm_draft app.config_versions;
+  v_coa_role uuid;
+  v_coa_draft app.role_versions;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeara');
+
+  -- FIN-192's own app.create_finance_account_draft requires FIN:Create, which
+  -- this file's own "Finance Manager" role (Edit/Approve/View only) does not
+  -- grant -- an additional, additive role assignment (mirrors scripts/db-tests/
+  -- finance-receipt-allocation.sql's own identical FIN-202 fixture prerequisite),
+  -- never a change to the existing role's own permission set.
+  v_coa_role := (app.create_role(v_tenant_a, 'Chart of Accounts Setup', 'B3-correction fixture-only account creation', 'tester')).id;
+  v_coa_draft := app.create_role_version(v_coa_role, 'tester');
+  perform app.set_role_version_permissions(v_coa_draft.id, array(select id from app.permissions where resource_module_code = 'FIN' and action = 'Create'), 'tester');
+  perform app.publish_role_version(v_coa_draft.id, now(), 'tester');
+  perform app.assign_role(v_tenant_a, (select id from app.role_versions where role_id = v_coa_role and status = 'published'), '00000000-0000-0000-0000-000000026502', '00000000-0000-0000-0000-000000026501', 'tester');
+
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'AR-CTRL', 'Accounts Receivable Control', 'asset', 'debit', null, false, null, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'REV-DEFAULT', 'Default Revenue', 'revenue', 'credit', null, false, null, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'TAX-PAYABLE-DEFAULT', 'Default Tax Payable', 'liability', 'credit', null, false, null, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  select * into v_pm_draft from app.create_finance_config_draft('finance_posting_map', v_tenant_a, 'tenant', null, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  perform app.set_finance_config_items(v_pm_draft.id, jsonb_build_array(
+    jsonb_build_object('key', 'ar_control', 'value', jsonb_build_object('accountCodeRef', 'AR-CTRL')),
+    jsonb_build_object('key', 'revenue_default', 'value', jsonb_build_object('accountCodeRef', 'REV-DEFAULT')),
+    jsonb_build_object('key', 'tax_payable_default', 'value', jsonb_build_object('accountCodeRef', 'TAX-PAYABLE-DEFAULT'))
+  ), '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  perform app.publish_finance_config_version(v_pm_draft.id, '00000000-0000-0000-0000-000000026502', null, 'financemanagera');
+end;
+$$;
+
+-- Mints a real app.finance_invoices row (via iss319_mint_invoice) PLUS one
+-- real app.finance_invoice_lines tax-line row -- a direct fixture insert
+-- (out of scope for this capability's own test, mirrors this file's own
+-- established iss319_mint_invoice convention) so the B3-correction GL-
+-- reversal logic has a real tax line to reverse against, without depending
+-- on FIN-195's own governed tax-calculation pipeline (scripts/db-tests/
+-- finance-invoice.sql's own scope). tax_code_id/tax_rule_version_id are
+-- left null (an "added tax with no governed rule" line), exercising the
+-- tax_payable_default posting-map fallback path.
+create function pg_temp.iss319_mint_invoice_with_tax_line(p_tenant_id uuid, p_account_id uuid, p_actor_auth_user_id uuid, p_actor_label text, p_seed text, p_tax_amount numeric)
+returns uuid
+language plpgsql
+as $fn$
+declare
+  v_invoice_id uuid;
+begin
+  v_invoice_id := pg_temp.iss319_mint_invoice(p_tenant_id, p_account_id, p_actor_auth_user_id, p_actor_label, p_seed);
+  insert into app.finance_invoice_lines (invoice_id, line_number, line_type, description, amount)
+  values (v_invoice_id, 1, 'tax', p_seed || ' tax', p_tax_amount);
+  return v_invoice_id;
+end;
+$fn$;
+
 \echo '>> CG-AUDIT-2026-09-02 B3: app.issue_finance_credit_note posts a real, negative AR open item against an already-issued invoice; caps cumulative credits at the invoice''s own original AR amount; rejects a not-yet-issued invoice, an empty reason and a caller with no FIN:Edit; is idempotent on its own key, never double-posting'
 do $$
 declare
@@ -522,6 +584,8 @@ declare
   v_credit_note app.finance_credit_notes;
   v_replay app.finance_credit_notes;
   v_ar_item app.finance_ar_open_items;
+  v_batch app.finance_subledger_batches;
+  v_line_count integer;
 begin
   v_tenant_a := (select id from app.tenants where slug = 'acmeara');
   v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
@@ -557,6 +621,29 @@ begin
     raise exception 'assertion failed: expected a real, negative (-300) credit_note AR open item with allocated_amount pinned at 0, got %', v_ar_item;
   end if;
 
+  -- CG-AUDIT-2026-09-02 B3 correction: this credit note ALSO posts a real,
+  -- balanced GL reversal (this invoice fixture carries no tax lines, so
+  -- the entire 300 reverses as a pure ar_control/revenue_default pair --
+  -- the "revenue is the balancing plug" formula reduces to exactly 300).
+  select * into v_batch from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'credit_note' and source_id = v_credit_note.id;
+  if not found or v_batch.total_amount <> 300 or v_batch.gl_journal_id is null then
+    raise exception 'assertion failed: expected a real, balanced (300) subledger batch with a posted GL journal for this credit note, got %', v_batch;
+  end if;
+  select count(*) into v_line_count from app.finance_subledger_lines where batch_id = v_batch.id;
+  if v_line_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 subledger lines (ar_control credit, revenue_default debit) for a tax-free credit, got %', v_line_count;
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'ar_control' and direction = 'credit' and amount = 300) then
+    raise exception 'assertion failed: expected an ar_control credit line of 300';
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'revenue_default' and direction = 'debit' and amount = 300) then
+    raise exception 'assertion failed: expected a revenue_default debit line of 300';
+  end if;
+  select count(*) into v_line_count from app.finance_journal_lines where journal_id = v_batch.gl_journal_id;
+  if v_line_count <> 2 then
+    raise exception 'assertion failed: expected the real posted GL journal to carry exactly 2 lines too, got %', v_line_count;
+  end if;
+
   -- Idempotent replay -- the same key returns the SAME credit note, never
   -- posting a second AR reduction.
   select * into v_replay from app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 300, 'billing correction: overcharged freight', '2026-03-20'::date, 'iss-b3-credit-1', '00000000-0000-0000-0000-000000026502', 'financemanagera');
@@ -565,6 +652,9 @@ begin
   end if;
   if (select count(*) from app.finance_ar_open_items where source_document_type = 'credit_note' and source_document_id = v_credit_note.id) <> 1 then
     raise exception 'assertion failed: expected exactly 1 AR open item for this credit note after the idempotent replay, never 2';
+  end if;
+  if (select count(*) from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'credit_note' and source_id = v_credit_note.id) <> 1 then
+    raise exception 'assertion failed: expected exactly 1 subledger batch for this credit note after the idempotent replay, never a second GL posting';
   end if;
 
   -- Cumulative credits on the SAME invoice may not exceed its own original
@@ -614,6 +704,119 @@ begin
     when others then
       if sqlerrm not like 'insufficient_authority%' then raise; end if;
   end;
+end $$;
+
+\echo '>> CG-AUDIT-2026-09-02 B3 correction: a credit note against an invoice with a real tax line posts a PROPORTIONAL GL reversal -- a full credit reverses the tax-payable line and the plug-derived revenue line exactly; a partial credit reverses both proportionally and the batch still balances exactly despite independent per-line rounding; app.get_finance_trial_balance actually reflects the reversal'
+do $$
+declare
+  v_tenant_a uuid;
+  v_customer_id uuid;
+  v_invoice_id uuid;
+  v_credit_note app.finance_credit_notes;
+  v_batch app.finance_subledger_batches;
+  v_line_count integer;
+  v_tb_row record;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmeara');
+  v_customer_id := (select id from app.accounts where tenant_id = v_tenant_a);
+
+  -- A real, issued invoice with a real 100 tax line and a 1000 net-
+  -- collectible AR open item (1000 = the amount this fixture posts as the
+  -- original AR amount, standing in for FIN-197's own net_collectible;
+  -- FIN-195's own governed tax calculation is finance-invoice.sql's scope,
+  -- not this file's -- see pg_temp.iss319_mint_invoice_with_tax_line's own
+  -- header).
+  v_invoice_id := pg_temp.iss319_mint_invoice_with_tax_line(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-b3-tax-reversal', 100);
+  update app.finance_invoices set status = 'issued' where id = v_invoice_id;
+  perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_invoice_id, 'USD', 1000, '2026-03-15'::date, '2026-04-14'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  -- Trial balance BEFORE this block's own credit notes -- app.get_finance_
+  -- trial_balance lists every account regardless of activity (a zero-
+  -- activity row still appears, per its own doc comment), so TAX-PAYABLE-
+  -- DEFAULT (never touched by any earlier block in this file -- only
+  -- ar_control/revenue_default were, by the plain, tax-free credit notes
+  -- above) must show a real, explicit zero balance, not merely "no row".
+  select * into v_tb_row from app.get_finance_trial_balance(v_tenant_a, null, '2026-03-31'::date, '00000000-0000-0000-0000-000000026502') where account_code = 'TAX-PAYABLE-DEFAULT';
+  if not found or v_tb_row.debit_balance <> 0 or v_tb_row.credit_balance <> 0 then
+    raise exception 'assertion failed: expected TAX-PAYABLE-DEFAULT to show a real, explicit zero balance before this block''s own credit notes, got %', v_tb_row;
+  end if;
+
+  -- A PARTIAL 500 credit (ratio 0.5): 100 tax * 0.5 = 50 (exact, no
+  -- rounding drift at this ratio) reverses as a tax_payable_default DEBIT
+  -- of 50; the plug-derived revenue reversal is (500 + 0) - 50 = 450,
+  -- DEBIT revenue_default; ar_control CREDIT 500. Balances: 500 = 50+450.
+  select * into v_credit_note from app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 500, 'billing correction: partial, proportional', '2026-03-20'::date, 'iss-b3-tax-partial', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  select * into v_batch from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'credit_note' and source_id = v_credit_note.id;
+  if not found or v_batch.total_amount <> 500 then
+    raise exception 'assertion failed: expected a real, balanced (500) subledger batch for the partial credit, got %', v_batch;
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'ar_control' and direction = 'credit' and amount = 500) then
+    raise exception 'assertion failed: expected an ar_control credit line of 500 for the partial credit';
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'tax_payable_default' and direction = 'debit' and amount = 50) then
+    raise exception 'assertion failed: expected a proportional tax_payable_default debit line of 50 (100 * 0.5) for the partial credit';
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'revenue_default' and direction = 'debit' and amount = 450) then
+    raise exception 'assertion failed: expected a plug-derived revenue_default debit line of 450 ((500 + 0) - 50) for the partial credit -- the batch must still balance exactly despite proportional splitting';
+  end if;
+
+  -- The trial balance now reflects the reversal for real: TAX-PAYABLE-
+  -- DEFAULT and REV-DEFAULT both carry a real posted debit balance (an
+  -- asset/expense-direction net for a liability/revenue account signals a
+  -- real reduction), and AR-CTRL carries the offsetting credit.
+  select * into v_tb_row from app.get_finance_trial_balance(v_tenant_a, null, '2026-03-31'::date, '00000000-0000-0000-0000-000000026502') where account_code = 'TAX-PAYABLE-DEFAULT';
+  if not found or v_tb_row.debit_balance <> 50 or v_tb_row.credit_balance <> 0 then
+    raise exception 'assertion failed: expected app.get_finance_trial_balance to show a real 50 net debit on TAX-PAYABLE-DEFAULT after the partial credit note -- CG-AUDIT-2026-09-02 B3''s own original gap (a live, already-consumed report silently overstated), got %', v_tb_row;
+  end if;
+
+  -- A SECOND, smaller 200 credit on the SAME invoice (500 + 200 = 700,
+  -- still within 1000) at ratio 0.2: 100 tax * 0.2 = 20, revenue plug =
+  -- (200 + 0) - 20 = 180. A fresh, independently-balanced batch.
+  select * into v_credit_note from app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 200, 'billing correction: second partial', '2026-03-20'::date, 'iss-b3-tax-partial-2', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  select * into v_batch from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'credit_note' and source_id = v_credit_note.id;
+  if not found or v_batch.total_amount <> 200 then
+    raise exception 'assertion failed: expected a real, balanced (200) subledger batch for the second partial credit, got %', v_batch;
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'tax_payable_default' and direction = 'debit' and amount = 20) then
+    raise exception 'assertion failed: expected a proportional tax_payable_default debit line of 20 (100 * 0.2) for the second partial credit';
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'revenue_default' and direction = 'debit' and amount = 180) then
+    raise exception 'assertion failed: expected a plug-derived revenue_default debit line of 180 for the second partial credit';
+  end if;
+
+  -- Cumulative credits are now 700 of 1000; the tax-payable trial-balance
+  -- debit is now 50 + 20 = 70, the exact sum of both real GL reversals.
+  select * into v_tb_row from app.get_finance_trial_balance(v_tenant_a, null, '2026-03-31'::date, '00000000-0000-0000-0000-000000026502') where account_code = 'TAX-PAYABLE-DEFAULT';
+  if not found or v_tb_row.debit_balance <> 70 then
+    raise exception 'assertion failed: expected app.get_finance_trial_balance to show a cumulative 70 net debit on TAX-PAYABLE-DEFAULT after both partial credits, got %', v_tb_row;
+  end if;
+
+  -- A FULL credit (ratio = 1 exactly) on a FRESH invoice: 100 tax * 1 =
+  -- 100, revenue plug = (1000 + 0) - 100 = 900 -- the migration's own
+  -- header claims this is algebraically exact to the invoice's own
+  -- subtotal, zero rounding artifact, at ratio 1. 3 real subledger lines:
+  -- ar_control credit 1000, tax_payable_default debit 100, revenue_default
+  -- debit 900.
+  v_invoice_id := pg_temp.iss319_mint_invoice_with_tax_line(v_tenant_a, v_customer_id, '00000000-0000-0000-0000-000000026502', 'financemanagera', 'iss319-b3-tax-full-credit', 100);
+  update app.finance_invoices set status = 'issued' where id = v_invoice_id;
+  perform app.post_finance_ar_open_item(v_tenant_a, null, v_customer_id, 'invoice', v_invoice_id, 'USD', 1000, '2026-03-15'::date, '2026-04-14'::date, '00000000-0000-0000-0000-000000026502', 'financemanagera');
+
+  select * into v_credit_note from app.issue_finance_credit_note(v_tenant_a, v_invoice_id, 1000, 'billing correction: full, exact', '2026-03-20'::date, 'iss-b3-tax-full', '00000000-0000-0000-0000-000000026502', 'financemanagera');
+  select * into v_batch from app.finance_subledger_batches where tenant_id = v_tenant_a and source_type = 'credit_note' and source_id = v_credit_note.id;
+  if not found or v_batch.total_amount <> 1000 then
+    raise exception 'assertion failed: expected a real, balanced (1000) subledger batch for the full credit, got %', v_batch;
+  end if;
+  select count(*) into v_line_count from app.finance_subledger_lines where batch_id = v_batch.id;
+  if v_line_count <> 3 then
+    raise exception 'assertion failed: expected exactly 3 subledger lines (ar_control, tax_payable_default, revenue_default) for the full credit, got %', v_line_count;
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'tax_payable_default' and direction = 'debit' and amount = 100) then
+    raise exception 'assertion failed: expected an exact tax_payable_default debit line of 100 for the full credit';
+  end if;
+  if not exists (select 1 from app.finance_subledger_lines where batch_id = v_batch.id and posting_map_key = 'revenue_default' and direction = 'debit' and amount = 900) then
+    raise exception 'assertion failed: expected an algebraically exact revenue_default debit line of 900 for the full credit, zero rounding artifact at ratio=1';
+  end if;
 end $$;
 
 \echo '>> schema-privilege defense in depth: anon holds zero EXECUTE on every new FIN-196 function (ERR-2026-004 regression guard)'

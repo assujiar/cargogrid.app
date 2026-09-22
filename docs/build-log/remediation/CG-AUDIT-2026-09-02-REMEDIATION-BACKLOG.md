@@ -77,7 +77,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 |---|---|---|---|---|
 | B5 | Withholding tax added instead of deducted on customer invoices | `CODE` | **DONE** | (this commit) |
 | B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | **PARTIAL** | a dedicated research pass (the same "verify before trusting a deferred label" discipline that found B7's own real bounded core) found the original "weeks of report-building effort" estimate accurate for P&L/balance sheet/year-end close, but NOT for a trial balance/account balance -- every hard part (double-entry enforcement guaranteeing debits always equal credits, chart-of-accounts account_type/normal_balance classification, fiscal periods, the `public.*` wrapper convention, even a working precedent for the exact summation math in `app.get_finance_cash_position`) already existed and was already correct; this was assembly, not invention. Closed: `app.get_finance_trial_balance` -- every account for the tenant/company, joined against posted, dated-eligible `finance_journal_lines`, one row per (account, currency actually posted against it) rather than a silently-blended cross-currency sum (a real, disclosed limitation tying to the still-open B4 finding: `finance_journals.currency` is one field per whole journal, and `finance_accounts.currency_restriction` is defined but never enforced at posting time). Still open: P&L, balance sheet, GL report, and year-end close -- these need period-scoped net-income roll-up, account-hierarchy subtotaling, and a real reporting-currency/FX conversion layer that does not exist anywhere in this schema today (ties to B4), genuinely larger work; B2 remains PARTIAL, not DONE |
-| B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "one issued invoice per job order, hard-capped" confirmed accurate (a real unique partial index plus an app-level pre-check both enforce it). "No credit notes" is now closed -- `app.finance_credit_notes` plus `app.issue_finance_credit_note` post a real, negative AR open item against an already-issued invoice, reusing the shared `app.post_finance_ar_open_item` primitive. Turned out worse than expected on investigation: there was no way to correct an issued invoice AT ALL before this fix, not even a full void. Deliberately out of scope: GL journal reversal for the credited revenue/tax (mirrors this module's own already-disclosed AR-side-only boundary) and an "apply credit to a future invoice" flow. Partial/milestone billing stays DEFERRED_LARGE -- needs a real billing-model product decision before schema work |
+| B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "one issued invoice per job order, hard-capped" confirmed accurate (a real unique partial index plus an app-level pre-check both enforce it). "No credit notes" is now closed -- `app.finance_credit_notes` plus `app.issue_finance_credit_note` post a real, negative AR open item against an already-issued invoice, reusing the shared `app.post_finance_ar_open_item` primitive, AND a real, balanced, proportional GL reversal via the shared `app.post_finance_subledger_batch` primitive (corrected 2026-09-22 -- the original "carries no GL journal line" disclosure was based on stale table comments predating the FIN-202 subledger retrofit; `app.get_finance_trial_balance` was silently overstated by every credit note until this correction). Turned out worse than expected on investigation: there was no way to correct an issued invoice AT ALL before this fix, not even a full void. Deliberately still out of scope: an "apply credit to a future invoice" allocation flow. Partial/milestone billing stays DEFERRED_LARGE -- needs a real billing-model product decision before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | **PARTIAL** | AR/AP exposure-summary cross-currency blend bug closed with honest per-currency + base-currency figures; `finance_journal_lines` retroactive FX persistence, `currency_restriction` enforcement at posting time, and true consolidated multi-currency financial statements remain deferred |
 | B6 | Cost/cash never auto-post to GL | `CODE` (AR/AP half) / `NEEDS_PRODUCT_DECISION` (internal-cost half) | **PARTIAL** | a dedicated recon pass found this MEDIUM overall, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL at all -- but the vendor-sourced path's own real precedent (`prepare_finance_vendor_bill_from_actual_cost`) never posts directly either: it stages a Finance-owned vendor-bill DRAFT that goes through Finance's own full review/approve/post lifecycle before it ever reaches the GL, honoring `app.shipment_actual_costs`' own explicit disclosed design boundary ("non-authoritative-for-payment operational figures," its creating migration's own words). A same-shape fix for internal cost needs an equivalent Finance-owned, Finance-reviewed document type to stage into -- none exists today, and inventing one (what document, what lifecycle, does it need its own approval step, which account absorbs it) is a real product decision, not a database migration a session can make unilaterally; a thin function posting internal-cost components straight to the GL would bypass that same governance model and treat internal cost as LESS governed than vendor cost, a new inconsistency worse than the gap it would close. See execution log |
 | B7 | Invoicing keyed off a hand-copied UUID; no credit control | `CODE-BIG` | **DONE** | the worklist-UI half: `finance/invoices/page.tsx` now shows every still-billable job (a new `app.list_billable_readiness_handoffs`) with a per-row "Prepare invoice" form -- the free-text BillingReadinessHandoff-ID field is gone. The credit-control half: `app.check_customer_credit` was never a stub -- it already read a real `app.credit_profiles`/`app.credit_profile_overrides` row and persisted every outcome -- but never consulted actual AR exposure (only the static approved limit) and was dead-gated code (reachable only via its own manual "Check eligibility" widget, never from any order-acceptance path). Now fixed: it sums real `app.finance_ar_open_items.open_amount` (status <> paid, same currency) into the comparison, and `app.prepare_job_order_handoff` (the correct singular acceptance-moment gate point) evaluates credit for the converted account and the quotation's own real total, raising `credit_blocked` for an affirmative credit-control decision already in force -- deliberately not for `blocked_no_profile` (credit profiles are opt-in, not mandatory). The decision core was factored into a new internal `app._evaluate_customer_credit` (no authority check of its own) after a full `db:test` run caught a real regression: a first draft called the public, COM:View-gated `check_customer_credit` directly, which broke a db-test fixture whose staff role holds COM:Edit but not COM:View -- fixed by having the internal function carry the logic and only the public wrapper add the authority check |
@@ -4690,3 +4690,82 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   migration/RPC change, so no `db:test`/`release:check-freeze` digest
   update is needed -- `app.list_org_units` already carries its own
   dedicated coverage in `scripts/db-tests/o1-query-layer-cluster7.sql`.
+- 2026-09-22 — B3 GL-reversal correction closed (this commit). A dedicated
+  adversarial re-sweep of already-shipped backlog items -- not only
+  DEFERRED_LARGE rows, the exact same "verify before trusting a prior
+  pass" discipline applied to this session's own prior B3 work -- found
+  the 2026-09-19 B3 migration's own "carries no GL journal line -- FIN-
+  202/203's own scope" disclosure was based on two table comments (`app.
+  finance_ar_open_items`/`app.finance_receipts`) that are stale: they
+  pre-date the FIN-202 subledger retrofit that already made EVERY other
+  AR/AP source type (invoice, receipt_allocation, vendor_bill, settlement,
+  opening_balance) post a real, balanced GL journal entry via the shared
+  `app.post_finance_subledger_batch` primitive. `credit_note` was the one
+  exception to an otherwise-universal pattern. This was a live correctness
+  bug, not an inert gap: `app.get_finance_trial_balance` (B2a, shipped the
+  day before B3) sums posted `app.finance_journal_lines` directly, so
+  revenue and tax-payable balances stayed permanently overstated by every
+  credited amount from the moment any credit note existed -- an already-
+  shipped, already-consumed financial report silently wrong. No test
+  caught it: the original B3 db-test coverage only checked the AR-open-
+  item side.
+  Closed: new migration `20260922010000_b3_credit_note_gl_reversal.sql`
+  widens `app.finance_subledger_batches_source_type_check` and `app.
+  post_finance_subledger_batch` (`CREATE OR REPLACE`, same signature) to
+  admit `credit_note` (mapped to the same `ar` period-lock scope as
+  `invoice`/`receipt_allocation`), and `app.issue_finance_credit_note`
+  (`CREATE OR REPLACE`, same signature -- zero TS/UI change needed) now
+  builds a proportional GL reversal against the credited invoice's own
+  already-approved `app.finance_invoice_lines`, mirroring `app.issue_
+  finance_invoice`'s own tax-line account-resolution logic with directions
+  flipped, and posts it through the same `app.post_finance_subledger_
+  batch` primitive `app.issue_finance_invoice` itself uses -- the same
+  "reuse the shared primitive" pattern this session's own E3 and original
+  B3 fixes already established. Exact-balance design: the revenue line is
+  a derived balancing plug (never ratio-computed directly), so the batch
+  always balances exactly despite independent per-tax-line rounding --
+  algebraically exact to the invoice's own `subtotal_amount` at a full
+  (ratio=1) credit, zero rounding artifact, verified by this pass's own
+  db-test coverage.
+  Two more real, independently-caught bugs during this pass's own db-test
+  verification, both fixed before ever reaching the full suite: (1) `app.
+  validate_finance_subledger_batch_source` (ISS-2026-206) -- the sibling
+  lineage guard, on the SUBLEDGER BATCH table this time, to the ISS-2026-
+  319 guard the original B3 migration already had to fix once for the AR
+  OPEN ITEM table -- also needed a `credit_note` branch, caught on the
+  very first quick-iteration run with the identical `finance_subledger_
+  unvalidated_source_type` failure mode. (2) two db-test files that call
+  `app.issue_finance_credit_note` (`finance-accounts-receivable.sql`'s own
+  extended coverage and the pre-existing `finance-receipt-allocation.sql`)
+  had no `revenue_default` (and, for the new tax-line test, `tax_payable_
+  default`) posting-map key configured for their own tenants -- every
+  existing credit-note test in both files would have failed with
+  `finance_subledger_missing_mapping` the moment this fix shipped; fixed
+  by extending both files' own already-established FIN-202 fixture-
+  prerequisite pattern with the missing account(s)/keys.
+  New db-test coverage: `scripts/db-tests/finance-accounts-receivable.sql`
+  gained a FIN-202 posting-map fixture, a new assertion block on the
+  existing tax-free credit-note test proving a real, balanced 2-line
+  subledger batch and GL journal now post (and that the idempotent replay
+  never double-posts the subledger side either), and a dedicated new block
+  proving a credit note against an invoice with a real tax line posts a
+  proportional reversal -- a full credit exact, two partial credits each
+  balanced despite rounding, and `app.get_finance_trial_balance` actually
+  reflecting the reversal (closing this pass's own original gap end to
+  end). `scripts/db-tests/finance-receipt-allocation.sql` gained the
+  missing `revenue_default` fixture entry.
+  Deliberately still unchanged, correctly out of this bounded core's own
+  scope: partial/milestone billing (needs a real billing-model product
+  decision) and any "apply this credit to a future invoice" allocation
+  flow. B3 stays PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6178/6178,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`, 561 migrations / 279 db-test files --
+  critical here since three SHARED primitives were widened: `app.post_
+  finance_subledger_batch`, `app.validate_finance_subledger_batch_source`,
+  and `app.issue_finance_credit_note`, and every existing caller of all
+  three stayed unaffected), `git:check-paths`, `security:check`,
+  `release:check-freeze` (HUNDRED-AND-SIXTY-THIRD PASS, both digests
+  updated -- one new migration file, zero new db-test files, two existing
+  db-test files gaining real new coverage), and a real `next build`.

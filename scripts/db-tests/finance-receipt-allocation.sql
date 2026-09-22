@@ -204,11 +204,17 @@ begin
   perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000028502', 'financemanagera');
   select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'CASH-DEFAULT', 'Default Cash', 'asset', 'debit', null, false, null, '00000000-0000-0000-0000-000000028502', 'financemanagera');
   perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000028502', 'financemanagera');
+  -- CG-AUDIT-2026-09-02 B3 correction: revenue_default is also required now
+  -- -- this file's own credit_note-candidate-exclusion block below posts a
+  -- real credit note, whose own new GL-reversal effect resolves this key.
+  select * into v_account from app.create_finance_account_draft(v_tenant_a, null, 'REV-DEFAULT', 'Default Revenue', 'revenue', 'credit', null, false, null, '00000000-0000-0000-0000-000000028502', 'financemanagera');
+  perform app.activate_finance_account(v_account.id, v_account.record_version, '00000000-0000-0000-0000-000000028502', 'financemanagera');
 
   select * into v_pm_draft from app.create_finance_config_draft('finance_posting_map', v_tenant_a, 'tenant', null, '00000000-0000-0000-0000-000000028502', 'financemanagera');
   perform app.set_finance_config_items(v_pm_draft.id, jsonb_build_array(
     jsonb_build_object('key', 'ar_control', 'value', jsonb_build_object('accountCodeRef', 'AR-CTRL')),
-    jsonb_build_object('key', 'cash_default', 'value', jsonb_build_object('accountCodeRef', 'CASH-DEFAULT'))
+    jsonb_build_object('key', 'cash_default', 'value', jsonb_build_object('accountCodeRef', 'CASH-DEFAULT')),
+    jsonb_build_object('key', 'revenue_default', 'value', jsonb_build_object('accountCodeRef', 'REV-DEFAULT'))
   ), '00000000-0000-0000-0000-000000028502', 'financemanagera');
   perform app.publish_finance_config_version(v_pm_draft.id, '00000000-0000-0000-0000-000000028502', null, 'financemanagera');
 end;
