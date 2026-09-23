@@ -5186,7 +5186,89 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "56ed07edfc4a2a6a049d515cfdbde3db24b7f70267d957a7ee3e04885cfdd4c3",
+  migrationSetSha256: "6e3c86f87a96d2808c343a523e2c486af971a24bc28126874f6d62fff662a471",
+  // HUNDRED-AND-SIXTY-SIXTH PASS: CG-AUDIT-2026-09-02 E5 (untracked sub-claim A,
+  // self-caught from the audit's own E5 paragraph -- "Driver licence expiry and
+  // vehicle serviceability are checked at neither assignment nor dispatch" -- present
+  // in the audit's own prose but absent from the backlog table's condensed 2-line
+  // summary, which only captured the install-evidence and ETA/route-planning halves).
+  // One new migration (20260923010000_e5_dispatch_readiness_driver_vehicle_checks.sql,
+  // 564 files, +1).
+  // A workflow-driven investigate:E5 agent proposed this AND a second sub-claim
+  // (wiring app.detect_overdue_geofence_arrivals into the tenant-configurable
+  // scheduler catalogue) as a combined "~40-60 lines, mechanical" fix; its own paired
+  // verify:E5 agent never completed (a session-usage-limit failure), so per this
+  // session's standing discipline neither claim was trusted without personal
+  // re-verification against current code. That re-verification found the scheduler
+  // sub-claim's proposed implementation genuinely incomplete: every one of the 11
+  // functions the tenant scheduler's own _run_scheduled_task_once already dispatches
+  // performs its own actor + app.evaluate_permission authority check (confirmed by
+  // reading app.run_incident_escalation_sweep, app.expire_loyalty_point_lots, and
+  // app.run_ticket_sla_evaluation_batch in full) -- a hard, load-bearing part of that
+  // subsystem's own governance contract (3-consecutive-authority-failure auto-disable
+  // per app.tenant_scheduled_tasks' own table comment), which app.detect_overdue_
+  // geofence_arrivals (deliberately service_role-only, no actor parameter at all,
+  // confirmed via its own grants in 20260730090000/20260826000000) does not and was
+  // never designed to satisfy directly. Wiring it in as literally proposed would have
+  // silently exempted this one task from that governance guarantee. Neither
+  // integration shape that would fix this correctly (retrofit an authority-check
+  // wrapper onto a function deliberately built without one, or add a first-of-its-
+  // kind supervisor lane -- scripts/jobs/supervisor.ts's own ALL_LANES has zero
+  // precedent for a bare service-role sweep call outside the claim-queue/tenant-
+  // scheduler dispatch shapes already established) has any existing precedent in this
+  // repository to assemble from, unlike every other bounded core this session has
+  // closed. That sub-claim is correctly NOT implemented this pass -- see the backlog
+  // doc's own execution-log entry for the full disposition.
+  // The driver-licence/vehicle-serviceability sub-claim closed this pass DID survive
+  // re-verification cleanly: app.evaluate_dispatch_readiness's own original comment
+  // (20260727160000) discloses "a per-mode required-role matrix is explicit Phase 5
+  // scope" as the ONLY deferred boundary -- a distinct question (does this mode have
+  // the right ROLE TYPES assigned) from whether an ALREADY-assigned driver/vehicle is
+  // itself fit to run, which Phase 5 has since shipped real data for (app.driver_
+  // operational_profiles.license_expiry_date / app.vehicle_operational_profiles.status,
+  // 20260729310000) with zero prior caller. Two new blocker checks
+  // (driver_license_expired, vehicle_not_serviceable) join app.resource_assignments
+  // to those two tables, fail-open when no profile is enrolled (mirrors this same
+  // function's own pre-existing NOT_RUN posture for required-document readiness --
+  // no invented policy), and reuse this codebase's own dominant "status <> 'active'"
+  // status-vocabulary idiom verbatim. app.dispatch_ready_queue's UI consumers
+  // (dispatch-panel.tsx, dispatch/page.tsx) already render blockers generically
+  // (`blockers.map(b => <li>{b.code}</li>)`) -- zero UI change needed or made.
+  // Re-verified from the function's own and ONLY definition (confirmed via a repo-
+  // wide grep for a later redefinition -- unlike C3's app.create_finance_tax_rule_
+  // draft case earlier this session, no such redefinition exists here, so no
+  // security-mode/search_path drift risk applied).
+  // Two db-test-time authority gaps self-caught and fixed before ever reaching the
+  // full suite: app.register_driver_operational_profile/app.register_vehicle_
+  // operational_profile each require BOTH OPS:Create (RBAC) AND, via their own nested
+  // app.create_master_record call, tenant_admin-LAYER-or-Supreme-Admin authority --
+  // two independent checks neither this file's existing bootstrap tenant_admin actor
+  // (layer membership, no RBAC role) nor its existing rep actor (RBAC role, no layer
+  // membership) alone satisfied; a first attempt at granting the rep role-version to
+  // the bootstrap actor itself also hit app.assign_role's own self-escalation guard.
+  // Fixed by granting the rep actor tenant_admin-layer membership instead (the
+  // grant-direction app.assign_role's guard does not block), mirroring advanced-tms-
+  // fleet-driver-device.sql's own established admin+rep-role actor shape.
+  // New db-test coverage: scripts/db-tests/operations-basic-dispatch.sql's existing
+  // fixture-setup block gained one new shipment order with a real active driver
+  // assignment (an already-expired licence) and a real active vehicle assignment (a
+  // 'maintenance' status); a new assertion block proves both blockers fire together,
+  // then clear independently as each underlying profile is corrected, ending at
+  // is_ready=true with zero blockers -- placed after, and never calling
+  // app.dispatch_shipment_order, so it cannot disturb this file's own pre-existing
+  // exact-count dispatch/audit-event assertions. Every OTHER fixture in this file
+  // (none of which ever enrolled a driver/vehicle operational profile) already re-
+  // proves the fail-open default unchanged, since none of their own already-asserted
+  // blocker lists gained either new code.
+  // Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors, only pre-
+  // existing warnings), the full unit test suite (6178/6178, including the release-
+  // freeze self-test after this digest update), a full `pnpm run db:test` (`ALL
+  // PASSED`, 564 migrations / 279 db-test files), `git:check-paths`, `security:check`.
+  // No app/, components/, or "use server" file touched by this pass -- `next build`
+  // not required by this file's own Tier A trigger and not run.
+  // History: 56ed07edfc4a2a6a049d515cfdbde3db24b7f70267d957a7ee3e04885cfdd4c3
+  // (563 files, HUNDRED-AND-SIXTY-FIFTH PASS).
+  //
   // HUNDRED-AND-SIXTY-FIFTH PASS: CG-AUDIT-2026-09-02 C3 write-side
   // correction. One new migration
   // (20260923000000_c3_tax_rule_percentage_bound_validation.sql, 563
@@ -7792,7 +7874,23 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "6ac7b2cda685f59434eba7f0801eed1694c07554fd70fc25cf40968821ec4933",
+  dbTestSetSha256: "da5989778eb71f20323dc00f0224a94de06288bfb269e6a8ba966fc80bdb956d",
+  // HUNDRED-AND-SIXTY-SIXTH PASS: same CG-AUDIT-2026-09-02 E5 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file (279 files
+  // unchanged), one EXISTING file gained real new coverage: scripts/db-tests/
+  // operations-basic-dispatch.sql, extended with a new driver+vehicle fixture (an
+  // expired-licence driver, a maintenance-status vehicle, both actively assigned to a
+  // new shipment order) and a new assertion block proving driver_license_expired and
+  // vehicle_not_serviceable fire together and clear independently, ending at
+  // is_ready=true/zero blockers -- placed after, and never calling, app.dispatch_
+  // shipment_order, so this file's own pre-existing exact-count dispatch/audit-event
+  // assertions are undisturbed. Two db-test-time authority-setup gaps (see
+  // migrationSetSha256's own note above) were caught and fixed on this pass's own
+  // quick-iteration runs before it ever reached the full suite, which then ran ALL
+  // PASSED cleanly.
+  // History: 6ac7b2cda685f59434eba7f0801eed1694c07554fd70fc25cf40968821ec4933
+  // (279 files, HUNDRED-AND-SIXTY-FIFTH PASS).
+  //
   // HUNDRED-AND-SIXTY-FIFTH PASS: same CG-AUDIT-2026-09-02 C3 write-side
   // slice as migrationSetSha256's own note immediately above -- no new
   // db-test file (279 files unchanged), one EXISTING file gained real new

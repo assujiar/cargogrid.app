@@ -117,7 +117,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` / `CODE` | **PARTIAL** | "no contract/repeat-order path" is confirmed accurate and stays `NEEDS_PRODUCT_DECISION` -- `app.quotations` carries no `account_id` at all (only via `app.account_conversions` post-acceptance), and `app.job_orders`/`app.job_order_handoffs` both require a real `quotation_id`, so inventing a "book directly against a contract" path is a genuine business/lifecycle decision. Separable, closed half: `app.get_effective_customer_price` (COM-156) was a fully-built, fully-tested, deterministic pricing lookup with zero callers anywhere in `app/` -- a tenant could build and publish a full contract price list end to end and never see, anywhere, what price the system would actually resolve for a real lane/service. Closed by wiring the already-existing RPC into a new "Check effective price" preview on the contract detail page (zero new migration, zero new RPC) |
 | E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2, re-dispositioned `DEFERRED_LARGE` after a closer schema check): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` -- closing it for real needs widening `finance_invoices`' own mandatory `job_order_id`/`billing_readiness_handoff_id` structural invariants (or a second, parallel invoicing primitive), a real product/schema decision, not a quick FK addition |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
-| E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap |
+| E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh; driver licence/vehicle serviceability unchecked at dispatch; overdue-arrival detection unenqueueable | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) + `CODE` (dispatch driver/vehicle checks, closed 2026-09-23) + untracked (scheduler wiring, does not survive re-verification -- see execution log) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap. Two more sub-claims from the audit's own E5 paragraph, present in its prose but dropped from this table's original condensed summary: "driver licence expiry and vehicle serviceability are checked at neither assignment nor dispatch" is now closed (`app.evaluate_dispatch_readiness` gained two data-backed blocker checks); "overdue-arrival detection is not merely unscheduled but unenqueueable" does NOT survive independent re-verification at the scope originally proposed -- see execution log for the full disposition |
 | E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | **PARTIAL** | the webhook half was closed after a dedicated research pass found the original audit's own literal finding ("`app.queue_webhook_delivery` is referenced by 0 other database functions") true on exactly one narrow point, not "no webhook publisher" wholesale: real schema, HMAC-SHA256 signing, SSRF guarding at both registration and dispatch time, the real outbound HTTP worker, job-type registration, wiring into the production supervisor loop, and a reachable tenant admin UI all already existed and were already tested (`20260719150000_create_api_key_webhook_primitives.sql`, `20260804040000_create_intelligence_webhook_management.sql`) -- it was simply dead-gated, never called from any real business event. Closed by adding one `app._enqueue_webhook_delivery` call (a new internal, authority-check-free decision core extracted from `app.queue_webhook_delivery`, mirroring B7's own `app._evaluate_customer_credit` precedent) to each of the three event types the schema's own seed data already anticipated -- `shipment.status_changed` (`app.transition_shipment_order`), `ticket.created` (`app._create_ticket`, covering all three channels: internal/customer/helpdesk), and `invoice.issued` (`app.issue_finance_invoice`). Still open: GraphQL/OpenAPI -- genuinely, confirmedly absent (no `graphql` package dependency, no resolver, no spec file), independently confirmed by two later release-readiness checkpoints; a real, separate REST-based external API surface does already exist (`app/api/v1/*`, API-key gateway, rate limiting, versioning) that could be documented with an OpenAPI spec far more cheaply than building GraphQL, but that is a product/scope call this session does not make unilaterally |
 
 ## New findings discovered during remediation (not in the original audit)
@@ -4959,3 +4959,135 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   AND-SIXTY-FIFTH PASS, both digests updated -- one new migration file,
   zero new db-test files, one existing db-test file gaining real new
   coverage), and a real `next build`.
+- 2026-09-23 — E5 (driver-licence/vehicle-serviceability half) closed;
+  overdue-arrival scheduler-wiring half investigated and correctly NOT
+  implemented (this commit). The comprehensive adversarial workflow sweep
+  surfaced a real `investigate:E5` finding whose own paired `verify:E5`
+  adversarial-skeptic agent never completed (a session-usage-limit
+  failure, not a real refutation) -- per this session's own standing
+  discipline, neither of its two proposed sub-claims was implemented
+  without personal re-verification against actual current code first.
+  Both sub-claims trace to the audit's own E5 paragraph verbatim ("Driver
+  licence expiry and vehicle serviceability are checked at neither
+  assignment nor dispatch. ... overdue-arrival detection is not merely
+  unscheduled but unenqueueable") -- present in the audit's own prose but
+  dropped entirely from this table's original condensed 2-line E5
+  summary, confirming these are real, audit-ratified gaps and not
+  investigator-invented scope.
+  **Sub-claim A (driver licence / vehicle serviceability) -- closed.**
+  Re-verification confirmed the claim cleanly: `app.evaluate_dispatch_
+  readiness`'s own original comment (`supabase/migrations/
+  20260727160000_create_operations_basic_dispatch.sql`, read in full, and
+  confirmed via a repo-wide grep to be this function's ONLY definition --
+  no later redefinition exists, unlike C3's `app.create_finance_tax_rule_
+  draft` case earlier this session) discloses exactly one deferred
+  boundary: "a per-mode required-role matrix is explicit Phase 5 scope."
+  That is a different question (does this shipment's mode have the RIGHT
+  ROLE TYPES assigned at all) from whether an ALREADY-assigned driver/
+  vehicle is itself fit to run -- and Phase 5 (Advanced TMS) has since
+  shipped real, joinable data for exactly that: `app.driver_operational_
+  profiles.license_expiry_date` and `app.vehicle_operational_profiles.
+  status` (`supabase/migrations/20260729310000_create_advanced_tms_fleet_
+  driver_device.sql`, read in full), joinable via the already-existing
+  `app.resource_assignments.resource_id` (`supabase/migrations/
+  20260727130000_create_operations_resource_assignment.sql`, read in
+  full) -- with zero prior caller anywhere.
+  Closed: two new blocker checks (`driver_license_expired`, `vehicle_not_
+  serviceable`) added to `app.evaluate_dispatch_readiness`, joining
+  `app.resource_assignments` (role='driver'/'vehicle', current, active)
+  to the two operational-profile tables. Fail-open by design when no
+  profile is enrolled for the assigned resource -- mirrors this exact
+  function's own pre-existing `NOT_RUN` posture for required-document
+  readiness ("no Document Requirement capability exists yet"), so a
+  tenant that has never enrolled ATW-223 profiles sees no new blocker,
+  unchanged from before this migration. Both new checks reuse this
+  codebase's own dominant "`status <> 'active'`" status-vocabulary idiom
+  verbatim (the same pattern `app.finance_accounts.status <> 'active'`
+  already uses everywhere) and an unambiguous "expiry date in the past"
+  check -- no invented business rule, no new judgment call. The dispatch
+  UI's own blocker rendering (`app/(tenant)/[tenantSlug]/operations/
+  shipment-orders/[shipmentOrderId]/dispatch-panel.tsx`,
+  `.../operations/dispatch/page.tsx`, both grepped) already renders
+  `blockers.map(b => <li>{b.code}</li>)` fully generically -- zero UI
+  change needed or made.
+  Two real db-test-time authority-setup gaps self-caught and fixed before
+  this pass ever reached the full suite: `app.register_driver_
+  operational_profile`/`app.register_vehicle_operational_profile` each
+  require BOTH OPS:Create (RBAC, via `app.evaluate_permission`) AND, via
+  their own nested `app.create_master_record` call, tenant_admin-LAYER-
+  or-Supreme-Admin authority -- two genuinely independent checks neither
+  `scripts/db-tests/operations-basic-dispatch.sql`'s existing bootstrap
+  tenant_admin actor (layer membership, no RBAC role) nor its existing
+  rep actor (RBAC role, no layer membership) alone satisfied. A first
+  attempt at granting the rep role-version to the bootstrap actor itself
+  hit `app.assign_role`'s own real self-escalation guard ("an actor may
+  not assign themselves a role version carrying a protected permission");
+  fixed by granting the rep actor tenant_admin-LAYER membership instead
+  (the grant direction that guard does not block), mirroring `advanced-
+  tms-fleet-driver-device.sql`'s own already-established admin+rep-role
+  actor shape for this exact pair of RPCs.
+  New db-test coverage: the existing fixture-setup block gained one new
+  shipment order with a real active driver assignment (an already-expired
+  licence) and a real active vehicle assignment (`maintenance` status); a
+  new assertion block proves both new blockers fire together, then clear
+  independently as each underlying profile is corrected in turn, ending
+  at `is_ready=true` with zero blockers -- placed strictly after, and
+  never calling, `app.dispatch_shipment_order`, so this file's own pre-
+  existing exact-count dispatch/audit-event assertions are undisturbed.
+  Every OTHER fixture in this file (none of which ever enrolled a driver/
+  vehicle operational profile at all) already re-proves the fail-open
+  default is unchanged, since none of their own already-asserted blocker
+  lists gained either new code.
+  **Sub-claim B (overdue-arrival scheduler wiring) -- investigated,
+  correctly NOT implemented.** The investigator proposed one catalogue
+  row plus one `CASE` branch in `app._run_scheduled_task_once` calling
+  `app.detect_overdue_geofence_arrivals(p_schedule.tenant_id)` directly,
+  framed as "~40-60 lines, mechanical." Re-verification against the
+  actual current code found this materially incomplete. Reading three of
+  the eleven functions this dispatcher already calls in full
+  (`app.run_incident_escalation_sweep`, `app.expire_loyalty_point_lots`,
+  `app.run_ticket_sla_evaluation_batch`) confirmed every one independently
+  performs its own actor-identity + `app.evaluate_permission` authority
+  check and raises `insufficient_privilege` on failure -- the exact
+  signal `app.run_due_scheduled_tasks`'s own re-check-per-run governance
+  model depends on (`app.tenant_scheduled_tasks`' own table comment: "if
+  \[the authorizing identity's authority\] is revoked or narrowed the run
+  fails ... rather than escalating or silently skipping," with a real
+  3-consecutive-authority-failure auto-disable). `app.detect_overdue_
+  geofence_arrivals` (`supabase/migrations/20260730090000_create_
+  advanced_tms_geofence_route_deviation_signals.sql`, read in full) takes
+  only `p_tenant_id`, no actor parameter at all, and is granted
+  `service_role`-only on both `app.*` and its `public.*` wrapper (grants
+  confirmed by direct grep) -- a deliberate design choice, not an
+  oversight, matching its own sibling `app.detect_shipment_leg_tracking_
+  health_signals`'s identical shape. Wiring it into the dispatcher exactly
+  as proposed would silently exempt this one task from the scheduler's
+  own governance guarantee -- the authorizing identity's authority would
+  never be re-checked, and a revoked/narrowed grant would never trigger
+  the auto-disable every other task gets.
+  Correctly fixing this needs either (a) a new authority-check wrapper
+  around a function deliberately built without one, or (b) a genuinely
+  new integration shape -- `scripts/jobs/supervisor.ts`'s own `ALL_LANES`
+  (read in full) has no existing precedent for a bare service-role sweep
+  call outside the two already-established shapes (the `app.jobs` claim-
+  queue the five external workers use, or the tenant-scheduler's own
+  human-attributed dispatch). A repo-wide grep confirmed neither this
+  function nor its identically-postured sibling (`app.detect_shipment_
+  leg_tracking_health_signals`) has EVER been wired anywhere since either
+  was created, so there is no existing precedent in this repository to
+  assemble from for either integration shape -- unlike every other
+  bounded core this session has closed (B2/B3/E1/C3/E5-sub-claim-A), this
+  is not "assembly of already-built, already-precedented pieces." Left
+  correctly un-implemented this pass rather than forcing a design
+  decision under genuine architectural uncertainty; a future task should
+  pick and ratify one integration shape explicitly before implementing.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6178/6178,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`, 564 migrations / 279 db-test files),
+  `git:check-paths`, `security:check`, `release:check-freeze` (HUNDRED-
+  AND-SIXTY-SIXTH PASS, both digests updated -- one new migration file,
+  zero new db-test files, one existing db-test file gaining real new
+  coverage). No app/, components/, or "use server" file touched by this
+  pass -- `next build` not required by this file's own Tier A trigger and
+  not run.

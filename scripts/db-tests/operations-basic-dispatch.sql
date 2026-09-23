@@ -33,10 +33,13 @@ declare
   v_vendor_blocked app.master_records;
   v_vendor_bulkready app.master_records;
   v_vendor_noschedule app.master_records;
+  v_driver app.driver_operational_profiles;
+  v_vehicle app.vehicle_operational_profiles;
   v_shipment_ready app.shipment_orders;
   v_shipment_noassign app.shipment_orders;
   v_shipment_blocked app.shipment_orders;
   v_shipment_noschedule app.shipment_orders;
+  v_shipment_driver_vehicle app.shipment_orders;
   v_shipment_bulkready app.shipment_orders;
 begin
   insert into auth.users (id, email) values
@@ -198,6 +201,33 @@ begin
   select * into v_shipment_bulkready from app.transition_shipment_order(v_shipment_bulkready.id, 'planned', v_shipment_bulkready.record_version, null, null, 'idem-dispatch-bulkready-planned', '00000000-0000-0000-0000-000000009831', 'rep');
   select * into v_shipment_bulkready from app.transition_shipment_order(v_shipment_bulkready.id, 'assigned', v_shipment_bulkready.record_version, null, null, 'idem-dispatch-bulkready-assigned', '00000000-0000-0000-0000-000000009831', 'rep');
   perform app.assign_resource(v_shipment_bulkready.id, 'vendor', v_vendor_bulkready.id, '00000000-0000-0000-0000-000000009831', 'rep');
+
+  -- CG-AUDIT-2026-09-02 E5: a real active driver assignment with an already-expired
+  -- licence, and a real active vehicle assignment whose operational status is
+  -- 'maintenance' (not 'active') -- both new blockers must fire independently.
+  -- app.register_driver_operational_profile/app.register_vehicle_operational_profile
+  -- require OPS:Create (RBAC) AND, via the nested app.create_master_record call,
+  -- tenant_admin-LAYER-or-Supreme-Admin authority -- two independent checks neither
+  -- the bootstrap tenant_admin actor (layer membership, no RBAC role) nor the rep
+  -- actor (RBAC role, no layer membership) alone satisfies. Rep gets tenant_admin
+  -- layer membership too (app.assign_role's self-escalation guard blocks granting the
+  -- rep role-version to the bootstrap actor itself, so the layer grant goes the other
+  -- way instead -- mirrors advanced-tms-fleet-driver-device.sql's own established
+  -- admin+rep-role actor shape without hitting that guard).
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000009831', 'tenant_admin', v_tenant1, null, 'tester');
+  select * into v_driver from app.register_driver_operational_profile(v_tenant1, 'DRV-DISPATCH-1', 'Budi Santoso', 'B2', current_date - 10, '00000000-0000-0000-0000-000000009831', 'rep');
+  select * into v_vehicle from app.register_vehicle_operational_profile(v_tenant1, 'VEH-DISPATCH-1', 'B 1234 XYZ', 'owned', 8000, 20, '00000000-0000-0000-0000-000000009831', 'rep');
+  update app.vehicle_operational_profiles set status = 'maintenance' where id = v_vehicle.id;
+
+  select * into v_shipment_driver_vehicle from app.create_shipment_order_from_job(
+    v_job_order.id, 'idem-dispatch-driver-vehicle', null, null, 'ocean_freight', 'sea', 'Jakarta', 'Bekasi',
+    now() + interval '1 day', now() + interval '10 days', null, null, null, null, null, null, 'split: driver/vehicle fixture', '00000000-0000-0000-0000-000000009831', 'rep'
+  );
+  select * into v_shipment_driver_vehicle from app.confirm_shipment_order(v_shipment_driver_vehicle.id, v_shipment_driver_vehicle.record_version, '00000000-0000-0000-0000-000000009831', 'rep');
+  select * into v_shipment_driver_vehicle from app.transition_shipment_order(v_shipment_driver_vehicle.id, 'planned', v_shipment_driver_vehicle.record_version, null, null, 'idem-dispatch-dv-planned', '00000000-0000-0000-0000-000000009831', 'rep');
+  select * into v_shipment_driver_vehicle from app.transition_shipment_order(v_shipment_driver_vehicle.id, 'assigned', v_shipment_driver_vehicle.record_version, null, null, 'idem-dispatch-dv-assigned', '00000000-0000-0000-0000-000000009831', 'rep');
+  perform app.assign_resource(v_shipment_driver_vehicle.id, 'driver', v_driver.driver_master_id, '00000000-0000-0000-0000-000000009831', 'rep');
+  perform app.assign_resource(v_shipment_driver_vehicle.id, 'vehicle', v_vehicle.vehicle_master_id, '00000000-0000-0000-0000-000000009831', 'rep');
 end $$;
 
 \echo '>> app.evaluate_dispatch_readiness / app.get_dispatch_readiness: is_ready=true with zero blockers for the fully-ready shipment; each other fixture reports its own exact single blocker; authority-gated (viewer holds OPS:View, so allowed; record-scope enforced separately)'
@@ -488,5 +518,39 @@ begin
   where tenant_id = v_tenant1 and resource_type = 'app.dispatch_commands' and action = 'dispatch_shipment_order' and result = 'failure';
   if v_failure_count <> 0 then
     raise exception 'assertion failed: expected zero persisted failure dispatch_shipment_order audit events (a raised exception always rolls back any insert made before it), found %', v_failure_count;
+  end if;
+end $$;
+
+\echo '>> CG-AUDIT-2026-09-02 E5: app.evaluate_dispatch_readiness now also blocks on an assigned driver''s already-expired licence and an assigned vehicle''s non-active operational status -- both fire together, then clear independently as each underlying profile is corrected, ending at is_ready=true with zero blockers; every OTHER fixture in this file (none of which ever enrolled a driver/vehicle operational profile at all) already proves the fail-open default unchanged, since none of their own already-asserted blocker lists gained either new code'
+do $$
+declare
+  v_shipment_id uuid;
+  v_driver_id uuid;
+  v_vehicle_id uuid;
+  v_dv record;
+begin
+  select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-dispatch-driver-vehicle';
+  select id into v_driver_id from app.driver_operational_profiles where driver_master_id = (select id from app.master_records where tenant_id = (select id from app.tenants where slug = 'acmedispatch') and code = 'DRV-DISPATCH-1');
+  select id into v_vehicle_id from app.vehicle_operational_profiles where vehicle_master_id = (select id from app.master_records where tenant_id = (select id from app.tenants where slug = 'acmedispatch') and code = 'VEH-DISPATCH-1');
+
+  select * into v_dv from app.get_dispatch_readiness(v_shipment_id, '00000000-0000-0000-0000-000000009831');
+  if v_dv.is_ready
+     or jsonb_array_length(v_dv.blockers) <> 2
+     or not exists (select 1 from jsonb_array_elements(v_dv.blockers) b where b ->> 'code' = 'driver_license_expired')
+     or not exists (select 1 from jsonb_array_elements(v_dv.blockers) b where b ->> 'code' = 'vehicle_not_serviceable')
+  then
+    raise exception 'assertion failed: expected exactly driver_license_expired + vehicle_not_serviceable, got is_ready=%, blockers=%', v_dv.is_ready, v_dv.blockers;
+  end if;
+
+  update app.driver_operational_profiles set license_expiry_date = current_date + 365 where id = v_driver_id;
+  select * into v_dv from app.get_dispatch_readiness(v_shipment_id, '00000000-0000-0000-0000-000000009831');
+  if v_dv.is_ready or jsonb_array_length(v_dv.blockers) <> 1 or (v_dv.blockers -> 0 ->> 'code') <> 'vehicle_not_serviceable' then
+    raise exception 'assertion failed: expected only vehicle_not_serviceable to remain once the licence is renewed, got is_ready=%, blockers=%', v_dv.is_ready, v_dv.blockers;
+  end if;
+
+  update app.vehicle_operational_profiles set status = 'active' where id = v_vehicle_id;
+  select * into v_dv from app.get_dispatch_readiness(v_shipment_id, '00000000-0000-0000-0000-000000009831');
+  if not v_dv.is_ready or jsonb_array_length(v_dv.blockers) <> 0 then
+    raise exception 'assertion failed: expected is_ready=true with zero blockers once the vehicle is back in active service, got is_ready=%, blockers=%', v_dv.is_ready, v_dv.blockers;
   end if;
 end $$;
