@@ -76,7 +76,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
 | B5 | Withholding tax added instead of deducted on customer invoices | `CODE` | **DONE** | (this commit) |
-| B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | **PARTIAL** | a dedicated research pass (the same "verify before trusting a deferred label" discipline that found B7's own real bounded core) found the original "weeks of report-building effort" estimate accurate for P&L/balance sheet/year-end close, but NOT for a trial balance/account balance -- every hard part (double-entry enforcement guaranteeing debits always equal credits, chart-of-accounts account_type/normal_balance classification, fiscal periods, the `public.*` wrapper convention, even a working precedent for the exact summation math in `app.get_finance_cash_position`) already existed and was already correct; this was assembly, not invention. Closed: `app.get_finance_trial_balance` -- every account for the tenant/company, joined against posted, dated-eligible `finance_journal_lines`, one row per (account, currency actually posted against it) rather than a silently-blended cross-currency sum (a real, disclosed limitation tying to the still-open B4 finding: `finance_journals.currency` is one field per whole journal, and `finance_accounts.currency_restriction` is defined but never enforced at posting time). Still open: P&L, balance sheet, GL report, and year-end close -- these need period-scoped net-income roll-up, account-hierarchy subtotaling, and a real reporting-currency/FX conversion layer that does not exist anywhere in this schema today (ties to B4), genuinely larger work; B2 remains PARTIAL, not DONE |
+| B2 | GL is write-only — no trial balance/account balance/P&L/balance sheet | `CODE-BIG` | **PARTIAL** | a dedicated research pass (the same "verify before trusting a deferred label" discipline that found B7's own real bounded core) found the original "weeks of report-building effort" estimate accurate for P&L/balance sheet/year-end close, but NOT for a trial balance/account balance -- every hard part (double-entry enforcement guaranteeing debits always equal credits, chart-of-accounts account_type/normal_balance classification, fiscal periods, the `public.*` wrapper convention, even a working precedent for the exact summation math in `app.get_finance_cash_position`) already existed and was already correct; this was assembly, not invention. Closed: `app.get_finance_trial_balance` -- every account for the tenant/company, joined against posted, dated-eligible `finance_journal_lines`, one row per (account, currency actually posted against it) rather than a silently-blended cross-currency sum (a real, disclosed limitation tying to the still-open B4 finding: `finance_journals.currency` is one field per whole journal, and `finance_accounts.currency_restriction` is defined but never enforced at posting time). "GL report" is now ALSO closed (2026-09-22) -- a second dedicated research pass found it was mis-bundled with the genuinely harder trio: `app.get_finance_account_ledger` (one account, one date range, a real per-currency opening balance and running total over posted `finance_journal_lines`, never blended) needed none of the three things blocking P&L/balance sheet/year-end-close, since a control account is structurally never postable (no hierarchy subtotaling needed) and it reuses B2a's own already-accepted per-currency convention verbatim (no new FX layer). A new `finance/chart-of-accounts/[accountId]/ledger/` page closes the audit's own literal "GL is write-only" complaint for real, account-level detail. Still open: P&L, balance sheet, and year-end close -- these need period-scoped net-income roll-up, account-hierarchy subtotaling, and a real reporting-currency/FX conversion layer that does not exist anywhere in this schema today (ties to B4), genuinely larger work; B2 remains PARTIAL, not DONE |
 | B3 | No credit notes; one issued invoice per job order, hard-capped | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "one issued invoice per job order, hard-capped" confirmed accurate (a real unique partial index plus an app-level pre-check both enforce it). "No credit notes" is now closed -- `app.finance_credit_notes` plus `app.issue_finance_credit_note` post a real, negative AR open item against an already-issued invoice, reusing the shared `app.post_finance_ar_open_item` primitive, AND a real, balanced, proportional GL reversal via the shared `app.post_finance_subledger_batch` primitive (corrected 2026-09-22 -- the original "carries no GL journal line" disclosure was based on stale table comments predating the FIN-202 subledger retrofit; `app.get_finance_trial_balance` was silently overstated by every credit note until this correction). Turned out worse than expected on investigation: there was no way to correct an issued invoice AT ALL before this fix, not even a full void. Deliberately still out of scope: an "apply credit to a future invoice" allocation flow. Partial/milestone billing stays DEFERRED_LARGE -- needs a real billing-model product decision before schema work |
 | B4 | Multi-currency postings summed as raw numbers, no FX/base-amount columns | `CODE-BIG` | **PARTIAL** | AR/AP exposure-summary cross-currency blend bug closed with honest per-currency + base-currency figures; `finance_journal_lines` retroactive FX persistence, `currency_restriction` enforcement at posting time, and true consolidated multi-currency financial statements remain deferred |
 | B6 | Cost/cash never auto-post to GL | `CODE` (AR/AP half) / `NEEDS_PRODUCT_DECISION` (internal-cost half) | **PARTIAL** | a dedicated recon pass found this MEDIUM overall, not CODE-BIG: 3 of 4 AR/AP allocation-reversal paths already post to the GL correctly; only reversed AR (`app.request_finance_receipt_deallocation`) was a genuine open gap, now fixed (B6a). Internal-source actual cost (no vendor bill) still has no path to the GL at all -- but the vendor-sourced path's own real precedent (`prepare_finance_vendor_bill_from_actual_cost`) never posts directly either: it stages a Finance-owned vendor-bill DRAFT that goes through Finance's own full review/approve/post lifecycle before it ever reaches the GL, honoring `app.shipment_actual_costs`' own explicit disclosed design boundary ("non-authoritative-for-payment operational figures," its creating migration's own words). A same-shape fix for internal cost needs an equivalent Finance-owned, Finance-reviewed document type to stage into -- none exists today, and inventing one (what document, what lifecycle, does it need its own approval step, which account absorbs it) is a real product decision, not a database migration a session can make unilaterally; a thin function posting internal-cost components straight to the GL would bypass that same governance model and treat internal cost as LESS governed than vendor cost, a new inconsistency worse than the gap it would close. See execution log |
@@ -4769,3 +4769,84 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   `release:check-freeze` (HUNDRED-AND-SIXTY-THIRD PASS, both digests
   updated -- one new migration file, zero new db-test files, two existing
   db-test files gaining real new coverage), and a real `next build`.
+- 2026-09-23 — B2 (GL detail-report half) closed (this commit). A
+  dedicated research pass (via a comprehensive adversarial sweep of every
+  still-open backlog row, not only DEFERRED_LARGE ones -- the same
+  discipline that found B7's/B2a's/E6's/B4's/A2b's/E3's/C1's/B3's own real
+  bounded cores) found the "GL report" sub-item was mis-bundled with the
+  genuinely harder P&L/balance-sheet/year-end-close trio by B2a's own
+  earlier pass. Confirmed by reading `app.list_finance_journals`
+  (journal-level, filtered by source_type/status/company, never by
+  account_id) and `app.get_finance_journal_lines` (exactly one journal_id
+  at a time): the audit's own "GL is write-only" framing was still
+  literally true even after B2a's own trial-balance fix -- you could see a
+  TOTAL or browse individual journals, but never ask "show me every posted
+  entry against Accounts Receivable this quarter", the classic bookkeeper
+  reconciliation need a trial-balance figure exists to be checked against.
+  `finance_journal_lines_account_idx (tenant_id, account_id)`, present
+  since the original FIN-203 migration and unused by any query until now,
+  was the same "assembly, not invention" signal B2a itself used to justify
+  closing trial balance. A GL DETAIL report for one account needs none of
+  the three things blocking the harder trio: no net-income roll-up
+  (P&L-only), no account-hierarchy subtotaling (a control account is
+  structurally never postable, `finance_accounts_control_not_postable_
+  check`, so a ledger report only ever targets one leaf/postable account
+  directly), and no new FX/reporting-currency layer (reuses B2a's own
+  already-accepted "group by currency actually posted, never blend"
+  convention verbatim).
+  Closed: new migration `20260922020000_b2_finance_account_ledger.sql`
+  adds `app.get_finance_account_ledger(tenant, company, account, date_
+  from, date_to, actor)` -- FIN:View-gated, a real, explicit per-currency
+  opening balance (net posted activity strictly before `date_from`, in the
+  account's own `normal_balance` direction) followed by every posted `app.
+  finance_journal_lines` row in range with a running balance carried
+  forward, never blending currencies. Only a `status='posted'` journal
+  counts, mirroring every other posting-authority convention in this
+  module. `server/contracts/finance-account-ledger/` and `server/queries/
+  finance-account-ledger.ts` are new, thin, typed wrappers, mirroring
+  every other capability's own established shape. UI: a new `finance/
+  chart-of-accounts/[accountId]/ledger/` page (a `<form method="get">`
+  date-range filter, mirroring `finance/aging/page.tsx`'s own established
+  pattern exactly, defaulting to the current month), linked from a new
+  "Ledger" column on the existing chart-of-accounts list -- shown only for
+  a postable (non-control) account, since a control account can never be
+  posted against directly and its own ledger would always be empty.
+  One real, self-caught bug during this pass's own db-test verification,
+  fixed before ever reaching the full suite: every one of this `RETURNS
+  TABLE` function's own OUT parameter names (`entry_date`, `journal_id`,
+  `amount`, `currency`, etc.) is implicitly in scope as a PL/pgSQL
+  variable throughout the function body, so the CTEs' own bare references
+  to columns of the identical names (e.g. `select distinct currency from
+  window_activity`) were genuinely ambiguous -- caught live on the very
+  first quick-iteration run (`column reference "currency" is ambiguous`),
+  fixed by prefixing every intermediate CTE column (`x_*`) and only
+  re-surfacing the real output names in the final, outermost select (a
+  `RETURN QUERY` inside a `RETURNS TABLE` function matches positionally,
+  not by name, so no alias restatement was even needed there).
+  New db-test coverage: `scripts/db-tests/finance-trial-balance.sql`
+  gained a dedicated block reusing this file's own already-posted CASH-TB/
+  MULTI-CCY-TB journals -- a full-month window (opening 0, both real
+  postings, running balance reconciling exactly to this file's own
+  already-proven 1400 trial-balance total, the future-dated and
+  never-posted-draft postings both absent), a narrower window proving an
+  earlier posting correctly carries forward as a real opening balance
+  rather than vanishing, MULTI-CCY-TB's own two never-blended currency
+  rows, and the full authority/validation surface (Plain User denied,
+  cross-tenant denied, an unknown account id rejected, a reversed date
+  range rejected).
+  Still open, correctly out of this bounded core's own scope: P&L, balance
+  sheet, and year-end close -- these still need period-scoped net-income
+  roll-up, account-hierarchy subtotaling, and a real reporting-currency/FX
+  conversion layer that does not exist anywhere in this schema today (ties
+  to B4), genuinely larger work. B2 stays PARTIAL, not DONE.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6178/6178,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`, 562 migrations / 279 db-test files --
+  one transient, unrelated pre-existing flake in `commercial-dashboard.
+  sql`'s own date-sensitive `due_today` bucket assertion on the first run,
+  independently confirmed by a clean second run with zero changes),
+  `git:check-paths`, `security:check`, `release:check-freeze`
+  (HUNDRED-AND-SIXTY-FOURTH PASS, both digests updated -- one new
+  migration file, zero new db-test files, one existing db-test file
+  gaining real new coverage), and a real `next build`.

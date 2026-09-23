@@ -339,6 +339,122 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 B2 (GL detail-report half): app.get_finance_account_ledger reuses this file''s own already-posted CASH-TB journals -- an opening balance carried forward, every posted line within range with a running total, the future-dated and draft-only postings both excluded, and a stale expected_version-style date-range validation; MULTI-CCY-TB proves two separate currency rows, never blended'
+do $$
+declare
+  v_tenant_a uuid;
+  v_cash_id uuid;
+  v_multi_id uuid;
+  v_row_count integer;
+  v_row record;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmetba');
+  v_cash_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'CASH-TB');
+  v_multi_id := (select id from app.finance_accounts where tenant_id = v_tenant_a and code = 'MULTI-CCY-TB');
+
+  -- Full-month window: opening 0, tb-jrnl-1 (Feb 10, debit 1000, running
+  -- 1000), tb-jrnl-2 (Feb 20, debit 400, running 1400) -- the future-dated
+  -- tb-jrnl-3 (Apr 1) and the never-posted tb-draft-only-1 (Feb 18) must
+  -- both be absent, exactly matching this file's own already-proven CASH-
+  -- TB trial-balance total of 1400.
+  select count(*) into v_row_count from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901');
+  if v_row_count <> 3 then
+    raise exception 'assertion failed: expected exactly 3 rows (opening + 2 posted lines), got %', v_row_count;
+  end if;
+
+  select * into v_row from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where journal_id is null;
+  if v_row.description <> 'Opening balance' or v_row.running_balance <> 0 or v_row.currency <> 'USD' then
+    raise exception 'assertion failed: expected a real, explicit USD opening-balance row at 0, got %', v_row;
+  end if;
+
+  select * into v_row from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where amount = 1000;
+  if not found or v_row.direction <> 'debit' or v_row.entry_date <> '2026-02-10'::date or v_row.running_balance <> 1000 then
+    raise exception 'assertion failed: expected tb-jrnl-1 as a real debit-1000 line dated 2026-02-10 with running balance 1000, got %', v_row;
+  end if;
+
+  select * into v_row from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where amount = 400;
+  if not found or v_row.direction <> 'debit' or v_row.entry_date <> '2026-02-20'::date or v_row.running_balance <> 1400 then
+    raise exception 'assertion failed: expected tb-jrnl-2 as a real debit-400 line dated 2026-02-20 with running balance 1400 (matching this file''s own trial-balance total), got %', v_row;
+  end if;
+
+  if exists (select 1 from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901') where amount in (9999, 77)) then
+    raise exception 'assertion failed: the future-dated (9999) and never-posted-draft (77) postings must never appear';
+  end if;
+
+  -- Narrower window starting AFTER tb-jrnl-1 -- its own 1000 must now
+  -- appear as a real, carried-forward OPENING balance, not vanish.
+  select count(*) into v_row_count from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-15'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901');
+  if v_row_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 rows (a carried-forward opening + tb-jrnl-2 only), got %', v_row_count;
+  end if;
+
+  select * into v_row from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-15'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where journal_id is null;
+  if v_row.running_balance <> 1000 then
+    raise exception 'assertion failed: expected the opening balance to carry forward tb-jrnl-1''s own 1000 even though it posted before this narrower window, got %', v_row.running_balance;
+  end if;
+
+  select * into v_row from app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-15'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where amount = 400;
+  if not found or v_row.running_balance <> 1400 then
+    raise exception 'assertion failed: expected tb-jrnl-2 to still land at running balance 1400 on top of the carried-forward opening, got %', v_row;
+  end if;
+
+  -- MULTI-CCY-TB: two genuinely separate currency rows (USD 50, EUR 30),
+  -- never a blended 80 -- mirrors app.get_finance_trial_balance's own
+  -- identical disclosed convention.
+  select count(*) into v_row_count from app.get_finance_account_ledger(v_tenant_a, null, v_multi_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901');
+  if v_row_count <> 4 then
+    raise exception 'assertion failed: expected exactly 4 rows (a USD opening+line, an EUR opening+line), got %', v_row_count;
+  end if;
+  if not exists (
+    select 1 from app.get_finance_account_ledger(v_tenant_a, null, v_multi_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where currency = 'USD' and amount = 50 and running_balance = 50
+  ) then
+    raise exception 'assertion failed: expected a real USD debit-50 line at running balance 50';
+  end if;
+  if not exists (
+    select 1 from app.get_finance_account_ledger(v_tenant_a, null, v_multi_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901')
+    where currency = 'EUR' and amount = 30 and running_balance = 30
+  ) then
+    raise exception 'assertion failed: expected a real, never-blended EUR debit-30 line at running balance 30';
+  end if;
+
+  -- Authority/validation: a Plain User with no FIN grant is denied; a
+  -- tenant B Finance Manager cannot read tenant A's own ledger; an
+  -- unknown account id is rejected; a reversed date range is rejected.
+  begin
+    perform app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031902');
+    raise exception 'assertion failed: expected insufficient_authority for Plain User A';
+  exception
+    when insufficient_privilege then null;
+  end;
+  begin
+    perform app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031903');
+    raise exception 'assertion failed: expected a tenant B Finance Manager to be denied tenant A''s own ledger';
+  exception
+    when insufficient_privilege then null;
+  end;
+  begin
+    perform app.get_finance_account_ledger(v_tenant_a, null, gen_random_uuid(), '2026-02-01'::date, '2026-03-31'::date, '00000000-0000-0000-0000-000000031901');
+    raise exception 'assertion failed: expected finance_account_ledger_account_not_found for an unknown account id';
+  exception
+    when others then
+      if sqlerrm not like 'finance_account_ledger_account_not_found%' then raise; end if;
+  end;
+  begin
+    perform app.get_finance_account_ledger(v_tenant_a, null, v_cash_id, '2026-03-31'::date, '2026-02-01'::date, '00000000-0000-0000-0000-000000031901');
+    raise exception 'assertion failed: expected finance_account_ledger_invalid_date_range when p_date_to is before p_date_from';
+  exception
+    when others then
+      if sqlerrm not like 'finance_account_ledger_invalid_date_range%' then raise; end if;
+  end;
+end;
+$$;
+
 \echo '>> schema privilege: app schema is not exposed to PostgREST; the public.* wrapper is the only externally-reachable surface (RGL-394 Option-2), cross-checked exhaustively by scripts/db-tests/public-api-wrapper-regression.sql'
 do $$
 begin

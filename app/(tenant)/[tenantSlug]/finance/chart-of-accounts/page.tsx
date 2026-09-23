@@ -113,6 +113,22 @@ export default async function ChartOfAccountsPage({
           "—"
         ),
     },
+    {
+      /* CG-AUDIT-2026-09-02 B2 (GL detail-report half): a leaf/postable
+         account's own posted transaction history -- a control account is
+         structurally never postable (finance_accounts_control_not_postable_
+         check), so its own ledger would always be empty; never linked. */
+      key: "ledger",
+      header: "Ledger",
+      render: (account) =>
+        account.isPostable ? (
+          <Link href={`/${tenantSlug}/finance/chart-of-accounts/${account.id}/ledger`} className="text-sm font-medium text-primary underline">
+            View ledger
+          </Link>
+        ) : (
+          "—"
+        ),
+    },
   ];
 
   const activeAccountsForParentSelect = accounts.filter((account) => account.status !== "inactive");

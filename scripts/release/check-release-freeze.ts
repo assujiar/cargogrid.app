@@ -5186,7 +5186,74 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "350fa15d6b05ebc506ec149c9c2ec03ff1b43aefc12371387cd77dc3d2e2e9e7",
+  migrationSetSha256: "822289f9c41bf80ddfde03bd341fdcb2c51f33bab3b6248599573b47408c3829",
+  // HUNDRED-AND-SIXTY-FOURTH PASS: CG-AUDIT-2026-09-02 B2 (GL detail-report
+  // half). One new migration (20260922020000_b2_finance_account_ledger.sql,
+  // 562 files, +1). A dedicated research pass found the backlog's own "GL
+  // report" sub-item was mis-bundled with the genuinely harder P&L/balance-
+  // sheet/year-end-close trio (all three stay DEFERRED_LARGE, untouched --
+  // net-income roll-up, account-hierarchy subtotaling, and a real reporting-
+  // currency/FX layer are all still genuinely needed there). A GL DETAIL
+  // report for one account needs none of those three: app.list_finance_
+  // journals lists whole journals (never filtered by account_id) and app.
+  // get_finance_journal_lines returns lines for exactly one journal_id at a
+  // time -- the audit's own "GL is write-only" framing was still literally
+  // true even after B2a's own trial-balance fix, since you could see a
+  // TOTAL but never an account's own posted detail. finance_journal_lines_
+  // account_idx (tenant_id, account_id), present since 20260729170000 and
+  // unused by any query until now, was the same "assembly, not invention"
+  // signal B2a itself used.
+  // Fix: app.get_finance_account_ledger(tenant, company, account, date_
+  // from, date_to, actor) -- FIN:View-gated, one real, explicit per-
+  // currency opening-balance row (net posted activity strictly before
+  // date_from, in the account's own normal_balance direction) followed by
+  // every posted app.finance_journal_lines row in range with a running
+  // balance carried forward, never blending currencies (mirrors app.get_
+  // finance_trial_balance's own identical disclosed convention exactly).
+  // Only a status='posted' journal counts. UI: a new finance/chart-of-
+  // accounts/[accountId]/ledger/ page (a GET-form date-range filter,
+  // mirroring finance/aging/page.tsx's own established pattern exactly),
+  // linked from a new "Ledger" column on the existing chart-of-accounts
+  // list -- only for a postable (non-control) account, since a control
+  // account can never be posted against directly.
+  // One real, self-caught bug during this pass's own db-test verification,
+  // fixed before ever reaching the full suite: every one of this RETURNS
+  // TABLE function's own OUT parameter names (entry_date, journal_id,
+  // amount, currency, etc.) is implicitly in scope as a PL/pgSQL variable
+  // throughout the function body, so the CTEs' own bare references to
+  // columns of the identical names (`select distinct currency from
+  // window_activity`, etc.) were genuinely ambiguous -- caught live on the
+  // first quick-iteration run ("column reference \"currency\" is
+  // ambiguous"), fixed by prefixing every intermediate CTE column (x_*)
+  // and only re-surfacing the real output names in the final, outermost
+  // select (RETURN QUERY inside a RETURNS TABLE function matches
+  // positionally, not by name, so no alias restatement was even needed
+  // there).
+  // New db-test coverage: scripts/db-tests/finance-trial-balance.sql
+  // gained a dedicated block reusing this file's own already-posted CASH-
+  // TB/MULTI-CCY-TB journals -- a full-month window (opening 0, both real
+  // postings, running balance reconciling exactly to this file's own
+  // already-proven 1400 trial-balance total, the future-dated and never-
+  // posted-draft postings both absent), a narrower window proving tb-
+  // jrnl-1's own 1000 correctly carries forward as a real opening balance
+  // rather than vanishing, MULTI-CCY-TB's own two never-blended currency
+  // rows, and the full authority/validation surface (Plain User denied,
+  // cross-tenant denied, an unknown account id rejected, a reversed date
+  // range rejected).
+  // Full Tier A gates verified clean: `typecheck`, the full unit test
+  // suite (6178/6178, including the release-freeze self-test after its
+  // digest update), a full `pnpm run db:test` (`ALL PASSED`, 562
+  // migrations / 279 db-test files -- one transient, unrelated pre-
+  // existing flake in commercial-dashboard.sql's own date-sensitive
+  // due_today bucket assertion on the first run, independently confirmed
+  // by a clean second run with zero changes), `git:check-paths`,
+  // `security:check`, `release:check-freeze` (HUNDRED-AND-SIXTY-FOURTH
+  // PASS, both digests updated -- one new migration file, zero new db-
+  // test files, one existing db-test file gaining real new coverage), and
+  // a real `next build`.
+  // History: 350fa15d6b05ebc506ec149c9c2ec03ff1b43aefc12371387cd77dc3d2e2e9e7
+  // (561 files, HUNDRED-AND-SIXTY-THIRD PASS).
+  //
   // HUNDRED-AND-SIXTY-THIRD PASS: CG-AUDIT-2026-09-02 B3 correction (self-
   // caught, not from the audit doc). One new migration
   // (20260922010000_b3_credit_note_gl_reversal.sql, 561 files, +1). A
@@ -7671,7 +7738,25 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "af9e11a70582f348de5a7a8d731ce5caf80955ea4fb1d6a0cd2a9becf5018101",
+  dbTestSetSha256: "9aa668a6668e9cfd83a36d1a42868d9d97f04843361e68aae716cee9b34ae106",
+  // HUNDRED-AND-SIXTY-FOURTH PASS: same CG-AUDIT-2026-09-02 B2 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), one EXISTING file gained real new coverage:
+  // scripts/db-tests/finance-trial-balance.sql, reusing its own already-
+  // posted CASH-TB/MULTI-CCY-TB journal fixtures for a full account-
+  // ledger assertion block (opening balance, running total reconciling
+  // exactly to this file's own already-proven trial-balance figures, a
+  // narrower-window opening-balance carry-forward proof, never-blended
+  // multi-currency rows, and the full authority/validation surface). A
+  // real ambiguous-column bug (see migrationSetSha256's own note above)
+  // was caught and fixed on this pass's own first quick-iteration run --
+  // fixed before this ever reached the full suite, which then ran ALL
+  // PASSED (one transient, unrelated pre-existing commercial-dashboard.sql
+  // flake on the first run, independently confirmed clean on a second run
+  // with zero changes).
+  // History: af9e11a70582f348de5a7a8d731ce5caf80955ea4fb1d6a0cd2a9becf5018101
+  // (279 files, HUNDRED-AND-SIXTY-THIRD PASS).
+  //
   // HUNDRED-AND-SIXTY-THIRD PASS: same CG-AUDIT-2026-09-02 B3 correction as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), two EXISTING files gained real new coverage:
