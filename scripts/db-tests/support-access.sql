@@ -513,6 +513,101 @@ begin
 end;
 $$;
 
+\echo '>> CG-AUDIT-2026-09-02 UNTRACKED-D4: app.list_support_access_grants_for_admin -- security invoker, RLS does the visibility filtering: Supreme Admin sees every grant across every tenant, a tenant''s own active tenant_admin sees only that tenant''s own grants (never another tenant''s), a tenant_admin of a tenant with zero grants sees zero rows (not an error), and total_count reflects exactly the visible row count'
+do $$
+declare
+  v_tenant_a uuid;
+  v_tenant_b uuid;
+  v_org_unit_b uuid;
+  v_row record;
+  v_count integer;
+  v_total_count integer;
+  v_saw_other_tenant boolean;
+begin
+  v_tenant_a := (select id from app.tenants where slug = 'acmesup');
+  v_tenant_b := (select id from app.tenants where slug = 'gizmosup');
+
+  insert into auth.users (id, email) values ('00000000-0000-0000-0000-000000000705', 'tenantadmingizmo@example.test');
+  perform app.create_org_unit(v_tenant_b, 'company', null, 'GIZMOSUP-CO', 'Gizmo Support Co HQ', 'tester');
+  v_org_unit_b := (select id from app.org_units where tenant_id = v_tenant_b and code = 'GIZMOSUP-CO');
+  perform app.invite_user(v_tenant_b, '00000000-0000-0000-0000-000000000705', 'tenantadmingizmo@example.test', 'Tenant B Admin', v_org_unit_b, 'tester', now() + interval '7 days');
+  perform app.transition_user_status((select id from app.users where email = 'tenantadmingizmo@example.test'), 'active', 'onboarded', 'tester');
+  perform app.grant_principal_membership('00000000-0000-0000-0000-000000000705', 'tenant_admin', v_tenant_b, null, 'tester');
+
+  set local role authenticated;
+
+  -- Supreme Admin: every grant across both tenants (at least the 4 real acmesup ones).
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000702", "role": "authenticated"}';
+  select count(*), max(total_count) into v_count, v_total_count from app.list_support_access_grants_for_admin(1, 50);
+  if v_count < 4 or v_total_count < 4 or v_count <> v_total_count then
+    raise exception 'assertion failed: expected Supreme Admin to see every grant (count=total_count, >= 4), saw count=% total_count=%', v_count, v_total_count;
+  end if;
+
+  -- acmesup's own tenant_admin: only acmesup's own grants, never gizmosup's (which has none
+  -- yet, but the predicate itself -- every row.tenant_id = tenant A -- is what matters).
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000701", "role": "authenticated"}';
+  v_saw_other_tenant := false;
+  select count(*) into v_count from app.list_support_access_grants_for_admin(1, 50);
+  if v_count < 4 then
+    raise exception 'assertion failed: expected acmesup''s own tenant_admin to see at least its own 4 grants, saw %', v_count;
+  end if;
+  for v_row in select * from app.list_support_access_grants_for_admin(1, 50) loop
+    if v_row.tenant_id <> v_tenant_a then
+      v_saw_other_tenant := true;
+    end if;
+  end loop;
+  if v_saw_other_tenant then
+    raise exception 'assertion failed: acmesup''s own tenant_admin must never see a grant scoped to another tenant';
+  end if;
+
+  -- gizmosup's own tenant_admin: zero grants (a real, empty tenant), not an error.
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000705", "role": "authenticated"}';
+  select count(*) into v_count from app.list_support_access_grants_for_admin(1, 50);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected gizmosup''s own tenant_admin to see zero grants (none exist for that tenant), saw %', v_count;
+  end if;
+
+  -- A regular org_user (no support-grant authority, and not a grantee of any of these
+  -- grants) sees zero rows too -- the grantee-only RLS branch does not admit them.
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000704", "role": "authenticated"}';
+  select count(*) into v_count from app.list_support_access_grants_for_admin(1, 50);
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected a regular org_user with no support-grant authority and no grants of their own to see zero rows, saw %', v_count;
+  end if;
+
+  reset role;
+end;
+$$;
+
+\echo '>> app.list_support_access_grants_for_admin: page-size clamp [1,100] and page floor 1'
+do $$
+declare
+  v_count integer;
+begin
+  set local role authenticated;
+  set local request.jwt.claims to '{"sub": "00000000-0000-0000-0000-000000000702", "role": "authenticated"}';
+  select count(*) into v_count from app.list_support_access_grants_for_admin(0, 500);
+  if v_count > 100 then
+    raise exception 'assertion failed: expected page_size clamped to 100, got % rows', v_count;
+  end if;
+  reset role;
+end;
+$$;
+
+\echo '>> ERR-2026-004 regression guard: anon holds zero EXECUTE on app.list_support_access_grants_for_admin or its public.* wrapper'
+do $$
+declare
+  v_count integer;
+begin
+  select count(*) into v_count
+  from information_schema.routine_privileges
+  where grantee = 'anon' and routine_name = 'list_support_access_grants_for_admin';
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero anon EXECUTE grants on list_support_access_grants_for_admin (either schema), found %', v_count;
+  end if;
+end;
+$$;
+
 \echo '>> defense in depth: anon is denied entirely on every new table; service_role has explicit full access'
 do $$
 begin

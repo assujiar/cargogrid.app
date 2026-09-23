@@ -38,6 +38,7 @@ import type { FinanceSettlementStatus } from "../../server/contracts/settlement/
 import type { FinanceJournalStatus } from "../../server/contracts/journal/journal.ts";
 import type { FinanceCorrectionStatus } from "../../server/contracts/journal-correction/journal-correction.ts";
 import type { FinancePeriodLockStatus } from "../../server/contracts/period-lock/period-lock.ts";
+import type { SupportAccessGrantStatus } from "../../server/contracts/support-access/support-access.ts";
 import type { FinanceReconciliationRunStatus, FinanceReconciliationExceptionStatus } from "../../server/contracts/reconciliation/reconciliation.ts";
 import type { FinanceBankTransactionMatchStatus } from "../../server/contracts/cash-bank/cash-bank.ts";
 import type { FinanceLifecycleCanonicalState } from "../../server/contracts/lifecycle/lifecycle.ts";
@@ -327,3 +328,15 @@ export const SHIPMENT_ORDER_STATUS_TONE_MAP: Record<ShipmentOrderStatus, StatusT
   held: { tone: "warning", label: "Held" },
   cancelled: { tone: "danger", label: "Cancelled" },
 };
+
+/** CG-AUDIT-2026-09-02 UNTRACKED-D4: the support-access console's own grant-status badge. */
+export const SUPPORT_ACCESS_GRANT_STATUS_TONE_MAP: Record<SupportAccessGrantStatus, StatusToneEntry> = {
+  pending_approval: { tone: "warning", label: "Pending approval" },
+  approved: { tone: "success", label: "Approved" },
+  denied: { tone: "danger", label: "Denied" },
+  revoked: { tone: "danger", label: "Revoked" },
+};
+
+export function resolveSupportAccessGrantStatusTone(status: string): StatusToneEntry {
+  return SUPPORT_ACCESS_GRANT_STATUS_TONE_MAP[status as SupportAccessGrantStatus] ?? { tone: "neutral", label: status };
+}

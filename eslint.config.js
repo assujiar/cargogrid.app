@@ -159,6 +159,7 @@ const serviceRoleImportGuard = {
     "app/(public)/vendor-intake/\\[token\\]/actions.ts",
     "app/(public)/vendor-intake/register/\\[tenantSlug\\]/actions.ts",
     "app/(public)/vendor-intake/register/\\[tenantSlug\\]/page.tsx",
+    "app/(supreme)/supreme/support-access/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/api-keys/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/approvals/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/approvals/page.tsx",

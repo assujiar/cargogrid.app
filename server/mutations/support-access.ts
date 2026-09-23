@@ -6,6 +6,7 @@
  * (supabase/migrations/20260716111315_create_support_access.sql).
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ApproveSupportAccessInputSchema,
   CompleteSupportAccessPostReviewInputSchema,
@@ -41,6 +42,11 @@ export interface SupportAccessMutationRpcClient {
     fn: GrantRpcFn | SessionRpcFn,
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/** Adapts a real Supabase client (whose `.rpc` is generic over a schema-derived function-name union) to this file's own narrower interface -- CG-AUDIT-2026-09-02 UNTRACKED-D4's first real caller, mirrors server/mutations/tenant.ts's own toTenantRpcClient exactly. */
+export function toSupportAccessMutationRpcClient(client: Pick<SupabaseClient, "rpc">): SupportAccessMutationRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export const SUPPORT_ACCESS_KNOWN_ERROR_CODES = [

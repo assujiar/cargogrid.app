@@ -5186,7 +5186,73 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "6e3c86f87a96d2808c343a523e2c486af971a24bc28126874f6d62fff662a471",
+  migrationSetSha256: "a4ac300313a0672de48fbef10b18a60b79912ce4914be548dd52bf464ad60a7c",
+  // HUNDRED-AND-SIXTY-SEVENTH PASS: CG-AUDIT-2026-09-02 UNTRACKED-D4 (support-access
+  // console). One new migration (20260924000000_d4_support_access_admin_console_
+  // list.sql, 565 files, +1). PLT-115's own support-access grant/approve/deny/
+  // revoke/post-review lifecycle (20260716111315_create_support_access.sql) has
+  // been fully built and fully tested since it shipped, but had zero callers
+  // anywhere in app/ -- AGENTS.md itself names this control by name ("Support
+  // access is purpose/time-bound, logged, tenant-visible, and revocable") and it
+  // could not be exercised through the product at all: no operator could grant,
+  // approve, deny, or revoke support access to a live tenant, and the one real
+  // kill switch (revoke_support_access) was unreachable.
+  // A workflow-driven investigate:UNTRACKED-D4-support-access-console agent
+  // proposed this candidate at "0 new migrations, 0 new RPCs -- UI slice only";
+  // its own paired verify agent never completed (a session-usage-limit failure),
+  // so per this session's standing discipline every claim was personally re-
+  // verified against current code before implementing. The lifecycle RPCs
+  // themselves (request/approve/deny/revoke/complete_post_review) genuinely did
+  // need zero schema change -- confirmed correct, and wired up via the
+  // established "explicit actor, service-role execution" pattern (app/(tenant)/
+  // [tenantSlug]/admin/roles/actions.ts's own precedent, since those RPCs are
+  // service_role-only too). But the "0 new RPCs" claim for the LIST view did not
+  // survive re-verification: this codebase's own O1-query-layer remediation
+  // (this session, clusters 0-7) eliminated every direct `.from()` read from
+  // page-level code in favor of a dedicated RPC, and app.list_supreme_tenants
+  // (20260913040000) is the exact, deliberately-chosen precedent for "a Supreme-
+  // visible list, RLS already grants the right rows, wrap it in a thin RPC
+  // anyway" -- confirmed by reading that migration's own extensive comment
+  // explaining exactly this choice. Building a raw `.from()` read here would
+  // have reintroduced the exact anti-pattern O1 spent 8 clusters removing.
+  // Closed: app.list_support_access_grants_for_admin(page, page_size) -- SECURITY
+  // INVOKER, zero actor parameter, deliberately no in-function authority check
+  // (app.support_access_grants' own support_access_grants_select_visible RLS
+  // policy already grants exactly the right visibility: the grantee's own
+  // grants; Supreme Admin sees every grant; a tenant's own active tenant_admin
+  // sees every grant into that tenant), `count(*) over()` pagination, identical
+  // [1,100] page-size clamp -- mirrors app.list_supreme_tenants byte-for-byte in
+  // shape. New app/(supreme)/supreme/support-access/ route: a grant list (status
+  // badge, emergency flag) with per-row Approve/Deny/Revoke/Complete-post-review
+  // forms varying by the grant's own current status, plus a request-access form.
+  // Deliberately, permanently out of scope this pass: starting or ending a
+  // support SESSION. app.start_support_session's own p_reauth_confirmed_at is a
+  // bare caller-asserted timestamp -- the RPC only checks it is recent (<=5
+  // minutes), it does not itself verify a real re-authentication happened.
+  // Confirmed via a repo-wide grep that zero UI anywhere calls server/mutations/
+  // enterprise-mfa.ts's own step-up challenge functions -- no genuine
+  // "re-authenticate right now" flow exists in this repository to produce a
+  // trustworthy timestamp. Wiring "Start session" to a synthesized
+  // `new Date().toISOString()` would be a real security regression (a false
+  // re-authentication claim), not a neutral UI addition; building a genuine
+  // step-up flow is a separate, deliberate capability of its own. The grant
+  // lifecycle this pass DOES wire up is what actually closes the audit's own
+  // complaint about granting/approving/revoking; it does not claim to close
+  // "start an impersonation session," which stays unreachable through the
+  // product exactly as before.
+  // Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors after
+  // adding this pass's own new Server Action file to eslint.config.js's
+  // deliberate service-role-import allowlist -- the file is a genuine `"use
+  // server"` action calling only service_role-only RPCs, the exact shape that
+  // allowlist exists to admit; only pre-existing warnings otherwise), the full
+  // unit test suite (6182/6182, including 4 new listSupportAccessGrantsForAdmin
+  // tests and the release-freeze self-test after this digest update), a full
+  // `pnpm run db:test` (`ALL PASSED`, 565 migrations / 279 db-test files),
+  // `git:check-paths`, `security:check`, and a real `next build` (confirmed
+  // `/supreme/support-access` in the route manifest).
+  // History: 6e3c86f87a96d2808c343a523e2c486af971a24bc28126874f6d62fff662a471
+  // (564 files, HUNDRED-AND-SIXTY-SIXTH PASS).
+  //
   // HUNDRED-AND-SIXTY-SIXTH PASS: CG-AUDIT-2026-09-02 E5 (untracked sub-claim A,
   // self-caught from the audit's own E5 paragraph -- "Driver licence expiry and
   // vehicle serviceability are checked at neither assignment nor dispatch" -- present
@@ -7874,7 +7940,28 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "da5989778eb71f20323dc00f0224a94de06288bfb269e6a8ba966fc80bdb956d",
+  dbTestSetSha256: "9a8c5479f0a15861d99802c22b457652de639501257b63e924ed9f60a82b7b88",
+  // HUNDRED-AND-SIXTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 UNTRACKED-D4 slice
+  // as migrationSetSha256's own note immediately above -- no new db-test file
+  // (279 files unchanged), one EXISTING file gained real new coverage:
+  // scripts/db-tests/support-access.sql, extended with a new tenant B
+  // tenant_admin actor (invited and activated properly -- app.principal_
+  // memberships' own foreign key to app.tenant_user_identities requires
+  // app.invite_user before app.grant_principal_membership, caught on this
+  // pass's own first quick-iteration run) and a new assertion block proving
+  // app.list_support_access_grants_for_admin's RLS-driven visibility: Supreme
+  // Admin sees every grant across both tenants (count = total_count), tenant
+  // A's own tenant_admin sees only tenant A's own grants (never leaking
+  // tenant B's), tenant B's own tenant_admin sees zero rows for its own,
+  // genuinely empty tenant (not an error), a regular org_user with no
+  // support-grant authority and no grants of their own sees zero rows too,
+  // the [1,100] page-size clamp holds, and anon holds zero EXECUTE on the new
+  // function (ERR-2026-004 regression guard).
+  // Full Tier A gates verified clean: same run as migrationSetSha256's own
+  // note above.
+  // History: da5989778eb71f20323dc00f0224a94de06288bfb269e6a8ba966fc80bdb956d
+  // (279 files, HUNDRED-AND-SIXTY-SIXTH PASS).
+  //
   // HUNDRED-AND-SIXTY-SIXTH PASS: same CG-AUDIT-2026-09-02 E5 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file (279 files
   // unchanged), one EXISTING file gained real new coverage: scripts/db-tests/

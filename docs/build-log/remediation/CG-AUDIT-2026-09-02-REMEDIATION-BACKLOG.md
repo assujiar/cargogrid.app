@@ -70,6 +70,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | B8 | Finance `company_id` is caller-supplied and never validated against the caller's tenant across ≥8 reachable RPCs | `CODE` | **DONE** | (this commit) |
 | D1 | MFA switched off; `verify_mfa_step_up_challenge` validates no real factor | `CODE` (challenge validation) + `INFRA` (enabling a real TOTP provider is a Supabase project auth-config change) | **PARTIAL** | CODE half done (this commit) — now requires the calling session itself to be authenticated at AAL2; INFRA half (enabling a real TOTP/phone provider, building the client-side `challengeAndVerify()` UI) is an operator/product task this repository cannot perform, see execution log |
 | D4 | `integration_secrets_encryption_key()` GUC never configured outside db-test fixtures | `INFRA` (real secret provisioning, not a code change) | NEEDS_HUMAN_GATE | a new real consumer now depends on this GUC being set: `app.platform_integration_secrets` (this commit, user-directed A6 extension) fails closed with `encryption_key_not_configured` until it is |
+| UNTRACKED-D4 | Support-access console: PLT-115's real grant/approve/deny/revoke lifecycle (`app.request_support_access` et al.) has zero callers anywhere in the product -- silently dropped from tracking entirely, never logged as a row, deferred, or even disclosed | `CODE` | **DONE** (2026-09-24) | closed via `app/(supreme)/supreme/support-access/` (request/approve/deny/revoke/complete-post-review, plus a new `app.list_support_access_grants_for_admin` list RPC -- the RLS-scoped, RPC-only pattern O1-query-layer already established). Deliberately, permanently out of scope: starting/ending a support SESSION, since `app.start_support_session`'s own re-auth-confirmation parameter is a bare caller-asserted timestamp and no genuine "re-authenticate right now" UI flow exists anywhere in this repository -- wiring it to a synthesized timestamp would be a real security regression, not a neutral addition. See execution log |
 
 ## B — Money (beyond B1/B8, already tracked above)
 
@@ -5091,3 +5092,136 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   coverage). No app/, components/, or "use server" file touched by this
   pass -- `next build` not required by this file's own Tier A trigger and
   not run.
+- 2026-09-24 — UNTRACKED-D4 (support-access console) closed (this
+  commit). The same comprehensive adversarial workflow sweep that found
+  E5's own hidden cores also surfaced a real `investigate:UNTRACKED-D4-
+  support-access-console` finding, present in this repository's actual
+  code but literally absent from this backlog table entirely -- a full-
+  document grep for "support-access console"/"grant/approve/revoke"
+  confirmed it was never logged as a row, deferred, or even disclosed.
+  Its own paired `verify:UNTRACKED-D4-support-access-console` adversarial-
+  skeptic agent never completed (a session-usage-limit failure, not a
+  real refutation), so every claim was personally re-verified against
+  actual current code before implementing, per this session's own
+  standing discipline.
+  The core claim held up cleanly: PLT-115's real support-access grant/
+  approve/deny/revoke/post-review lifecycle
+  (`supabase/migrations/20260716111315_create_support_access.sql`, read
+  in full) has been fully built, fully tested
+  (`scripts/db-tests/support-access.sql`), and fully wired at the
+  `server/mutations/support-access.ts` / `server/queries/support-
+  access.ts` layer since it shipped -- confirmed by reading both files in
+  full -- but a repo-wide grep for every one of its 8 mutation/query
+  function names across `app/` returned zero hits. `AGENTS.md` itself
+  names this exact control by name ("Support access is purpose/time-
+  bound, logged, tenant-visible, and revocable"), and today the one real
+  kill switch (`revoke_support_access`) was unreachable through the
+  product -- an operator could not grant, approve, deny, or revoke
+  support access to a live tenant at all.
+  One real correction to the investigator's own scope estimate ("0 new
+  migrations, 0 new RPCs -- UI slice only"), caught during re-
+  verification, before any code was written: the lifecycle RPCs
+  themselves genuinely needed no schema change (confirmed via their
+  grants -- `service_role`-only, wired up via the same "explicit actor,
+  service-role execution" pattern `app/(tenant)/[tenantSlug]/admin/
+  roles/actions.ts` already established for an identically-gated RPC
+  set), but the LIST view's "a direct `.from('support_access_grants').
+  select()` already works via RLS, no RPC needed" claim did not survive
+  re-verification: this codebase's own O1-query-layer remediation (this
+  session, clusters 0-7, ~65 files) eliminated every direct `.from()`
+  read from page-level code specifically in favor of a dedicated RPC even
+  where RLS alone would have sufficed -- confirmed by reading `app.list_
+  supreme_tenants`'s own extensive migration comment
+  (`20260913040000_close_o1_query_layer_cluster6_batch4_scheduled_
+  reports_dashboards.sql`), which replaced exactly this shape of raw read
+  for exactly this reason and is the deliberate precedent this session
+  has followed all the way through. Building a raw `.from()` read here
+  would have reintroduced the exact anti-pattern O1 spent 8 clusters
+  removing, in a brand-new page, in the same session that just finished
+  removing it everywhere else.
+  Closed: `app.list_support_access_grants_for_admin(page, page_size)` --
+  SECURITY INVOKER, zero actor parameter, deliberately no in-function
+  authority check (`app.support_access_grants`' own `support_access_
+  grants_select_visible` RLS policy, read in full, already grants exactly
+  the right visibility: the grantee's own grants; Supreme Admin sees
+  every grant; a tenant's own active tenant_admin sees every grant into
+  that tenant), `count(*) over()` pagination, identical `[1,100]` page-
+  size clamp -- mirrors `app.list_supreme_tenants` byte-for-byte in
+  shape, plus a matching `public.*` wrapper (RGL-394 Option-2, security
+  invoker, matched exactly to that same precedent's own grant/revoke
+  sequencing). New `toSupportAccessMutationRpcClient`/
+  `toSupportAccessRpcClient` adapters added to `server/mutations/
+  support-access.ts`/`server/queries/support-access.ts` (mirroring
+  `server/mutations/tenant.ts`'s own `toTenantRpcClient` exactly -- this
+  file's own header already disclosed it had no real caller to prove the
+  "works without an adapter" claim, same as `server/mutations/tenant.ts`'s
+  own history), plus `listSupportAccessGrantsForAdmin` (mirrors
+  `listSupremeTenants` exactly) with 4 new unit tests. New
+  `resolveSupportAccessGrantStatusTone` added to `components/domain/
+  status-tone-map.ts` (the same central status-to-tone binding every
+  other domain's own `StatusBadge` consumer already uses).
+  New route: `app/(supreme)/supreme/support-access/` -- a grant list
+  (status badge, emergency flag) with a per-row action cell varying by
+  the grant's own current status (Approve + Deny while
+  `pending_approval`; Revoke, plus Complete-post-review when an emergency
+  grant's own post-review is still outstanding, while `approved` and not
+  revoked; nothing further once denied/revoked), and a request-access
+  form. Added to the Supreme nav (`app/(supreme)/supreme/layout.tsx`).
+  One real lint-gate finding, self-caught before this pass ever reached
+  `pnpm run lint`: `app/(supreme)/supreme/support-access/actions.ts`
+  imports `createSupabaseServiceRoleClient` and is a genuine `"use
+  server"` Server Action calling only `service_role`-only RPCs -- the
+  exact shape `eslint.config.js`'s own `serviceRoleImportGuard` allowlist
+  exists to admit -- but that allowlist is a deliberate, explicit file-
+  path list (`docs/standards/CODING_STANDARDS.md` §4/§10's own "flag
+  everywhere, then allowlist the exact audited-legitimate file" design),
+  not a smart "is this really a Server Action" check, and had no
+  `(supreme)/` entries yet (every prior Supreme route used the RLS-scoped
+  client instead). Added this pass's own new file to that allowlist,
+  confirmed via `pnpm run lint` returning to 0 errors afterward.
+  Deliberately, permanently out of scope this pass, and explained in this
+  route's own `actions.ts` header comment: starting or ending a support
+  SESSION. `app.start_support_session`'s own `p_reauth_confirmed_at` is a
+  bare caller-asserted timestamp (read its full body) -- the RPC only
+  checks it is recent (<=5 minutes old and not in the future), it does
+  not itself verify any real re-authentication happened. A repo-wide grep
+  for every caller of `server/mutations/enterprise-mfa.ts`'s own step-up
+  challenge functions (`requestMfaStepUpChallenge`/
+  `verifyMfaStepUpChallenge`/`assertCurrentStepUpAuthorization`) returned
+  zero hits anywhere in `app/` -- no genuine "re-authenticate right now"
+  UI flow exists anywhere in this repository to produce a trustworthy
+  timestamp. Wiring "Start session" to a synthesized
+  `new Date().toISOString()` would have been a real security regression
+  (a UI falsely claiming re-authentication just happened), not a neutral
+  addition -- building a genuine step-up-confirmation flow is a separate,
+  deliberate capability of its own, outside this bounded change. The
+  grant lifecycle this pass DOES wire up is what actually closes the
+  audit's own complaint about granting/approving/revoking; it does not
+  claim to close "start an impersonation session," which stays
+  unreachable through the product exactly as it was before this pass --
+  disclosed explicitly rather than silently narrowed.
+  New db-test coverage: `scripts/db-tests/support-access.sql` gained a
+  properly-invited-and-activated tenant B `tenant_admin` actor (a first
+  quick-iteration run caught a real fixture gap: `app.principal_
+  memberships`' own foreign key to `app.tenant_user_identities` requires
+  `app.invite_user` before `app.grant_principal_membership` -- fixed
+  before ever reaching the full suite) and a new assertion block proving
+  `app.list_support_access_grants_for_admin`'s RLS-driven visibility:
+  Supreme Admin sees every grant across both tenants with `count =
+  total_count`; tenant A's own tenant_admin sees only tenant A's own
+  grants, never tenant B's; tenant B's own tenant_admin (a genuinely
+  empty tenant) sees zero rows, not an error; a regular org_user with no
+  support-grant authority and no grants of their own also sees zero rows;
+  the `[1,100]` page-size clamp holds; and anon holds zero EXECUTE on the
+  new function (ERR-2026-004 regression guard).
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors
+  after the allowlist addition above, only pre-existing warnings
+  otherwise), the full unit test suite (6182/6182, including 4 new
+  `listSupportAccessGrantsForAdmin` tests and the release-freeze self-
+  test after its digest update), a full `pnpm run db:test` (`ALL
+  PASSED`, 565 migrations / 279 db-test files), `git:check-paths`,
+  `security:check`, `release:check-freeze` (HUNDRED-AND-SIXTY-SEVENTH
+  PASS, both digests updated -- one new migration file, zero new db-test
+  files, one existing db-test file gaining real new coverage), and a real
+  `next build` (confirmed `/supreme/support-access` in the route
+  manifest).
