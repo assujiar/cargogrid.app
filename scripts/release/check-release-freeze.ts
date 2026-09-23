@@ -5186,7 +5186,105 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "a4ac300313a0672de48fbef10b18a60b79912ce4914be548dd52bf464ad60a7c",
+  migrationSetSha256: "4779288b6535c05e31f2955d5016f13c4f0ce6deccb9e517519879a3db391b5f",
+  // HUNDRED-AND-SIXTY-EIGHTH PASS: CG-AUDIT-2026-09-02 UNTRACKED-B8 (the "number
+  // counters compound it" second half of the original B8 finding -- the backlog's
+  // own B8 row closed only the "company_id caller-supplied, never validated"
+  // first half). One new migration
+  // (20260924010000_untracked_b8_fix_finance_number_counter_scope.sql, 566
+  // files, +1).
+  // Confirmed live, in the CURRENT (not stale) body of every affected RPC,
+  // before writing this migration: app.finance_invoice_number_counters (and
+  // its 3 siblings for journal/settlement/vendor_bill) key their own upsert on
+  // (tenant_id, coalesce(company_id, sentinel), year) -- one independent
+  // sequence per company -- while the resulting document's own number carries
+  // NO company component ('INV-' || year || '-' || lpad(seq,6,'0')) and the
+  // target table's own uniqueness (finance_invoices_tenant_number_unique and
+  // its 3 siblings) is tenant-scoped only. Any tenant with >= 2 org_units
+  // (company_id sources -- a real, already-shipped feature) issuing/posting in
+  // the same year hits a guaranteed 23505 unique-violation on the second
+  // company's first document of that type each year. The audit's own §6
+  // roadmap (line 574) names the intended target explicitly: "per-tenant
+  // number uniqueness" -- confirming the fix is to narrow the counter's own
+  // scope to match the already-declared, already-enforced constraint, not
+  // invent a new company-qualified display format.
+  // A workflow-driven investigate:UNTRACKED-B8-invoice-number-uniqueness agent
+  // named 5 affected RPCs (issue_finance_invoice, post_finance_journal,
+  // create_and_post_finance_system_journal, post_finance_settlement,
+  // post_finance_vendor_bill); its own paired verify agent never completed (a
+  // session-usage-limit failure), so every claim was personally re-verified
+  // against current code before implementing, per this session's own standing
+  // discipline. That re-verification found the investigator's own citations
+  // for 2 of those 5 functions were themselves STALE (issue_finance_invoice
+  // had been redefined twice more since the cited migration, by this
+  // session's own earlier B5 and E6 passes) -- the TRUE latest body of each
+  // was fetched programmatically (not retyped by hand, to eliminate
+  // transcription risk on finance-posting code) before this migration was
+  // written, and every one of the 5 diffs was verified byte-for-byte against
+  // its source, confirming the ONLY change is the conflict-target line.
+  // A SIXTH affected function -- app.import_historical_finance_journal
+  // (20260826160000_create_finance_journal_historical_import.sql), which
+  // shares app.finance_journal_number_counters with post_finance_journal/
+  // create_and_post_finance_system_journal but is its own separate entry
+  // point -- was missed entirely by the investigate agent's own report AND by
+  // this migration's own first draft. Caught only because this migration was
+  // run against a full `pnpm run db:test` before being trusted: finance-
+  // journal.sql's own historical-import test hit "there is no unique or
+  // exclusion constraint matching the ON CONFLICT specification" on the first
+  // run. Found the complete, exhaustive set (6, not 5) via a programmatic
+  // scan of every `insert into app.finance_*_number_counters` call site
+  // across every migration file, not by trusting either report -- exactly the
+  // class of drift this session's own standing discipline (personally
+  // re-verify, never trust a sub-agent claim or a first-pass grep at face
+  // value) exists to catch, now demonstrated on the fix itself, not just the
+  // original finding.
+  // Fix, per counter table (4 tables, 6 call sites): consolidate any existing
+  // per-company rows for the same (tenant_id, year) into exactly one row
+  // (next_seq raised to a safe floor -- the greater of the existing rows' own
+  // max next_seq and one past the highest sequence number already embedded in
+  // a real issued/posted document number for that tenant/year, a defensive
+  // cross-check against actual ground truth -- never decreased, matching the
+  // same discipline app.bootstrap_numbering_counter's own
+  // numbering_counter_cannot_decrease guard enforces for the platform's
+  // separate generic numbering engine); re-scope each table's own unique
+  // index from (tenant_id, coalesce(company_id, sentinel), year) to
+  // (tenant_id, year); update each of the 6 functions' own conflict target to
+  // match. company_id itself is retained on all 4 tables (never dropped -- a
+  // destructive change AGENTS.md's own database rules require explicit
+  // approval/backup/rehearsal for, and confirmed via grep that nothing else
+  // in this schema reads the column, so leaving it as informational-only
+  // carries zero risk).
+  // New db-test coverage: a new scripts/db-tests/untracked-b8-finance-number-
+  // counter-scope.sql directly exercises the exact mechanism this fix
+  // changed (the same INSERT ... ON CONFLICT statement each affected RPC
+  // performs, reproduced verbatim) rather than through the full commercial-
+  // to-invoice business chain -- a fresh disposable test database starts
+  // every counter table empty, so there is no pre-existing per-company
+  // duplicate data for this migration's own consolidation logic to exercise
+  // in that environment (that logic only matters against a live database
+  // carrying real pre-fix history); what IS exactly reproducible and
+  // meaningful is the going-forward behavior, which the new test proves for
+  // all 4 counter tables: two different company_id values under the same
+  // tenant/year now share one incrementing sequence (1, then 2) instead of
+  // each independently starting at 1 (the pre-fix bug, which would have
+  // collided on the target table's own tenant-only uniqueness the moment
+  // both were actually issued/posted); a different year or a different
+  // tenant still gets its own independent sequence starting at 1 (the fix
+  // narrows scope, it does not over-merge); and the 4 tables' own scope-
+  // unique indexes are confirmed to no longer reference company_id at all.
+  // Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  // only pre-existing warnings), the full unit test suite (6182/6182,
+  // including the release-freeze self-test after this digest update), a full
+  // `pnpm run db:test` (`ALL PASSED`, 566 migrations / 280 db-test files --
+  // the first run of this migration caught the missing 6th function via a
+  // real ON CONFLICT specification error in finance-journal.sql's own
+  // existing historical-import test, fixed before this pass was ever
+  // trusted), `git:check-paths`, `security:check`. No app/, components/, or
+  // "use server" file touched by this pass -- `next build` not required by
+  // this file's own Tier A trigger and not run.
+  // History: a4ac300313a0672de48fbef10b18a60b79912ce4914be548dd52bf464ad60a7c
+  // (565 files, HUNDRED-AND-SIXTY-SEVENTH PASS).
+  //
   // HUNDRED-AND-SIXTY-SEVENTH PASS: CG-AUDIT-2026-09-02 UNTRACKED-D4 (support-access
   // console). One new migration (20260924000000_d4_support_access_admin_console_
   // list.sql, 565 files, +1). PLT-115's own support-access grant/approve/deny/
@@ -7940,7 +8038,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "9a8c5479f0a15861d99802c22b457652de639501257b63e924ed9f60a82b7b88",
+  dbTestSetSha256: "a84cea91b045f5133f01a3e63358b83688afbc40455e7cfbbd6861ed24acfd25",
+  // HUNDRED-AND-SIXTY-EIGHTH PASS: same CG-AUDIT-2026-09-02 UNTRACKED-B8 slice
+  // as migrationSetSha256's own note immediately above -- one new db-test file
+  // (280 files, +1): scripts/db-tests/untracked-b8-finance-number-counter-
+  // scope.sql, directly exercising the counter-upsert conflict-target change
+  // on all 4 finance number-counter tables (see migrationSetSha256's own note
+  // for the full description of what it proves and why it tests the
+  // mechanism directly rather than through a full invoice/journal/settlement/
+  // vendor-bill business chain).
+  // History: 9a8c5479f0a15861d99802c22b457652de639501257b63e924ed9f60a82b7b88
+  // (279 files, HUNDRED-AND-SIXTY-SEVENTH PASS).
+  //
   // HUNDRED-AND-SIXTY-SEVENTH PASS: same CG-AUDIT-2026-09-02 UNTRACKED-D4 slice
   // as migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), one EXISTING file gained real new coverage:

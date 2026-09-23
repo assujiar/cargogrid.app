@@ -68,6 +68,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | D3d | An enqueued job can leak another tenant's data — 4 of 5 workers never compare the payload's embedded ids back to the job's own tenant | `CODE` | **DONE** | `b9c1663` |
 | D3 | IP allowlist bypass — `integrations/actions.ts:76` takes `x-forwarded-for` first-hop instead of last-hop | `CODE` | **DONE** | `f5f0878` |
 | B8 | Finance `company_id` is caller-supplied and never validated against the caller's tenant across ≥8 reachable RPCs | `CODE` | **DONE** | (this commit) |
+| UNTRACKED-B8 | Number counters compound B8: they run one sequence per company per year while invoice/journal/settlement/vendor-bill numbers are unique only per tenant, so a second org_unit's first document of a year collides with the first's (same B8 paragraph, never closed by the row above) | `CODE` | **DONE** (2026-09-24) | closed by re-scoping all 4 finance number-counter tables' own unique index and all 6 RPCs that upsert them from per-tenant/company/year to per-tenant/year, matching `finance_*_tenant_number_unique`'s own already-enforced tenant-only scope. See execution log |
 | D1 | MFA switched off; `verify_mfa_step_up_challenge` validates no real factor | `CODE` (challenge validation) + `INFRA` (enabling a real TOTP provider is a Supabase project auth-config change) | **PARTIAL** | CODE half done (this commit) — now requires the calling session itself to be authenticated at AAL2; INFRA half (enabling a real TOTP/phone provider, building the client-side `challengeAndVerify()` UI) is an operator/product task this repository cannot perform, see execution log |
 | D4 | `integration_secrets_encryption_key()` GUC never configured outside db-test fixtures | `INFRA` (real secret provisioning, not a code change) | NEEDS_HUMAN_GATE | a new real consumer now depends on this GUC being set: `app.platform_integration_secrets` (this commit, user-directed A6 extension) fails closed with `encryption_key_not_configured` until it is |
 | UNTRACKED-D4 | Support-access console: PLT-115's real grant/approve/deny/revoke lifecycle (`app.request_support_access` et al.) has zero callers anywhere in the product -- silently dropped from tracking entirely, never logged as a row, deferred, or even disclosed | `CODE` | **DONE** (2026-09-24) | closed via `app/(supreme)/supreme/support-access/` (request/approve/deny/revoke/complete-post-review, plus a new `app.list_support_access_grants_for_admin` list RPC -- the RLS-scoped, RPC-only pattern O1-query-layer already established). Deliberately, permanently out of scope: starting/ending a support SESSION, since `app.start_support_session`'s own re-auth-confirmation parameter is a bare caller-asserted timestamp and no genuine "re-authenticate right now" UI flow exists anywhere in this repository -- wiring it to a synthesized timestamp would be a real security regression, not a neutral addition. See execution log |
@@ -5225,3 +5226,123 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   files, one existing db-test file gaining real new coverage), and a real
   `next build` (confirmed `/supreme/support-access` in the route
   manifest).
+- 2026-09-24 — UNTRACKED-B8 (finance number-counter per-company-vs-
+  per-tenant scope mismatch) closed (this commit). The same comprehensive
+  adversarial workflow sweep that found UNTRACKED-D4 also surfaced a real
+  `investigate:UNTRACKED-B8-invoice-number-uniqueness` finding -- the
+  SAME paragraph of the original audit's own B8 finding
+  (`docs/audit/2026-09-02-independent-launch-readiness-audit.md` lines
+  297-298: "Number counters compound it: they run one sequence per
+  company per year while invoice numbers are unique only per tenant, so
+  a second company's first invoice of a year collides with the first
+  company's") that the backlog's own B8 row never actually closed -- that
+  row's own commit only validated `company_id` belongs to the caller's
+  tenant (`app.assert_finance_company_org_unit`), leaving the counter-
+  scope half of the SAME finding untouched. Its own paired
+  `verify:UNTRACKED-B8-invoice-number-uniqueness` adversarial-skeptic
+  agent never completed (a session-usage-limit failure), so per this
+  session's own standing discipline every claim was personally
+  re-verified against actual current code before implementing --
+  elevated to the same care this session gave the B3 GL-reversal
+  correction, since this is a real finance-posting-adjacent fix (document
+  numbering feeding directly into `finance_invoices`/`finance_journals`/
+  `finance_settlements`/`finance_vendor_bills`, all Tier C sensitive
+  under `AGENTS.md`).
+  Confirmed live, in the CURRENT body of every affected RPC (not assumed
+  from a first grep hit): `app.finance_invoice_number_counters` and its 3
+  siblings key their own upsert on `(tenant_id, coalesce(company_id,
+  sentinel), year)` -- one independent sequence per `app.org_units`
+  company -- while the resulting document's own number string carries no
+  company component and the target table's own uniqueness
+  (`finance_invoices_tenant_number_unique` and its 3 siblings) is
+  tenant-scoped only. Any tenant with >= 2 org_units issuing/posting in
+  the same year hits a guaranteed `23505` unique-violation on the second
+  company's first document of that type each year -- a real,
+  deterministic production-breaking failure for the multi-branch/
+  multi-company feature this repository has already shipped, not a
+  hypothetical. The audit's own §6 roadmap (line 574) names the intended
+  target explicitly -- "per-tenant number uniqueness" -- confirming the
+  fix narrows the counter's own scope to match the already-declared,
+  already-enforced constraint; it does not invent a new company-
+  qualified display format (which would have been a genuine, out-of-
+  scope product/format decision).
+  Two real corrections to the investigator's own report, both caught
+  during personal re-verification rather than trusted at face value:
+  (1) two of the five RPCs the investigator cited (`app.
+  issue_finance_invoice` in particular) were themselves cited from a
+  STALE migration -- that function had been redefined twice more since,
+  by this session's own earlier B5 and E6 passes -- so every one of the
+  5 functions' TRUE latest bodies was re-fetched programmatically (never
+  retyped by hand, to eliminate transcription risk on finance-posting
+  code) before writing anything, and each resulting diff was verified
+  byte-for-byte to confirm the ONLY change is the conflict-target line.
+  (2) A SIXTH affected function --
+  `app.import_historical_finance_journal`
+  (`20260826160000_create_finance_journal_historical_import.sql`), which
+  shares `app.finance_journal_number_counters` with `post_finance_
+  journal`/`create_and_post_finance_system_journal` but is its own
+  separate historical-backdate entry point -- was missed entirely by the
+  investigator's own report AND by this fix's own first draft. Caught
+  only because the first draft of this migration was run against a full
+  `pnpm run db:test` before ever being trusted: `finance-journal.sql`'s
+  own existing historical-import test hit "there is no unique or
+  exclusion constraint matching the ON CONFLICT specification" on that
+  first run. The complete, exhaustive set of 6 (not 5) affected functions
+  was then found via a programmatic scan of every `insert into app.
+  finance_*_number_counters` call site across every migration file --
+  not by trusting either the investigator's report or a single grep pass
+  -- the exact class of drift this session's own standing discipline
+  (personally re-verify, never trust a sub-agent claim or an
+  investigator's own citation at face value) exists to catch, now
+  demonstrated on the fix's own construction, not just the original
+  audit finding.
+  Fix, per counter table (4 tables, 6 call sites across the 6 functions):
+  consolidate any existing per-company rows for the same `(tenant_id,
+  year)` into exactly one row, its `next_seq` raised to a safe floor --
+  the greater of the existing rows' own max `next_seq` and one past the
+  highest sequence number already embedded in a real issued/posted
+  document number for that tenant/year (a defensive cross-check against
+  actual ground truth) -- never decreased, matching the same discipline
+  `app.bootstrap_numbering_counter`'s own `numbering_counter_cannot_
+  decrease` guard enforces for the platform's separate generic numbering
+  engine; re-scope each table's own unique index from `(tenant_id,
+  coalesce(company_id, sentinel), year)` to `(tenant_id, year)`; update
+  each of the 6 functions' own conflict target to match, with every other
+  line of each function body copied verbatim (not reimplemented).
+  `company_id` itself is retained on all 4 counter tables (never dropped
+  -- a destructive schema change `AGENTS.md`'s own database rules require
+  explicit approval/backup/rehearsal for; confirmed via grep that nothing
+  else in this schema reads the column, so leaving it as informational-
+  only carries zero risk).
+  New db-test coverage: a new `scripts/db-tests/untracked-b8-finance-
+  number-counter-scope.sql` directly exercises the exact mechanism this
+  fix changed (the same `INSERT ... ON CONFLICT` statement each affected
+  RPC performs, reproduced verbatim) rather than through the full
+  commercial-to-invoice/journal/settlement/vendor-bill business chain --
+  a fresh disposable test database starts every counter table empty, so
+  there is no pre-existing per-company duplicate data for this
+  migration's own consolidation logic to exercise in that environment
+  (that logic only matters against a live database carrying real pre-fix
+  history); what IS exactly reproducible and meaningful is the going-
+  forward behavior, which the new test proves for all 4 counter tables:
+  two different `company_id` values under the same tenant/year now share
+  one incrementing sequence (1, then 2) instead of each independently
+  starting at 1 (the pre-fix bug, which would have collided on the
+  target table's own tenant-only uniqueness the moment both were
+  actually issued/posted); a different year or a different tenant still
+  gets its own independent sequence starting at 1 (the fix narrows
+  scope, it does not over-merge); and the 4 tables' own scope-unique
+  indexes are confirmed to no longer reference `company_id` at all.
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6182/6182,
+  including the release-freeze self-test after its digest update), a
+  full `pnpm run db:test` (`ALL PASSED`, 566 migrations / 280 db-test
+  files -- the first run of this migration caught the missing 6th
+  function via a real ON CONFLICT specification error in
+  `finance-journal.sql`'s own existing historical-import test, fixed
+  before this pass was ever trusted), `git:check-paths`,
+  `security:check`, `release:check-freeze` (HUNDRED-AND-SIXTY-EIGHTH
+  PASS, both digests updated -- one new migration file, one new db-test
+  file). No app/, components/, or "use server" file touched by this pass
+  -- `next build` not required by this file's own Tier A trigger and not
+  run.
