@@ -49,8 +49,21 @@ export function CreateFinanceTaxRuleDraftForm({ action, taxCodes }: { action: Bo
         </div>
 
         <div className="w-40">
-          <FormField id="rateValue" label="Rate value">
-            <Input id="rateValue" name="rateValue" type="number" step="0.000001" min="0" required invalid={Boolean(state.error)} />
+          <FormField
+            id="rateValue"
+            label="Rate value"
+            helpText="Percentage is a fraction of 1 (e.g. 0.11 for 11%, not 11). Fixed amount is in the selected currency's units."
+          >
+            <Input
+              id="rateValue"
+              name="rateValue"
+              type="number"
+              step="0.000001"
+              min="0"
+              required
+              invalid={Boolean(state.error)}
+              aria-describedby={state.error ? "rateValue-error" : "rateValue-help"}
+            />
           </FormField>
         </div>
 

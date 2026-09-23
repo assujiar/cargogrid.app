@@ -86,7 +86,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status | Notes |
 |---|---|---|---|---|
-| C3 | Tax console shows 11% as "0.11%" — display bug only, calculator is correct | `CODE` | **DONE** (`57fc8fe`) | trivial, high-value |
+| C3 | Tax console shows 11% as "0.11%" — display bug only, calculator is correct | `CODE` | **DONE** (`57fc8fe`, write-side correction 2026-09-23) | trivial, high-value. Correction (2026-09-23): the original fix closed only the read side (admin tax-rule list display). The write side had a real, separate gap -- `app.create_finance_tax_rule_draft` never validated the percentage-basis upper bound (`rate_value <= 1`), so a misentered whole-number rate (e.g. 11 instead of 0.11) fell through to a raw, unclassified Postgres CHECK-constraint error instead of a clean one. Now closed: see execution log |
 | C1 | No NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all | `CODE-BIG` / `PRODUCT` | **PARTIAL** | NPWP-as-master-data-field closed -- `app.org_units.tax_id` plus a "Seller Tax ID" line on the A7 invoice/purchase-order PDFs, needing zero tax expertise (mirrors `app.accounts.tax_id`'s own already-unvalidated-free-text precedent). Faktur pajak/NSFP/e-Faktur generation stays DEFERRED_LARGE -- confirmed absent code-wide, genuinely needs a tax SME |
 | C2 | PPh 21 uncomputable — no PTKP/bracket/NPWP columns | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | same |
 
@@ -4902,3 +4902,60 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   its own dedicated coverage in `server/queries/contract.test.ts`/
   `server/contracts/contract/contract.test.ts` and the underlying RPC's
   own db-test suite.
+- 2026-09-23 — C3 write-side correction closed (this commit). The same
+  comprehensive adversarial sweep that found E1's own hidden core also
+  surfaced a genuine, still-open write-side counterpart to the already-
+  closed C3 read-side display bug: `CreateFinanceTaxRuleDraftForm`
+  (`app/(tenant)/[tenantSlug]/finance/tax-baseline/tax-baseline-forms.tsx`)
+  offered a bare "Rate value" number field with no percent/fraction hint,
+  and neither the Zod schema (`CreateFinanceTaxRuleDraftInputSchema`), the
+  Server Action, nor `app.create_finance_tax_rule_draft` itself validated
+  the percentage-basis upper bound (`rate_value <= 1`, since a percentage
+  rate is stored as a fraction -- `finance_tax_rule_versions_percentage_
+  bound_check`) before insert. An SME typing "11" for an 11% rate (rather
+  than the required fractional "0.11") fell through the RPC's own
+  validation entirely and hit a raw, unclassified Postgres CHECK-
+  constraint violation instead of a clean, `TAX_BASELINE_KNOWN_MUTATION_
+  ERROR_CODES`-classified one. This candidate's paired adversarial-skeptic
+  verify agent did not complete (a workflow session-usage-limit failure),
+  so every claim was personally re-verified against the actual current
+  code (all 5 cited files read in full) before implementing, per this
+  session's own standing discipline for any unverified workflow finding.
+  Closed: `app.create_finance_tax_rule_draft` gained one new `if p_rate_
+  basis = 'percentage' and p_rate_value > 1` guard, reusing the already-
+  declared `finance_tax_rule_invalid_rate` error code (already listed in
+  `TAX_BASELINE_KNOWN_MUTATION_ERROR_CODES` -- zero TS change needed) --
+  the same "validate in the RPC what the table's own CHECK constraint
+  would otherwise reject blind" pattern every other guard in this function
+  already follows. `CreateFinanceTaxRuleDraftForm`'s Rate value field
+  gained a basis-aware `FormField` `helpText` hint, wired via `aria-
+  describedby` (no new component).
+  One real bug self-caught before this migration was ever committed: a
+  first draft copied `app.create_finance_tax_rule_draft`'s body from its
+  *original* 20260729090000 declaration, which predates
+  `20260810700000_harden_finance_authority_chain_security_definer.sql`'s
+  later hardening of this same function to `SECURITY DEFINER` with a
+  restricted `search_path` -- `CREATE OR REPLACE FUNCTION` always takes
+  the security/search_path clauses of the new statement, never inherits
+  the previous definition's, so this would have silently reverted that
+  hardening. Caught immediately by `scripts/db-tests/public-api-wrapper-
+  regression.sql`'s own security-mode-parity check on the first `db:test`
+  run (`create_finance_tax_rule_draft` named explicitly), independently
+  confirmed via a disposable-database probe against HEAD (before this
+  change) that the function was already `SECURITY DEFINER` there --
+  proving the hardening was real and the stale copy had reverted it, not
+  a pre-existing repository bug. Rewritten to base the `CREATE OR REPLACE`
+  on `20260810700000`'s own current definition before re-running `db:test`.
+  New db-test coverage: `scripts/db-tests/finance-tax-baseline.sql`'s own
+  "authority + structural validation" block gained a rejection assertion
+  (percentage `rate_value=11` -> `finance_tax_rule_invalid_rate`) and a
+  same-block proof that a `fixed_amount` rule is exempt from the bound
+  (`rate_value=50000` still succeeds).
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6178/6178,
+  including the release-freeze self-test after its digest update), a full
+  `pnpm run db:test` (`ALL PASSED`, 563 migrations / 279 db-test files),
+  `git:check-paths`, `security:check`, `release:check-freeze` (HUNDRED-
+  AND-SIXTY-FIFTH PASS, both digests updated -- one new migration file,
+  zero new db-test files, one existing db-test file gaining real new
+  coverage), and a real `next build`.

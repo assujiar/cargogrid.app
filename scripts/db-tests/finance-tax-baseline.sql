@@ -122,7 +122,7 @@ begin
 end;
 $$;
 
-\echo '>> authority + structural validation: Plain User A is denied draft creation; an inactive/unknown tax code, unsupported basis, and invalid account mapping are each rejected; Finance Manager A creates a valid PPN draft with an account mapping'
+\echo '>> authority + structural validation: Plain User A is denied draft creation; an inactive/unknown tax code, unsupported basis, invalid account mapping, and an out-of-range percentage rate are each rejected; Finance Manager A creates a valid PPN draft with an account mapping'
 do $$
 declare
   v_tenant_a uuid;
@@ -171,6 +171,27 @@ begin
         raise exception 'assertion failed: expected finance_tax_rule_invalid_account_mapping, got %', sqlerrm;
       end if;
   end;
+
+  begin
+    -- CG-AUDIT-2026-09-02 C3 (write-side): a percentage rate is stored as a
+    -- fraction of 1 (finance_tax_rule_versions_percentage_bound_check) -- an
+    -- SME typing "11" meaning 11% must be rejected in-RPC with a classified
+    -- error, not fall through to the raw table CHECK constraint.
+    perform app.create_finance_tax_rule_draft(v_tenant_a, v_ppn_code_id, 'percentage', 11, null, v_account_id, null, '2026-01-01'::date, null, '00000000-0000-0000-0000-000000025502', 'financemanagera');
+    raise exception 'assertion failed: expected finance_tax_rule_invalid_rate for a percentage rate of 11 (not a fraction of 1)';
+  exception
+    when others then
+      if sqlerrm !~ 'finance_tax_rule_invalid_rate' then
+        raise exception 'assertion failed: expected finance_tax_rule_invalid_rate, got %', sqlerrm;
+      end if;
+  end;
+
+  -- A fixed_amount rule is exempt from the percentage bound -- a value > 1 is
+  -- the ordinary case (a currency amount), so it must still succeed.
+  select * into v_rule from app.create_finance_tax_rule_draft(v_tenant_a, v_ppn_code_id, 'fixed_amount', 50000, 'IDR', v_account_id, null, '2026-01-01'::date, null, '00000000-0000-0000-0000-000000025502', 'financemanagera');
+  if v_rule.status <> 'draft' or v_rule.rate_value <> 50000 or v_rule.rate_basis <> 'fixed_amount' then
+    raise exception 'assertion failed: expected a draft fixed_amount rule at 50000, got % / % / %', v_rule.status, v_rule.rate_value, v_rule.rate_basis;
+  end if;
 
   select * into v_rule from app.create_finance_tax_rule_draft(v_tenant_a, v_ppn_code_id, 'percentage', 0.11, null, v_account_id, null, '2026-01-01'::date, null, '00000000-0000-0000-0000-000000025502', 'financemanagera');
   if v_rule.status <> 'draft' or v_rule.rate_value <> 0.11 then

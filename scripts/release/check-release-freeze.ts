@@ -5186,7 +5186,61 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "822289f9c41bf80ddfde03bd341fdcb2c51f33bab3b6248599573b47408c3829",
+  migrationSetSha256: "56ed07edfc4a2a6a049d515cfdbde3db24b7f70267d957a7ee3e04885cfdd4c3",
+  // HUNDRED-AND-SIXTY-FIFTH PASS: CG-AUDIT-2026-09-02 C3 write-side
+  // correction. One new migration
+  // (20260923000000_c3_tax_rule_percentage_bound_validation.sql, 563
+  // files, +1). The read-side half of C3 (the admin tax-rule list
+  // rendering 0.11 as "0.11%" instead of "11%") was already fixed
+  // earlier this session. The comprehensive backlog sweep surfaced a real
+  // write-side counterpart: app.create_finance_tax_rule_draft has always
+  // enforced rate_value >= 0 but never the percentage-basis upper bound
+  // (rate_value <= 1, since a percentage rate is stored as a fraction --
+  // finance_tax_rule_versions_percentage_bound_check,
+  // 20260729090000_create_finance_tax_baseline.sql), and neither the Zod
+  // schema, the Server Action, nor the RPC itself rejected a misentered
+  // whole-number rate (e.g. 11 meaning 11%) before it reached that raw
+  // CHECK constraint -- an SME would see an unclassified Postgres
+  // constraint-violation error instead of a clean one.
+  // Fix: one new `if p_rate_basis = 'percentage' and p_rate_value > 1`
+  // guard, reusing the already-declared finance_tax_rule_invalid_rate
+  // error code (server/mutations/tax-baseline.ts's own
+  // TAX_BASELINE_KNOWN_MUTATION_ERROR_CODES already lists it -- zero TS
+  // change needed) -- the same "validate in the RPC what the table's own
+  // CHECK constraint would otherwise reject blind" pattern every other
+  // guard in this function already follows. Plus a basis-aware unit hint
+  // on CreateFinanceTaxRuleDraftForm's own Rate value field (FormField
+  // helpText, wired via aria-describedby, no new component).
+  // One real bug self-caught before this migration was ever committed:
+  // this function's CURRENT definition is not its original
+  // 20260729090000 declaration -- 20260810700000_harden_finance_
+  // authority_chain_security_definer.sql later redefined it as SECURITY
+  // DEFINER with `SET search_path TO 'app', 'pg_temp'`, neither of which
+  // the original had. A first draft of this migration copied the
+  // original (pre-hardening) body verbatim; scripts/db-tests/public-api-
+  // wrapper-regression.sql's own security-mode-parity check caught the
+  // resulting app.*/public.* SECURITY DEFINER/INVOKER mismatch
+  // immediately on the first db:test run (`create_finance_tax_rule_draft`
+  // named explicitly in the failure). Confirmed via a disposable-database
+  // probe against HEAD (pre-change) that app.create_finance_tax_rule_
+  // draft was already prosecdef=true there, proving the hardening was
+  // real and my own CREATE OR REPLACE had silently reverted it -- not a
+  // pre-existing repository bug. Rewritten to base the CREATE OR REPLACE
+  // on 20260810700000's own current definition (SECURITY DEFINER +
+  // restricted search_path preserved) before ever re-running db:test.
+  // New db-test coverage: scripts/db-tests/finance-tax-baseline.sql's own
+  // existing "authority + structural validation" block gained a rejection
+  // assertion (percentage rate_value=11 -> finance_tax_rule_invalid_rate)
+  // and a same-block proof that a fixed_amount rule is exempt from the
+  // percentage bound (rate_value=50000 still succeeds).
+  // Full Tier A gates verified clean: `typecheck`, `lint` (0 errors, only
+  // pre-existing warnings), the full unit test suite (6178/6178, plus the
+  // release-freeze self-test after this digest update), a full `pnpm run
+  // db:test` (`ALL PASSED`, 563 migrations / 279 db-test files),
+  // `git:check-paths`, `security:check`, and a real `next build`.
+  // History: 822289f9c41bf80ddfde03bd341fdcb2c51f33bab3b6248599573b47408c3829
+  // (562 files, HUNDRED-AND-SIXTY-FOURTH PASS).
+  //
   // HUNDRED-AND-SIXTY-FOURTH PASS: CG-AUDIT-2026-09-02 B2 (GL detail-report
   // half). One new migration (20260922020000_b2_finance_account_ledger.sql,
   // 562 files, +1). A dedicated research pass found the backlog's own "GL
@@ -7738,7 +7792,24 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "9aa668a6668e9cfd83a36d1a42868d9d97f04843361e68aae716cee9b34ae106",
+  dbTestSetSha256: "6ac7b2cda685f59434eba7f0801eed1694c07554fd70fc25cf40968821ec4933",
+  // HUNDRED-AND-SIXTY-FIFTH PASS: same CG-AUDIT-2026-09-02 C3 write-side
+  // slice as migrationSetSha256's own note immediately above -- no new
+  // db-test file (279 files unchanged), one EXISTING file gained real new
+  // coverage: scripts/db-tests/finance-tax-baseline.sql's own "authority +
+  // structural validation" block, extended with a percentage-rate-out-of-
+  // range rejection assertion (rate_value=11 on a percentage-basis draft
+  // -> finance_tax_rule_invalid_rate) and a same-block proof that a
+  // fixed_amount rule is exempt from that bound (rate_value=50000 still
+  // succeeds, since only percentage-basis rates are fractions of 1).
+  // Neither new assertion disturbed any later assertion in the file (the
+  // new fixed_amount draft is filtered out of every later rate_value=0.11-
+  // scoped query by construction).
+  // Full Tier A gates verified clean: same run as migrationSetSha256's own
+  // note above.
+  // History: 9aa668a6668e9cfd83a36d1a42868d9d97f04843361e68aae716cee9b34ae106
+  // (279 files, HUNDRED-AND-SIXTY-FOURTH PASS).
+  //
   // HUNDRED-AND-SIXTY-FOURTH PASS: same CG-AUDIT-2026-09-02 B2 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (279 files unchanged), one EXISTING file gained real new coverage:
