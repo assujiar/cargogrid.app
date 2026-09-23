@@ -5,6 +5,7 @@ import { getCustomerContractById, listCustomerContractVersions, listCustomerCont
 import { getAccountById } from "../../../../../../server/queries/account.ts";
 import { removePriceComponentAction, publishContractAction } from "./actions.ts";
 import { AddComponentForm } from "./add-component-form.tsx";
+import { CheckEffectivePriceForm } from "./check-effective-price-form.tsx";
 import { RenewalForm } from "./renewal-form.tsx";
 import { RetireForm } from "./retire-form.tsx";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
@@ -153,6 +154,12 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
       </div>
 
       {editable ? <AddComponentForm tenantSlug={tenantSlug} contractId={contract.id} /> : null}
+
+      {/* CG-AUDIT-2026-09-02 E1: app.get_effective_customer_price only ever
+          matches a PUBLISHED contract's own components -- a draft always
+          resolves no_effective_price regardless of components, so this is
+          only shown once publish makes it meaningful. */}
+      {contract.status === "published" ? <CheckEffectivePriceForm tenantSlug={tenantSlug} accountId={contract.accountId} /> : null}
 
       {editable ? (
         <form action={publishContractAction.bind(null, tenantSlug, contract.id, contract.recordVersion)}>

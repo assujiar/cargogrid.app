@@ -19,9 +19,65 @@ import {
   retireCustomerContract,
   ContractMutationError,
 } from "../../../../../../server/mutations/contract.ts";
+import { getEffectiveCustomerPrice, ContractQueryError } from "../../../../../../server/queries/contract.ts";
+import type { EffectiveCustomerPrice } from "../../../../../../server/contracts/contract/contract.ts";
 
 export interface ContractFormState {
   readonly error: string | null;
+}
+
+export interface EffectiveCustomerPriceFormState {
+  readonly error: string | null;
+  readonly result: EffectiveCustomerPrice | null;
+}
+
+/**
+ * CG-AUDIT-2026-09-02 E1 (bounded core): app.get_effective_customer_price
+ * (COM-156) has been a fully-built, fully-tested, deterministic pricing
+ * lookup since this capability shipped, but had zero callers anywhere in
+ * app/ -- a tenant could build and publish a full contract price list end
+ * to end and never see, anywhere, what price the system would actually
+ * resolve for a real lane/service. This is the first real caller. Read-
+ * only (no mutation, no revalidatePath); `no_effective_price` is a real,
+ * expected outcome (no matching component), surfaced as a friendly result
+ * state rather than a thrown error.
+ */
+export async function checkEffectiveCustomerPriceAction(
+  tenantSlug: string,
+  accountId: string,
+  serviceType: string,
+  mode: string | null,
+  originLane: string | null,
+  destinationLane: string | null,
+  equipmentType: string | null,
+): Promise<EffectiveCustomerPriceFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace.", result: null };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  try {
+    const result = await getEffectiveCustomerPrice(supabase, {
+      tenantId: access.tenant.id,
+      accountId,
+      serviceType,
+      mode,
+      originLane,
+      destinationLane,
+      equipmentType,
+      actorAuthUserId: access.authUserId,
+    });
+    return { error: null, result };
+  } catch (error) {
+    if (error instanceof ContractQueryError) {
+      if (error.message.startsWith("no_effective_price")) {
+        return { error: "No published price component matches these criteria.", result: null };
+      }
+      return { error: `Could not resolve a price: ${error.message}`, result: null };
+    }
+    throw error;
+  }
 }
 
 export async function addPriceComponentAction(

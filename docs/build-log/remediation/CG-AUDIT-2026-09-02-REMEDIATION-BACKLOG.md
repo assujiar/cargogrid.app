@@ -114,7 +114,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status |
 |---|---|---|---|
-| E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` | NEEDS_PRODUCT_DECISION |
+| E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` / `CODE` | **PARTIAL** | "no contract/repeat-order path" is confirmed accurate and stays `NEEDS_PRODUCT_DECISION` -- `app.quotations` carries no `account_id` at all (only via `app.account_conversions` post-acceptance), and `app.job_orders`/`app.job_order_handoffs` both require a real `quotation_id`, so inventing a "book directly against a contract" path is a genuine business/lifecycle decision. Separable, closed half: `app.get_effective_customer_price` (COM-156) was a fully-built, fully-tested, deterministic pricing lookup with zero callers anywhere in `app/` -- a tenant could build and publish a full contract price list end to end and never see, anywhere, what price the system would actually resolve for a real lane/service. Closed by wiring the already-existing RPC into a new "Check effective price" preview on the contract detail page (zero new migration, zero new RPC) |
 | E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2, re-dispositioned `DEFERRED_LARGE` after a closer schema check): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` -- closing it for real needs widening `finance_invoices`' own mandatory `job_order_id`/`billing_readiness_handoff_id` structural invariants (or a second, parallel invoicing primitive), a real product/schema decision, not a quick FK addition |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
 | E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap |
@@ -4850,3 +4850,55 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   (HUNDRED-AND-SIXTY-FOURTH PASS, both digests updated -- one new
   migration file, zero new db-test files, one existing db-test file
   gaining real new coverage), and a real `next build`.
+- 2026-09-23 — E1 (effective-price-preview half) closed (this commit). A
+  comprehensive adversarial sweep (a workflow-driven fan-out re-
+  investigating every still-open backlog row, cross-verified by an
+  independent skeptic pass on each claim before trusting it -- the same
+  discipline that found B7's/B2a's/E6's/B4's/A2b's/E3's/C1's/B3's/B2's own
+  real bounded cores) found E1 bundles two distinct claims. "Every job
+  order must originate from a quotation; no contract/repeat-order path" is
+  confirmed still fully accurate and genuinely `NEEDS_PRODUCT_DECISION`:
+  `app.quotations` carries no `account_id` at all (an account is only
+  known post-acceptance via `app.account_conversions`), and both `app.
+  job_orders.quotation_id`/`source_handoff_id` and `app.job_order_
+  handoffs.quotation_id` are `NOT NULL` with FKs -- there is no "book
+  directly against a contract" or repeat/standing-order primitive
+  anywhere, and inventing one (what lifecycle, what approval, does it
+  still need a quote) is a real business decision, not a migration. Stays
+  untouched, `NEEDS_PRODUCT_DECISION`.
+  The separable half: `app.get_effective_customer_price` (COM-156,
+  `supabase/migrations/20260724300000_create_commercial_customer_contract_
+  pricing.sql`) has been a fully-built, fully-tested, deterministic
+  pricing lookup (exact-match on 5 dimensions, correctly masked via `has_
+  view_selling_price`, raises a clean `no_effective_price` on no match)
+  since this capability shipped -- but a repository-wide grep found ZERO
+  callers anywhere in `app/`. A tenant could build and publish a full
+  customer contract price list end to end (create/add-component/publish,
+  all real) and never see, anywhere in the product, what price the system
+  would actually resolve for a real lane/service -- not even the person
+  configuring it could verify their own rows resolve correctly (catch a
+  typo'd lane string, an overlapping criteria set) before a real quote or
+  job depended on it.
+  Closed: a new `checkEffectiveCustomerPriceAction` (`app/(tenant)/
+  [tenantSlug]/commercial/contracts/[contractId]/actions.ts`) wraps the
+  already-existing, already-tested `getEffectiveCustomerPrice` query
+  function -- zero new migration, zero new RPC, zero new database access
+  of any kind. A new `CheckEffectivePriceForm` client component (mirroring
+  `AddComponentForm`'s own established "local state, submit via
+  startTransition" pattern, the identical 5 dimension fields already shown
+  in the price-components table on the same page) renders the resolved
+  price/discount/effective-date window, or a friendly "no published price
+  component matches these criteria" state for the real, expected `no_
+  effective_price` outcome -- never a thrown error. Shown only once the
+  contract is `published` (the RPC itself only ever matches a published
+  contract's own components, confirmed by reading its body -- a draft
+  contract would always resolve `no_effective_price` regardless of
+  components, so showing the form earlier would be actively misleading).
+  Full Tier A gates verified clean: `typecheck`, full `lint` (0 errors,
+  only pre-existing warnings), the full unit test suite (6178/6178),
+  `git:check-paths`, `security:check`, and a real `next build`. No
+  migration/RPC change, so no `db:test`/`release:check-freeze` digest
+  update is needed -- `app.get_effective_customer_price` already carries
+  its own dedicated coverage in `server/queries/contract.test.ts`/
+  `server/contracts/contract/contract.test.ts` and the underlying RPC's
+  own db-test suite.
