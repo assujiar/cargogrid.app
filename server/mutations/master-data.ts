@@ -6,6 +6,7 @@
  * (see the migration's own grant comment).
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   RegisterMasterTypeInputSchema,
   CreateMasterRecordInputSchema,
@@ -33,6 +34,11 @@ export interface MasterDataMutationRpcClient {
       | "merge_master_records",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/** Adapts a real Supabase client (its own `.rpc()` typed over the full schema-derived function-name union) to this file's own narrower `MasterDataMutationRpcClient`. */
+export function toMasterDataMutationRpcClient(client: Pick<SupabaseClient, "rpc">): MasterDataMutationRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export const MASTER_DATA_KNOWN_MUTATION_ERROR_CODES = [

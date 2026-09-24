@@ -113,6 +113,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and five printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, invoice, and packing list, now exist end to end (`server/documents/`, five new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD now embeds the real signature/photo evidence images (NEW-2, a follow-on unblocked once A6's own signed-download capability closed) rather than the text-only summary it originally shipped with. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Packing list required a from-scratch, standalone internal page (`operations/packing-tasks/[packingTaskId]/`) -- ATW-018's own domain (`server/queries/wms-packing.ts`) was real and fully tested but had zero pages/actions anywhere, confirmed by repo-wide search; no host list page for `wms_outbound_orders`/packing tasks exists anywhere in this codebase (a genuinely separate, larger gap -- an internal outbound-order/pick-pack worklist -- out of this slice's own scope), so the new page is reached directly by a packing task id, mirroring `finance/config/page.tsx`'s/`inventory-opening-balance`'s own standalone-and-unlinked precedent. Still open: faktur pajak, gated on new backend RPC work and the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 | UNTRACKED-A1 | The audit's own A1 paragraph separately states "the 407 lint warnings are all raw `<a>` tags, so the navigation that exists reloads the page on every click" -- a distinct sub-claim about the MECHANISM of the pre-existing navigation, never mentioned anywhere in A1's own row/execution-log summary (which only covered the 81/238-unreachable-routes reachability half) | `CODE` | **PARTIAL** (2026-09-26) | Personal re-verification found the true scope is bigger than the audit's own 407-warning figure: `@next/next/no-html-link-for-pages` only flags a `<a href="...">` when the href is a static string it can statically resolve -- every one of the persistent per-module nav bars uses a dynamic template-literal href (e.g. `` href={`/${tenant.slug}/admin/users`} ``), which the linter's static analysis silently cannot see at all, so most of the real full-page-reload navigation was never counted in the 407 figure to begin with. Closed for the persistent navigation the audit specifically named ("the navigation that exists"): all 19 module/shell layout files (`admin`, `analytics`, `automation-rules`, `commercial`, `dashboards`, `finance`, `helpdesk`, `hris`, `integrations`, `knowledge-base`, `operations`, `procurement`, `reports`, `saved-views`, `scheduled-reports`, `tickets` layouts, plus `supreme/layout.tsx`, `(public)/status/page.tsx`, and the tenant Home `page.tsx`) -- 56 raw `<a href>` elements converted to `next/link`'s `Link` (via the already-existing `components/ui/link.tsx` wrapper this same codebase's own `tenant-portal-nav.tsx` already used), confirmed via a full repo-wide `<a href` audit that none of the converted elements were external/`target="_blank"`/`mailto:` links (all same-origin internal navigation). This closes 100% of the actual ESLint warning count (1465 -> 0) and every persistent nav bar's own full-reload behavior. Deliberately NOT included in this pass, and left open as a separate, larger follow-up: ~65 additional files scattered across `app/` contain page-CONTENT `<a href>` links (e.g. a list page's "view detail" row link to another internal page) -- a materially larger, `CODE-BIG`-class sweep in the same shape as `Ø1-query-layer`'s own multi-batch closure, not a single bounded change; a sample check confirmed some of these 65 files' own `<a>` tags are legitimately `target="_blank"` (correctly left as `<a>`, not a bug), so that follow-up needs the same per-occurrence external-link triage this pass already did for the 19 nav files, not a blind global swap |
+| UNTRACKED-A2-dedup | The audit's own A2 paragraph separately states, distinct from the tenant/user/role/org-unit UI gaps A2's row already closed: "the generic `createMasterRecord` wrapper has no caller and its RPC is granted to `postgres`/`service_role` only; and `mergeMasterRecords` — the only deduplication path in the system — has no caller at all." Never mentioned anywhere in A2's own row or its 2026-09-14 execution-log entry (which enumerates every mutation it wired up, and neither of these two is on that list) | `CODE` | **PARTIAL** (2026-09-26) | `mergeMasterRecords` closed: new `app/(tenant)/[tenantSlug]/admin/master-data/` page (search by master type/code/name via the already-`authenticated`-callable `app.search_master_records`, then merge two records via the already-tested, `service_role`-only `app.merge_master_records`, the "explicit actor, service-role execution" pattern every other privileged mutation here already follows) -- zero new RPC, zero new authority surface, only two new thin `toMasterDataMutationRpcClient`/`toMasterDataQueryRpcClient` adapters (this session's own established convention) plus a new admin nav link. `createMasterRecord`'s own generic wrapper is deliberately NOT given a UI: verified all 6 currently-seeded master types (`vendor`, `vendor_rate`, `fleet`, `vehicle`, `driver`, `employee` -- confirmed via every real `insert into app.master_types` migration) already have their own dedicated, tested, wired domain-specific creation path that calls `app.create_master_record` internally (vendor intake, vehicle/driver registration via ATW-223, employee onboarding) -- there is no live domain today with an unmet creation need that would route through a second, generic "create any master record" form; a real future domain needing one is a when-it-exists concern, not a current gap |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
 
@@ -5656,3 +5657,75 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   a documentation-only backlog-table addition; `git:check-paths`/
   `security:check` re-run clean regardless (no forbidden paths, no
   secret-shaped pattern).
+- 2026-09-26 — UNTRACKED-A2-dedup closed. The same audit-prose sweep
+  that surfaced UNTRACKED-A1/UNTRACKED-C-PPN (see the two entries above)
+  also flagged, in section A, a distinct sentence from A2's own
+  paragraph: "the generic `createMasterRecord` wrapper has no caller
+  and its RPC is granted to `postgres`/`service_role` only; and
+  `mergeMasterRecords` — the only deduplication path in the system —
+  has no caller at all." A2's own row and its 2026-09-14 execution-log
+  entry enumerate every mutation that entry wired up (provisionTenant,
+  inviteUser, createRole and its whole family, createOrgUnit and its
+  whole family) -- neither `createMasterRecord` nor `mergeMasterRecords`
+  is on that list, confirmed by grepping the full backlog document for
+  `create_master_record`, `merge_master_records`, and broader
+  `master.?data`/`dedup`/`duplicat` terms; the one unrelated
+  `create_master_record` hit is about a db-test authority-setup detail
+  for the E5 driver/vehicle dispatch-readiness fix, not this gap.
+  Personally re-verified before implementing: confirmed live in the
+  repo that `server/mutations/master-data.ts`'s `createMasterRecord` and
+  `mergeMasterRecords` are referenced only by their own test file and
+  nowhere under `app/`; confirmed both RPCs are genuinely
+  `service_role`-only (`supabase/migrations/
+  20260717120000_create_master_data.sql`'s own grant statements);
+  read `app.merge_master_records`' current (only-ever-redefined-once,
+  in `20260903131000_harden_tenant_id_disclosure_platform_iam_
+  white_label.sql`) body to confirm its authority model (Supreme Admin
+  for a global-scoped record, `app.is_support_grant_authority` --
+  Supreme Admin or tenant_admin layer membership -- for a tenant-scoped
+  one); and enumerated every real (non-db-test) `insert into
+  app.master_types` migration to confirm all 6 currently-seeded master
+  types (`vendor`, `vendor_rate`, `fleet`, `vehicle`, `driver`,
+  `employee`) are `scope='tenant'` -- no global-scoped type is seeded
+  anywhere today, which simplified the UI to the tenant-scoped merge
+  path only.
+  Fix, `mergeMasterRecords` half: new `app/(tenant)/[tenantSlug]/
+  admin/master-data/` page -- a search panel (master type dropdown over
+  the 6 known seeded types, code/name query) backed by the already-
+  `authenticated`-callable `app.search_master_records`, and a merge form
+  (pick the record to keep, the record to merge away, and a reason)
+  backed by the already-tested, `service_role`-only
+  `app.merge_master_records`, using the "explicit actor, service-role
+  execution" pattern every other privileged mutation in this repository
+  already follows. Zero new RPC, zero new authority surface -- only two
+  new thin one-line adapters, `toMasterDataMutationRpcClient`/
+  `toMasterDataQueryRpcClient` (this session's own established
+  `toXRpcClient` convention, matching `toSupportAccessMutationRpcClient`/
+  `toSupportAccessRpcClient`'s own shape exactly), since neither
+  `server/mutations/master-data.ts` nor `server/queries/master-data.ts`
+  had one yet (zero prior callers meant zero prior need). Added a new
+  "Master data" link to the admin nav bar (itself just converted to
+  `next/link`'s `Link` by UNTRACKED-A1, immediately above) and the new
+  Server Action file to `eslint.config.js`'s `serviceRoleImportGuard`
+  allowlist.
+  `createMasterRecord`'s own generic wrapper is deliberately NOT given a
+  UI in this pass: every one of the 6 currently-seeded master types
+  already has its own dedicated, tested, wired domain-specific creation
+  path that calls `app.create_master_record` internally (vendor intake,
+  vehicle/driver registration via ATW-223, employee onboarding) --
+  there is no live domain today with an unmet creation need that would
+  route through a second, generic "create any master record" form.
+  Building one now would be speculative infrastructure for a domain that
+  does not yet exist, not a closure of a real, current gap -- a future
+  domain needing one is a when-it-exists concern.
+  Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  (0 errors, 0 warnings -- one `react/no-unescaped-entities` error
+  caught and fixed on the new panel component before this pass was ever
+  trusted), the full unit test suite (6182/6182 unaffected, since the
+  two new adapters are trivial pass-throughs matching an already-tested
+  shape and no existing RPC/schema changed), `git:check-paths`,
+  `security:check`, and a full `npx next build` (exit 0, the new
+  `/[tenantSlug]/admin/master-data` route registers cleanly). No
+  migration or db-test changed by this pass (zero new RPC), so
+  `release:check-freeze`'s two digests are untouched and its self-test
+  still passes unmodified.

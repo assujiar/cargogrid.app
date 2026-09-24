@@ -6,6 +6,7 @@
  * has no pre-authentication use case, unlike PLT-117/118/119's public resolvers.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   ResolveMasterRecordInputSchema,
   SearchMasterRecordsInputSchema,
@@ -20,6 +21,11 @@ export interface MasterDataQueryRpcClient {
     fn: "resolve_master_record" | "search_master_records",
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: { message: string } | null }>;
+}
+
+/** Adapts a real Supabase client (its own `.rpc()` typed over the full schema-derived function-name union) to this file's own narrower `MasterDataQueryRpcClient`. */
+export function toMasterDataQueryRpcClient(client: Pick<SupabaseClient, "rpc">): MasterDataQueryRpcClient {
+  return { rpc: async (fn, args) => await client.rpc(fn, args) };
 }
 
 export class MasterDataQueryError extends Error {

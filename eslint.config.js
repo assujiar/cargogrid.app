@@ -164,6 +164,7 @@ const serviceRoleImportGuard = {
     "app/(tenant)/\\[tenantSlug\\]/admin/approvals/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/approvals/page.tsx",
     "app/(tenant)/\\[tenantSlug\\]/admin/loyalty-rewards/actions.ts",
+    "app/(tenant)/\\[tenantSlug\\]/admin/master-data/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/organization/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/roles/actions.ts",
     "app/(tenant)/\\[tenantSlug\\]/admin/users/actions.ts",
