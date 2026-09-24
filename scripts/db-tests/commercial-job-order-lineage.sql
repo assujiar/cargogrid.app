@@ -331,7 +331,67 @@ begin
 end;
 $$;
 
-\echo '>> audit trail: prepare_job_order_handoff recorded a real app.audit_logs event, tenant-scoped'
+\echo '>> app.build_job_order_draft_payload (CG-AUDIT-2026-09-02 E1): a repeat order for an ALREADY-contracted account still resolves the currently published contract, even though only the ORIGINAL quotation ever set customer_contracts.source_quotation_id -- app.convert_quotation_to_account''s own documented "linked_existing" repeat-business path, not a fabricated scenario'
+do $$
+declare
+  v_opportunity_id uuid;
+  v_contact_id uuid;
+  v_calc_id uuid;
+  v_source_quote_id uuid;
+  v_account_id uuid;
+  v_contract app.customer_contracts;
+  v_repeat_quote app.quotations;
+  v_send record;
+  v_handoff app.job_order_handoffs;
+  v_direct_source_match_count integer;
+begin
+  select id into v_opportunity_id from app.opportunities where name = 'Lineage Jakarta-Surabaya quote lane';
+  select id into v_contact_id from app.contacts where full_name = 'Lineage Contact';
+  select id into v_source_quote_id from app.quotations where customer_snapshot ->> 'legal_name' = 'Lineage Co' order by quote_number asc limit 1;
+  select id into v_account_id from app.accounts where legal_name = 'Lineage Co';
+  select id into v_calc_id from app.margin_calculations where rate_selection_id = (select id from app.rate_selections where costing_request_id = (select id from app.costing_requests where opportunity_id = v_opportunity_id)) and is_current;
+
+  -- A real published, in-force contract sourced from the ORIGINAL quotation only.
+  select * into v_contract from app.create_customer_contract_draft(v_source_quote_id, null, now() - interval '1 day', null, null, '00000000-0000-0000-0000-000000009611', 'tester');
+  perform app.add_customer_contract_price_component(
+    v_contract.id, 'ocean_freight', 'FCL', 'Jakarta', 'Surabaya', '20ft', 'IDR', 15000000, null, 0, '[]'::jsonb,
+    '00000000-0000-0000-0000-000000009611', 'tester'
+  );
+  select * into v_contract from app.publish_customer_contract(v_contract.id, v_contract.record_version, '00000000-0000-0000-0000-000000009611', 'tester');
+
+  -- A brand-new quotation on the same opportunity, accepted and converted with
+  -- p_target_account_id = the already-existing account (app.convert_quotation_to_account's
+  -- own "linked_existing" repeat-business flow) -- this quotation never itself sourced
+  -- any contract.
+  select * into v_repeat_quote from app.create_quotation_draft(
+    (select tenant_id from app.opportunities where id = v_opportunity_id), v_opportunity_id, 'IDR', now() + interval '14 days', v_contact_id, null, null,
+    '00000000-0000-0000-0000-000000009611', 'tester'
+  );
+  perform app.add_quotation_line(v_repeat_quote.id, v_repeat_quote.record_version, 'service', 'Ocean freight Jakarta-Surabaya (repeat order)', v_calc_id, 1, 15000000, 0, 0, '00000000-0000-0000-0000-000000009611', 'tester');
+  select * into v_repeat_quote from app.quotations where id = v_repeat_quote.id;
+  select * into v_repeat_quote from app.submit_quotation(v_repeat_quote.id, v_repeat_quote.record_version, '00000000-0000-0000-0000-000000009611', 'tester');
+  select * into v_send from app.send_quotation_for_acceptance(v_repeat_quote.id, v_contact_id, 'email', '00000000-0000-0000-0000-000000009611', 'tester');
+  perform app.record_quotation_customer_decision(v_send.raw_token, 'accepted', 'Lineage Contact', null, null, null, null, null);
+  perform app.convert_quotation_to_account(v_repeat_quote.id, v_account_id, null, '00000000-0000-0000-0000-000000009611', 'tester');
+
+  -- Confirms the scenario is real, not accidentally hitting the exact-match branch:
+  -- this repeat quotation never sourced a contract of its own.
+  select count(*) into v_direct_source_match_count from app.customer_contracts where source_quotation_id = v_repeat_quote.id;
+  if v_direct_source_match_count <> 0 then
+    raise exception 'assertion failed: the repeat quotation must never itself be a contract''s source_quotation_id for this test to be meaningful, found %', v_direct_source_match_count;
+  end if;
+
+  select * into v_handoff from app.prepare_job_order_handoff(v_repeat_quote.id, '00000000-0000-0000-0000-000000009611', 'tester');
+  if v_handoff.payload -> 'contract' ->> 'customerContractId' is distinct from v_contract.id::text then
+    raise exception 'assertion failed: expected the repeat order''s job order snapshot to carry the account''s currently published contract (id=%), got contract=%', v_contract.id, v_handoff.payload -> 'contract';
+  end if;
+  if v_handoff.payload -> 'contract' ->> 'status' <> 'published' or (v_handoff.payload -> 'contract' ->> 'versionNumber')::int <> 1 then
+    raise exception 'assertion failed: expected contract status=published versionNumber=1, got %', v_handoff.payload -> 'contract';
+  end if;
+end;
+$$;
+
+\echo '>> audit trail: prepare_job_order_handoff recorded a real app.audit_logs event per successful call, tenant-scoped'
 do $$
 declare
   v_tenant1 uuid;
@@ -339,8 +399,8 @@ declare
 begin
   v_tenant1 := (select id from app.tenants where slug = 'acmelineage');
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and action = 'prepare_job_order_handoff';
-  if v_count <> 1 then
-    raise exception 'assertion failed: expected exactly 1 prepare_job_order_handoff audit_logs entry (the successful first call, not the idempotent retry), got %', v_count;
+  if v_count <> 2 then
+    raise exception 'assertion failed: expected exactly 2 prepare_job_order_handoff audit_logs entries (the original quotation''s successful first call, never the idempotent retry, plus the CG-AUDIT-2026-09-02 E1 repeat-order quotation''s own successful call), got %', v_count;
   end if;
 end;
 $$;

@@ -5186,7 +5186,72 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "4779288b6535c05e31f2955d5016f13c4f0ce6deccb9e517519879a3db391b5f",
+  migrationSetSha256: "aef4d9dc78284f9238c371dcdd05b2f88dd44b940c4e50f6ce4767fd6555d9c0",
+  // HUNDRED-AND-SIXTY-NINTH PASS: CG-AUDIT-2026-09-02 E1 (repeat-order
+  // contract-lineage bounded core). One new migration
+  // (20260925000000_e1_repeat_order_contract_lineage_fix.sql, 567 files, +1).
+  // The backlog's own E1 row already closed the "effective price preview"
+  // half (app.get_effective_customer_price wired into the contract detail
+  // page) and correctly left "book directly against a contract, skip the
+  // quotation" as NEEDS_PRODUCT_DECISION -- app.quotations carries no
+  // account_id and app.job_orders/app.job_order_handoffs both require a real
+  // quotation_id, a genuine lifecycle decision this pass does not touch or
+  // weaken.
+  // A dedicated re-verification pass found a real, bounded, mechanical bug
+  // hiding under that same finding: app.customer_contracts' own comment
+  // documents that source_quotation_id is set ONLY on a contract's own
+  // originating (version 1) row -- a renewal/amendment carries a reason
+  // instead. app.build_job_order_draft_payload's contract lookup (this
+  // function's only-ever definition, confirmed by grepping every migration
+  // for its name before writing this one) matched EXCLUSIVELY on that exact
+  // source_quotation_id, so any repeat order for an already-contracted
+  // account -- app.convert_quotation_to_account's own documented
+  // "linked_existing" path for a brand-new quotation against an existing
+  // account, or a app.clone_quotation clone -- always resolved the job
+  // order's contract snapshot to null, even with a real published, in-force
+  // contract for that account. Every dollar amount on the resulting job
+  // order/invoice was always correct regardless (it comes from the
+  // quotation's own accepted price lines, never from the contract snapshot),
+  // so this is not a financial-correctness bug like B8 -- but the contract
+  // linkage is real governance/traceability data, and AGENTS.md is explicit
+  // that "critical transactions retain the applied version." Confirmed the
+  // correct resolution pattern already exists 500 lines away in the same
+  // migration, unused here: app.get_effective_customer_price (COM-156)
+  // matches on account_id + status=published + effective window.
+  // Fix: when the exact source_quotation_id match misses, fall back to that
+  // same published/effective-window resolution -- purely additive, so the
+  // already-working version-1 case (which may legitimately still be draft/
+  // unpublished at handoff time) is untouched; confirmed via a mechanical
+  // diff against the function's current body that this is the ONLY line
+  // changed.
+  // New db-test coverage (scripts/db-tests/commercial-job-order-lineage.sql):
+  // a real published contract sourced from the original quotation, then a
+  // brand-new sibling quotation accepted and converted with
+  // p_target_account_id set to the SAME existing account (the
+  // "linked_existing" repeat-business path, never itself sourcing a
+  // contract) -- proves app.prepare_job_order_handoff's payload for the
+  // repeat order carries the account's currently published contract, not
+  // null. Updated the file's own pre-existing audit-trail assertion from
+  // exactly 1 to exactly 2 prepare_job_order_handoff audit_logs entries (one
+  // real additional successful call, not a weakened assertion).
+  // UI: a "Repeat as new quotation" action on the contract detail page
+  // (app/(tenant)/[tenantSlug]/commercial/contracts/[contractId]/
+  // repeat-order-form.tsx + actions.ts), reusing the existing
+  // app.clone_quotation flow (already wired as cloneQuotationAction on the
+  // quotation detail page) against the contract's own root/version-1
+  // sourceQuotationId -- zero new RPC, zero new authority surface. Every job
+  // order booked from the resulting clone still goes through the full
+  // submit/accept/convert/handoff chain unchanged.
+  // Full Tier A gates verified clean: `typecheck` (0 errors), full `lint` (0
+  // errors, only pre-existing warnings, and 0 warnings on every file this
+  // pass touched), the full unit test suite (6182/6182 passing, including
+  // the release-freeze self-test after this digest update), a full `pnpm
+  // run db:test` (`ALL PASSED`, 567 migrations / 280 db-test files),
+  // `git:check-paths`, `security:check`. app/ files touched by this pass, so
+  // `next build` re-run clean too.
+  // History: 4779288b6535c05e31f2955d5016f13c4f0ce6deccb9e517519879a3db391b5f
+  // (566 files, HUNDRED-AND-SIXTY-EIGHTH PASS).
+  //
   // HUNDRED-AND-SIXTY-EIGHTH PASS: CG-AUDIT-2026-09-02 UNTRACKED-B8 (the "number
   // counters compound it" second half of the original B8 finding -- the backlog's
   // own B8 row closed only the "company_id caller-supplied, never validated"
@@ -8038,7 +8103,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "a84cea91b045f5133f01a3e63358b83688afbc40455e7cfbbd6861ed24acfd25",
+  dbTestSetSha256: "3fc3d93c7a13179babf565f306163e1381912b4835d40648385f6b6b5ade63dd",
+  // HUNDRED-AND-SIXTY-NINTH PASS: same CG-AUDIT-2026-09-02 E1 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (still 280 files): extended the existing scripts/db-tests/commercial-
+  // job-order-lineage.sql with a real published contract plus a genuine
+  // repeat-order (app.convert_quotation_to_account's own "linked_existing"
+  // path) proving the job order handoff's contract snapshot now resolves
+  // correctly (see migrationSetSha256's own note for the full description).
+  // History: a84cea91b045f5133f01a3e63358b83688afbc40455e7cfbbd6861ed24acfd25
+  // (280 files, HUNDRED-AND-SIXTY-EIGHTH PASS).
+  //
   // HUNDRED-AND-SIXTY-EIGHTH PASS: same CG-AUDIT-2026-09-02 UNTRACKED-B8 slice
   // as migrationSetSha256's own note immediately above -- one new db-test file
   // (280 files, +1): scripts/db-tests/untracked-b8-finance-number-counter-

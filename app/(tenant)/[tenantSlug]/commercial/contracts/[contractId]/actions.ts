@@ -20,6 +20,7 @@ import {
   ContractMutationError,
 } from "../../../../../../server/mutations/contract.ts";
 import { getEffectiveCustomerPrice, ContractQueryError } from "../../../../../../server/queries/contract.ts";
+import { cloneQuotation, QuotationMutationError } from "../../../../../../server/mutations/quotation.ts";
 import type { EffectiveCustomerPrice } from "../../../../../../server/contracts/contract/contract.ts";
 
 export interface ContractFormState {
@@ -184,6 +185,39 @@ export async function retireContractAction(tenantSlug: string, contractId: strin
 
   revalidatePath(`/${tenantSlug}/commercial/contracts/${contractId}`);
   return { error: null };
+}
+
+/**
+ * CG-AUDIT-2026-09-02 E1 (repeat-order bounded core): reuses the existing "clone a
+ * prior draft" flow (app.clone_quotation, COM-152 -- already wired as
+ * cloneQuotationAction on the quotation detail page) as the practical "repeat this
+ * contract as a new order" entry point, right from the contract that actually
+ * governs the pricing. Creates a brand-new draft quotation with the same customer/
+ * lines/terms as the contract's own originating quotation; every job order booked
+ * from it still goes through the full accept/convert/handoff chain unchanged --
+ * this never lets a job order skip quotation. Inventing a no-quotation booking path
+ * remains the separate, genuine product decision the backlog's own E1 disposition
+ * already identifies.
+ */
+export async function repeatContractAsQuotationAction(tenantSlug: string, sourceQuotationId: string): Promise<ContractFormState> {
+  const access = await resolveCommercialAccessForRequest(tenantSlug);
+  if (access.status !== "allowed") {
+    return { error: "You don't have access to this organization's Commercial workspace." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  let cloneId: string;
+  try {
+    const clone = await cloneQuotation(supabase, { sourceQuotationId, actorAuthUserId: access.authUserId, createdBy: access.authUserId });
+    cloneId = clone.id;
+  } catch (error) {
+    if (error instanceof QuotationMutationError) {
+      return { error: `Could not create a repeat quotation: ${error.message}` };
+    }
+    throw error;
+  }
+
+  redirect(`/${tenantSlug}/commercial/quotations/${cloneId}`);
 }
 
 /** Alternative flow (Prompt 156 §22): renewal/amendment from a current or historical version -- redirects to the new draft's own detail page, the same "redirect to the new version" pattern createQuotationRevisionAction (COM-152) established. */

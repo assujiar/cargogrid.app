@@ -116,7 +116,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 
 | ID | Item | Class | Status |
 |---|---|---|---|
-| E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` / `CODE` | **PARTIAL** | "no contract/repeat-order path" is confirmed accurate and stays `NEEDS_PRODUCT_DECISION` -- `app.quotations` carries no `account_id` at all (only via `app.account_conversions` post-acceptance), and `app.job_orders`/`app.job_order_handoffs` both require a real `quotation_id`, so inventing a "book directly against a contract" path is a genuine business/lifecycle decision. Separable, closed half: `app.get_effective_customer_price` (COM-156) was a fully-built, fully-tested, deterministic pricing lookup with zero callers anywhere in `app/` -- a tenant could build and publish a full contract price list end to end and never see, anywhere, what price the system would actually resolve for a real lane/service. Closed by wiring the already-existing RPC into a new "Check effective price" preview on the contract detail page (zero new migration, zero new RPC) |
+| E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` / `CODE` | **PARTIAL** | "book directly against a contract, skip the quotation entirely" is confirmed accurate and stays `NEEDS_PRODUCT_DECISION` -- `app.quotations` carries no `account_id` at all (only via `app.account_conversions` post-acceptance), and `app.job_orders`/`app.job_order_handoffs` both require a real `quotation_id`, so inventing a no-quotation booking path is a genuine business/lifecycle decision. First closed half: `app.get_effective_customer_price` (COM-156) was a fully-built, fully-tested, deterministic pricing lookup with zero callers anywhere in `app/` -- closed by wiring the already-existing RPC into a new "Check effective price" preview on the contract detail page (zero new migration, zero new RPC). Second closed half (2026-09-25, a dedicated re-verification pass that found a real bounded core hiding under the same finding): `app.build_job_order_draft_payload`'s contract lookup matched EXCLUSIVELY on `customer_contracts.source_quotation_id`, which that table's own comment documents is set only on a contract's own originating (version 1) row -- so any repeat order for an already-contracted account (`app.convert_quotation_to_account`'s own documented "linked_existing" path, or an `app.clone_quotation` clone) always lost its contract lineage in the job order snapshot, even with a real published contract in force. Every dollar amount was always correct regardless (it comes from the quotation's own price lines, never the contract snapshot), so this was a governance/traceability gap, not a financial-correctness bug -- but AGENTS.md is explicit that "critical transactions retain the applied version." Fixed by falling back to the same published/effective-window resolution `app.get_effective_customer_price` already uses, when the exact match misses (additive, one migration); paired with a new "Repeat as new quotation" action on the contract detail page reusing the existing `app.clone_quotation` flow (zero new RPC). See execution log |
 | E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2, re-dispositioned `DEFERRED_LARGE` after a closer schema check): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` -- closing it for real needs widening `finance_invoices`' own mandatory `job_order_id`/`billing_readiness_handoff_id` structural invariants (or a second, parallel invoicing primitive), a real product/schema decision, not a quick FK addition |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
 | E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh; driver licence/vehicle serviceability unchecked at dispatch; overdue-arrival detection unenqueueable | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) + `CODE` (dispatch driver/vehicle checks, closed 2026-09-23) + untracked (scheduler wiring, does not survive re-verification -- see execution log) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap. Two more sub-claims from the audit's own E5 paragraph, present in its prose but dropped from this table's original condensed summary: "driver licence expiry and vehicle serviceability are checked at neither assignment nor dispatch" is now closed (`app.evaluate_dispatch_readiness` gained two data-backed blocker checks); "overdue-arrival detection is not merely unscheduled but unenqueueable" does NOT survive independent re-verification at the scope originally proposed -- see execution log for the full disposition |
@@ -5346,3 +5346,109 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   file). No app/, components/, or "use server" file touched by this pass
   -- `next build` not required by this file's own Tier A trigger and not
   run.
+- 2026-09-25 — E1 (repeat-order contract-lineage bounded core) closed. This
+  session's own comprehensive workflow sweep had fully resolved every
+  candidate on its list (C3, E5 driver/vehicle half, UNTRACKED-D4,
+  UNTRACKED-B8); rather than stop there, three independent investigator
+  agents were sent to re-verify the remaining still-open rows that had
+  never had a dedicated "is a bounded core hiding here" pass this
+  session -- B3 (milestone/partial billing), E1 (contract/repeat-order
+  path), and E5's own ETA half (straight-line/40kmh) -- since this
+  session's own repeated experience is that a `DEFERRED_LARGE`/
+  `NEEDS_PRODUCT_DECISION` label is not itself evidence the item has no
+  closeable core.
+  B3's investigator corroborated the existing disposition exactly:
+  `finance_invoices_job_order_issued_unique` is genuinely unconditional
+  on `(tenant_id, job_order_id)`, `finance_invoice_lines` is deliberately
+  single-summary-line by design, and no billing-schedule/milestone
+  infrastructure exists anywhere in the schema to hang a mechanical fix
+  on -- partial/milestone billing stays `DEFERRED_LARGE`, untouched,
+  correctly.
+  E1's investigator found a real, bounded, mechanical bug that the
+  backlog's own prior "NEEDS_PRODUCT_DECISION" framing had missed:
+  `app.customer_contracts`' own comment documents that
+  `source_quotation_id` is set ONLY on a contract's own originating
+  (version 1) row -- a renewal/amendment carries a reason instead.
+  `app.build_job_order_draft_payload` (COM-160, its only-ever
+  definition, confirmed by grepping every migration for its name before
+  writing anything) matched EXCLUSIVELY on that exact
+  `source_quotation_id`, so any repeat order for an already-contracted
+  account -- `app.convert_quotation_to_account`'s own documented
+  "linked_existing" path for a brand-new quotation against an existing
+  account, or an `app.clone_quotation` clone -- always resolved the job
+  order's contract snapshot to null, even with a real published,
+  in-force contract for that account. Personally re-verified against
+  current code before implementing (per this session's own standing
+  discipline of never trusting a sub-agent's claim at face value): read
+  `app.customer_contracts`' own table definition and comment
+  (confirming `source_quotation_id` really is version-1-only), read
+  `app.get_effective_customer_price`'s own resolution (confirming the
+  "correct pattern" the investigator cited really does live 500 lines
+  away in the same migration, unused by the contract-lookup function),
+  and confirmed `app.build_job_order_draft_payload` has genuinely never
+  been redefined since its original migration.
+  Every dollar amount on the resulting job order/invoice was always
+  correct regardless of this bug (it comes from the quotation's own
+  accepted price lines, never from the contract snapshot), so this is
+  not a financial-correctness bug like B8 -- but the contract linkage is
+  real governance/traceability data (which contract/pricelist version
+  was actually in force when a job order was created), and `AGENTS.md`
+  is explicit that "critical transactions retain the applied version."
+  Silently losing that linkage on every repeat order for an
+  already-contracted account is a genuine data-lineage gap.
+  Fix (one migration,
+  `20260925000000_e1_repeat_order_contract_lineage_fix.sql`): when the
+  exact `source_quotation_id` match misses, fall back to the same
+  published/effective-window resolution `app.get_effective_customer_
+  price` already uses for that account -- additive only (the
+  already-working version-1 case, which may legitimately still be
+  draft/unpublished at handoff time, is untouched). The function body
+  was mechanically extracted from its current migration and diffed
+  (via Python `difflib`) against the modified version before ever being
+  pasted into the new migration, confirming only the one intended block
+  was inserted -- the same transcription-risk discipline this session
+  established after the C3 near-miss.
+  New db-test coverage (extended the existing
+  `scripts/db-tests/commercial-job-order-lineage.sql`, no new file): a
+  real published contract sourced from the original quotation, then a
+  brand-new sibling quotation accepted and converted with
+  `p_target_account_id` set to the SAME existing account (the
+  "linked_existing" repeat-business path, never itself sourcing a
+  contract) -- proves `app.prepare_job_order_handoff`'s payload for the
+  repeat order carries the account's currently published contract, not
+  null, and that the repeat quotation genuinely never itself became a
+  contract's `source_quotation_id` (so the fallback branch, not the
+  exact-match branch, is what fired). Updated the file's own
+  pre-existing audit-trail assertion from exactly 1 to exactly 2
+  `prepare_job_order_handoff` `audit_logs` entries -- a real additional
+  successful call this test adds, not a weakened assertion.
+  UI (paired with the backend fix, since a fixed-but-undiscoverable
+  data lineage improvement has limited practical value): a "Repeat as
+  new quotation" action on the contract detail page
+  (`app/(tenant)/[tenantSlug]/commercial/contracts/[contractId]/
+  repeat-order-form.tsx` + a new `repeatContractAsQuotationAction` in
+  that route's own `actions.ts`), reusing the existing
+  `app.clone_quotation` flow (already wired as `cloneQuotationAction`
+  on the quotation detail page) against the contract's own
+  root/version-1 `sourceQuotationId` -- zero new RPC, zero new
+  authority surface, and every job order booked from the resulting
+  clone still goes through the full submit/accept/convert/handoff
+  chain unchanged. This never lets a job order skip quotation; the
+  separate, genuine "skip quotation entirely for repeat business"
+  product decision stays exactly as open as before.
+  E5's ETA investigator found a real bounded piece too (replacing the
+  hardcoded 40km/h speed constant with a per-vehicle actual-average-
+  speed computed from `app.canonical_telemetry_events`, already
+  populated by live ingestion, zero external API) -- correctly scoped
+  as a SEPARATE backlog item from this one, not implemented in this
+  pass, and left for a following bounded change.
+  Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  (0 errors, only pre-existing warnings, and 0 warnings/errors on every
+  file this pass touched, checked individually), the full unit test
+  suite (6182/6182 passing, including the release-freeze self-test
+  after its digest update), a full `pnpm run db:test` (`ALL PASSED`,
+  567 migrations / 280 db-test files), `git:check-paths`,
+  `security:check`, `release:check-freeze` (HUNDRED-AND-SIXTY-NINTH
+  PASS, both digests updated -- one new migration file, no new db-test
+  file), and a full `npx next build` (exit 0, clean route manifest --
+  this pass touched `app/` files).

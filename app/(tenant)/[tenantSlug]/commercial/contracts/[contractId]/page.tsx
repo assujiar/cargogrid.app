@@ -3,10 +3,11 @@ import { resolveCommercialAccessForRequest } from "../../../../../../lib/portal/
 import { createSupabaseServerClient } from "../../../../../../lib/supabase/server.ts";
 import { getCustomerContractById, listCustomerContractVersions, listCustomerContractPriceComponents, ContractQueryError } from "../../../../../../server/queries/contract.ts";
 import { getAccountById } from "../../../../../../server/queries/account.ts";
-import { removePriceComponentAction, publishContractAction } from "./actions.ts";
+import { removePriceComponentAction, publishContractAction, repeatContractAsQuotationAction } from "./actions.ts";
 import { AddComponentForm } from "./add-component-form.tsx";
 import { CheckEffectivePriceForm } from "./check-effective-price-form.tsx";
 import { RenewalForm } from "./renewal-form.tsx";
+import { RepeatOrderForm } from "./repeat-order-form.tsx";
 import { RetireForm } from "./retire-form.tsx";
 import { ErrorState } from "../../../../../../components/ui/error-state.tsx";
 
@@ -48,6 +49,11 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
   ]);
 
   const editable = contract.status === "draft";
+  // CG-AUDIT-2026-09-02 E1: source_quotation_id is set only on a contract's own
+  // version-1 row (app.customer_contracts' own documented convention) -- looked
+  // up across the full version history so "Repeat as new quotation" still works
+  // while viewing a later renewal/amendment version.
+  const rootSourceQuotationId = versions.find((version) => version.versionNumber === 1)?.sourceQuotationId ?? contract.sourceQuotationId ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,6 +166,8 @@ export default async function ContractDetailPage({ params }: { params: Promise<{
           resolves no_effective_price regardless of components, so this is
           only shown once publish makes it meaningful. */}
       {contract.status === "published" ? <CheckEffectivePriceForm tenantSlug={tenantSlug} accountId={contract.accountId} /> : null}
+
+      {rootSourceQuotationId ? <RepeatOrderForm tenantSlug={tenantSlug} sourceQuotationId={rootSourceQuotationId} /> : null}
 
       {editable ? (
         <form action={publishContractAction.bind(null, tenantSlug, contract.id, contract.recordVersion)}>
