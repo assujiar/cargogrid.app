@@ -5186,7 +5186,73 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "c856f3c71fbc00f51c357d01da89381322f606207f673e5cd0fec60f582e63e3",
+  migrationSetSha256: "016b2784173bf1cb2b26d4143175c9a310b7bdca368afd20cfdcf0e743ebf190",
+  // HUNDRED-AND-SEVENTY-FIRST PASS: CG-AUDIT-2026-09-02 UNTRACKED-F-tenant-index
+  // (batch 1 of a CODE-BIG follow-up). One new migration
+  // (20260927000000_untracked_f_add_missing_tenant_id_indexes_batch1.sql, 569
+  // files, +1).
+  // A fresh Workflow-orchestrated sweep re-read the audit document's own raw
+  // prose sentence-by-sentence across every section (the same sweep that
+  // surfaced UNTRACKED-A1/UNTRACKED-A2-dedup/UNTRACKED-C-PPN, see the three
+  // passes immediately below) and surfaced section F's own closing
+  // parenthetical: "99 of 550 tenant-scoped tables (including
+  // vehicle_current_positions, ticket_events, the route-deviation/geofence
+  // tables, and the WMS order-line tables) lack any index leading on
+  // tenant_id" -- "the exact index coverage that would otherwise absorb some
+  // of F4's own RLS-predicate cost." Never mentioned anywhere in this
+  // backlog under any row, confirmed by grepping the full document.
+  // Personally re-verified against the CURRENT live schema, not the audit's
+  // own 2026-09-02 snapshot, before writing anything: applied every
+  // migration to a fresh disposable database and queried
+  // pg_class/pg_attribute/pg_index directly for every app.* table carrying a
+  // tenant_id column with no index whose first key column is tenant_id.
+  // Result: 551 tenant-scoped tables today (one more than the audit's own
+  // 550, ordinary schema growth since 2026-09-02), and the missing-index
+  // count is STILL exactly 99 -- confirming the gap is real, current, and
+  // genuinely still open.
+  // This is a mechanical, purely additive schema fix -- the exact same
+  // pattern already merged in
+  // 20260907170000_fix_shipment_order_dispatch_double_scan_iss_f5.sql (new
+  // `CREATE INDEX ... ON app.<table> (tenant_id, ...)`, zero RLS/policy
+  // change, zero data-model change) -- not a product/business decision.
+  // 99 tables in one migration would exceed AGENTS.md's own default
+  // bounded-task envelope (1-3 migrations, ~5-15 changed files), so this is
+  // deliberately scoped to a first batch: the 4 table groups the audit's
+  // own closing parenthetical named explicitly by name --
+  // `vehicle_current_positions`, `ticket_events`, the route-deviation/
+  // geofence tables (`shipment_leg_route_deviation_states`,
+  // `shipment_leg_stop_geofence_states`), and the WMS order-line tables
+  // (`wms_inbound_order_lines`, `wms_outbound_order_lines`,
+  // `wms_package_lines`, `wms_shipment_issue_lines`) -- 8 tables. The
+  // remaining 91 tables are logged as a separate, disclosed follow-up in
+  // the backlog, not silently dropped or implied closed.
+  // Plain single-column `(tenant_id)` indexes, not a composite: the
+  // audit's own framing is a coverage gap ("lack ANY index leading on
+  // tenant_id"), not a specific slow query with a known secondary sort/
+  // filter column -- confirmed for each of these 8 tables (grepping every
+  // `create index ... on app.<table>` statement across all migrations)
+  // that no existing index leads with tenant_id, so this is genuinely
+  // additive and non-overlapping with any prior index. A composite index
+  // tuned to one particular query shape would be speculative optimization
+  // ahead of a measured need, which AGENTS.md's own performance rule
+  // cautions against.
+  // New db-test coverage: a new scripts/db-tests/untracked-f-tenant-index-
+  // coverage-batch1.sql directly queries pg_class/pg_attribute/pg_index
+  // (the same mechanism used to personally re-verify the finding) to prove
+  // each of the 8 named tables now has a real leading-tenant_id index, and
+  // separately asserts the remaining gap count is exactly 91 (not silently
+  // narrowed to "no gap left" -- this batch closed exactly 8 of 99).
+  // Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  // (0 errors, only pre-existing warnings -- no app/ file touched by this
+  // pass), the full unit test suite (6182/6182, unaffected by a schema-only
+  // additive change), a full `pnpm run db:test` (`ALL PASSED`, 569
+  // migrations / 281 db-test files), `git:check-paths`, `security:check`.
+  // No app/, components/, or "use server" file touched by this pass --
+  // `next build` not required by this file's own Tier A trigger and not
+  // run.
+  // History: c856f3c71fbc00f51c357d01da89381322f606207f673e5cd0fec60f582e63e3
+  // (568 files, HUNDRED-AND-SEVENTIETH PASS).
+  //
   // HUNDRED-AND-SEVENTIETH PASS: CG-AUDIT-2026-09-02 E5 (ETA speed-constant
   // bounded core). One new migration
   // (20260926000000_e5_eta_effective_vehicle_speed.sql, 568 files, +1).
@@ -8179,7 +8245,18 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "372fd7dfa922d36caacab7393562fd1f0ed30e1d6b91df692e9f6cb7c4762f7f",
+  dbTestSetSha256: "de8ad2e6ba2d89e7b106bca73043871cfb9b199469aabfceb09fbda54777640d",
+  // HUNDRED-AND-SEVENTY-FIRST PASS: same CG-AUDIT-2026-09-02
+  // UNTRACKED-F-tenant-index slice as migrationSetSha256's own note
+  // immediately above -- one new db-test file (281 files, +1):
+  // scripts/db-tests/untracked-f-tenant-index-coverage-batch1.sql, directly
+  // querying pg_class/pg_attribute/pg_index to prove the 8 named tables now
+  // carry a leading-tenant_id index and that exactly 91 tenant-scoped
+  // tables remain without one (see migrationSetSha256's own note for the
+  // full description).
+  // History: 372fd7dfa922d36caacab7393562fd1f0ed30e1d6b91df692e9f6cb7c4762f7f
+  // (280 files, HUNDRED-AND-SEVENTIETH PASS).
+  //
   // HUNDRED-AND-SEVENTIETH PASS: same CG-AUDIT-2026-09-02 E5 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (still 280 files): extended the existing scripts/db-tests/advanced-tms-

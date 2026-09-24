@@ -114,6 +114,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
 | UNTRACKED-A1 | The audit's own A1 paragraph separately states "the 407 lint warnings are all raw `<a>` tags, so the navigation that exists reloads the page on every click" -- a distinct sub-claim about the MECHANISM of the pre-existing navigation, never mentioned anywhere in A1's own row/execution-log summary (which only covered the 81/238-unreachable-routes reachability half) | `CODE` | **PARTIAL** (2026-09-26) | Personal re-verification found the true scope is bigger than the audit's own 407-warning figure: `@next/next/no-html-link-for-pages` only flags a `<a href="...">` when the href is a static string it can statically resolve -- every one of the persistent per-module nav bars uses a dynamic template-literal href (e.g. `` href={`/${tenant.slug}/admin/users`} ``), which the linter's static analysis silently cannot see at all, so most of the real full-page-reload navigation was never counted in the 407 figure to begin with. Closed for the persistent navigation the audit specifically named ("the navigation that exists"): all 19 module/shell layout files (`admin`, `analytics`, `automation-rules`, `commercial`, `dashboards`, `finance`, `helpdesk`, `hris`, `integrations`, `knowledge-base`, `operations`, `procurement`, `reports`, `saved-views`, `scheduled-reports`, `tickets` layouts, plus `supreme/layout.tsx`, `(public)/status/page.tsx`, and the tenant Home `page.tsx`) -- 56 raw `<a href>` elements converted to `next/link`'s `Link` (via the already-existing `components/ui/link.tsx` wrapper this same codebase's own `tenant-portal-nav.tsx` already used), confirmed via a full repo-wide `<a href` audit that none of the converted elements were external/`target="_blank"`/`mailto:` links (all same-origin internal navigation). This closes 100% of the actual ESLint warning count (1465 -> 0) and every persistent nav bar's own full-reload behavior. Deliberately NOT included in this pass, and left open as a separate, larger follow-up: ~65 additional files scattered across `app/` contain page-CONTENT `<a href>` links (e.g. a list page's "view detail" row link to another internal page) -- a materially larger, `CODE-BIG`-class sweep in the same shape as `Ø1-query-layer`'s own multi-batch closure, not a single bounded change; a sample check confirmed some of these 65 files' own `<a>` tags are legitimately `target="_blank"` (correctly left as `<a>`, not a bug), so that follow-up needs the same per-occurrence external-link triage this pass already did for the 19 nav files, not a blind global swap |
 | UNTRACKED-A2-dedup | The audit's own A2 paragraph separately states, distinct from the tenant/user/role/org-unit UI gaps A2's row already closed: "the generic `createMasterRecord` wrapper has no caller and its RPC is granted to `postgres`/`service_role` only; and `mergeMasterRecords` — the only deduplication path in the system — has no caller at all." Never mentioned anywhere in A2's own row or its 2026-09-14 execution-log entry (which enumerates every mutation it wired up, and neither of these two is on that list) | `CODE` | **PARTIAL** (2026-09-26) | `mergeMasterRecords` closed: new `app/(tenant)/[tenantSlug]/admin/master-data/` page (search by master type/code/name via the already-`authenticated`-callable `app.search_master_records`, then merge two records via the already-tested, `service_role`-only `app.merge_master_records`, the "explicit actor, service-role execution" pattern every other privileged mutation here already follows) -- zero new RPC, zero new authority surface, only two new thin `toMasterDataMutationRpcClient`/`toMasterDataQueryRpcClient` adapters (this session's own established convention) plus a new admin nav link. `createMasterRecord`'s own generic wrapper is deliberately NOT given a UI: verified all 6 currently-seeded master types (`vendor`, `vendor_rate`, `fleet`, `vehicle`, `driver`, `employee` -- confirmed via every real `insert into app.master_types` migration) already have their own dedicated, tested, wired domain-specific creation path that calls `app.create_master_record` internally (vendor intake, vehicle/driver registration via ATW-223, employee onboarding) -- there is no live domain today with an unmet creation need that would route through a second, generic "create any master record" form; a real future domain needing one is a when-it-exists concern, not a current gap |
+| UNTRACKED-F-tenant-index | Section F's own closing parenthetical separately states: "99 of 550 tenant-scoped tables (including `vehicle_current_positions`, `ticket_events`, the route-deviation/geofence tables, and the WMS order-line tables) lack any index leading on `tenant_id`" -- "the exact index coverage that would otherwise absorb some of F4's own RLS-predicate cost." Never mentioned anywhere in this backlog under any row | `CODE` (mechanical, additive) | **PARTIAL** (batch 1 of 99, 2026-09-26) | Personally re-verified against the CURRENT live schema (not the audit's own 2026-09-02 snapshot): applied every migration to a fresh disposable database and queried `pg_class`/`pg_attribute`/`pg_index` directly. Result: 551 tenant-scoped tables today (ordinary growth since 2026-09-02), missing-index count STILL exactly 99 -- the gap is real and current, not stale. This is a mechanical, purely additive schema fix (the same pattern F5's own migration already established: `CREATE INDEX ... (tenant_id, ...)`, zero RLS/policy change), not a product decision -- but 99 tables in one migration exceeds AGENTS.md's own default bounded-task envelope, so closed as a first batch: the exact 4 table groups the audit's own sentence named by name -- `vehicle_current_positions`, `ticket_events`, `shipment_leg_route_deviation_states`/`shipment_leg_stop_geofence_states` (the route-deviation/geofence tables), and `wms_inbound_order_lines`/`wms_outbound_order_lines`/`wms_package_lines`/`wms_shipment_issue_lines` (the WMS order-line tables) -- 8 tables, each confirmed via grep to have no pre-existing index leading on `tenant_id`. Plain single-column `(tenant_id)` indexes (not a composite) since the audit's own framing is a coverage gap, not a specific slow query with a known secondary column -- a tuned composite would be speculative optimization ahead of a measured need. The remaining 91 tables are a disclosed, separate follow-up, not silently narrowed to "no gap left" (the new db-test asserts the exact remaining count). See execution log |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
 
@@ -5729,3 +5730,70 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   migration or db-test changed by this pass (zero new RPC), so
   `release:check-freeze`'s two digests are untouched and its self-test
   still passes unmodified.
+- 2026-09-26 — UNTRACKED-F-tenant-index (batch 1 of a CODE-BIG
+  follow-up) closed. The same audit-prose sweep that surfaced
+  UNTRACKED-A1/UNTRACKED-A2-dedup/UNTRACKED-C-PPN (see the three entries
+  above) also flagged section F's own closing parenthetical: "99 of 550
+  tenant-scoped tables (including `vehicle_current_positions`,
+  `ticket_events`, the route-deviation/geofence tables, and the WMS
+  order-line tables) lack any index leading on `tenant_id`" -- "the
+  exact index coverage that would otherwise absorb some of F4's own
+  RLS-predicate cost." Never mentioned anywhere in this backlog under
+  any row, confirmed by grepping the full document.
+  Personally re-verified against the CURRENT live schema, not the
+  audit's own 2026-09-02 snapshot, before writing anything: spun up a
+  disposable database via the same `lib/setup-disposable-db.sh` this
+  repository's own `db:test` runner uses, applied every migration, and
+  queried `pg_class`/`pg_attribute`/`pg_index` directly for every
+  `app.*` table carrying a `tenant_id` column with no index whose first
+  key column is `tenant_id`. Result: 551 tenant-scoped tables today
+  (one more than the audit's own 550, ordinary schema growth since
+  2026-09-02), and the missing-index count is STILL exactly 99 --
+  confirming the gap is real, current, and genuinely still open, not
+  something a later migration already closed.
+  This is a mechanical, purely additive schema fix -- the exact same
+  pattern already merged in
+  `20260907170000_fix_shipment_order_dispatch_double_scan_iss_f5.sql`
+  (new `CREATE INDEX ... ON app.<table> (tenant_id, ...)`, zero RLS/
+  policy change, zero data-model change) -- not a product/business
+  decision, unlike this backlog's other `DEFERRED_LARGE`/
+  `NEEDS_PRODUCT_DECISION` rows. 99 tables in one migration would exceed
+  AGENTS.md's own default bounded-task envelope (1-3 migrations, ~5-15
+  changed files), so this closes a deliberate first batch: the 4 table
+  groups the audit's own closing parenthetical named explicitly by name
+  -- `vehicle_current_positions`, `ticket_events`, the route-deviation/
+  geofence tables (`shipment_leg_route_deviation_states`,
+  `shipment_leg_stop_geofence_states`), and the WMS order-line tables
+  (`wms_inbound_order_lines`, `wms_outbound_order_lines`,
+  `wms_package_lines`, `wms_shipment_issue_lines`) -- 8 tables. For each,
+  confirmed via grep (every `create index ... on app.<table>` statement
+  across all migrations) that no pre-existing index leads with
+  `tenant_id`, so every new index is genuinely additive and non-
+  overlapping. The remaining 91 tables are logged as a separate,
+  disclosed follow-up in the backlog row itself, not silently dropped
+  or implied closed.
+  Plain single-column `(tenant_id)` indexes, not a composite: the
+  audit's own framing is a coverage gap ("lack ANY index leading on
+  tenant_id"), not a specific slow query with a known secondary sort/
+  filter column. A composite index tuned to one particular query shape
+  would be speculative optimization ahead of a measured need, which
+  AGENTS.md's own performance rule cautions against ("read replicas/
+  read models only after measured thresholds").
+  New db-test coverage: a new
+  `scripts/db-tests/untracked-f-tenant-index-coverage-batch1.sql`
+  directly queries `pg_class`/`pg_attribute`/`pg_index` (the identical
+  mechanism used to personally re-verify the finding) to prove each of
+  the 8 named tables now carries a real leading-`tenant_id` index, and
+  separately asserts the remaining gap count is exactly 91 -- proving
+  this batch closed exactly 8 of 99, never silently narrowed to "no gap
+  left."
+  Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  (0 errors, only pre-existing warnings -- no `app/` file touched by
+  this pass), the full unit test suite (6182/6182, unaffected by a
+  schema-only additive change), a full `pnpm run db:test` (`ALL
+  PASSED`, 569 migrations / 281 db-test files), `git:check-paths`,
+  `security:check`, `release:check-freeze` (HUNDRED-AND-SEVENTY-FIRST
+  PASS, both digests updated -- one new migration file, one new db-test
+  file). No `app/`, `components/`, or `"use server"` file touched by
+  this pass -- `next build` not required by this file's own Tier A
+  trigger and not run.
