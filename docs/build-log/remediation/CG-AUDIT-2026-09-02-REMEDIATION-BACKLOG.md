@@ -91,6 +91,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | C3 | Tax console shows 11% as "0.11%" — display bug only, calculator is correct | `CODE` | **DONE** (`57fc8fe`, write-side correction 2026-09-23) | trivial, high-value. Correction (2026-09-23): the original fix closed only the read side (admin tax-rule list display). The write side had a real, separate gap -- `app.create_finance_tax_rule_draft` never validated the percentage-basis upper bound (`rate_value <= 1`), so a misentered whole-number rate (e.g. 11 instead of 0.11) fell through to a raw, unclassified Postgres CHECK-constraint error instead of a clean one. Now closed: see execution log |
 | C1 | No NPWP on tenant/org unit; no faktur pajak/NSFP/e-Faktur at all | `CODE-BIG` / `PRODUCT` | **PARTIAL** | NPWP-as-master-data-field closed -- `app.org_units.tax_id` plus a "Seller Tax ID" line on the A7 invoice/purchase-order PDFs, needing zero tax expertise (mirrors `app.accounts.tax_id`'s own already-unvalidated-free-text precedent). Faktur pajak/NSFP/e-Faktur generation stays DEFERRED_LARGE -- confirmed absent code-wide, genuinely needs a tax SME |
 | C2 | PPh 21 uncomputable — no PTKP/bracket/NPWP columns | `CODE-BIG` / `PRODUCT` | DEFERRED_LARGE | same |
+| UNTRACKED-C-PPN | The audit separately notes, distinct from C1/C2, that the only seeded PPN (VAT) tax rule is a deliberately inert `is_example_fixture=true`/`rate_value=0` placeholder that `app.approve_finance_tax_rule` structurally refuses to ever approve -- meaning no tenant can compute or invoice real Indonesian VAT until an authorized Finance/Tax SME creates and approves a genuine, evidence-backed PPN rate. This precondition/fact was never tracked anywhere in this backlog under any row | `PRODUCT` / `DEFERRED_LARGE` | **DISCLOSED** (2026-09-26) | Not a code gap -- `supabase/migrations/20260729090000_create_finance_tax_baseline.sql`'s own header already discloses this exhaustively and enforces it structurally (`app.approve_finance_tax_rule` raises `finance_tax_rule_example_fixture_not_activatable` for any `is_example_fixture=true` row; `app.create_finance_tax_rule_draft`, the only reachable INSERT path, has no parameter to ever create another fixture row), matching RPD-016/021's own binding "no rate may be guessed" boundary. This row exists purely so the backlog itself discloses the precondition, matching C1/C2's own DEFERRED_LARGE class (needs a real Finance/Tax SME with dated legal evidence, not a schema/code change) -- no migration, no test, no commit needed to close the underlying disclosure gap beyond this row |
 
 ## A — Operability
 
@@ -5622,3 +5623,36 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   changed by this pass, so `release:check-freeze`'s two digests
   (migration set, db-test set) are untouched and its self-test still
   passes unmodified.
+- 2026-09-26 — UNTRACKED-C-PPN disclosed. The same audit-prose sweep
+  that surfaced UNTRACKED-A1 (see the entry above) also flagged, in
+  section C, that the audit's own C-section discussion separately notes
+  the seeded PPN (VAT) tax rule is a deliberately inert
+  `is_example_fixture=true`/`rate_value=0` placeholder `app.approve_
+  finance_tax_rule` structurally refuses to ever approve -- meaning no
+  tenant can compute or invoice real Indonesian VAT until an authorized
+  Finance/Tax SME creates and approves a genuine rate -- and that this
+  precondition was never tracked under any row in this backlog,
+  confirmed by grepping the full document for every plausible keyword
+  (PPN, VAT, tax rule, fixture, example) before concluding it was
+  genuinely dropped.
+  Personally re-verified: read `supabase/migrations/
+  20260729090000_create_finance_tax_baseline.sql`'s own header in full
+  -- it already discloses this exhaustively (RPD-016/021's own binding
+  "no rate may be guessed" boundary) and enforces it structurally
+  (`app.approve_finance_tax_rule` raises `finance_tax_rule_example_
+  fixture_not_activatable` for any `is_example_fixture=true` row;
+  `app.create_finance_tax_rule_draft`, the only reachable INSERT path,
+  has no parameter to ever create another fixture row). This is not a
+  code gap -- the product already behaves correctly and discloses the
+  precondition in the migration itself. The genuinely dropped piece was
+  narrower: this backlog's own table never stated the fact, unlike its
+  C1/C2 siblings which already carry the equivalent "needs a tax SME"
+  disclosure for their own findings.
+  Closed by adding a documentation-only row (`UNTRACKED-C-PPN`),
+  dispositioned `PRODUCT`/`DEFERRED_LARGE` matching C1/C2's own class --
+  no migration, no test, no code change, since the underlying gap is a
+  real Finance/Tax SME dependency, not something a coding agent may
+  guess per AGENTS.md's own Indonesia tax rule. No Tier A gates apply to
+  a documentation-only backlog-table addition; `git:check-paths`/
+  `security:check` re-run clean regardless (no forbidden paths, no
+  secret-shaped pattern).
