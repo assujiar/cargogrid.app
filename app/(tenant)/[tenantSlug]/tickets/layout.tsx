@@ -5,6 +5,7 @@ import { resolveSignedInUserLabelForRequest } from "../../../../lib/auth/resolve
 import { AccountMenu } from "../../../../components/layout/account-menu.tsx";
 import { TenantPortalNav } from "../../../../components/domain/tenant-portal-nav.tsx";
 import { TenantMain } from "../../../../components/layout/tenant-main.tsx";
+import { Link } from "../../../../components/ui/link.tsx";
 
 /**
  * Tickets module shell (audit remediation A1). Was a bare `<TenantMain>`
@@ -38,9 +39,9 @@ export default async function TicketsModuleLayout({
             ? "This organization's account is currently suspended."
             : "You don't have access to this organization's Tickets workspace."}
         </p>
-        <a href="/login" className="text-sm font-medium text-primary underline">
+        <Link href="/login" className="text-sm font-medium text-primary underline">
           Sign in with a different account
-        </a>
+        </Link>
       </main>
     );
   }

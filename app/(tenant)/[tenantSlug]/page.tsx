@@ -52,9 +52,9 @@ export default async function TenantHomePage({ params }: { params: Promise<{ ten
             ? "This organization's account is currently suspended."
             : "You don't have access to this organization."}
         </p>
-        <a href="/login" className="text-sm font-medium text-primary underline">
+        <Link href="/login" className="text-sm font-medium text-primary underline">
           Sign in with a different account
-        </a>
+        </Link>
       </main>
     );
   }

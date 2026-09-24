@@ -4,6 +4,7 @@ import { resolveSupremeAdminAccessForRequest } from "../../../lib/portal/resolve
 import { Banner } from "../../../components/ui/banner.tsx";
 import { resolveSignedInUserLabelForRequest } from "../../../lib/auth/resolve-signed-in-user-label.server.ts";
 import { AccountMenu } from "../../../components/layout/account-menu.tsx";
+import { Link } from "../../../components/ui/link.tsx";
 
 /**
  * Supreme Admin portal shell (PLT-136, CG-S6-PLT-033). Every request through this
@@ -36,9 +37,9 @@ export default async function SupremeLayout({ children }: { children: ReactNode 
       <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-3 px-4 text-center">
         <h1 className="text-xl font-semibold text-neutral-900">Access denied</h1>
         <p className="text-sm text-neutral-600">You don&apos;t have access to the CargoGrid control plane.</p>
-        <a href="/login" className="text-sm font-medium text-primary underline">
+        <Link href="/login" className="text-sm font-medium text-primary underline">
           Sign in with a different account
-        </a>
+        </Link>
       </main>
     );
   }
@@ -56,21 +57,21 @@ export default async function SupremeLayout({ children }: { children: ReactNode 
         <span className="text-sm font-semibold text-neutral-900">CargoGrid — Control Plane</span>
         <div className="flex items-center gap-4">
           <nav aria-label="Supreme navigation" className="flex gap-4 text-sm">
-            <a href="/supreme" className="text-neutral-700 hover:text-neutral-900">
+            <Link href="/supreme" className="text-neutral-700 hover:text-neutral-900">
               Home
-            </a>
-            <a href="/supreme/tenants" className="text-neutral-700 hover:text-neutral-900">
+            </Link>
+            <Link href="/supreme/tenants" className="text-neutral-700 hover:text-neutral-900">
               Tenants
-            </a>
-            <a href="/supreme/helpdesk" className="text-neutral-700 hover:text-neutral-900">
+            </Link>
+            <Link href="/supreme/helpdesk" className="text-neutral-700 hover:text-neutral-900">
               Helpdesk
-            </a>
-            <a href="/supreme/support-access" className="text-neutral-700 hover:text-neutral-900">
+            </Link>
+            <Link href="/supreme/support-access" className="text-neutral-700 hover:text-neutral-900">
               Support access
-            </a>
-            <a href="/supreme/integrations" className="text-neutral-700 hover:text-neutral-900">
+            </Link>
+            <Link href="/supreme/integrations" className="text-neutral-700 hover:text-neutral-900">
               Integrations
-            </a>
+            </Link>
           </nav>
           {signedInUserLabel ? <AccountMenu name={signedInUserLabel} /> : null}
         </div>

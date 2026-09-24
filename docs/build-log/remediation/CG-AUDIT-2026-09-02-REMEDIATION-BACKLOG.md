@@ -111,6 +111,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | A6 | No Storage bucket/policies; uploads never store bytes; malware-scan status never advances, deadlocking 3+ flows | `CODE-BIG` | **DONE** | All 4 real evidence-upload flows in this codebase now have real upload + real bytes stored + a malware scan enqueued: vendor compliance document submission/renewal, shipment document checklist uploads, ticket-reply attachments (previously an outright, reproducible hard failure: `app.reply_to_ticket` raises `evidence_file_not_scanned` for any attachment that never reaches `malware_scan_status='clean'`, and nothing ever wired real bytes/scanning), and ePOD evidence capture (previously read plain TEXT filename fields and called `uploadShipmentDocumentFile` with a HARDCODED mimeType/sizeBytes -- no real File ever reached the action, so no evidence file could ever leave `malware_scan_status='pending'`). All four now share one `lib/malware-scan/store-file-bytes-and-enqueue-scan.server.ts` helper. Signed download is now wired for all 4: vendor compliance evidence (`app.access_vendor_compliance_document_evidence_for_download`), shipment document checklist evidence (`app.access_shipment_document_checklist_item_evidence_for_download`, gated on the previously-seeded-but-never-used `OPS:Download` permission action code), ticket-reply attachments (`app.access_ticket_attachment_evidence_for_download`, gated on the existing `app.can_access_ticket` baseline plus the linked reply's own `public`/`internal` visibility), and ePOD signature/photo evidence (`app.access_epod_evidence_for_download`, gated on `OPS:Download` plus the parent shipment order's own `app.can_access_record` scope -- the same bar its document checklist sibling already uses). Closing the ePOD slice also surfaced and fixed a more fundamental gap: the `epod` document type itself was never registered by any real (non-db-test) migration anywhere in this repository, so a genuinely fresh tenant's first ePOD evidence upload would have failed immediately with `document_type_not_configured` in spite of every RPC being fully wired and tested -- fixed by the same global-catalogue-registration migration that adds the signed-download RPC. Out of A6's own scope, tracked separately under D4: every scan still fails closed on D4's own still-open GUC gap until an operator configures both the encryption key and a real VirusTotal API key |
 | A7 | No PDF/print library; no printable document of any kind | `CODE-BIG` | **PARTIAL** | the PDF-generation infrastructure (`@react-pdf/renderer`, chosen for Vercel serverless compatibility -- pure JS, no headless-browser dependency) and five printable documents, surat jalan (delivery note), POD (proof of delivery), purchase order, invoice, and packing list, now exist end to end (`server/documents/`, five new Route Handlers, wired into their respective detail/list pages), per the audit's own §6 step 4 ("the printable document set, surat jalan first"). POD now embeds the real signature/photo evidence images (NEW-2, a follow-on unblocked once A6's own signed-download capability closed) rather than the text-only summary it originally shipped with. Invoice required one new RPC (`app.get_finance_invoice`, no single-invoice-by-id read existed before) and prints directly from the invoice list row (no invoice detail page exists in this codebase). Packing list required a from-scratch, standalone internal page (`operations/packing-tasks/[packingTaskId]/`) -- ATW-018's own domain (`server/queries/wms-packing.ts`) was real and fully tested but had zero pages/actions anywhere, confirmed by repo-wide search; no host list page for `wms_outbound_orders`/packing tasks exists anywhere in this codebase (a genuinely separate, larger gap -- an internal outbound-order/pick-pack worklist -- out of this slice's own scope), so the new page is reached directly by a packing task id, mirroring `finance/config/page.tsx`'s/`inventory-opening-balance`'s own standalone-and-unlinked precedent. Still open: faktur pajak, gated on new backend RPC work and the tax-SME judgment calls flagged elsewhere in this backlog (C1/C2) |
 | F4 | `has_active_tenant_membership` costs ~138µs/row, unindexable, no caching layer anywhere | `CODE-BIG` (research) | DEFERRED_LARGE | needs a load-bearing-function redesign, not a quick patch |
+| UNTRACKED-A1 | The audit's own A1 paragraph separately states "the 407 lint warnings are all raw `<a>` tags, so the navigation that exists reloads the page on every click" -- a distinct sub-claim about the MECHANISM of the pre-existing navigation, never mentioned anywhere in A1's own row/execution-log summary (which only covered the 81/238-unreachable-routes reachability half) | `CODE` | **PARTIAL** (2026-09-26) | Personal re-verification found the true scope is bigger than the audit's own 407-warning figure: `@next/next/no-html-link-for-pages` only flags a `<a href="...">` when the href is a static string it can statically resolve -- every one of the persistent per-module nav bars uses a dynamic template-literal href (e.g. `` href={`/${tenant.slug}/admin/users`} ``), which the linter's static analysis silently cannot see at all, so most of the real full-page-reload navigation was never counted in the 407 figure to begin with. Closed for the persistent navigation the audit specifically named ("the navigation that exists"): all 19 module/shell layout files (`admin`, `analytics`, `automation-rules`, `commercial`, `dashboards`, `finance`, `helpdesk`, `hris`, `integrations`, `knowledge-base`, `operations`, `procurement`, `reports`, `saved-views`, `scheduled-reports`, `tickets` layouts, plus `supreme/layout.tsx`, `(public)/status/page.tsx`, and the tenant Home `page.tsx`) -- 56 raw `<a href>` elements converted to `next/link`'s `Link` (via the already-existing `components/ui/link.tsx` wrapper this same codebase's own `tenant-portal-nav.tsx` already used), confirmed via a full repo-wide `<a href` audit that none of the converted elements were external/`target="_blank"`/`mailto:` links (all same-origin internal navigation). This closes 100% of the actual ESLint warning count (1465 -> 0) and every persistent nav bar's own full-reload behavior. Deliberately NOT included in this pass, and left open as a separate, larger follow-up: ~65 additional files scattered across `app/` contain page-CONTENT `<a href>` links (e.g. a list page's "view detail" row link to another internal page) -- a materially larger, `CODE-BIG`-class sweep in the same shape as `Ø1-query-layer`'s own multi-batch closure, not a single bounded change; a sample check confirmed some of these 65 files' own `<a>` tags are legitimately `target="_blank"` (correctly left as `<a>`, not a bug), so that follow-up needs the same per-occurrence external-link triage this pass already did for the 19 nav files, not a blind global swap |
 
 ## E — Domain modeling (all `PRODUCT`-gated per the audit's own framing, "decide what CargoGrid is")
 
@@ -5537,3 +5538,87 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   updated -- one new migration file, no new db-test file). No app/,
   components/, or "use server" file touched by this pass -- `next build`
   not required by this file's own Tier A trigger and not run.
+- 2026-09-26 — UNTRACKED-A1 (persistent-navigation full-page-reload
+  half) closed. After E1/E5-ETA/B3's own re-verification pass (see the
+  two entries above), a fresh Workflow-orchestrated sweep re-read the
+  audit document's own raw prose sentence-by-sentence across every
+  section, cross-referencing each discrete claim against the backlog's
+  current rows and execution log, specifically hunting for the same
+  class of silently-dropped sub-claim that UNTRACKED-B8/UNTRACKED-D4
+  turned out to be. It surfaced 9 real candidates; each was
+  independently adversarially re-verified (a second agent re-reading
+  the audit quote in full context and re-searching the backlog itself,
+  never trusting the first agent's search) before anything was
+  implemented. This entry closes the first, highest-confidence one.
+  A1's own row/execution-log summary covered only the "81/238 routes
+  unreachable" reachability half of the audit's A1 paragraph. The
+  paragraph's own separate closing sentence -- "the 407 lint warnings
+  are all raw `<a>` tags, so the navigation that exists reloads the page
+  on every click" -- was never mentioned anywhere in A1's row or its
+  2026-09-14 execution-log entry, confirmed by grepping the full,
+  several-thousand-line backlog document for every plausible keyword
+  (`<a>`, `html-link-for-pages`, `407`, `next/link`, `page reload`, etc.)
+  before concluding it was genuinely dropped.
+  Personally re-verified before implementing, and caught a real scope
+  understatement in the process: running the repo's actual `pnpm run
+  lint` today reproduces the audit's own 1465-warning/407-distinct-
+  occurrence figure (this session's own earlier passes had already
+  fixed unrelated warnings, so the absolute count differs from the
+  audit's 2026-09-02 snapshot, but the rule and mechanism are identical)
+  -- but `@next/next/no-html-link-for-pages` only fires when it can
+  statically resolve an `<a href="...">`'s string value; a plain
+  repo-wide grep for `<a href` found 84 files with raw anchor tags in
+  `app/`, and reading a representative sample (`admin/layout.tsx`, 18
+  raw `<a>` tags, only 1 ever flagged by lint) confirmed every nav-bar
+  link built from a template literal (e.g. `` href={`/${tenant.slug}/
+  admin/users`} ``) is invisible to the linter's static analysis, even
+  though it causes the exact same full-page-reload bug the audit
+  describes. So the audit's own 407-warning figure, and this session's
+  own workflow investigator's initial "~19 flagged files, swap the
+  flagged lines" sketch, both understated the true scope -- the real
+  fix needed to cover every `<a href>` in the actual persistent
+  navigation, not merely the subset ESLint's string-literal heuristic
+  happened to catch.
+  Fix: converted all 56 raw `<a href>` elements across the 19 files that
+  make up "the navigation that exists" -- every module/shell layout
+  (`admin`, `analytics`, `automation-rules`, `commercial`, `dashboards`,
+  `finance`, `helpdesk`, `hris`, `integrations`, `knowledge-base`,
+  `operations`, `procurement`, `reports`, `saved-views`,
+  `scheduled-reports`, `tickets`), plus `app/(supreme)/supreme/
+  layout.tsx`, the public `(public)/status/page.tsx` (confirmed safe
+  despite its own deliberate `force-static` rendering -- `next/link`
+  needs no server data and is fully compatible with statically-rendered
+  pages), and the tenant Home `page.tsx` -- to `next/link`'s `Link`,
+  reusing the already-existing `components/ui/link.tsx` wrapper this
+  same codebase's own `tenant-portal-nav.tsx` (built for A1) already
+  uses, so no new pattern was invented. Before converting, confirmed via
+  grep that none of the 19 files' own `<a>` tags carry `target="_blank"`,
+  `mailto:`, `tel:`, or an external `http(s)://` href -- every one is a
+  same-origin internal navigation link, safe to convert wholesale; the
+  mechanical replacement was verified file-by-file with a script that
+  asserted the `<a >`/`</a>` tag counts matched before rewriting, then
+  every changed file was read back and spot-checked.
+  This closes 100% of the actual lint-rule violation (`pnpm run lint`:
+  1465 warnings -> 0, confirming literally every one of them was this
+  single rule) and the full-page-reload behavior for every persistent
+  nav bar in the product. Deliberately NOT closed in this pass, and
+  disclosed as a separate, larger follow-up rather than silently
+  ignored: a repo-wide `<a href` grep found ~65 more files (outside
+  these 19) with page-CONTENT internal links (e.g. a list page's own
+  "view detail" row link) -- sampling two of them found one genuine
+  internal nav link (the same bug, not yet fixed) and one legitimate
+  `target="_blank"` link (correctly NOT a bug) in the same file class,
+  meaning that follow-up needs the same per-occurrence external-link
+  triage this pass just did for the 19 nav files, not a blind global
+  swap -- sized `CODE-BIG`, comparable to `Ø1-query-layer`'s own
+  multi-batch closure, not a single bounded change.
+  Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  (0 errors, 0 warnings -- down from 1465), the full unit test suite
+  (6182/6182 unaffected, since this is a pure frontend change with zero
+  schema/RPC/contract impact), `git:check-paths`, `security:check`, and
+  a full `npx next build` (exit 0, clean route manifest, `/status`
+  still correctly renders `○ (Static)`, confirming the `force-static`
+  page is unaffected by the `Link` conversion). No migration or db-test
+  changed by this pass, so `release:check-freeze`'s two digests
+  (migration set, db-test set) are untouched and its self-test still
+  passes unmodified.

@@ -5,6 +5,7 @@ import { resolveSignedInUserLabelForRequest } from "../../../../lib/auth/resolve
 import { AccountMenu } from "../../../../components/layout/account-menu.tsx";
 import { TenantPortalNav } from "../../../../components/domain/tenant-portal-nav.tsx";
 import { TenantMain } from "../../../../components/layout/tenant-main.tsx";
+import { Link } from "../../../../components/ui/link.tsx";
 
 /**
  * Reports module shell (audit remediation A1). Was a bare `<TenantMain>`
@@ -40,9 +41,9 @@ export default async function ReportsModuleLayout({
             ? "This organization's account is currently suspended."
             : "You don't have access to this organization's Reports workspace."}
         </p>
-        <a href="/login" className="text-sm font-medium text-primary underline">
+        <Link href="/login" className="text-sm font-medium text-primary underline">
           Sign in with a different account
-        </a>
+        </Link>
       </main>
     );
   }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { StatusPanel } from "./status-panel.tsx";
+import { Link } from "../../../components/ui/link.tsx";
 
 /**
  * Public service-status page (ISS-2026-304). Unauthenticated, and deliberately STATIC.
@@ -34,9 +35,9 @@ export default function StatusPage() {
       <StatusPanel />
 
       <footer className="text-sm text-neutral-600">
-        <a href="/login" className="font-medium text-neutral-900 underline">
+        <Link href="/login" className="font-medium text-neutral-900 underline">
           Back to sign in
-        </a>
+        </Link>
       </footer>
     </main>
   );

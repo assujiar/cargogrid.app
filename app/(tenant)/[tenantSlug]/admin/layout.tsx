@@ -5,6 +5,7 @@ import { resolveTenantPortalThemeForRequest } from "../../../../lib/portal/resol
 import { resolveSignedInUserLabelForRequest } from "../../../../lib/auth/resolve-signed-in-user-label.server.ts";
 import { AccountMenu } from "../../../../components/layout/account-menu.tsx";
 import { TenantPortalNav } from "../../../../components/domain/tenant-portal-nav.tsx";
+import { Link } from "../../../../components/ui/link.tsx";
 
 /**
  * Tenant Admin portal shell (PLT-135, CG-S6-PLT-032). Every request through this route
@@ -54,9 +55,9 @@ export default async function TenantAdminLayout({
             ? "This organization's account is currently suspended."
             : "You don't have access to this organization's admin area."}
         </p>
-        <a href="/login" className="text-sm font-medium text-primary underline">
+        <Link href="/login" className="text-sm font-medium text-primary underline">
           Sign in with a different account
-        </a>
+        </Link>
       </main>
     );
   }
@@ -84,57 +85,57 @@ export default async function TenantAdminLayout({
         </div>
         </div>
         <nav aria-label="Admin navigation" className="flex flex-wrap gap-4 border-t border-neutral-200 px-6 py-2 text-sm">
-          <a href={`/${access.tenant.slug}/admin`} className="text-neutral-700 hover:text-neutral-900">
+          <Link href={`/${access.tenant.slug}/admin`} className="text-neutral-700 hover:text-neutral-900">
             Home
-          </a>
-          <a href={`/${access.tenant.slug}/admin/users`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/users`} className="text-neutral-700 hover:text-neutral-900">
             Users
-          </a>
-          <a href={`/${access.tenant.slug}/admin/roles`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/roles`} className="text-neutral-700 hover:text-neutral-900">
             Roles
-          </a>
-          <a href={`/${access.tenant.slug}/admin/approvals`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/approvals`} className="text-neutral-700 hover:text-neutral-900">
             Approval routing
-          </a>
-          <a href={`/${access.tenant.slug}/admin/organization`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/organization`} className="text-neutral-700 hover:text-neutral-900">
             Organization
-          </a>
-          <a href={`/${access.tenant.slug}/admin/tracking`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/tracking`} className="text-neutral-700 hover:text-neutral-900">
             Tracking
-          </a>
-          <a href={`/${access.tenant.slug}/admin/api-keys`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/api-keys`} className="text-neutral-700 hover:text-neutral-900">
             API keys
-          </a>
-          <a href={`/${access.tenant.slug}/admin/customer-profile-review`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/customer-profile-review`} className="text-neutral-700 hover:text-neutral-900">
             Customer profile review
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty`} className="text-neutral-700 hover:text-neutral-900">
             Loyalty
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-tiers`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-tiers`} className="text-neutral-700 hover:text-neutral-900">
             Loyalty tiers
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-points`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-points`} className="text-neutral-700 hover:text-neutral-900">
             Points ledger
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-benefits`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-benefits`} className="text-neutral-700 hover:text-neutral-900">
             Cashback &amp; vouchers
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-rewards`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-rewards`} className="text-neutral-700 hover:text-neutral-900">
             Reward catalogue
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-redemptions`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-redemptions`} className="text-neutral-700 hover:text-neutral-900">
             Redemptions
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-expiry`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-expiry`} className="text-neutral-700 hover:text-neutral-900">
             Expiry sweep
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-fraud-review`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-fraud-review`} className="text-neutral-700 hover:text-neutral-900">
             Fraud review
-          </a>
-          <a href={`/${access.tenant.slug}/admin/loyalty-liability`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/admin/loyalty-liability`} className="text-neutral-700 hover:text-neutral-900">
             Liability &amp; reconciliation
-          </a>
+          </Link>
         </nav>
       </header>
       <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-6">

@@ -4,6 +4,7 @@ import { resolveCommercialAccessForRequest } from "../../../../lib/portal/resolv
 import { resolveSignedInUserLabelForRequest } from "../../../../lib/auth/resolve-signed-in-user-label.server.ts";
 import { AccountMenu } from "../../../../components/layout/account-menu.tsx";
 import { TenantPortalNav } from "../../../../components/domain/tenant-portal-nav.tsx";
+import { Link } from "../../../../components/ui/link.tsx";
 
 /**
  * Commercial portal shell (COM-143, CG-S7-COM-002) -- the first business-domain route
@@ -43,9 +44,9 @@ export default async function CommercialLayout({
             ? "This organization's account is currently suspended."
             : "You don't have access to this organization's Commercial workspace."}
         </p>
-        <a href="/login" className="text-sm font-medium text-primary underline">
+        <Link href="/login" className="text-sm font-medium text-primary underline">
           Sign in with a different account
-        </a>
+        </Link>
       </main>
     );
   }
@@ -64,51 +65,51 @@ export default async function CommercialLayout({
         </div>
         </div>
         <nav aria-label="Commercial navigation" className="flex flex-wrap gap-4 border-t border-neutral-200 px-6 py-2 text-sm">
-          <a href={`/${access.tenant.slug}/commercial/dashboard`} className="text-neutral-700 hover:text-neutral-900">
+          <Link href={`/${access.tenant.slug}/commercial/dashboard`} className="text-neutral-700 hover:text-neutral-900">
             Dashboard
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/reports`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/reports`} className="text-neutral-700 hover:text-neutral-900">
             Reports
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/leads`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/leads`} className="text-neutral-700 hover:text-neutral-900">
             Leads
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/prospects`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/prospects`} className="text-neutral-700 hover:text-neutral-900">
             Prospects
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/contacts`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/contacts`} className="text-neutral-700 hover:text-neutral-900">
             Contacts
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/pipeline`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/pipeline`} className="text-neutral-700 hover:text-neutral-900">
             Pipeline
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/opportunities`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/opportunities`} className="text-neutral-700 hover:text-neutral-900">
             Opportunities
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/rates`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/rates`} className="text-neutral-700 hover:text-neutral-900">
             Rates
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/quotations`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/quotations`} className="text-neutral-700 hover:text-neutral-900">
             Quotations
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/accounts`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/accounts`} className="text-neutral-700 hover:text-neutral-900">
             Accounts
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/contracts`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/contracts`} className="text-neutral-700 hover:text-neutral-900">
             Contracts
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/margin-rules`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/margin-rules`} className="text-neutral-700 hover:text-neutral-900">
             Margin Rules
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/approval-rules`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/approval-rules`} className="text-neutral-700 hover:text-neutral-900">
             Approval Rules
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/approvals`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/approvals`} className="text-neutral-700 hover:text-neutral-900">
             Approvals
-          </a>
-          <a href={`/${access.tenant.slug}/commercial/credit-approvals`} className="text-neutral-700 hover:text-neutral-900">
+          </Link>
+          <Link href={`/${access.tenant.slug}/commercial/credit-approvals`} className="text-neutral-700 hover:text-neutral-900">
             Credit Approvals
-          </a>
+          </Link>
         </nav>
       </header>
       <main id="main-content" tabIndex={-1} className="flex-1 px-6 py-6">
