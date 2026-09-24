@@ -119,7 +119,7 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
 | E1 | Every job order must originate from a quotation; no contract/repeat order path | `PRODUCT` / `CODE` | **PARTIAL** | "book directly against a contract, skip the quotation entirely" is confirmed accurate and stays `NEEDS_PRODUCT_DECISION` -- `app.quotations` carries no `account_id` at all (only via `app.account_conversions` post-acceptance), and `app.job_orders`/`app.job_order_handoffs` both require a real `quotation_id`, so inventing a no-quotation booking path is a genuine business/lifecycle decision. First closed half: `app.get_effective_customer_price` (COM-156) was a fully-built, fully-tested, deterministic pricing lookup with zero callers anywhere in `app/` -- closed by wiring the already-existing RPC into a new "Check effective price" preview on the contract detail page (zero new migration, zero new RPC). Second closed half (2026-09-25, a dedicated re-verification pass that found a real bounded core hiding under the same finding): `app.build_job_order_draft_payload`'s contract lookup matched EXCLUSIVELY on `customer_contracts.source_quotation_id`, which that table's own comment documents is set only on a contract's own originating (version 1) row -- so any repeat order for an already-contracted account (`app.convert_quotation_to_account`'s own documented "linked_existing" path, or an `app.clone_quotation` clone) always lost its contract lineage in the job order snapshot, even with a real published contract in force. Every dollar amount was always correct regardless (it comes from the quotation's own price lines, never the contract snapshot), so this was a governance/traceability gap, not a financial-correctness bug -- but AGENTS.md is explicit that "critical transactions retain the applied version." Fixed by falling back to the same published/effective-window resolution `app.get_effective_customer_price` already uses, when the exact match misses (additive, one migration); paired with a new "Repeat as new quotation" action on the contract detail page reusing the existing `app.clone_quotation` flow (zero new RPC). See execution log |
 | E3 | No UoM on stock; free-text locations; warehouse billing has no invoice FK | `CODE-BIG` / `PRODUCT` | **PARTIAL** | "no UoM on stock" was overstated -- a real cross-UOM balance-corruption bug in `app.post_inventory_movement` is now closed (piece 1). "Free-text locations" confirmed FALSE for warehouse locations (already structured/FK-enforced); the real free-text gap is `app.shipment_orders.origin`/`.destination`, a separate TMS-side finding out of this scope. Still open (piece 2, re-dispositioned `DEFERRED_LARGE` after a closer schema check): `app.warehouse_billing_handoffs` has no `invoice_id`/FK to `app.finance_invoices` -- closing it for real needs widening `finance_invoices`' own mandatory `job_order_id`/`billing_readiness_handoff_id` structural invariants (or a second, parallel invoicing primitive), a real product/schema decision, not a quick FK addition |
 | E4 | Whole cost/document domains absent (fixed assets, maintenance, customs, BOM, …) | `PRODUCT` | NEEDS_PRODUCT_DECISION |
-| E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh; driver licence/vehicle serviceability unchecked at dispatch; overdue-arrival detection unenqueueable | `CODE` (installation-evidence upload wiring) + `CODE-BIG` (ETA) + `CODE` (dispatch driver/vehicle checks, closed 2026-09-23) + untracked (scheduler wiring, does not survive re-verification -- see execution log) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. The "ETA is straight-line/40kmh" half remains DEFERRED_LARGE -- a genuinely separate, larger algorithmic gap (road-network/traffic-aware routing or a mapping-API integration, touching 3+ existing capabilities), unrelated to A6's storage/malware-scan gap. Two more sub-claims from the audit's own E5 paragraph, present in its prose but dropped from this table's original condensed summary: "driver licence expiry and vehicle serviceability are checked at neither assignment nor dispatch" is now closed (`app.evaluate_dispatch_readiness` gained two data-backed blocker checks); "overdue-arrival detection is not merely unscheduled but unenqueueable" does NOT survive independent re-verification at the scope originally proposed -- see execution log for the full disposition |
+| E5 | Telematics: device can never reach `installed` (blocked by A6); ETA is straight-line/40kmh; driver licence/vehicle serviceability unchecked at dispatch; overdue-arrival detection unenqueueable | `CODE` (installation-evidence upload wiring) + `CODE` (ETA speed half, closed 2026-09-26) / `DEFERRED_LARGE` (ETA distance half) + `CODE` (dispatch driver/vehicle checks, closed 2026-09-23) + untracked (scheduler wiring, does not survive re-verification -- see execution log) | **PARTIAL** | Split: the "device can never reach `installed`" half is now fixed -- `app.record_gps_device_installation` (ATW-226B) and its own db-test already fully built and exercised the evidenced-installation RPC; the real blocker was that no real migration ever registered the `gps_device_installation` document type (only six different db-test fixtures' own throwaway registrations did), so every real tenant's first upload would have failed `document_type_not_configured` before ever reaching its own per-tenant publish step, and no Server Action/UI ever called the upload+store+scan sequence at all. Both fixed: a new catalogue-registration migration plus a real "record installation" upload form in `fleet-panel.tsx`. "ETA is straight-line/40kmh" was carried as one undivided `DEFERRED_LARGE` item; a dedicated re-verification pass (2026-09-26) found it conflated two genuinely different gaps. The DISTANCE half (straight-line, no road-network/traffic awareness) really does need a mapping-API/routing-engine integration and stays `DEFERRED_LARGE`. The SPEED half -- a single hardcoded 40km/h constant (`app.route_planning_default_speed_kmh`, shared by exactly 2 consumers, not the "3+ capabilities" originally claimed) -- had a real, bounded, zero-external-API fix hiding in it: this codebase already ingests and stores real per-vehicle telemetry (`app.canonical_telemetry_events.speed_kmh`, ATW-226F, live-fed) that the flat constant never used. Closed by a new internal helper (`app._route_planning_effective_speed_kmh`) computing each vehicle's own recent observed average speed (>=5 qualifying samples in 30 days, implausible/idle readings excluded), falling back to the unchanged constant for an untracked vehicle -- purely additive, never worse than before. Two more sub-claims from the audit's own E5 paragraph, present in its prose but dropped from this table's original condensed summary: "driver licence expiry and vehicle serviceability are checked at neither assignment nor dispatch" is now closed (`app.evaluate_dispatch_readiness` gained two data-backed blocker checks); "overdue-arrival detection is not merely unscheduled but unenqueueable" does NOT survive independent re-verification at the scope originally proposed -- see execution log for the full disposition |
 | E6 | No webhook publisher; no GraphQL/OpenAPI surface | `CODE-BIG` | **PARTIAL** | the webhook half was closed after a dedicated research pass found the original audit's own literal finding ("`app.queue_webhook_delivery` is referenced by 0 other database functions") true on exactly one narrow point, not "no webhook publisher" wholesale: real schema, HMAC-SHA256 signing, SSRF guarding at both registration and dispatch time, the real outbound HTTP worker, job-type registration, wiring into the production supervisor loop, and a reachable tenant admin UI all already existed and were already tested (`20260719150000_create_api_key_webhook_primitives.sql`, `20260804040000_create_intelligence_webhook_management.sql`) -- it was simply dead-gated, never called from any real business event. Closed by adding one `app._enqueue_webhook_delivery` call (a new internal, authority-check-free decision core extracted from `app.queue_webhook_delivery`, mirroring B7's own `app._evaluate_customer_credit` precedent) to each of the three event types the schema's own seed data already anticipated -- `shipment.status_changed` (`app.transition_shipment_order`), `ticket.created` (`app._create_ticket`, covering all three channels: internal/customer/helpdesk), and `invoice.issued` (`app.issue_finance_invoice`). Still open: GraphQL/OpenAPI -- genuinely, confirmedly absent (no `graphql` package dependency, no resolver, no spec file), independently confirmed by two later release-readiness checkpoints; a real, separate REST-based external API surface does already exist (`app/api/v1/*`, API-key gateway, rate limiting, versioning) that could be documented with an OpenAPI spec far more cheaply than building GraphQL, but that is a product/scope call this session does not make unilaterally |
 
 ## New findings discovered during remediation (not in the original audit)
@@ -5452,3 +5452,88 @@ scoped and left for a dedicated follow-up session) · `NEEDS_PRODUCT_DECISION` �
   PASS, both digests updated -- one new migration file, no new db-test
   file), and a full `npx next build` (exit 0, clean route manifest --
   this pass touched `app/` files).
+- 2026-09-26 — E5 (ETA speed-constant bounded core) closed. The
+  investigator sent alongside B3/E1's own re-verification pass (see the
+  2026-09-25 entry above) found a real bounded core hiding inside E5's
+  own "ETA is straight-line/40kmh" `DEFERRED_LARGE` disposition, which
+  had reasoned the whole thing "genuinely needs a mapping-API/routing-
+  engine integration, touching 3+ existing capabilities."
+  Personally re-verified before implementing (per this session's own
+  standing discipline): grepped every migration for
+  `app.route_planning_default_speed_kmh` and its two consumers
+  (`app._compute_shipment_leg_eta`, `app.generate_route_planning_
+  candidates`) to confirm each has been redefined at most once since its
+  original migration (both, in fact, redefined exactly once, in
+  `20260901150000_harden_relocate_postgis_out_of_public.sql`, which is
+  where the fix's own CREATE OR REPLACE bodies were mechanically
+  extracted from); confirmed `app.route_planning_default_speed_kmh`
+  itself has never been redefined at all; read `app.canonical_telemetry_
+  events`' own table definition and confirmed `speed_kmh` really is raw,
+  live, device-reported speed (not a derived/implied value) fed by the
+  real ingestion paths, not dead scaffolding; and confirmed the
+  investigator's own "3+ capabilities" claim did NOT hold for the speed
+  constant specifically -- only 2 functions actually consume it (a
+  third, `app.evaluate_route_deviation`, reuses only the corridor-
+  distance idea, never the speed constant).
+  This split the finding cleanly: the DISTANCE half (straight-line
+  great-circle measurement, no road network, no live traffic) genuinely
+  has no fix without an external mapping-API/routing-engine integration
+  -- correctly stays `DEFERRED_LARGE`, untouched by this migration. The
+  SPEED half did not need one: this codebase already ingests and stores
+  real per-vehicle telemetry that a flat national constant simply never
+  used.
+  Fix (one migration,
+  `20260926000000_e5_eta_effective_vehicle_speed.sql`): a new internal
+  helper, `app._route_planning_effective_speed_kmh(p_vehicle_master_id)`
+  -- underscore-prefixed, no `public.*` wrapper, granted only to
+  `service_role`, matching `app._compute_shipment_leg_eta`'s own already-
+  established convention for an internal-only helper (confirmed via grep
+  that no underscore-prefixed function in this schema has ever received
+  a `public.*` wrapper) -- computes a vehicle's own recent observed
+  average speed from `app.canonical_telemetry_events` (last 30 days,
+  `speed_kmh` restricted to `(0, 200]` to exclude idle/parked readings
+  and implausible GPS glitches, requiring >=5 qualifying samples before
+  trusting the average), falling back to the UNCHANGED
+  `app.route_planning_default_speed_kmh()` constant for a cold-start or
+  insufficiently-tracked vehicle. Purely additive -- never worse than
+  the pre-fix flat-constant behavior. Swapped into the two consumers'
+  own one call site each; each function's current body was mechanically
+  extracted via a Python script and diffed (`difflib`) against the
+  patched version before ever being pasted into the migration, confirming
+  only the one intended line changed in either -- the same transcription-
+  risk discipline this session established after the C3 near-miss.
+  Honest scope disclosure (matching the investigator's own honesty):
+  this personalizes the ETA assumption per vehicle (implicitly capturing
+  vehicle class, typical routes, and driver/route behavior) but does NOT
+  fix the underlying straight-line-distance approximation -- a genuine,
+  partial accuracy improvement, not a claim of solved ETA.
+  New db-test coverage (extended the existing `scripts/db-tests/
+  advanced-tms-route-load-planning.sql`, no new file): proves the
+  untracked-vehicle fallback equals the unchanged 40 constant, and that
+  the already-generated feasible-scenario candidate from earlier in the
+  same file (created before any telemetry existed) already matches that
+  same fallback exactly -- the pre-existing production behavior,
+  unchanged; inserts 5 real, recent, plausible telemetry samples
+  averaging 80km/h for one vehicle plus deliberate noise (a 260km/h GPS
+  glitch, a 0km/h idle reading, a 45-day-stale reading) and proves none
+  of it moves the resulting average off 80; proves a second vehicle with
+  only 4 qualifying samples still falls back to 40, and that a 5th
+  qualifying sample tips it to a real 90km/h average; and -- the real
+  production-wiring proof, not just the helper in isolation -- generates
+  a FRESH scenario on the same shipment after the first vehicle's
+  telemetry already exists, proving `app.generate_route_planning_
+  candidates`' own real `estimated_duration_minutes` reflects the
+  observed 80km/h average, never the flat 40km/h default. The first
+  `pnpm run db:test` run caught that this new test block's extra
+  `prepare_route_planning_scenario` call broke the file's own pre-
+  existing exact-count audit-trail assertion (5 -> 6 events) -- fixed
+  before this pass was ever trusted, not weakened.
+  Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  (0 errors, only pre-existing warnings), the full unit test suite
+  (6182/6182, including the release-freeze self-test after its digest
+  update), a full `pnpm run db:test` (`ALL PASSED`, 568 migrations / 280
+  db-test files), `git:check-paths`, `security:check`,
+  `release:check-freeze` (HUNDRED-AND-SEVENTIETH PASS, both digests
+  updated -- one new migration file, no new db-test file). No app/,
+  components/, or "use server" file touched by this pass -- `next build`
+  not required by this file's own Tier A trigger and not run.

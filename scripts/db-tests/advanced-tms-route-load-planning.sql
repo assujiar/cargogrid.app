@@ -408,6 +408,111 @@ begin
   end if;
 end $$;
 
+\echo '>> app._route_planning_effective_speed_kmh (CG-AUDIT-2026-09-02 E5, ETA speed-constant bounded core): a vehicle with no telemetry falls back to the unchanged 40km/h default; the already-generated feasible-scenario candidate above (created before any telemetry existed) proves the real production wiring used that same fallback, not a hardcoded test-only value'
+do $$
+declare
+  v_vehicle_a_id uuid;
+  v_top_before app.route_planning_candidate_plans;
+begin
+  select vop.vehicle_master_id into v_vehicle_a_id
+    from app.vehicle_operational_profiles vop
+    join app.master_records mr on mr.id = vop.vehicle_master_id
+    where vop.tenant_id = (select id from app.tenants where slug = 'acmeplan') and mr.code = 'VEH-PLAN-A';
+
+  if app._route_planning_effective_speed_kmh(v_vehicle_a_id) <> 40 then
+    raise exception 'assertion failed: expected the untracked-vehicle fallback to equal app.route_planning_default_speed_kmh() (40), got %', app._route_planning_effective_speed_kmh(v_vehicle_a_id);
+  end if;
+
+  select * into v_top_before from app.route_planning_candidate_plans
+    where scenario_id = (select id from app.route_planning_scenarios where idempotency_key = 'idem-scenario-feasible') and plan_rank = 1;
+  if v_top_before.estimated_duration_minutes <> round(v_top_before.total_distance_km / 40 * 60, 1) then
+    raise exception 'assertion failed: expected the already-generated candidate''s own estimated_duration_minutes (%) to match the 40km/h fallback exactly (%), proving app.generate_route_planning_candidates'' real wiring uses the same fallback this test just confirmed directly', v_top_before.estimated_duration_minutes, round(v_top_before.total_distance_km / 40 * 60, 1);
+  end if;
+end $$;
+
+\echo '>> app._route_planning_effective_speed_kmh: real, plausible, recent telemetry (>=5 samples) overrides the flat default; too few qualifying samples, stale samples (>30 days), and implausible/idle readings (0 or >200 km/h) are all correctly excluded from the average'
+do $$
+declare
+  v_vehicle_a_id uuid;
+  v_vehicle_b_id uuid;
+  v_speed numeric;
+begin
+  select vop.vehicle_master_id into v_vehicle_a_id
+    from app.vehicle_operational_profiles vop
+    join app.master_records mr on mr.id = vop.vehicle_master_id
+    where vop.tenant_id = (select id from app.tenants where slug = 'acmeplan') and mr.code = 'VEH-PLAN-A';
+  select vop.vehicle_master_id into v_vehicle_b_id
+    from app.vehicle_operational_profiles vop
+    join app.master_records mr on mr.id = vop.vehicle_master_id
+    where vop.tenant_id = (select id from app.tenants where slug = 'acmeplan') and mr.code = 'VEH-PLAN-B';
+
+  -- 5 real, recent, plausible readings averaging exactly 80km/h for vehicle A.
+  insert into app.canonical_telemetry_events (tenant_id, vehicle_master_id, source_type, source_report_id, event_at, received_at, speed_kmh)
+  select (select id from app.tenants where slug = 'acmeplan'), v_vehicle_a_id, 'direct_device', gen_random_uuid(), now() - (n || ' hours')::interval, now() - (n || ' hours')::interval, 80
+  from generate_series(1, 5) n;
+
+  -- Noise that must NOT move the average: an implausibly fast GPS glitch, an idle
+  -- (stationary) reading, and a stale reading from 45 days ago.
+  insert into app.canonical_telemetry_events (tenant_id, vehicle_master_id, source_type, source_report_id, event_at, received_at, speed_kmh) values
+    ((select id from app.tenants where slug = 'acmeplan'), v_vehicle_a_id, 'direct_device', gen_random_uuid(), now() - interval '2 hours', now() - interval '2 hours', 260),
+    ((select id from app.tenants where slug = 'acmeplan'), v_vehicle_a_id, 'direct_device', gen_random_uuid(), now() - interval '2 hours', now() - interval '2 hours', 0),
+    ((select id from app.tenants where slug = 'acmeplan'), v_vehicle_a_id, 'direct_device', gen_random_uuid(), now() - interval '45 days', now() - interval '45 days', 80);
+
+  v_speed := app._route_planning_effective_speed_kmh(v_vehicle_a_id);
+  if v_speed <> 80 then
+    raise exception 'assertion failed: expected vehicle A''s own effective speed to be the real observed average (80), unaffected by the implausible/idle/stale noise rows, got %', v_speed;
+  end if;
+
+  -- Vehicle B: only 4 qualifying (recent, plausible, moving) samples -- below the
+  -- >=5 threshold, so it must still fall back to the flat default, never a
+  -- statistically-thin average.
+  insert into app.canonical_telemetry_events (tenant_id, vehicle_master_id, source_type, source_report_id, event_at, received_at, speed_kmh)
+  select (select id from app.tenants where slug = 'acmeplan'), v_vehicle_b_id, 'direct_device', gen_random_uuid(), now() - (n || ' hours')::interval, now() - (n || ' hours')::interval, 90
+  from generate_series(1, 4) n;
+  v_speed := app._route_planning_effective_speed_kmh(v_vehicle_b_id);
+  if v_speed <> 40 then
+    raise exception 'assertion failed: expected vehicle B (only 4 qualifying samples) to still fall back to 40, got %', v_speed;
+  end if;
+
+  -- A 5th qualifying sample tips it over the threshold -- now a real average.
+  insert into app.canonical_telemetry_events (tenant_id, vehicle_master_id, source_type, source_report_id, event_at, received_at, speed_kmh)
+  values ((select id from app.tenants where slug = 'acmeplan'), v_vehicle_b_id, 'direct_device', gen_random_uuid(), now() - interval '5 hours', now() - interval '5 hours', 90);
+  v_speed := app._route_planning_effective_speed_kmh(v_vehicle_b_id);
+  if v_speed <> 90 then
+    raise exception 'assertion failed: expected vehicle B''s own effective speed to be 90 once 5 qualifying samples exist, got %', v_speed;
+  end if;
+end $$;
+
+\echo '>> app.generate_route_planning_candidates (real production wiring, not just the helper in isolation): a fresh scenario on the SAME shipment, generated AFTER vehicle A''s own telemetry exists above, produces an estimated_duration_minutes reflecting the real 80km/h observed average -- never the flat 40km/h default'
+do $$
+declare
+  v_shipment_id uuid;
+  v_scenario app.route_planning_scenarios;
+  v_vehicle_a_id uuid;
+  v_top app.route_planning_candidate_plans;
+begin
+  select vop.vehicle_master_id into v_vehicle_a_id
+    from app.vehicle_operational_profiles vop
+    join app.master_records mr on mr.id = vop.vehicle_master_id
+    where vop.tenant_id = (select id from app.tenants where slug = 'acmeplan') and mr.code = 'VEH-PLAN-A';
+
+  select id into v_shipment_id from app.shipment_orders where idempotency_key = 'idem-plan-feasible';
+  select * into v_scenario from app.prepare_route_planning_scenario(v_shipment_id, 'idem-scenario-eta-speed', 800, 10, '00000000-0000-0000-0000-000000039302', 'rep');
+  perform app.add_route_planning_stop(v_scenario.id, 1, 'pickup', 'Jakarta Warehouse', 'Jl. Rasuna Said 1', 106.8456, -6.2088, now() + interval '1 day', now() + interval '1 day 2 hours', '00000000-0000-0000-0000-000000039302', 'rep');
+  perform app.add_route_planning_stop(v_scenario.id, 2, 'delivery', 'Bandung Warehouse', null, 107.6098, -6.9175, now() + interval '2 days', null, '00000000-0000-0000-0000-000000039302', 'rep');
+  select * into v_scenario from app.validate_route_planning_scenario(v_scenario.id, v_scenario.record_version, '00000000-0000-0000-0000-000000039302', 'rep');
+  perform app.execute_route_planning_scenario(v_scenario.id, v_scenario.record_version, 'idem-plan-job-eta-speed', '00000000-0000-0000-0000-000000039302', 'rep');
+  perform app.run_next_route_planning_job('worker-1');
+
+  select * into v_top from app.route_planning_candidate_plans where scenario_id = v_scenario.id and vehicle_master_id = v_vehicle_a_id;
+  if v_top.id is null then
+    raise exception 'assertion failed: expected a candidate plan for vehicle A on the new scenario';
+  end if;
+  if v_top.estimated_duration_minutes <> round(v_top.total_distance_km / 80 * 60, 1) then
+    raise exception 'assertion failed: expected estimated_duration_minutes (%) to reflect vehicle A''s own real 80km/h observed average (%), not the flat 40km/h default (%) -- app.generate_route_planning_candidates'' own production call site must be using app._route_planning_effective_speed_kmh', v_top.estimated_duration_minutes, round(v_top.total_distance_km / 80 * 60, 1), round(v_top.total_distance_km / 40 * 60, 1);
+  end if;
+end $$;
+
 \echo '>> app.select_route_planning_plan: rejects an infeasible candidate; succeeds on a feasible one; re-selecting supersedes the prior selection'
 do $$
 declare
@@ -686,7 +791,7 @@ begin
   end if;
 end $$;
 
-\echo '>> schema-privilege defense in depth: anon holds no EXECUTE on any of the 15 new Route and Load Planning functions (ERR-2026-004 regression guard)'
+\echo '>> schema-privilege defense in depth: anon holds no EXECUTE on any of the 15 new Route and Load Planning functions (ERR-2026-004 regression guard), plus the CG-AUDIT-2026-09-02 E5 effective-speed helper (also no authenticated EXECUTE -- an internal helper, never a direct RPC target)'
 do $$
 declare
   v_count integer;
@@ -701,10 +806,17 @@ begin
       'add_route_planning_constraint', 'validate_route_planning_scenario', 'execute_route_planning_scenario',
       'generate_route_planning_candidates', 'run_next_route_planning_job', 'cancel_route_planning_scenario',
       'select_route_planning_plan', 'override_route_planning_selection', 'replan_route_planning_scenario',
-      'get_route_planning_stops'
+      'get_route_planning_stops', '_route_planning_effective_speed_kmh'
     );
   if v_count <> 0 then
-    raise exception 'assertion failed: expected zero anon EXECUTE grants on the 15 new Route and Load Planning functions, found %', v_count;
+    raise exception 'assertion failed: expected zero anon EXECUTE grants on the 15 new Route and Load Planning functions plus the E5 effective-speed helper, found %', v_count;
+  end if;
+
+  select count(*) into v_count
+  from information_schema.routine_privileges
+  where routine_schema = 'app' and routine_name = '_route_planning_effective_speed_kmh' and grantee = 'authenticated';
+  if v_count <> 0 then
+    raise exception 'assertion failed: expected zero authenticated EXECUTE grants on the internal app._route_planning_effective_speed_kmh helper, found %', v_count;
   end if;
 end $$;
 
@@ -737,8 +849,8 @@ begin
   v_tenant1 := (select id from app.tenants where slug = 'acmeplan');
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.route_planning_scenarios' and action = 'prepare_route_planning_scenario';
-  if v_count <> 5 then
-    raise exception 'assertion failed: expected exactly 5 prepare_route_planning_scenario audit events (feasible, infeasible, legs-done, to-cancel, and CG-AUDIT-2026-09-02 D2''s own real-session regression scenario; the idempotent retry and the denied attempt are not counted), found %', v_count;
+  if v_count <> 6 then
+    raise exception 'assertion failed: expected exactly 6 prepare_route_planning_scenario audit events (feasible, infeasible, legs-done, to-cancel, CG-AUDIT-2026-09-02 D2''s own real-session regression scenario, and CG-AUDIT-2026-09-02 E5''s own effective-speed scenario; the idempotent retry and the denied attempt are not counted), found %', v_count;
   end if;
 
   select count(*) into v_count from app.audit_logs where tenant_id = v_tenant1 and resource_type = 'app.route_planning_selected_plans' and action = 'override_route_planning_selection';

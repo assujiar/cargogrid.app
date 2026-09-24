@@ -5186,7 +5186,83 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "aef4d9dc78284f9238c371dcdd05b2f88dd44b940c4e50f6ce4767fd6555d9c0",
+  migrationSetSha256: "c856f3c71fbc00f51c357d01da89381322f606207f673e5cd0fec60f582e63e3",
+  // HUNDRED-AND-SEVENTIETH PASS: CG-AUDIT-2026-09-02 E5 (ETA speed-constant
+  // bounded core). One new migration
+  // (20260926000000_e5_eta_effective_vehicle_speed.sql, 568 files, +1).
+  // The audit's own E5 finding covered "ETA is straight-line/40kmh" as one
+  // item; the backlog's own prior disposition already split off the driver-
+  // licence/vehicle-serviceability dispatch-check half (closed earlier this
+  // window) and left the ETA half itself DEFERRED_LARGE wholesale, reasoning
+  // it "genuinely needs a mapping-API/routing-engine integration." A
+  // dedicated re-verification pass found that framing conflated two
+  // genuinely different gaps: the DISTANCE half (straight-line, no road-
+  // network/traffic awareness) really does need a mapping-API integration
+  // and stays DEFERRED_LARGE, untouched by this migration -- but the SPEED
+  // half is a single hardcoded 40km/h constant
+  // (app.route_planning_default_speed_kmh, ATW-224's own governed default,
+  // confirmed via grep to have never been redefined since its original
+  // migration) shared by exactly two consumers
+  // (app._compute_shipment_leg_eta and app.generate_route_planning_
+  // candidates, both confirmed to have never been redefined since
+  // 20260901150000_harden_relocate_postgis_out_of_public.sql, their only
+  // later redefinition) -- and this codebase already ingests and stores
+  // real per-vehicle telemetry (app.canonical_telemetry_events.speed_kmh,
+  // ATW-226F, fed live by the direct-device and third-party-platform
+  // ingestion paths, hardened across 8+ subsequent migrations) that the
+  // flat constant simply never used.
+  // Fix: a new internal helper, app._route_planning_effective_speed_kmh
+  // (underscore-prefixed, no public.* wrapper, granted only to
+  // service_role -- matches app._compute_shipment_leg_eta's own established
+  // convention for a function called only from within other SECURITY
+  // DEFINER functions, confirmed via grep that no underscore-prefixed
+  // function in this schema has ever received a public.* wrapper), computes
+  // a vehicle's own recent observed average speed from real telemetry (last
+  // 30 days, speed_kmh in (0, 200] to exclude idle/parked readings and
+  // implausible GPS glitches, requiring >=5 qualifying samples before
+  // trusting it), falling back to the UNCHANGED app.route_planning_default_
+  // speed_kmh() constant for a cold-start/insufficiently-tracked vehicle --
+  // purely additive, never worse than the pre-fix behavior. Swapped into
+  // the two consumers' own one call site each; each function's current body
+  // was mechanically extracted and diffed (Python difflib) against the
+  // patched version before ever being pasted into this migration, confirmed
+  // that only the intended line changed in either. This personalizes the
+  // ETA assumption per vehicle (implicitly capturing vehicle class, typical
+  // routes, and driver behavior) but honestly does not fix the underlying
+  // straight-line-distance approximation -- a partial accuracy improvement,
+  // disclosed as such, not a claim of solved ETA.
+  // New db-test coverage (extended the existing scripts/db-tests/advanced-
+  // tms-route-load-planning.sql, no new file): proves the untracked-vehicle
+  // fallback equals the unchanged 40 constant (and that the already-
+  // generated feasible-scenario candidate, created before any telemetry
+  // existed, already matches that same fallback exactly -- the pre-existing
+  // production wiring, unchanged); inserts 5 real, recent, plausible
+  // telemetry samples averaging 80km/h for one vehicle plus deliberate
+  // noise (a 260km/h GPS glitch, a 0km/h idle reading, a 45-day-stale
+  // reading) and proves none of the noise moves the resulting average off
+  // 80; proves a second vehicle with only 4 qualifying samples still falls
+  // back to 40, and that a 5th qualifying sample tips it over to a real
+  // 90km/h average; and -- the real production-wiring proof, not just the
+  // helper in isolation -- generates a FRESH scenario on the same shipment
+  // after the first vehicle's telemetry already exists, proving
+  // app.generate_route_planning_candidates' own real
+  // estimated_duration_minutes reflects the observed 80km/h average, never
+  // the flat 40km/h default. Updated the file's own pre-existing exact-
+  // count audit-trail assertion for prepare_route_planning_scenario events
+  // from 5 to 6 (one real additional successful scenario this new test
+  // block adds, not a weakened assertion).
+  // Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  // (0 errors, only pre-existing warnings), the full unit test suite
+  // (6182/6182, including the release-freeze self-test after this digest
+  // update), a full `pnpm run db:test` (`ALL PASSED`, 568 migrations / 280
+  // db-test files -- the first run caught the new test block's own
+  // downstream exact-count audit-assertion collision, fixed before this
+  // pass was ever trusted), `git:check-paths`, `security:check`. No app/,
+  // components/, or "use server" file touched by this pass -- `next build`
+  // not required by this file's own Tier A trigger and not run.
+  // History: aef4d9dc78284f9238c371dcdd05b2f88dd44b940c4e50f6ce4767fd6555d9c0
+  // (567 files, HUNDRED-AND-SIXTY-NINTH PASS).
+  //
   // HUNDRED-AND-SIXTY-NINTH PASS: CG-AUDIT-2026-09-02 E1 (repeat-order
   // contract-lineage bounded core). One new migration
   // (20260925000000_e1_repeat_order_contract_lineage_fix.sql, 567 files, +1).
@@ -8103,7 +8179,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "3fc3d93c7a13179babf565f306163e1381912b4835d40648385f6b6b5ade63dd",
+  dbTestSetSha256: "372fd7dfa922d36caacab7393562fd1f0ed30e1d6b91df692e9f6cb7c4762f7f",
+  // HUNDRED-AND-SEVENTIETH PASS: same CG-AUDIT-2026-09-02 E5 slice as
+  // migrationSetSha256's own note immediately above -- no new db-test file
+  // (still 280 files): extended the existing scripts/db-tests/advanced-tms-
+  // route-load-planning.sql with real per-vehicle telemetry, the fallback/
+  // override/threshold/noise-exclusion proofs, and one fresh end-to-end
+  // scenario proving app.generate_route_planning_candidates' own production
+  // wiring (see migrationSetSha256's own note for the full description).
+  // History: 3fc3d93c7a13179babf565f306163e1381912b4835d40648385f6b6b5ade63dd
+  // (280 files, HUNDRED-AND-SIXTY-NINTH PASS).
+  //
   // HUNDRED-AND-SIXTY-NINTH PASS: same CG-AUDIT-2026-09-02 E1 slice as
   // migrationSetSha256's own note immediately above -- no new db-test file
   // (still 280 files): extended the existing scripts/db-tests/commercial-
