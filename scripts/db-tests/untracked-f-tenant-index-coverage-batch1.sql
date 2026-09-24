@@ -57,11 +57,19 @@ begin
       select 1 from pg_index i where i.indrelid = c.oid and i.indkey[0] = a.attnum
     );
 
-  -- This batch closed exactly 8 of the 99 originally-missing tables; 91 remain, a
-  -- disclosed, separate follow-up (see the backlog's own UNTRACKED-F-tenant-index
-  -- row) -- never silently narrowed to "no gap left."
-  if v_still_missing <> 91 then
-    raise exception 'assertion failed: expected exactly 91 tenant-scoped tables (of % total) still missing a leading tenant_id index after this batch''s 8 additions, got %', v_total_tenant_scoped, v_still_missing;
+  -- This batch closed exactly 8 of the 99 originally-missing tables; at the time
+  -- this file was written, 91 remained as a disclosed, separate follow-up (see
+  -- the backlog's own UNTRACKED-F-tenant-index row) -- never silently narrowed
+  -- to "no gap left" by this batch alone. That follow-up (batch 2,
+  -- scripts/db-tests/untracked-f-tenant-index-coverage-batch2.sql) has since
+  -- landed and closed the remaining 91, so by the time this file runs against
+  -- the fully-migrated schema the true count is 0 -- this assertion checks
+  -- "never MORE than 91 remain" (a real regression guard: this batch's own 8
+  -- additions must never have been silently reverted or never applied) rather
+  -- than hardcoding a number that depends on whether a later, independent batch
+  -- has also landed by the time the full migration set is applied.
+  if v_still_missing > 91 then
+    raise exception 'assertion failed: expected at most 91 tenant-scoped tables (of % total) still missing a leading tenant_id index after this batch''s 8 additions, got %', v_total_tenant_scoped, v_still_missing;
   end if;
 end;
 $$;

@@ -5186,7 +5186,61 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // grant every newly-created SQL function gets by default. Fixed by adding
   // the missing revoke to both; re-verified with a second full `pnpm run
   // db:test`, ALL PASSED.
-  migrationSetSha256: "016b2784173bf1cb2b26d4143175c9a310b7bdca368afd20cfdcf0e743ebf190",
+  migrationSetSha256: "96ffe15cafd7171e49e2ff8cd805cc1d4dbd264017b828be516238152ce86e80",
+  // HUNDRED-AND-SEVENTY-SECOND PASS: CG-AUDIT-2026-09-02 UNTRACKED-F-tenant-index
+  // (batch 2, CLOSES the item). One new migration
+  // (20260928000000_untracked_f_add_missing_tenant_id_indexes_batch2.sql, 570
+  // files, +1).
+  // Batch 1 (HUNDRED-AND-SEVENTY-FIRST PASS, immediately below) closed the 8
+  // tables the audit's own sentence named explicitly, disclosing the
+  // remaining 91 as a separate follow-up rather than silently narrowing the
+  // finding. This migration closes that follow-up: re-queried the live
+  // schema the same way (pg_class/pg_attribute/pg_index against a fresh
+  // disposable database with every migration, including batch 1, applied)
+  // and got back the exact same 91-table list disclosed in batch 1's own
+  // row/execution-log entry -- confirming no other migration touched any of
+  // these tables' indexes in between, and that the list was not hand-
+  // compiled but generated from the live query output. Every index name and
+  // `CREATE INDEX` statement was generated programmatically from that
+  // captured list (a Python script), not hand-typed, to eliminate
+  // transcription risk across 91 repeated statements -- also verified none
+  // of the 91 generated index names (`<table>_tenant_idx`) exceed
+  // Postgres' 63-character identifier limit (longest: 58 chars).
+  // Same reasoning as batch 1, unchanged: plain single-column `(tenant_id)`
+  // indexes (the audit's own framing is a coverage gap, not a tuned-query
+  // need), confirmed via grep that none of the 91 tables had a pre-existing
+  // leading-tenant_id index, so every addition here is genuinely additive.
+  // This closes the UNTRACKED-F-tenant-index item in full: 8 (batch 1) + 91
+  // (this migration) = 99, the audit's own original count -- the live
+  // schema-wide gap this backlog item tracks is now genuinely zero.
+  // New db-test coverage: a new scripts/db-tests/untracked-f-tenant-index-
+  // coverage-batch2.sql asserts all 91 named tables now carry a leading-
+  // tenant_id index AND that the schema-wide remaining-gap count is exactly
+  // 0. Also corrected batch 1's own db-test (scripts/db-tests/untracked-f-
+  // tenant-index-coverage-batch1.sql): its "still missing 91" assertion was
+  // written before batch 2 existed and, since db-tests always run against
+  // the FULLY migrated schema (every migration applies before any test
+  // file runs), it would now see the count already at 0 and fail --
+  // changed from an exact-91 check to an at-most-91 regression guard (never
+  // more than 91 remain, i.e. batch 1's own 8 additions were never silently
+  // reverted or skipped), which is honestly what that file can promise once
+  // a later, independent batch may also have landed by the time it runs.
+  // The first `pnpm run db:test` run after writing this migration caught
+  // batch 1's now-stale exact-91 assertion failing for exactly this reason
+  // -- fixed before this pass was ever trusted, not weakened to hide a real
+  // regression (the underlying 8-table coverage batch 1 itself asserts is
+  // untouched and still checked).
+  // Full Tier A gates verified clean: `typecheck` (0 errors), full `lint`
+  // (0 errors, only pre-existing warnings -- no app/ file touched by this
+  // pass), the full unit test suite (6182/6182, including the release-
+  // freeze self-test after this digest update), a full `pnpm run db:test`
+  // (`ALL PASSED`, 570 migrations / 282 db-test files), `git:check-paths`,
+  // `security:check`. No app/, components/, or "use server" file touched
+  // by this pass -- `next build` not required by this file's own Tier A
+  // trigger and not run.
+  // History: 016b2784173bf1cb2b26d4143175c9a310b7bdca368afd20cfdcf0e743ebf190
+  // (569 files, HUNDRED-AND-SEVENTY-FIRST PASS).
+  //
   // HUNDRED-AND-SEVENTY-FIRST PASS: CG-AUDIT-2026-09-02 UNTRACKED-F-tenant-index
   // (batch 1 of a CODE-BIG follow-up). One new migration
   // (20260927000000_untracked_f_add_missing_tenant_id_indexes_batch1.sql, 569
@@ -8245,7 +8299,17 @@ export const FROZEN_CANDIDATE: FrozenCandidate = {
   // to keep the new assertions traceable against a clean, single-purpose
   // state rather than the many prior mutations already run against "Finance
   // Approver" earlier in this same file.
-  dbTestSetSha256: "de8ad2e6ba2d89e7b106bca73043871cfb9b199469aabfceb09fbda54777640d",
+  dbTestSetSha256: "67a78ffdcbe346a4378d0d792262a0095d48dcff79087dba7d24751044e513b3",
+  // HUNDRED-AND-SEVENTY-SECOND PASS: same CG-AUDIT-2026-09-02
+  // UNTRACKED-F-tenant-index (batch 2) slice as migrationSetSha256's own
+  // note immediately above -- one new db-test file (282 files, +1):
+  // scripts/db-tests/untracked-f-tenant-index-coverage-batch2.sql, plus a
+  // correction to the existing batch-1 file (still 282 files net, since
+  // batch 1's file was modified, not added) -- see migrationSetSha256's
+  // own note for the full description of both.
+  // History: de8ad2e6ba2d89e7b106bca73043871cfb9b199469aabfceb09fbda54777640d
+  // (281 files, HUNDRED-AND-SEVENTY-FIRST PASS).
+  //
   // HUNDRED-AND-SEVENTY-FIRST PASS: same CG-AUDIT-2026-09-02
   // UNTRACKED-F-tenant-index slice as migrationSetSha256's own note
   // immediately above -- one new db-test file (281 files, +1):
